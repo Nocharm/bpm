@@ -880,3 +880,45 @@ def test_later_delivery_notifies_admins_of_both_l5s_when_placeholders_resolve(cl
                 VersionEvent.version_id == draft_id, VersionEvent.event_type == "external_linked"))).all()
     events = _run(_events())
     assert len(events) == 1 and events[0].note == "검체 인수"
+
+
+def _parallel_linkage_doc(l5_code: str, prefix: str, edges: list[tuple[str, str, str | None]]) -> dict:
+    """L6 3건(a·b·c) + 최상위 relations — 병렬 출구 시드/보강 시나리오 공용."""
+    data = _interview()
+    data["l5"]["nodeCode"] = l5_code
+    data["framework"]["categories"].append(
+        {"code": l5_code, "name": f"{prefix} 병렬 검증", "level": 5, "parent": "19-01-06-01"})
+    base = data["rows"][0]
+    data["rows"] = []
+    for key in ("a", "b", "c"):
+        row = {**base, "taskId": f"task-{prefix}-{key}", "unitId": f"unit-{prefix}-{key}", "l6": f"{prefix} 업무 {key}"}
+        data["rows"].append(row)
+    data["relations"]["entry"]["taskId"] = f"task-{prefix}-a"
+    data["relations"]["edges"] = [
+        {"src": f"task-{prefix}-{s}", "dst": f"task-{prefix}-{d}", "kind": "branch" if g else "seq",
+         "gateway": g, "condition": None, "label": None, "quote": None}
+        for s, d, g in edges
+    ]
+    return data
+
+
+def test_linkage_parallel_fanout_marks_the_source_exit(client: TestClient) -> None:
+    """전부 병행인 팬아웃은 분기 노드 없이 출발 SP의 출구를 병렬로 켠다 (출력 규칙 2026-10-01)."""
+    data = _parallel_linkage_doc("19-01-06-01-11", "pf", [("a", "b", "parallel"), ("a", "c", "parallel")])
+    assert _post(client, [{"name": "pf.json", "content": data}], apply=True).status_code == 200
+    nodes, edges = _linkage_graph("19-01-06-01-11")
+    source = next(n for n in nodes if n.title == "pf 업무 a")
+    assert source.parallel_outputs == ["__primary__"]
+    assert not any(n.node_type == "decision" for n in nodes)
+    assert sum(1 for e in edges if e.source_node_id == source.id) == 2
+
+
+def test_linkage_augment_keeps_existing_plain_exit_unflagged(client: TestClient) -> None:
+    """보강 시 기존 비병렬 진출이 있는 노드는 병렬로 켜지 않는다 — 수동 엣지 의미 보존(체크리스트가 알림)."""
+    first = _parallel_linkage_doc("19-01-06-01-12", "pa", [("a", "b", None)])
+    assert _post(client, [{"name": "pa.json", "content": first}], apply=True).status_code == 200
+    again = _parallel_linkage_doc("19-01-06-01-12", "pa", [("a", "b", "parallel"), ("a", "c", "parallel")])
+    assert _post(client, [{"name": "pa.json", "content": again}], apply=True).status_code == 200
+    nodes, _ = _linkage_graph("19-01-06-01-12")
+    source = next(n for n in nodes if n.title == "pa 업무 a")
+    assert source.parallel_outputs in ([], None)

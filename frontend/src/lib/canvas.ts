@@ -131,6 +131,8 @@ export type NodeData = {
   nodeWidth?: number | null;
   // 대표 끝 (nodeType==="end")
   isPrimaryEnd?: boolean;
+  // 병렬로 켠 출구 키 — 일반 노드 `__primary__`, SP는 끝 키별. 병렬 출구는 엣지 2개 이상 (lib/output-rules.ts)
+  parallelOutputs?: string[];
   // 연결된 맵의 최신 버전이 핀된 버전과 다를 때 true — UI 업데이트 알림용
   updateAvailable?: boolean;
   // 링크된 맵의 끝 노드 목록 — 렌더 시 파생, 퍼시스트 안 함 (nodeType==="subprocess")

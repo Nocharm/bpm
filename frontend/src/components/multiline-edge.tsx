@@ -16,6 +16,7 @@ import {
 } from "@xyflow/react";
 import { Link2 } from "lucide-react";
 
+import { EdgePulseDot } from "@/components/edge-pulse-dot";
 import { type AppNode, EDGE_LABEL_MAX_WIDTH } from "@/lib/canvas";
 import {
   buildDetourPoints,
@@ -31,6 +32,7 @@ import {
   spreadStraightEndpoints,
   type EdgeFan,
 } from "@/lib/edge-fanout";
+import { getDecisionTravel, isEdgePulse } from "@/lib/edge-pulse";
 
 type LineVariant = "default" | "smoothstep" | "straight";
 
@@ -114,6 +116,7 @@ function DetourSmoothstepEdge(props: EdgeProps) {
         fanned.d,
         fanned.labelX,
         fanned.labelY,
+        getDecisionTravel(props.sourceX, props.sourceY, props.targetX, props.targetY),
       );
     }
   }
@@ -140,6 +143,7 @@ function DetourSmoothstepEdge(props: EdgeProps) {
     path,
     labelX,
     labelY,
+    getDecisionTravel(props.sourceX, props.sourceY, props.targetX, props.targetY),
   );
 }
 
@@ -152,9 +156,12 @@ function renderEdge(
   path: string,
   labelX: number,
   labelY: number,
+  pulseTravel: number,
 ) {
   const { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, data } =
     props;
+  // 흐름 펄스(병렬 동시·분기 택일) — 표면이 edge.data.pulse로 넘긴다(lib/edge-pulse, 렌더 전용)
+  const pulse = isEdgePulse(data?.pulse) ? data.pulse : null;
   const [padX, padY] = labelBgPadding ?? [6, 3];
   // 미러 라벨(하위프로세스 끝 제목 기본값, 저장 안 됨) — 점선 테두리 + 링크 아이콘으로 직접 라벨과 구분
   const mirrored = data?.labelMirrored === true;
@@ -162,6 +169,7 @@ function renderEdge(
   return (
     <>
       <BaseEdge path={path} markerEnd={markerEnd} style={style} />
+      {pulse ? <EdgePulseDot path={path} pulse={pulse} travel={pulseTravel} /> : null}
       {label ? (
         <EdgeLabelRenderer>
           {/* pointer-events-none — 라벨은 경로 중앙에 놓이므로 클릭/더블클릭/우클릭이
@@ -212,6 +220,7 @@ function createLineEdge(variant: LineVariant) {
       path,
       labelX,
       labelY,
+      getDecisionTravel(props.sourceX, props.sourceY, props.targetX, props.targetY),
     );
   }
   LineEdge.displayName = `LineEdge(${variant})`;

@@ -2,7 +2,7 @@
 // added/removed/changed/unchanged 상태 부여. 단일 캔버스 비교 화면이 좌표 무시·연결 기반 diff 렌더에 사용.
 
 import type { FlatNode, GraphEdge, VersionGraph } from "@/lib/api";
-import { FIELD_KEYS, getLineageKey, type ChangedField } from "@/lib/diff";
+import { FIELD_KEYS, getFieldValue, getLineageKey, type ChangedField } from "@/lib/diff";
 
 export type MergedNodeStatus = "unchanged" | "added" | "removed" | "changed";
 export type MergedEdgeStatus = "unchanged" | "added" | "removed" | "changed";
@@ -50,8 +50,10 @@ function indexByLineage(nodes: FlatNode[]): Map<string, FlatNode> {
 function diffFieldChanges(base: FlatNode, target: FlatNode): FieldChange[] {
   const changes: FieldChange[] = [];
   for (const [field, label] of FIELD_KEYS) {
-    if (base[field] !== target[field]) {
-      changes.push({ field: label, before: String(base[field] ?? ""), after: String(target[field] ?? "") });
+    const before = getFieldValue(base, field);
+    const after = getFieldValue(target, field);
+    if (before !== after) {
+      changes.push({ field: label, before: String(before ?? ""), after: String(after ?? "") });
     }
   }
   return changes;

@@ -143,6 +143,7 @@ import {
   type NodeDisplayToggle,
 } from "@/lib/node-actions";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { PRIMARY_END_HANDLE } from "@/lib/subprocess-embed";
 import {
   buildMergedGraph,
   type MergedEdge,
@@ -296,8 +297,16 @@ const COMPARE_NODE_ACTIONS: NodeActions = {
 
 // duration·touch_time은 1h30m, 비용 2필드는 천단위 콤마(라벨에 통화가 있어 기호는 생략) — 나머지는 원문 그대로.
 // 포맷 실패(무효 레거시 값)는 원문 노출(빈 표시보다 진단 가능).
-const displayFieldValue = (field: ChangedField, value: string): string => {
+const displayFieldValue = (t: (key: MessageKey) => string, field: ChangedField, value: string): string => {
   if (field === "duration" || field === "touch_time") return formatDurationHm(value) || value;
+  // 병렬 출구 키 목록 — 일반 노드·SP 대표 끝의 "__primary__"는 사람이 읽는 이름으로
+  if (field === "parallel") {
+    return value
+      .split(", ")
+      .filter(Boolean)
+      .map((key) => (key === PRIMARY_END_HANDLE ? t("field.parallelMain") : key))
+      .join(", ");
+  }
   if (field === "gmp") return formatGmp(value) || value;
   if (field === "cost_krw" || field === "cost_usd") return formatThousands(value) || value;
   return value;
@@ -954,8 +963,8 @@ function ComparePane({
     (m: MergedNode): DiffFieldRow[] | undefined =>
       m.status === "changed"
         ? m.fieldChanges.map((fc) => {
-            const rawBefore = displayFieldValue(fc.field, fc.before);
-            const rawAfter = displayFieldValue(fc.field, fc.after);
+            const rawBefore = displayFieldValue(t, fc.field, fc.before);
+            const rawAfter = displayFieldValue(t, fc.field, fc.after);
             return {
               label: t(FIELD_MSG[fc.field]),
               before: rawBefore || t("summary.none"),
@@ -1177,8 +1186,8 @@ function ComparePane({
         fields:
           m.status === "changed"
             ? m.fieldChanges.map((fc) => {
-                const rawBefore = displayFieldValue(fc.field, fc.before);
-                const rawAfter = displayFieldValue(fc.field, fc.after);
+                const rawBefore = displayFieldValue(t, fc.field, fc.before);
+                const rawAfter = displayFieldValue(t, fc.field, fc.after);
                 return {
                   label: t(FIELD_MSG[fc.field]),
                   before: rawBefore || t("summary.none"),
@@ -2065,8 +2074,8 @@ function ComparePane({
                       label={t(PARAM_LABEL_KEY[field])}
                       subLabel={field === "headcount" ? t("compare.avg") : undefined}
                       delta={formatSumDelta(field, base, target)}
-                      baseText={displayFieldValue(field, base) || t("summary.none")}
-                      targetText={displayFieldValue(field, target) || t("summary.none")}
+                      baseText={displayFieldValue(t, field, base) || t("summary.none")}
+                      targetText={displayFieldValue(t, field, target) || t("summary.none")}
                       open={openParams.has(field)}
                       onToggle={() => toggleSumOpen(field)}
                     >
@@ -2084,16 +2093,16 @@ function ComparePane({
                               </span>
                               {row.base === row.target ? (
                                 <span className="shrink-0 text-caption text-ink-secondary">
-                                  {displayFieldValue(field, row.target)}
+                                  {displayFieldValue(t, field, row.target)}
                                 </span>
                               ) : (
                                 <span className="flex shrink-0 items-center gap-1 text-caption">
                                   <span className="text-ink-muted line-through">
-                                    {displayFieldValue(field, row.base) || t("summary.none")}
+                                    {displayFieldValue(t, field, row.base) || t("summary.none")}
                                   </span>
                                   <span className="text-ink-tertiary">→</span>
                                   <span className="font-semibold text-diff-changed">
-                                    {displayFieldValue(field, row.target) || t("summary.none")}
+                                    {displayFieldValue(t, field, row.target) || t("summary.none")}
                                   </span>
                                 </span>
                               )}
@@ -2438,17 +2447,17 @@ function ComparePane({
                     ] as const
                   ).filter(show).map((key) => {
                     const change = selectedNode.fieldChanges.find((fc) => fc.field === key);
-                    const current = displayFieldValue(key, selectedNode.node[key] || "");
+                    const current = displayFieldValue(t, key, selectedNode.node[key] || "");
                     return (
                       <InspectorRow key={key} label={t(FIELD_MSG[key])}>
                         {change ? (
                           <>
                             <span className="text-ink-muted line-through">
-                              {displayFieldValue(key, change.before) || t("summary.none")}
+                              {displayFieldValue(t, key, change.before) || t("summary.none")}
                             </span>
                             <span className="mx-1 text-ink-tertiary">→</span>
                             <span className="font-semibold text-diff-changed">
-                              {displayFieldValue(key, change.after) || t("summary.none")}
+                              {displayFieldValue(t, key, change.after) || t("summary.none")}
                             </span>
                           </>
                         ) : (
@@ -2459,6 +2468,29 @@ function ComparePane({
                       </InspectorRow>
                     );
                   })}
+                  {/* 병렬 출구 — 배열 필드라 위 문자열 목록과 따로. 값이 있거나 바뀐 노드만 (출력 규칙 2026-10-01) */}
+                  {(() => {
+                    const change = selectedNode.fieldChanges.find((fc) => fc.field === "parallel");
+                    const current = displayFieldValue(t, "parallel", (selectedNode.node.parallel_outputs ?? []).join(", "));
+                    if (!show("parallel") || (!change && !current)) return null;
+                    return (
+                      <InspectorRow label={t(FIELD_MSG.parallel)}>
+                        {change ? (
+                          <span data-id="compare-inspector-parallel">
+                            <span className="text-ink-muted line-through">
+                              {displayFieldValue(t, "parallel", change.before) || t("summary.none")}
+                            </span>
+                            <span className="mx-1 text-ink-tertiary">→</span>
+                            <span className="font-semibold text-diff-changed">
+                              {displayFieldValue(t, "parallel", change.after) || t("summary.none")}
+                            </span>
+                          </span>
+                        ) : (
+                          <span data-id="compare-inspector-parallel" className="text-ink-secondary">{current}</span>
+                        )}
+                      </InspectorRow>
+                    );
+                  })()}
                 </div>
                 {/* I/O·조건 — 긴 텍스트 필드는 블록형, 값이나 변경이 있는 것만 (인터뷰 승격 필드 최신화) */}
                 {(() => {

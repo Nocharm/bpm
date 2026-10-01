@@ -951,6 +951,65 @@ def test_confirm_readiness_parallel_fanout_ok(client: TestClient, enforce: None)
     assert _confirm_readiness(map_id, draft_id) == []
 
 
+def _fan_canvas(client: TestClient, code: str, name: str) -> tuple[int, int, dict, list[dict]]:
+    """출력 규칙 시나리오 공용 — SP 노드 1개 + 끝 노드 2개 캔버스."""
+    map_id, draft_id = _make_canvas(client, code, name)
+    node = client.get(f"/api/versions/{draft_id}/graph").json()["nodes"][0]
+    ends = [
+        dict(node, id=f"{code.lower().replace('-', '')}end{i}".ljust(30, "0"), node_type="end",
+             linked_map_id=None, title=f"{name}끝{i}", is_primary_end=False)
+        for i in (1, 2)
+    ]
+    return map_id, draft_id, node, ends
+
+
+def _fan_edge(code: str, i: int, source: str, target: str, **extra: str) -> dict:
+    return {"id": f"{code.lower().replace('-', '')}edge{i}".ljust(30, "0"),
+            "source_node_id": source, "target_node_id": target, **extra}
+
+
+def test_output_rule_allows_one_edge_per_subprocess_end(client: TestClient, enforce: None) -> None:
+    """끝이 다른 출구(대표·반려)로 하나씩 나가면 통과 — 노드 단위가 아니라 출구 단위 (출력 규칙 2026-10-01)."""
+    code = "FWC-OR-ENDS"
+    map_id, draft_id, node, ends = _fan_canvas(client, code, "출구별")
+    edges = [
+        _fan_edge(code, 1, node["id"], ends[0]["id"], source_handle="__primary__"),
+        _fan_edge(code, 2, node["id"], ends[1]["id"], source_handle="반려"),
+    ]
+    _put_graph(client, draft_id, [node, *ends], edges)
+    assert _confirm_readiness(map_id, draft_id) == []
+
+
+def test_output_rule_flags_two_edges_on_one_end(client: TestClient, enforce: None) -> None:
+    """대표 끝에 엣지 2개(레거시 변 id도 대표 끝으로 셈)면 plain_fanout."""
+    code = "FWC-OR-SAME"
+    map_id, draft_id, node, ends = _fan_canvas(client, code, "같은출구")
+    edges = [
+        _fan_edge(code, 1, node["id"], ends[0]["id"], source_handle="__primary__"),
+        _fan_edge(code, 2, node["id"], ends[1]["id"], source_handle="s-right"),
+    ]
+    _put_graph(client, draft_id, [node, *ends], edges)
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert failures["plain_fanout"].node_ids == [node["id"]]
+
+
+def test_output_rule_parallel_attribute(client: TestClient, enforce: None) -> None:
+    """병렬로 켠 출구는 엣지 2개 통과, 1개면 plain_fanout (속성 기준, gateway 없이)."""
+    code = "FWC-OR-PAR"
+    map_id, draft_id, node, ends = _fan_canvas(client, code, "병렬속성")
+    parallel = dict(node, parallel_outputs=["__primary__"])
+    two = [
+        _fan_edge(code, 1, node["id"], ends[0]["id"]),
+        _fan_edge(code, 2, node["id"], ends[1]["id"]),
+    ]
+    _put_graph(client, draft_id, [parallel, *ends], two)
+    assert _confirm_readiness(map_id, draft_id) == []
+
+    _put_graph(client, draft_id, [parallel, *ends], two[:1])
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert failures["plain_fanout"].node_ids == [node["id"]]
+
+
 def test_confirm_readiness_clean_passes(client: TestClient, enforce: None) -> None:
     """정상 캔버스(링크 완전·게시·순환 없음)는 게이트 전건 통과 → []."""
     map_id, draft_id = _make_canvas(client, "FWC-GT-CLEAN", "게이트클린")

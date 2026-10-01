@@ -69,6 +69,7 @@ export function buildLiveGraph(nodes: AppNode[], lineageById?: ReadonlyMap<strin
     follow_latest: node.data.followLatest ?? true,
     linked_version_id: node.data.linkedVersionId ?? null,
     is_primary_end: node.data.isPrimaryEnd ?? false,
+    parallel_outputs: node.data.parallelOutputs ?? [],
     parent_node_id: null,
     source_node_id: lineageById?.get(node.id) ?? null, // 미상이면 자기 id가 계보 루트
   }));

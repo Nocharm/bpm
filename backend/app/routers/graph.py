@@ -462,6 +462,7 @@ async def replace_graph(
             existing.placeholder_category_id = node.placeholder_category_id
             existing.width = node.width
             existing.is_primary_end = node.is_primary_end
+            existing.parallel_outputs = list(node.parallel_outputs)
         else:
             session.add(Node(version_id=version_id, **node.model_dump()))
     for edge in payload.edges:

@@ -7,7 +7,9 @@ import {
   Handle,
   type NodeProps,
   Position,
+  useConnection,
   useNodeId,
+  useStore,
   useStoreApi,
   useUpdateNodeInternals,
 } from "@xyflow/react";
@@ -31,6 +33,7 @@ import {
   type LucideIcon,
   MessageSquare,
   Pin,
+  Pause,
   Play,
   Plus,
   RefreshCw,
@@ -63,6 +66,7 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { FrameworkPeekPill, FrameworkPeekTrigger } from "@/components/framework-peek-pill";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
+import { getOutputGroups, type OutputGroup } from "@/lib/output-rules";
 import {
   collectNodeWarnings,
   hasAssigneeWarning,
@@ -1070,6 +1074,10 @@ function SubprocessHandles({
   anchorTop?: number;
 }) {
   const anchorStyle = anchorTop !== undefined ? { top: anchorTop } : undefined;
+  // 들어오는 문은 연결을 받기만 한다 — 평소엔 숨기고 클릭도 통과(노드 드래그), 연결 드래그 중에만 드롭 대상으로 드러낸다.
+  // 시작 가능하면 target에서 출발한 역방향 연결이 되어, 끌어간 노드가 SP의 입력으로 붙던 문제(사용자 리포트 2026-10-01).
+  const isConnecting = useConnection((connection) => connection.inProgress);
+  const inHiddenStyle = isConnecting ? undefined : { opacity: 0, pointerEvents: "none" as const };
   // 끝 핸들은 링크 맵 resolved가 도착한 뒤 늘어난다 — RF는 핸들 추가를 스스로 재측정하지 않아(handleBounds 스테일)
   // 보조 끝(반려 등)으로 나가는 저장 엣지가 로드 직후 조용히 안 그려진다. 끝 키 집합이 바뀔 때 내부 측정을 갱신한다.
   const nodeId = useNodeId();
@@ -1089,7 +1097,8 @@ function SubprocessHandles({
           type="target"
           position={position}
           isConnectable={connectable}
-          style={side === "left" || side === "right" ? anchorStyle : undefined}
+          isConnectableStart={false}
+          style={{ ...(side === "left" || side === "right" ? anchorStyle : undefined), ...inHiddenStyle }}
         />
       ))}
       {ends.length === 0 ? (
@@ -1101,25 +1110,130 @@ function SubprocessHandles({
           style={anchorStyle}
         />
       ) : (
-        ends.map((end, i) => (
+        // 출구는 우측 한 점 — 끝마다 핸들을 두되(엣지 앵커·끝 키 보존) 전부 라벨 라인에 겹쳐 놓고, 대표 끝 하나만
+        // 보이고 잡힌다(DOM 마지막=최상단). 끝 ≥2에서 끌어 놓으면 page.tsx가 출구 목록으로 끝을 고른다.
+        // 세로 분산은 우측 폭 조절 그립과 겹쳐 폐기 (사용자 결정 2026-10-01)
+        [...ends].reverse().map((end) => (
           <Handle
             key={end.key}
             id={end.key}
             type="source"
             position={Position.Right}
-            // 단일 끝은 라벨 라인 앵커(좌 인핸들과 동일) — 50% 중앙 dot이 엣지 앵커와 어긋나던 것.
-            // 다중 끝만 세로 분산 유지 (사용자 리포트 2026-08-25)
             style={
-              ends.length === 1 && anchorStyle
+              end.key === ends[0].key
                 ? anchorStyle
-                : { top: `${((i + 1) / (ends.length + 1)) * 100}%` }
+                : { ...anchorStyle, opacity: 0, pointerEvents: "none" }
             }
-            title={end.title}
+            title={ends.length === 1 ? end.title : undefined}
             isConnectable={connectable}
           />
         ))
       )}
     </>
+  );
+}
+
+// 이 노드의 출구별 엣지 그룹(lib/output-rules) — RF 스토어에서 이 노드 출력만 문자열로 뽑아(원시값 비교)
+// 드래그 중 재렌더를 막는다. SP 끝 배지·병렬 호버 배지가 공유.
+function useNodeOutputGroups(nodeId: string, nodeType: string, parallelOutputs?: string[]): OutputGroup[] {
+  const outputSig = useStore((state) =>
+    state.edges
+      .filter((edge) => edge.source === nodeId)
+      .map((edge) => `${edge.sourceHandle ?? ""}\u0001${(edge.data?.gateway as string | null | undefined) ?? ""}`)
+      .join("\u0000"),
+  );
+  const edges = outputSig
+    ? outputSig.split("\u0000").map((entry) => {
+        const [sourceHandle, gateway] = entry.split("\u0001");
+        return { source: nodeId, sourceHandle, gateway };
+      })
+    : [];
+  return getOutputGroups({ id: nodeId, nodeType, parallelOutputs }, edges);
+}
+
+// 병렬 출구 호버 배지 — 노드 위에 '동시 N갈래'(SP는 끝 제목 앞에). 엣지 펄스(lib/edge-pulse)와 짝, 분기 노드엔 없음.
+function ParallelHoverBadge({
+  nodeId,
+  nodeType,
+  parallelOutputs,
+  ends,
+  visible,
+}: {
+  nodeId: string;
+  nodeType: string;
+  parallelOutputs?: string[];
+  ends?: SubEnd[];
+  visible: boolean;
+}) {
+  const { t } = useI18n();
+  const groups = useNodeOutputGroups(nodeId, nodeType, parallelOutputs).filter(
+    (group) => group.parallel && group.count >= 2,
+  );
+  if (groups.length === 0) return null;
+  const titleOf = (key: string): string | null =>
+    (ends?.length ?? 0) >= 2 ? (ends?.find((end) => end.key === key)?.title ?? key) : null;
+  return (
+    <div
+      data-id="node-parallel-badge"
+      className={`pointer-events-none absolute -top-6 left-0 flex gap-1 transition-opacity duration-150 ease-smooth ${
+        visible ? "opacity-100" : "opacity-0"
+      }`}
+    >
+      {groups.map((group) => {
+        const endTitle = titleOf(group.key);
+        return (
+          <span
+            key={group.key}
+            className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border border-accent-tint-border bg-accent-tint px-1.5 py-px text-fine text-accent"
+          >
+            <Pause size={11} strokeWidth={1.5} className="shrink-0" />
+            {endTitle ? `${endTitle} · ` : ""}
+            {t("node.parallelCount", { count: group.count })}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+// SP 끝 개수 배지 — 제목 끝에 인라인으로 붙는 알약 하나(제목 폭을 따로 먹지 않게). 끝 ≥2면 `출구 사용량/끝 수`(병렬 출구는 1로 셈),
+// 한 출구에 엣지가 넘치면 끝 1개여도 같은 알약이 에러 톤 `+N`이 되고 호버 시 틴트 그대로 `출구 사용량/끝 수`(예: 4/3)로 페이드(사용자 결정 2026-10-01).
+function SpOutputBadge({ nodeId, ends, parallelOutputs }: { nodeId: string; ends: SubEnd[]; parallelOutputs?: string[] }) {
+  const { t } = useI18n();
+  const groups = useNodeOutputGroups(nodeId, "subprocess", parallelOutputs);
+  const excess = groups.reduce((sum, group) => sum + (group.parallel ? 0 : Math.max(0, group.count - 1)), 0);
+  const total = Math.max(1, ends.length);
+  // 분자 = 출구 사용량 — 병렬 출구는 엣지가 여럿이어도 1(정상), 일반 출구는 엣지 수 그대로라
+  // 초과면 끝 수를 넘어(예: 4/3) 정상(3/3)과 구분된다
+  const connected = groups.reduce((sum, group) => sum + (group.parallel ? 1 : group.count), 0);
+  if (ends.length < 2 && excess === 0) return null;
+  const ratio = `${connected}/${total}`;
+  const pillBase = "ml-1 inline-grid rounded-xs border px-1 py-px align-[1px] text-fine leading-none";
+  if (excess === 0) {
+    return (
+      <span
+        data-id="sp-output-count"
+        title={t("subprocess.outputCount", { connected, total })}
+        className={`${pillBase} border-hairline bg-surface-alt text-ink-tertiary`}
+      >
+        {ratio}
+      </span>
+    );
+  }
+  // 두 글자를 같은 칸에 겹쳐 크로스페이드 — 폭은 둘 중 긴 쪽으로 고정돼 호버 때 제목 줄이 흔들리지 않는다
+  return (
+    <span
+      data-id="sp-output-excess"
+      title={`${t("subprocess.outputExcess", { count: excess })} ${t("subprocess.outputCount", { connected, total })}`}
+      className={`${pillBase} group/sp-out border-error/40 bg-error/10 text-error`}
+    >
+      <span className="col-start-1 row-start-1 text-center transition-opacity duration-150 ease-smooth group-hover/sp-out:opacity-0">
+        +{excess}
+      </span>
+      <span className="col-start-1 row-start-1 text-center opacity-0 transition-opacity duration-150 ease-smooth group-hover/sp-out:opacity-100">
+        {ratio}
+      </span>
+    </span>
   );
 }
 
@@ -1308,6 +1422,15 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             style={{ left: -1.5, top: -1.5, bottom: -1.5, width: 5, background: color }}
           />
         )}
+        {!diff && (
+          <ParallelHoverBadge
+            nodeId={id}
+            nodeType="subprocess"
+            parallelOutputs={data.parallelOutputs}
+            ends={data.subEnds}
+            visible={hovered}
+          />
+        )}
         <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
         {/* SP 마크는 라벨 앞에만 — 아래 줄들(필드·IO)이 노드 전체 폭을 쓴다 (사용자 요청 2026-08-23) */}
         <div className="flex items-center gap-1.5 font-medium text-ink">
@@ -1320,6 +1443,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           <div className="min-w-0">
             {/* 타이틀 = 링크된 맵 이름 고정 — 인라인 이름 편집 차단 (F5) */}
             <NodeTitle id={id} label={data.label} editable={false} />
+            {!diff && data.sideHandles !== true && (
+              <SpOutputBadge nodeId={id} ends={data.subEnds ?? []} parallelOutputs={data.parallelOutputs} />
+            )}
           </div>
           {/* 업무체계 필 — 일반 맵에서 링크맵이 프레임워크 소속일 때, 3초 호버로 체계 피크 (2026-08-30) */}
           {data.spFrameworkCategoryId != null && data.linkedMapId != null && (
@@ -1582,6 +1708,14 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
     >
       {diff && <DiffBadge status={diff} />}
       {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
+      {!diff && (
+        <ParallelHoverBadge
+          nodeId={id}
+          nodeType={data.nodeType}
+          parallelOutputs={data.parallelOutputs}
+          visible={hovered}
+        />
+      )}
       <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
       {customTerminal && (
         // 타입 필 — GMP 필과 같은 자리(본문 첫 줄 좌측). 노드색 테두리+틴트로 소속을 드러낸다.

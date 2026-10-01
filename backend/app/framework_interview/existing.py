@@ -10,6 +10,7 @@ from app import workflow
 from app.app_settings import OTHER_SYSTEM, commit_system, get_systems
 from app.duration import DURATION_RE
 from app.models import Edge, MapVersion, Node, ProcessMap
+from app.subprocess import PRIMARY_END_HANDLE
 
 # (source_node_id, target_node_id, label, gateway) — 합성 노드를 접어 넣기 전/후 공용 흐름 표현
 FlowEdge = tuple[str, str, str, str | None]
@@ -106,11 +107,22 @@ def map_to_row(
     카탈로그 없이도 동작하는 Other 폴백 규칙.
     """
     # 지연 import — 스크립트 패키지
-    from scripts.consultant_interview import EXCEPTION_VARIANT_COLOR, LOOP_BRANCH_NODE_NAME
+    from scripts.consultant_interview import EXCEPTION_VARIANT_COLOR, FANOUT_BRANCH_SUFFIX, LOOP_BRANCH_NODE_NAME
+
+    # 어댑터가 세운 ◇ — 자기 반복(반복 이름)과 팬아웃(유일한 선행 활동명 + " 결과", 2026-10-01). 행으로 되돌리지 않고 접는다
+    title_by_id = {n.id: (n.title or "").strip() for n in nodes}
+    preds: dict[str, set[str]] = {}
+    for e in edges:
+        preds.setdefault(e.target_node_id, set()).add(e.source_node_id)
+
+    def _is_fanout_branch(n: Node) -> bool:
+        sources = preds.get(n.id, set())
+        return len(sources) == 1 and (n.title or "").strip() == f"{title_by_id.get(next(iter(sources)), '')} {FANOUT_BRANCH_SUFFIX}"
 
     synthetic = {
         n.id for n in nodes
-        if n.node_type == "decision" and (n.title or "").strip() == LOOP_BRANCH_NODE_NAME
+        if n.node_type == "decision"
+        and ((n.title or "").strip() == LOOP_BRANCH_NODE_NAME or _is_fanout_branch(n))
     }
     activity = sorted(
         (n for n in nodes if n.node_type in ACTIVITY_TYPES and n.id not in synthetic),
@@ -172,6 +184,11 @@ def map_to_row(
                 item["condition"] = label
         elif by_id[source].node_type == "decision":
             item = {"src": src, "dst": dst, "kind": "branch", "gateway": gateway or "exclusive"}
+            if label:
+                item["condition"] = label
+        elif PRIMARY_END_HANDLE in (by_id[source].parallel_outputs or []) or gateway == "parallel":
+            # 병렬 출구에서 나가는 엣지는 병행 갈래 — 어댑터가 다시 출구를 병렬로 켠다 (출력 규칙 2026-10-01)
+            item = {"src": src, "dst": dst, "kind": "branch", "gateway": "parallel"}
             if label:
                 item["condition"] = label
         else:

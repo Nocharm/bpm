@@ -6,6 +6,7 @@ import { type AppNode, getNewEdgeLineStyle, layoutSubsetWithDagre, layoutWithDag
 import { commitRole, commitSystem } from "./catalogs";
 import { normalizeDuration, normalizeNumericParam, stripThousands } from "./duration";
 import { genId } from "./id";
+import { applyParallelFlag } from "./output-rules";
 import {
   coerceAiNewNodeType,
   dropConflictingCurrency,
@@ -77,7 +78,7 @@ const HEADER_COLUMNS = [
   "name", "description", "assignee", "role", "department", "system", "duration", "touch_time",
   "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
   "input", "input_flags", "output", "start_condition", "end_condition",
-  "url", "url_label", "next",
+  "url", "url_label", "parallel", "next",
 ] as const;
 type HeaderColumn = (typeof HEADER_COLUMNS)[number];
 
@@ -85,7 +86,7 @@ type HeaderColumn = (typeof HEADER_COLUMNS)[number];
 const MAX_DATA_ROWS = 500;
 // 백엔드 NodeIn 제약 미러. description·input/output·조건은 Text 컬럼(무상한)이라 제외한다.
 const MAX_LEN: Record<
-  Exclude<HeaderColumn, "next" | "description" | "input" | "input_flags" | "output" | "start_condition" | "end_condition">,
+  Exclude<HeaderColumn, "next" | "parallel" | "description" | "input" | "input_flags" | "output" | "start_condition" | "end_condition">,
   number
 > = {
   name: 200,
@@ -349,6 +350,8 @@ const mergeNode = (
             : "",
       url: pick(next.url ?? "", existing.url ?? ""),
       url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
+      // 병렬 출구 — 후보가 지정했을 때만(undefined=유지). CSV·AI 공용 (출력 규칙 2026-10-01)
+      parallel_outputs: next.parallel_outputs ?? existing.parallel_outputs ?? [],
       sort_order: next.sort_order,
     },
     droppedParamFields: droppedFields,
@@ -537,6 +540,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     end_condition: cellOf(r, "end_condition"),
     url: cellOf(r, "url"),
     url_label: cellOf(r, "url_label"),
+    parallelRaw: cellOf(r, "parallel"),
     nextRaw: cellOf(r, "next"),
     line: r.line,
   }));
@@ -615,6 +619,19 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
 
   // 담당자/부서 해석 — id→이름, 한글 부서명→정식명. 해석 후 길이를 재야 한다(id는 짧아도 이름은 길 수 있음)
   const warnings: CsvImportWarning[] = [];
+  // Parallel 셀 — Y/N(대소문자·yes/no·true/false·1/0 허용), 빈 칸은 유지. 그 외 값은 경고 후 무시 (출력 규칙 2026-10-01)
+  const parallelOf = new Map<string, boolean>();
+  for (const row of rows) {
+    const value = row.parallelRaw.toLowerCase();
+    if (value === "") continue;
+    if (["y", "yes", "true", "1"].includes(value)) parallelOf.set(row.name, true);
+    else if (["n", "no", "false", "0"].includes(value)) parallelOf.set(row.name, false);
+    else warnings.push({ line: row.line, message: `Parallel "${row.parallelRaw}" is not Y or N - ignored` });
+    // 병렬 출구는 갈래 2개 이상이 규칙 — 1개 이하면 저장 체크리스트가 막으니 임포트 때 알린다
+    if (parallelOf.get(row.name) === true && (nextsOf.get(row.name) ?? []).length < 2) {
+      warnings.push({ line: row.line, message: `Parallel "${row.name}" needs two or more Next targets - add another branch or set N` });
+    }
+  }
   const resolved = new Map<string, { assignee: string; department: string }>();
   for (const row of rows) {
     if (!names.has(row.name)) continue; // 이름 에러 행은 스킵
@@ -681,7 +698,14 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         ...NODE_DEFAULTS,
         id: idOf.get(row.name) as string,
         title: row.name,
-        node_type: (nextsOf.get(row.name) ?? []).length >= 2 ? "decision" : "process",
+        // Next 2개 이상은 분기(decision) — 단 병렬(Parallel=Y, 빈 칸이면 기존 노드의 병렬 설정)이면
+        // 동시 진행이라 병렬 출구를 켠 일반 노드
+        node_type:
+          (nextsOf.get(row.name) ?? []).length >= 2 &&
+          !(parallelOf.get(row.name) ?? (byTitle.get(row.name)?.parallel_outputs ?? []).includes("__primary__"))
+            ? "decision"
+            : "process",
+        parallel_outputs: applyParallelFlag(byTitle.get(row.name)?.parallel_outputs, parallelOf.get(row.name)),
         description: row.description,
         assignee: resolved.get(row.name)?.assignee ?? "",
         // 역할 — 별칭→정식 표기, 미일치는 자유값 그대로 (commitRole)
@@ -981,6 +1005,8 @@ export function buildGraphFromAiProposal(
       color: attr?.color ?? "",
       group_ids: groupId ? [groupId] : [],
       sort_order: index,
+      // 병렬 출구 플래그 — 생략이면 undefined(mergeNode가 기존 유지), true/false면 기본 출구 켬/끔
+      parallel_outputs: applyParallelFlag(existing?.parallel_outputs, attr?.parallel),
     };
     // AI 계약: SP 노드는 annual_count·fte만 수정 가능 — dropUneditableParams(mergeNode 내부)로
     // 프롬프트와 무관하게 다시 강제하고, 실제로 드롭된 값이 있으면 CSV와 같은 문구로 경고한다.

@@ -134,9 +134,10 @@ def test_convert_basic_map_and_nodes() -> None:
 
 def test_relations_edges_drive_the_graph() -> None:
     m = convert_interview(_interview()).maps[0]
-    assert [n.code for n in m.nodes] == ["a01", "a02", "a03", "a04"]
+    # a01에서 순차 2갈래 — 출구당 1개 규칙으로 뒤에 ◇(a01f)가 서서 갈래를 나눈다 (2026-10-01)
+    assert [n.code for n in m.nodes] == ["a01", "a01f", "a02", "a03", "a04"]
     pairs = {(e.source, e.target) for e in m.edges}
-    assert pairs == {("a01", "a02"), ("a01", "a03"), ("a02", "a04"), ("a03", "a04")}
+    assert pairs == {("a01", "a01f"), ("a01f", "a02"), ("a01f", "a03"), ("a02", "a04"), ("a03", "a04")}
     assert {e.kind for e in m.edges} == {"seq"}
 
 
@@ -151,7 +152,7 @@ def test_edge_label_joins_label_and_condition() -> None:
     data2 = _interview()
     data2["rows"][0]["relations"]["edges"][0] = _edge(1, 2, condition="준비 목록 산출 시")
     m2 = convert_interview(data2).maps[0]
-    assert next(e for e in m2.edges if e.source == "a01" and e.target == "a02").label == "준비 목록 산출 시"
+    assert next(e for e in m2.edges if e.source == "a01f" and e.target == "a02").label == "준비 목록 산출 시"
 
 
 def test_exclusive_branch_promotes_source_to_decision() -> None:
@@ -169,8 +170,11 @@ def test_parallel_gateway_does_not_promote() -> None:
     """병행 팬아웃은 택일이 아니다 — 마름모로 그리면 오독된다."""
     data = _interview()
     data["rows"][0]["relations"]["edges"][0] = _edge(1, 2, kind="branch", gateway="parallel")
+    data["rows"][0]["relations"]["edges"][1] = _edge(1, 3, kind="branch", gateway="parallel")
     src = next(n for n in convert_interview(data).maps[0].nodes if n.code == "a01")
     assert src.type == "process"
+    # 대신 출구를 병렬로 켤 표시를 남긴다 (출력 규칙 2026-10-01)
+    assert src.parallel is True
 
 
 def test_loop_and_bypass_kinds_are_kept() -> None:
@@ -182,7 +186,8 @@ def test_loop_and_bypass_kinds_are_kept() -> None:
     m = convert_interview(data).maps[0]
     by_pair = {(e.source, e.target): e.kind for e in m.edges}
     assert by_pair[("a04", "a02")] == "loop"
-    assert by_pair[("a01", "a04")] == "bypass"
+    # a01 진출은 ◇(a01f)에서 갈라진다 — kind는 이설돼도 유지
+    assert by_pair[("a01f", "a04")] == "bypass"
 
 
 def test_backward_edge_is_reclassified_as_loop() -> None:
@@ -488,6 +493,58 @@ def test_l5_self_edge_kept_as_loop_branch() -> None:
     )
     # 드랍 시절엔 quote 노트도 함께 증발했다 — 유지 경로에선 flow 노트로 살아남아야 한다
     assert any(n.kind == "flow" and "미흡하면 다시 돌려요." in n.text for n in res.notes)
+
+
+def test_self_edge_clears_parallel_mark_moved_to_the_loop_branch() -> None:
+    """self edge가 진출을 ◇로 이설하면 원본에는 A→◇ 하나뿐 — 병렬 표시를 지워 "병렬인데 1개" 위반을 막는다 (2026-10-01)."""
+    data = _interview()
+    data["rows"][0]["relations"]["edges"] = [
+        _edge(1, 2),
+        _edge(2, 2, condition="측정 불가 시"),
+        _edge(2, 3, kind="branch", gateway="parallel"),
+        _edge(2, 4, kind="branch", gateway="parallel"),
+    ]
+    res = convert_interview(data)
+    assert not res.has_error()
+    src = next(n for n in res.maps[0].nodes if n.code == "a02")
+    assert src.parallel is False
+
+
+def test_loop_plus_next_fanout_gets_auto_branch_node() -> None:
+    """되돌아가기+다음 단계가 한 활동에서 나가면 뒤에 ◇(반복 이름)를 세워 갈래를 나눈다 (출력 규칙 2026-10-01)."""
+    data = _interview()
+    data["rows"][0]["relations"]["edges"] = [
+        _edge(1, 2),
+        _edge(2, 3),
+        _edge(2, 1, kind="loop", condition="보완"),
+        _edge(3, 4),
+    ]
+    res = convert_interview(data)
+    assert not res.has_error()
+    m = res.maps[0]
+    branch = next(n for n in m.nodes if n.code == "a02f")
+    assert branch.type == "decision" and branch.name == "반복 여부(자동 생성됨)"
+    pairs = {(e.source, e.target) for e in m.edges}
+    assert {("a02", "a02f"), ("a02f", "a03"), ("a02f", "a01")} <= pairs
+    assert any("a02f" in i.message for i in res.issues)
+
+
+def test_plain_fanout_branch_node_is_named_after_its_activity() -> None:
+    """순차 갈래 여러 개는 '{활동명} 결과' ◇, 전부 병행이면 ◇ 없이 출구를 병렬로 켠다."""
+    data = _interview()
+    data["rows"][0]["relations"]["edges"] = [_edge(1, 2), _edge(1, 3), _edge(2, 4), _edge(3, 4)]
+    m = convert_interview(data).maps[0]
+    assert next(n for n in m.nodes if n.code == "a01f").name == "작업지시 확인 결과"
+
+    data2 = _interview()
+    data2["rows"][0]["relations"]["edges"] = [
+        _edge(1, 2, kind="branch", gateway="parallel"),
+        _edge(1, 3, kind="branch", gateway="parallel"),
+        _edge(2, 4), _edge(3, 4),
+    ]
+    m2 = convert_interview(data2).maps[0]
+    assert not any(n.code == "a01f" for n in m2.nodes)
+    assert next(n for n in m2.nodes if n.code == "a01").parallel is True
 
 
 def test_l6_self_edge_becomes_loop_branch() -> None:

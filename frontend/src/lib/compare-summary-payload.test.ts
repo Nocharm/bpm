@@ -232,3 +232,15 @@ describe("buildCompareSummaryPayload", () => {
     expect(hasCompareChanges(payload.totals)).toBe(false);
   });
 });
+
+describe("buildCompareSummaryPayload - 병렬 출구", () => {
+  it("reports a parallel toggle with readable exit names instead of raw keys", () => {
+    const base: VersionGraph = { nodes: [mkNode({ id: "a", title: "A", parallel_outputs: [] })], edges: [] };
+    const target: VersionGraph = {
+      nodes: [mkNode({ id: "a2", source_node_id: "a", title: "A", parallel_outputs: ["__primary__"] })],
+      edges: [],
+    };
+    const { payload } = buildCompareSummaryPayload(buildMergedGraph(base, target));
+    expect(payload.nodes[0].changes).toEqual([{ field: "parallel", before: "", after: "main exit" }]);
+  });
+});

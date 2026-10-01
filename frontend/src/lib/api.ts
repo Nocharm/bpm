@@ -178,6 +178,8 @@ export interface GraphNode {
   width?: number | null;
   // 대표 끝 (node_type==="end")
   is_primary_end: boolean;
+  // 병렬로 켠 출구 키("__primary__" 또는 SP 끝 키) — 출력 규칙(lib/output-rules.ts). 레거시 응답엔 없을 수 있다
+  parallel_outputs?: string[];
 }
 
 // 전체 그래프(모든 계층) 조회용 — 계층/계보 정보 포함 (검색·버전 diff)
@@ -2362,6 +2364,8 @@ export interface AiNodeAttributes {
   color?: string | null;
   url?: string | null;
   url_label?: string | null;
+  // 병렬 출구(노드 기본 출구) — null/생략=유지, true/false=켬/끔 (lib/output-rules applyParallelFlag)
+  parallel?: boolean | null;
 }
 
 export interface AiNode {

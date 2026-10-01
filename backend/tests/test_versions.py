@@ -105,6 +105,7 @@ def test_create_version_clones_graph(client: TestClient) -> None:
                     "id": "p", "title": "발주",
                     "input": "PR\n견적", "input_forms": "document",
                     "output": "발주서", "output_ids": "itm_c1",
+                    "parallel_outputs": ["__primary__"],
                 },
                 {
                     "id": "c", "title": "승인",
@@ -132,6 +133,8 @@ def test_create_version_clones_graph(client: TestClient) -> None:
     assert cloned_p["input"] == "PR\n견적" and cloned_p["input_forms"] == "document"
     # IO 링크 컬럼은 itemId 그대로 복사 — 리매핑 없음 (io-linking design §3)
     assert cloned_p["output_ids"] == "itm_c1"
+    # 병렬 출구도 클론에 보존 (출력 규칙 2026-10-01)
+    assert cloned_p["parallel_outputs"] == ["__primary__"]
     cloned_c = next(n for n in cloned_graph["nodes"] if n["title"] == "승인")
     assert cloned_c["input_links"] == "itm_c1"
     assert cloned_c["input_flags"] == "optional"

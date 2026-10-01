@@ -62,6 +62,8 @@ function buildFlowEdges(
   const edges: PreviewEdge[] = [];
   const seen = new Set<string>();
   const selfSpecs: { node: PreviewNode; label: string }[] = [];
+  // 병행 갈래 쌍 — 팬아웃 post-pass가 전부 병행인 출구는 ◇ 없이 둔다(backend parallel_pairs 동치)
+  const parallelPairs = new Set<string>();
   for (const raw of rawEdges) {
     const edge = asRecord(raw);
     if (!edge) continue;
@@ -81,6 +83,7 @@ function buildFlowEdges(
       selfSpecs.push({ node: src, label });
       continue;
     }
+    if (kind === "branch" && asText(edge.gateway) === "parallel") parallelPairs.add(pair);
     if (kind === "branch" && asText(edge.gateway) !== "parallel") src.type = "decision";
     // 뒤 활동 → 앞 활동(seq 역행)은 되돌아가는 연결 — seq/branch로 와도 loop로 본다(backend _build_flow_edges 동치).
     // 그대로 두면 앞 활동에 in-edge가 생겨 Start가 안 붙는다
@@ -102,6 +105,29 @@ function buildFlowEdges(
     edges.push({ from: branch.code, to: node.code, label, kind: "loop" });
     if (!declared.has(node.code)) node.type = "process";
     loopNodes.push({ anchor: node.code, node: branch });
+  }
+  // 팬아웃 post-pass — 일반 활동에서 2개 이상 나가는데 전부 병행은 아니면 뒤에 ◇(backend _build_flow_edges 동치)
+  const byCode = new Map(ordered.map((node) => [node.code, node]));
+  const outBySrc = new Map<string, PreviewEdge[]>();
+  for (const edge of edges) {
+    const list = outBySrc.get(edge.from);
+    if (list) list.push(edge);
+    else outBySrc.set(edge.from, [edge]);
+  }
+  for (const [srcCode, group] of outBySrc) {
+    const src = byCode.get(srcCode);
+    if (!src || src.type === "decision" || group.length < 2) continue;
+    if (group.every((edge) => parallelPairs.has(`${edge.from}>${edge.to}`))) continue;
+    const branch: PreviewNode = {
+      code: `${srcCode}f`,
+      name: group.some((edge) => edge.kind === "loop") ? PREVIEW_LOOP_BRANCH_NAME : `${src.name} 결과`,
+      type: "decision",
+      color: "",
+      seq: src.seq,
+    };
+    for (const edge of group) edge.from = branch.code;
+    edges.push({ from: srcCode, to: branch.code, label: "", kind: "seq" });
+    loopNodes.push({ anchor: srcCode, node: branch });
   }
   if (edges.length === 0) return { edges: makeSeqChain(ordered), loopNodes: [] };
   return { edges, loopNodes };

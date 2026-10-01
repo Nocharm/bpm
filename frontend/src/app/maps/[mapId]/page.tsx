@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MessageSquare, Monitor, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MessageSquare, Monitor, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pause, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -322,6 +322,8 @@ import {
   subprocessInHandle,
   type SubEnd,
 } from "@/lib/subprocess-embed";
+import { applyParallelFlag, getOutputGroups, getOutputKey, type OutputRuleEdge, type OutputRuleNode } from "@/lib/output-rules";
+import { assignEdgePulses } from "@/lib/edge-pulse";
 import {
   NodeActionsContext,
   type IoListDisplayState,
@@ -753,6 +755,7 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       placeholderCategoryPath: node.placeholder_category_path ?? null,
       nodeWidth: node.width ?? null,
       isPrimaryEnd: node.is_primary_end,
+      parallelOutputs: node.parallel_outputs ?? [],
     },
   }));
 }
@@ -777,6 +780,19 @@ const EDGE_LINE_STYLE_OPTIONS = [
   { value: "smoothstep", labelKey: "edgeStyle.step", icon: CornerDownRight },
   { value: "straight", labelKey: "edgeStyle.straight", icon: Slash },
 ] as const;
+
+// 저장 체크리스트·출력 규칙 입력 — 노드는 병렬 출구, 엣지는 출구 키·레거시 게이트웨이까지 넘긴다(lib/output-rules.ts).
+function buildCheckNode(node: AppNode): OutputRuleNode & { label: string } {
+  return { id: node.id, nodeType: node.data.nodeType, label: node.data.label, parallelOutputs: node.data.parallelOutputs };
+}
+
+function buildCheckEdge(edge: Edge): OutputRuleEdge {
+  return {
+    source: edge.source,
+    sourceHandle: edge.sourceHandle,
+    gateway: (edge.data?.gateway as string | null | undefined) ?? null,
+  };
+}
 
 export function toAppEdges(graph: Graph): Edge[] {
   const subprocessIds = new Set(
@@ -872,6 +888,7 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     follow_latest: true,
     linked_version_id: null,
     is_primary_end: false,
+    parallel_outputs: applyParallelFlag([], attr?.parallel) ?? [],
   };
 }
 
@@ -932,6 +949,8 @@ export function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]
       placeholder_category_id: node.data.placeholderCategoryId ?? null,
       width: node.data.nodeWidth ?? null,
       is_primary_end: node.data.isPrimaryEnd ?? false,
+      // 미직렬화 시 저장마다 서버 소거 — 왕복 필수
+      parallel_outputs: node.data.parallelOutputs ?? [],
     })),
     // 양 끝이 모두 payload 노드인 엣지만 — 누락 노드 참조 제거
     edges: edges
@@ -2554,6 +2573,10 @@ function MapEditor({ mapId }: { mapId: number }) {
             data: {
               ...node.data,
               ...(title !== undefined ? { label: title } : {}),
+              // 병렬 출구 플래그 — 생략이면 유지, true/false면 기본 출구 켬/끔 (출력 규칙 2026-10-01)
+              ...(attr?.parallel != null
+                ? { parallelOutputs: applyParallelFlag(node.data.parallelOutputs, attr.parallel) }
+                : {}),
               ...(desc !== undefined ? { description: desc } : {}),
               ...(attr
                 ? {
@@ -3296,10 +3319,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (ns.length === 0) {
       return [];
     }
-    const states = getSaveCheckStates(
-      ns.map((node) => ({ id: node.id, nodeType: node.data.nodeType, label: node.data.label })),
-      edgesRef.current.map((edge) => ({ source: edge.source })),
-    );
+    const states = getSaveCheckStates(ns.map(buildCheckNode), edgesRef.current.map(buildCheckEdge));
     const blockers: string[] = [];
     // 연계 캔버스는 start·대표끝이 없는 게 정상 — 두 조건은 일반 맵에만 (2026-08-28 개선)
     if (!isFrameworkMap && !states.start) blockers.push(t("save.checkOneStart"));
@@ -3379,12 +3399,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
 
   const saveCheckItems = useMemo<SaveCheckItem[]>(() => {
-    const simpleNodes = nodes.map((node) => ({
-      id: node.id,
-      nodeType: node.data.nodeType,
-      label: node.data.label,
-    }));
-    const simpleEdges = edges.map((edge) => ({ source: edge.source }));
+    const simpleNodes = nodes.map(buildCheckNode);
+    const simpleEdges = edges.map(buildCheckEdge);
     const states = getSaveCheckStates(simpleNodes, simpleEdges);
     const problemIds = getMultiOutputNodeIds(simpleNodes, simpleEdges);
     return [
@@ -3862,7 +3878,16 @@ function MapEditor({ mapId }: { mapId: number }) {
         const outgoing = getOutgoingEdges(edgesRef.current, connection.source).filter(
           (edge) => sourceHandle === undefined || edge.sourceHandle === sourceHandle,
         );
-        if (outgoing.length > 0) {
+        // 병렬 출구는 갈래를 더하는 게 정상 — 삽입/교체 모달 없이 바로 추가(lib/output-rules)
+        // 판정은 출력 규칙과 같은 소스(getOutputGroups) — 플래그 없이 gateway=parallel만 가진 레거시 출구도 병렬
+        const exitKey = getOutputKey(source?.data.nodeType ?? "process", connection.sourceHandle);
+        const isParallelExit =
+          source !== undefined &&
+          (source.data.parallelOutputs?.includes(exitKey) ||
+            getOutputGroups(buildCheckNode(source), edgesRef.current.map(buildCheckEdge)).some(
+              (group) => group.key === exitKey && group.parallel,
+            ));
+        if (outgoing.length > 0 && !isParallelExit) {
           setEdgeAction({
             source: connection.source,
             target: connection.target ?? "",
@@ -3886,6 +3911,23 @@ function MapEditor({ mapId }: { mapId: number }) {
       .nodeType;
     return !violatesTerminalRule(sourceType, targetType);
   }, []);
+
+  // 캔버스 연결(핸들 드래그·몸체 드롭) 입구 — SP 출구는 우측 한 점이라 끝이 2개 이상이면 어느 끝인지 모른다.
+  // 출구 선택 목록으로 끝을 고른 뒤 연결한다(사용자 결정 2026-10-01). 끝 1개 이하·일반 노드는 그대로.
+  const handleFlowConnect = useCallback(
+    (connection: Connection) => {
+      const sourceId = connection.source;
+      const isSubprocessSource =
+        nodesRef.current.find((node) => node.id === sourceId)?.data.nodeType === "subprocess";
+      const ends = sourceId && isSubprocessSource ? subEndsOf(sourceId) : [];
+      if (sourceId && ends.length >= 2) {
+        openEndPrompt(sourceId, ends, (endKey) => onConnect({ ...connection, sourceHandle: endKey }));
+        return;
+      }
+      onConnect(connection);
+    },
+    [onConnect, subEndsOf, openEndPrompt],
+  );
 
   // 몸체 드롭 빠른 연결 — 핸들 미포착 드롭(isValid 아님)이 노드 위에서 끝나면 기본 핸들
   // (정방향=왼쪽 타깃, 역방향=오른쪽 소스)로 연결. 판정은 미리보기(QuickConnectLine)와 공유.
@@ -3921,15 +3963,9 @@ function MapEditor({ mapId }: { mapId: number }) {
             targetHandle: getQuickTargetHandleId(over.data.nodeType),
           };
       if (!isValidConnection(connection)) return;
-      // 역방향 몸체 드롭의 소스가 끝 2개 이상인 하위프로세스면 출구 목록으로 끝을 고른 뒤 연결
-      const ends = reverse && over.data.nodeType === "subprocess" ? subEndsOf(over.id) : [];
-      if (ends.length >= 2) {
-        openEndPrompt(over.id, ends, (endKey) => onConnect({ ...connection, sourceHandle: endKey }));
-        return;
-      }
-      onConnect(connection);
+      handleFlowConnect(connection);
     },
-    [readOnly, isValidConnection, onConnect, subEndsOf, openEndPrompt],
+    [readOnly, isValidConnection, handleFlowConnect],
   );
 
   // 드롭존 흐름 삽입이 시작/끝 규칙을 어기는지 — front=A→B(드래그→대상), back=B→A(대상→드래그).
@@ -6591,6 +6627,46 @@ function MapEditor({ mapId }: { mapId: number }) {
               },
             ]
           : [];
+      // 병렬 출구 토글 — 출구 엣지가 모두 동시 진행(2개 이상 필수, lib/output-rules). 분기·끝은 대상 아님.
+      // SP 끝 ≥2면 끝별 하위 체크(출구가 끝마다 따로라서), 그 외는 노드 출구 하나 (사용자 결정 2026-10-01)
+      const parallelTarget = injectedTarget;
+      const parallelKeys = parallelTarget?.data.parallelOutputs ?? [];
+      const toggleParallel = (key: string) => {
+        if (!menu.targetId) return;
+        patchNode(
+          menu.targetId,
+          {
+            parallelOutputs: parallelKeys.includes(key)
+              ? parallelKeys.filter((item) => item !== key)
+              : [...parallelKeys, key],
+          },
+        );
+      };
+      const parallelEnds = parallelTarget?.data.nodeType === "subprocess" ? (parallelTarget.data.subEnds ?? []) : [];
+      const parallelItems: ContextMenuItem[] =
+        readOnly || !parallelTarget || menuNodeType === "decision" || menuNodeType === "end"
+          ? []
+          : parallelEnds.length >= 2
+            ? [
+                {
+                  label: t("ctx.parallelOutput"),
+                  icon: Pause,
+                  submenu: parallelEnds.map((end) => ({
+                    check: true as const,
+                    label: end.title,
+                    checked: parallelKeys.includes(end.key),
+                    onToggle: () => toggleParallel(end.key),
+                  })),
+                },
+              ]
+            : [
+                {
+                  check: true as const,
+                  label: t("ctx.parallelOutput"),
+                  checked: parallelKeys.includes(PRIMARY_END_HANDLE),
+                  onToggle: () => toggleParallel(PRIMARY_END_HANDLE),
+                },
+              ];
       // 이름 변경 — 인라인 타이틀 편집 진입(startRename). 편집 전용이라 readOnly에선 숨김(F2 전역키와 동일).
       // subprocess는 타이틀=링크된 맵 이름 고정이라 항목 자체 숨김 (F5)
       const renameItems: ContextMenuItem[] = readOnly || menuNodeType === "subprocess"
@@ -6621,6 +6697,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           },
         },
         ...renameItems,
+        ...parallelItems,
         { divider: true },
         ...colorItems,
         ...openChildItems,
@@ -6671,6 +6748,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     applyAutoLayout,
     reactFlow,
     promptOpenLinkedMap,
+    patchNode,
     t,
   ]);
 
@@ -7667,7 +7745,22 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
       }
     }
-    const finishEdges = (list: Edge[]): Edge[] => injectFanLanes(anchorEdgesToGhosts(list), fanGeom);
+    // 흐름 펄스(렌더 전용, lib/edge-pulse) — 메인 스코프 노드의 병렬 출구·분기 갈래. 펼침 자식·게이트웨이는 제외.
+    const pulses = assignEdgePulses(
+      nodes.map((node) => ({
+        ...buildCheckNode(node),
+        color: resolveNodeStroke(node.data.color, node.data.nodeType),
+      })),
+      edges.map((edge) => ({ ...buildCheckEdge(edge), id: edge.id, hidden: hiddenIds?.has(edge.id) })),
+    );
+    const withPulse = (list: Edge[]): Edge[] =>
+      pulses.size === 0
+        ? list
+        : list.map((edge) => {
+            const pulse = pulses.get(edge.id);
+            return pulse ? { ...edge, data: { ...edge.data, pulse } } : edge;
+          });
+    const finishEdges = (list: Edge[]): Edge[] => injectFanLanes(anchorEdgesToGhosts(withPulse(list)), fanGeom);
     const currentStyled = mirroredEdges.map((edge) => {
       // 인라인 펼침 시 A→B는 렌더에서만 숨김(데이터 보존)
       if (hiddenIds?.has(edge.id)) {
@@ -9289,6 +9382,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             );
           })()}
           <button
+            data-id="editor-save"
             className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => void handleSave()}
             disabled={readOnly}
@@ -9673,7 +9767,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       nodesConnectable={!readOnly}
                       onNodesChange={handleNodesChange}
                       onEdgesChange={onEdgesChange}
-                      onConnect={onConnect}
+                      onConnect={handleFlowConnect}
                       onConnectEnd={handleConnectEnd}
                       connectionLineComponent={QuickConnectLine}
                       isValidConnection={isValidConnection}

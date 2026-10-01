@@ -29,6 +29,7 @@ export type ChangedField =
   | "gmp"
   | "start_condition"
   | "end_condition"
+  | "parallel"
   | "location";
 
 export interface NodeDiffEntry {
@@ -79,7 +80,15 @@ export const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
   ["gmp", "gmp"],
   ["start_condition", "start_condition"],
   ["end_condition", "end_condition"],
+  // 병렬 출구 — 흐름 의미라 콘텐츠 diff 대상(백엔드 확정 서명과 같이). 배열이라 getFieldValue로 비교
+  ["parallel_outputs", "parallel"],
 ];
+
+/** diff 비교·표시용 필드 값 — 배열(병렬 출구)은 정렬 후 ", " 결합해 참조 동일성 대신 내용으로 비교한다. */
+export function getFieldValue(node: FlatNode, field: keyof FlatNode): unknown {
+  const value = node[field];
+  return Array.isArray(value) ? [...value].sort().join(", ") : value;
+}
 
 // 변경 필드 라벨 키 — compare 화면·연계 캔버스 확정 요약 공용 (2026-08-28 승격)
 export const FIELD_MSG: Record<ChangedField, MessageKey> = {
@@ -105,6 +114,7 @@ export const FIELD_MSG: Record<ChangedField, MessageKey> = {
   gmp: "field.gmp",
   start_condition: "field.startCondition",
   end_condition: "field.endCondition",
+  parallel: "field.parallel",
   location: "field.location",
 };
 
@@ -192,7 +202,7 @@ export function computeVersionDiff(
 
   for (const [leftNode, rightNode] of pairs) {
     const changedFields: ChangedField[] = FIELD_KEYS.filter(
-      ([field]) => leftNode[field] !== rightNode[field],
+      ([field]) => getFieldValue(leftNode, field) !== getFieldValue(rightNode, field),
     ).map(([, key]) => key);
     if (getParentLineageKey(leftNode, leftById) !== getParentLineageKey(rightNode, rightById)) {
       changedFields.push("location");

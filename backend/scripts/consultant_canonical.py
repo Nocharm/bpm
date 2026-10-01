@@ -64,6 +64,8 @@ class CanonicalNode(BaseModel):
     description: str = ""
     # 노드 stroke 색("#RRGGBB" 또는 "") — Node.color는 String(20). 예외 variant 표식용 (2026-08-19)
     color: str = Field(default="", max_length=20)
+    # 병행 갈래(branch+gateway=parallel)의 출발 — 임포터가 Node.parallel_outputs로 출구를 병렬로 켠다 (출력 규칙 2026-10-01)
+    parallel: bool = False
 
 
 class CanonicalEdge(BaseModel):

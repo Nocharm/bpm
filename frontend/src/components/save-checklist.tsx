@@ -7,6 +7,8 @@
 import { Check, ChevronRight, Crosshair } from "lucide-react";
 import { useState } from "react";
 
+import { getOutputViolations, type OutputRuleEdge, type OutputRuleNode } from "@/lib/output-rules";
+
 export interface SaveCheckItem {
   key: string;
   label: string;
@@ -15,32 +17,20 @@ export interface SaveCheckItem {
   onLocate?: () => void;
 }
 
-// 잘못된 다중 연결 노드 id — 분기(decision)·하위프로세스(subprocess, 다중 끝) 외 노드가 출력 2개 이상.
+// 출력 규칙 위반 노드 id — 출구마다 1개·병렬 출구 2개 이상(`lib/output-rules.ts`, 분기는 규칙 밖).
 export function getMultiOutputNodeIds(
-  nodes: { id: string; nodeType: string }[],
-  edges: { source: string }[],
+  nodes: readonly OutputRuleNode[],
+  edges: readonly OutputRuleEdge[],
 ): string[] {
-  const outCount = new Map<string, number>();
-  for (const edge of edges) {
-    outCount.set(edge.source, (outCount.get(edge.source) ?? 0) + 1);
-  }
-  return nodes
-    .filter(
-      (node) =>
-        node.nodeType !== "decision" &&
-        node.nodeType !== "subprocess" &&
-        (outCount.get(node.id) ?? 0) > 1,
-    )
-    .map((node) => node.id);
+  return getOutputViolations(nodes, edges).map((violation) => violation.nodeId);
 }
 
 // 저장(그래프 검증) 조건의 충족 여부 — 체크리스트 렌더와 저장/승인 차단 로직 공용(어긋남 방지).
-// 백엔드 validate_process 정합(시작 1개 / 대표끝=1 / 끝 이름 중복 없음) + 클라이언트 전용:
-// 분기(decision)·하위프로세스(subprocess, 다중 끝)만 다출력 정상 — 그 외 노드가 출력 2개 이상이면
-// 드롭존 조작 등으로 생긴 잘못된 분기이므로 작업자에게 알린다.
+// 백엔드 validate_process 정합(시작 1개 / 대표끝=1 / 끝 이름 중복 없음) + 출력 규칙(확정 게이트 6과 동치):
+// 삽입 재연결 등으로 한 출구에 엣지가 2개 이상 생기면(일시 허용) 저장·승인 시작에서 작업자에게 알린다.
 export function getSaveCheckStates(
-  nodes: { id: string; nodeType: string; label: string }[],
-  edges: { source: string }[],
+  nodes: readonly (OutputRuleNode & { label: string })[],
+  edges: readonly OutputRuleEdge[],
 ): { start: boolean; primaryEnd: boolean; endUnique: boolean; singleOutput: boolean } {
   const startCount = nodes.filter((node) => node.nodeType === "start").length;
   const endLabels = nodes.filter((node) => node.nodeType === "end").map((node) => node.label);
@@ -88,6 +78,7 @@ export function MapTitleChecklist({
     <div className={`${chipBase} w-max max-w-[220px] select-none overflow-hidden`}>
       <button
         type="button"
+        data-id="save-checklist-toggle"
         onClick={() => setOpen((value) => !value)}
         className="flex w-full items-center gap-1.5 px-2 py-1 hover:bg-surface-alt/50"
       >
@@ -157,7 +148,7 @@ export function MapTitleChecklist({
                 </>
               );
               return (
-                <li key={item.key}>
+                <li key={item.key} data-id={`save-check-${item.key}`} data-ok={item.ok}>
                   {locatable ? (
                     <button
                       type="button"

@@ -1,5 +1,6 @@
 """하위프로세스 참조 모델 — 프로세스 검증·순환 탐지·링크 버전 해석·확정 게이트."""
 
+import re
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -452,6 +453,46 @@ def _find_scc_iterative(node_ids: list[str], adj: dict[str, list[str]]) -> list[
     return components
 
 
+_SIDE_HANDLE_RE = re.compile(r"^[st]-")
+_IN_HANDLES = {"in", "in:left", "in:right", "in:top", "in:bottom"}
+
+
+def get_output_key(node_type: str, source_handle: str | None) -> str:
+    """엣지가 나가는 출구 키 — SP는 끝 키(변 id·in·없음은 대표 끝), 그 외 노드는 출구 하나.
+
+    FE `endKeyOfEdge`(lib/subprocess-embed.ts)·`getOutputKey`(lib/output-rules.ts)와 동치.
+    """
+    if node_type != "subprocess" or not source_handle:
+        return PRIMARY_END_HANDLE
+    if _SIDE_HANDLE_RE.match(source_handle) or source_handle in _IN_HANDLES:
+        return PRIMARY_END_HANDLE
+    return source_handle
+
+
+def find_output_rule_violations(nodes: list[Node], edges: list[Edge]) -> list[str]:
+    """출력 규칙 위반 노드 id — 비병렬 출구에 엣지 ≥2, 또는 병렬 출구에 엣지 1개. decision은 규칙 밖.
+
+    병렬 출구 = 노드 `parallel_outputs`에 켜짐 ∪ (엣지 ≥2이고 전부 gateway="parallel", 레거시 임포트 도출).
+    FE `getOutputViolations`(lib/output-rules.ts)와 동치 — 한쪽을 고치면 양쪽+테스트를 같이 옮긴다.
+    """
+    node_by_id = {n.id: n for n in nodes}
+    groups: dict[tuple[str, str], list[Edge]] = {}
+    for e in edges:
+        node = node_by_id.get(e.source_node_id)
+        if node is None or node.node_type == "decision":
+            continue
+        key = get_output_key(node.node_type, e.source_handle)
+        groups.setdefault((node.id, key), []).append(e)
+    violating: list[str] = []
+    for (node_id, key), group in groups.items():
+        flagged = key in (node_by_id[node_id].parallel_outputs or [])
+        is_parallel = flagged or (len(group) >= 2 and all(e.gateway == "parallel" for e in group))
+        broken = len(group) == 1 if is_parallel else len(group) >= 2
+        if broken and node_id not in violating:
+            violating.append(node_id)
+    return violating
+
+
 def _find_noexit_cycle_nodes(nodes: list[Node], edges: list[Edge]) -> list[str]:
     """탈출구 없는 순환에 속한 노드 id들 — SCC(크기≥2) 또는 자기루프(크기1)이며,
     그 성분 밖으로 나가는 엣지가 하나도 없는 경우만 위반(§4 게이트 5)."""
@@ -543,17 +584,8 @@ async def validate_confirm_readiness(
     if cyclic:
         failures.append(GateFailure("noexit_cycle", len(cyclic), cyclic))
 
-    # 6) plain_fanout — 비-decision out-degree≥2, 단 전부 gateway=="parallel"이면 허용
-    node_type_by_id = {n.id: n.node_type for n in draft.nodes}
-    out_by_src: dict[str, list[Edge]] = {}
-    for e in draft.edges:
-        out_by_src.setdefault(e.source_node_id, []).append(e)
-    fanout = [
-        src for src, group in out_by_src.items()
-        if len(group) >= 2
-        and node_type_by_id.get(src) != "decision"
-        and not all(e.gateway == "parallel" for e in group)
-    ]
+    # 6) plain_fanout — 출력 규칙: 출구마다 엣지 1개, 병렬 출구는 2개 이상(decision 제외)
+    fanout = find_output_rule_violations(draft.nodes, draft.edges)
     if fanout:
         failures.append(GateFailure("plain_fanout", len(fanout), fanout))
 
@@ -679,16 +711,7 @@ async def validate_confirm_readiness_batch(
         if cyclic:
             failures.append(GateFailure("noexit_cycle", len(cyclic), cyclic))
 
-        node_type_by_id = {n.id: n.node_type for n in nodes}
-        out_by_src: dict[str, list[Edge]] = {}
-        for e in edges:
-            out_by_src.setdefault(e.source_node_id, []).append(e)
-        fanout = [
-            src for src, group in out_by_src.items()
-            if len(group) >= 2
-            and node_type_by_id.get(src) != "decision"
-            and not all(e.gateway == "parallel" for e in group)
-        ]
+        fanout = find_output_rule_violations(nodes, edges)
         if fanout:
             failures.append(GateFailure("plain_fanout", len(fanout), fanout))
 
