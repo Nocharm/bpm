@@ -10,6 +10,7 @@ from app import workflow
 from app.app_settings import OTHER_SYSTEM, commit_system, get_systems
 from app.duration import DURATION_RE
 from app.models import Edge, MapVersion, Node, ProcessMap
+from app.subprocess import PRIMARY_END_HANDLE
 
 # (source_node_id, target_node_id, label, gateway) — 합성 노드를 접어 넣기 전/후 공용 흐름 표현
 FlowEdge = tuple[str, str, str, str | None]
@@ -172,6 +173,11 @@ def map_to_row(
                 item["condition"] = label
         elif by_id[source].node_type == "decision":
             item = {"src": src, "dst": dst, "kind": "branch", "gateway": gateway or "exclusive"}
+            if label:
+                item["condition"] = label
+        elif PRIMARY_END_HANDLE in (by_id[source].parallel_outputs or []) or gateway == "parallel":
+            # 병렬 출구에서 나가는 엣지는 병행 갈래 — 어댑터가 다시 출구를 병렬로 켠다 (출력 규칙 2026-10-01)
+            item = {"src": src, "dst": dst, "kind": "branch", "gateway": "parallel"}
             if label:
                 item["condition"] = label
         else:

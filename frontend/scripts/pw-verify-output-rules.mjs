@@ -251,6 +251,15 @@ await sleep(600);
 const toast = await page.getByText(/Cannot save/).first().textContent({ timeout: 3000 }).catch(() => null);
 check("manual save is blocked with the output rule", !!toast && toast.includes("No invalid branching"), String(toast));
 
+// ── (6) 같은 상태에서 대표 끝을 병렬로 켜면 정상 — 초과 없음·병렬 출구는 1로 세어 3/3·체크리스트 통과
+const graph6 = await api("GET", `/api/versions/${host.draft.id}/graph`);
+graph6.nodes = graph6.nodes.map((n) => (n.id === SP ? { ...n, parallel_outputs: ["__primary__"] } : n));
+await api("PUT", `/api/versions/${host.draft.id}/graph`, { nodes: graph6.nodes, edges: graph6.edges, groups: graph6.groups ?? [] });
+await openEditor();
+check("a parallel end with two edges shows no excess", (await badgeText("sp-output-excess")) === null);
+check("a parallel end counts once (3/3)", (await badgeText("sp-output-count")) === "3/3", String(await badgeText("sp-output-count")));
+check("save checklist passes with the parallel end", (await checkOk("singleOutput")) === "true");
+
 check("no console errors", errors.length === 0, errors.join(" | "));
 await browser.close();
 if (!KEEP) {

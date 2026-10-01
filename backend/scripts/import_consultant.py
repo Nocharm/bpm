@@ -228,6 +228,20 @@ def build_graph_rows(
     for virtual, attach, _, _ in link_rows:
         flow.append((attach, virtual, "", "seq"))
 
+    # 병렬 출구 — 병행 갈래 출발 활동과 연계 노드가 붙어 출력이 늘어난 부착원점은 동시 진행이라
+    # 출구를 병렬로 켠다(출구당 1개 규칙의 예외). 실제 출력이 2개 이상일 때만 — 1개면 "병렬인데 1개" 위반 (2026-10-01)
+    out_count: dict[str, int] = {}
+    for src, *_ in flow:
+        out_count[src] = out_count.get(src, 0) + 1
+    parallel_codes = {cn.code for cn in ordered if cn.parallel} | {attach for _, attach, _, _ in link_rows}
+    parallel_codes = {
+        code for code in parallel_codes
+        if out_count.get(code, 0) >= 2 and next((cn.type for cn in ordered if cn.code == code), "start") != "decision"
+    }
+
+    def _parallel_outputs(code: str) -> list[str]:
+        return [PRIMARY_END_HANDLE] if code in parallel_codes else []
+
     # 노드·엣지를 다 만든 뒤 가로 자동정렬로 최종화 — 에디터 "자동 정렬"(LR)과 동형
     # (rank 배치 + 교차 감소 + 백본 직선화 + 엣지 핸들). scripts/consultant_layout.py 참조.
     all_codes = [start, *l7_codes, *[v for v, *_ in link_rows], end]
@@ -255,6 +269,7 @@ def build_graph_rows(
     nodes.append(Node(
         id=code_to_id[start], source_node_id=make_node_id(cmap.code, start),
         title="Start", node_type="start", pos_x=sx, pos_y=sy, sort_order=0,
+        parallel_outputs=_parallel_outputs(start),
     ))
     for i, cn in enumerate(ordered, start=1):
         x, y = pos[cn.code]
@@ -266,6 +281,7 @@ def build_graph_rows(
             input=cn.input, output=cn.output, output_forms=cn.output_forms,
             system_fallback=cn.system_fallback,
             pos_x=x, pos_y=y, sort_order=i,
+            parallel_outputs=_parallel_outputs(cn.code),
         ))
     for j, (virtual, _, map_id, params) in enumerate(link_rows):
         x, y = pos[virtual]
@@ -672,7 +688,9 @@ def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
              # 기존 description과 동일 계약) (design 2026-08-19 §4.1)
              n.touch_time or "", n.input or "", n.output or "",
              n.start_condition or "", n.end_condition or "",
-             n.output_forms or "", n.system_fallback or "")
+             n.output_forms or "", n.system_fallback or "",
+             # 병렬 출구 — 흐름 의미라 전달분이 진실(출력 규칙 2026-10-01). 이전 게시본엔 없어 첫 재임포트는 새 버전
+             tuple(sorted(n.parallel_outputs or [])))
             for n in nodes
         ),
         sorted(
@@ -1919,6 +1937,10 @@ async def apply_interview_linkage(
                 report.add(code, "warning",
                            f"linkage edge {src_key}→{dst_key} dropped - node not on canvas")
                 continue
+            # 병행 팬아웃은 출발 출구를 병렬로 켠다 — 출력 규칙(출구당 1개)의 예외를 gateway 표시가 아니라
+            # 노드 속성으로 들고 가야 이후 수동으로 다시 그린 엣지도 병렬 출구로 판정된다 (2026-10-01)
+            if gateway == "parallel" and PRIMARY_END_HANDLE not in (src.parallel_outputs or []):
+                src.parallel_outputs = [*(src.parallel_outputs or []), PRIMARY_END_HANDLE]
             if (src.id, dst.id) in existing_pairs:
                 continue
             session.add(Edge(

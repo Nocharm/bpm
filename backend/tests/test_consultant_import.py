@@ -1540,3 +1540,33 @@ def test_import_normalizes_systems_to_catalog_and_lands_owner_role(client) -> No
             await session.commit()
 
     _run(_clear_catalog())
+
+
+def test_build_graph_rows_marks_parallel_exits() -> None:
+    """병행 갈래 출발 활동·연계 부착원점은 출력이 2개 이상일 때만 출구를 병렬로 켠다 (출력 규칙 2026-10-01)."""
+    from scripts.import_consultant import build_graph_rows, make_node_id
+
+    cmap = _canonical_map(
+        nodes=[
+            {"code": "N1", "name": "요청", "type": "process", "seq": 1, "parallel": True},
+            {"code": "N2", "name": "발주", "type": "process", "seq": 2},
+            {"code": "N3", "name": "회계", "type": "process", "seq": 3},
+            {"code": "N4", "name": "보관", "type": "process", "seq": 4, "parallel": True},
+        ],
+        edges=[
+            {"from": "N1", "to": "N2", "label": "", "kind": "branch"},
+            {"from": "N1", "to": "N3", "label": "", "kind": "branch"},
+            {"from": "N2", "to": "N4", "label": "", "kind": "seq"},
+        ],
+        links=[{"to_map": "L6-02", "after_node": "N2"}],
+    )
+    from scripts.consultant_canonical import CanonicalParams
+
+    nodes, _, _ = build_graph_rows(cmap, link_targets={"L6-02": (99, CanonicalParams())})
+    parallel = {n.source_node_id: n.parallel_outputs for n in nodes}
+    assert parallel[make_node_id("L6-01", "N1")] == ["__primary__"]
+    # 연계가 붙어 출력이 2개가 된 부착원점(N2→N4, N2→연계)도 동시 진행
+    assert parallel[make_node_id("L6-01", "N2")] == ["__primary__"]
+    # 병렬 표시가 있어도 출력이 1개(N4→End)면 켜지 않는다 — "병렬인데 1개" 위반 방지
+    assert parallel[make_node_id("L6-01", "N4")] == []
+    assert parallel[make_node_id("L6-01", "N3")] == []

@@ -433,6 +433,9 @@ def _build_flow_edges(
         else:
             # 택일 분기만 decision(마름모)으로 승격 — parallel은 병행 팬아웃이라 다중 out-edge로
             # 이미 표현되고, 마름모로 그리면 택일로 오독된다 (design 2026-09-01 §2). 역행 재분류보다 먼저(원래 kind 기준)
+            # 병행 갈래는 마름모 대신 출발 활동의 출구를 병렬로 켠다 — 출구당 1개 규칙의 예외 (2026-10-01)
+            if kind == "branch" and gateway == "parallel":
+                src_node.parallel = True
             if kind == "branch" and gateway != "parallel" and src_node.type != "decision":
                 src_node.type = "decision"
                 issues.append(AdapterIssue(
@@ -478,6 +481,8 @@ def _build_flow_edges(
             {"from": branch.code, "to": src_node.code, "label": loop_label, "kind": "loop"}))
         if src_node.code not in declared_decisions:
             src_node.type = "process"
+        # 진출이 ◇로 이설돼 A에는 A→◇ 하나만 남는다 — 병렬 표시를 남기면 "병렬인데 1개" 위반이 된다
+        src_node.parallel = False
         loop_nodes.append((src_node.code, branch))
     if not edges and by_seq:
         issues.append(AdapterIssue(

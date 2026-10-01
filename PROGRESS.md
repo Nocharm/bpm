@@ -8,6 +8,7 @@
 - 계획 `docs/superpowers/plans/2026-10-01-output-rules.md`(사용자 결정 8건). P1: SP 들어오는 핸들은 드래그 시작 불가(`isConnectableStart=false`)·연결 드래그 중에만 노출 — target에서 시작하면 역방향 빠른 연결이 되어, 좌·상·하에서 끌어간 노드가 SP 입력으로 붙던 문제. 스모크 `pw-verify-output-rules.mjs`.
 - P2·P3: 출력 규칙 순수 함수 `lib/output-rules.ts`(출구별 1개·병렬 출구 ≥2·레거시 parallel 도출)로 저장 체크리스트가 SP를 통째로 면제하던 구멍을 막음(삽입 재연결이 대표 끝에 엣지 2개를 만들던 상태). SP 출구는 우측 한 점(끝 핸들 겹침, 세로 분산이 폭 조절 그립과 겹친다는 피드백) + 끌어 놓으면 출구 목록, 팬아웃 그룹 키는 (노드·변)으로. 라벨 끝 인라인 배지 `2/3`, 초과는 같은 알약이 `+N`(호버 시 비율로 페이드). 스모크 20/20·sp-ends 23/23·fanout 24/24.
 - P4: `nodes.parallel_outputs`(JSON 출구 키 목록, `_ADDED_COLUMNS` 등록) — 스키마 정규화(공백·중복 제거)·upsert·클론·확정 서명·FE 왕복·CSV 기본값. 비교 diff는 `getFieldValue`로 배열을 내용 비교(`parallel` 필드, "__primary__"는 "기본 출구"로 표시).
+- P6: 확정 게이트 6 `plain_fanout`을 출구별 판정(`find_output_rule_violations`, FE `getOutputViolations` 동치)으로 — 끝마다 1개씩 정상 연결된 다중 끝 SP가 막히던 것. 임포트는 병행 갈래 출발에 `parallel_outputs`를 켠다: L5 연계(`gateway=parallel` 엣지), L6(어댑터 `CanonicalNode.parallel` — 종전엔 gateway가 canonical에서 증발해 흔적이 없었다 — + 연계 부착원점), 출력 ≥2일 때만. 역변환 `map_to_row`는 병렬 출구를 branch/parallel로 되돌림. 재임포트 서명에 포함(첫 재임포트는 새 버전). 배지 분자는 병렬 출구를 1로 세는 출구 사용량(초과 호버 4/3).
 
 ## 2026-10-01 — 홈 한 줄 행 말줄임 정리 (dev)
 

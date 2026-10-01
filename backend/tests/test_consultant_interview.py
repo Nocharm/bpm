@@ -171,6 +171,8 @@ def test_parallel_gateway_does_not_promote() -> None:
     data["rows"][0]["relations"]["edges"][0] = _edge(1, 2, kind="branch", gateway="parallel")
     src = next(n for n in convert_interview(data).maps[0].nodes if n.code == "a01")
     assert src.type == "process"
+    # 대신 출구를 병렬로 켤 표시를 남긴다 (출력 규칙 2026-10-01)
+    assert src.parallel is True
 
 
 def test_loop_and_bypass_kinds_are_kept() -> None:
@@ -488,6 +490,21 @@ def test_l5_self_edge_kept_as_loop_branch() -> None:
     )
     # 드랍 시절엔 quote 노트도 함께 증발했다 — 유지 경로에선 flow 노트로 살아남아야 한다
     assert any(n.kind == "flow" and "미흡하면 다시 돌려요." in n.text for n in res.notes)
+
+
+def test_self_edge_clears_parallel_mark_moved_to_the_loop_branch() -> None:
+    """self edge가 진출을 ◇로 이설하면 원본에는 A→◇ 하나뿐 — 병렬 표시를 지워 "병렬인데 1개" 위반을 막는다 (2026-10-01)."""
+    data = _interview()
+    data["rows"][0]["relations"]["edges"] = [
+        _edge(1, 2),
+        _edge(2, 2, condition="측정 불가 시"),
+        _edge(2, 3, kind="branch", gateway="parallel"),
+        _edge(2, 4, kind="branch", gateway="parallel"),
+    ]
+    res = convert_interview(data)
+    assert not res.has_error()
+    src = next(n for n in res.maps[0].nodes if n.code == "a02")
+    assert src.parallel is False
 
 
 def test_l6_self_edge_becomes_loop_branch() -> None:

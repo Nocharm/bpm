@@ -1132,8 +1132,8 @@ function SubprocessHandles({
   );
 }
 
-// SP 끝 개수 배지 — 제목 끝에 인라인으로 붙는 알약 하나(제목 폭을 따로 먹지 않게). 끝 ≥2면 `나가는 엣지 수/끝 수`,
-// 한 출구에 엣지가 넘치면 끝 1개여도 같은 알약이 에러 톤 `+N`이 되고 호버 시 틴트 그대로 `엣지 수/끝 수`(예: 4/3)로 페이드(사용자 결정 2026-10-01).
+// SP 끝 개수 배지 — 제목 끝에 인라인으로 붙는 알약 하나(제목 폭을 따로 먹지 않게). 끝 ≥2면 `출구 사용량/끝 수`(병렬 출구는 1로 셈),
+// 한 출구에 엣지가 넘치면 끝 1개여도 같은 알약이 에러 톤 `+N`이 되고 호버 시 틴트 그대로 `출구 사용량/끝 수`(예: 4/3)로 페이드(사용자 결정 2026-10-01).
 // 판정은 저장 체크리스트와 같은 lib/output-rules. 엣지는 RF 스토어에서 이 노드 출력만 문자열로 뽑아(원시값 비교) 드래그 중 재렌더를 막는다.
 function SpOutputBadge({ nodeId, ends, parallelOutputs }: { nodeId: string; ends: SubEnd[]; parallelOutputs?: string[] }) {
   const { t } = useI18n();
@@ -1152,8 +1152,9 @@ function SpOutputBadge({ nodeId, ends, parallelOutputs }: { nodeId: string; ends
   const groups = getOutputGroups({ id: nodeId, nodeType: "subprocess", parallelOutputs }, edges);
   const excess = groups.reduce((sum, group) => sum + (group.parallel ? 0 : Math.max(0, group.count - 1)), 0);
   const total = Math.max(1, ends.length);
-  // 분자 = 나가는 엣지 수 — 초과가 없으면 연결된 출구 수와 같고, 초과면 끝 수를 넘어(예: 4/3) 정상(3/3)과 구분된다
-  const connected = edges.length;
+  // 분자 = 출구 사용량 — 병렬 출구는 엣지가 여럿이어도 1(정상), 일반 출구는 엣지 수 그대로라
+  // 초과면 끝 수를 넘어(예: 4/3) 정상(3/3)과 구분된다
+  const connected = groups.reduce((sum, group) => sum + (group.parallel ? 1 : group.count), 0);
   if (ends.length < 2 && excess === 0) return null;
   const ratio = `${connected}/${total}`;
   const pillBase = "ml-1 inline-grid rounded-xs border px-1 py-px align-[1px] text-fine leading-none";

@@ -414,3 +414,23 @@ def test_merge_existing_cards_drops_frozen_maps() -> None:
     ]
     merged = merge_existing_cards(cards, existing)
     assert [(c["name"], c["mode"]) for c in merged] == [("접수", "keep"), ("신규", "new")]
+
+
+def test_map_to_row_emits_parallel_branches_from_a_parallel_exit() -> None:
+    """병렬 출구에서 나가는 엣지는 branch/parallel로 되돌린다 — 어댑터가 다시 출구를 병렬로 켠다 (2026-10-01)."""
+    nodes = [
+        Node(id="s", version_id=1, title="Start", node_type="start", sort_order=0),
+        Node(id="a", version_id=1, title="A", node_type="process", sort_order=1, parallel_outputs=["__primary__"]),
+        Node(id="b", version_id=1, title="B", node_type="process", sort_order=2),
+        Node(id="c", version_id=1, title="C", node_type="process", sort_order=3),
+    ]
+    edges = [
+        Edge(id="1", version_id=1, source_node_id="s", target_node_id="a"),
+        Edge(id="2", version_id=1, source_node_id="a", target_node_id="b"),
+        Edge(id="3", version_id=1, source_node_id="a", target_node_id="c", label="동시"),
+    ]
+    row = map_to_row("맵", "품질팀", nodes, edges)
+    assert row["relations"]["edges"] == [
+        {"src": 1, "dst": 2, "kind": "branch", "gateway": "parallel"},
+        {"src": 1, "dst": 3, "kind": "branch", "gateway": "parallel", "condition": "동시"},
+    ]
