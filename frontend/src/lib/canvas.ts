@@ -826,9 +826,14 @@ export function hasReciprocalEdge(edges: Edge[], source: string, target: string)
   return edges.some((edge) => edge.source === target && edge.target === source);
 }
 
-/** source에서 나가는 엣지를 모두 제거 — 출력 1개 고정(자동 스왑)용. decision 제외는 호출부 책임. */
-export function removeOutgoingEdges(edges: Edge[], sourceId: string): Edge[] {
-  return edges.filter((edge) => edge.source !== sourceId);
+/** source에서 나가는 엣지를 모두 제거 — 출력 1개 고정(자동 스왑)용. decision 제외는 호출부 책임.
+ *  sourceHandle(하위프로세스 끝 키)을 주면 그 끝에서 나가는 엣지만 제거(끝당 출력 1개 규칙). */
+export function removeOutgoingEdges(edges: Edge[], sourceId: string, sourceHandle?: string): Edge[] {
+  return edges.filter(
+    (edge) =>
+      edge.source !== sourceId ||
+      (sourceHandle !== undefined && edge.sourceHandle !== sourceHandle),
+  );
 }
 
 /** 흐름상 다음 노드 — nodeId의 첫 출력 엣지 target (F14 스테퍼). 없으면 null. */

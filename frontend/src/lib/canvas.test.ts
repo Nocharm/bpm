@@ -356,6 +356,16 @@ describe("removeOutgoingEdges (single-output auto-swap)", () => {
   it("returns the same edges when the source has no outgoing edge", () => {
     expect(removeOutgoingEdges(edges, "B")).toHaveLength(2);
   });
+
+  it("sourceHandle을 주면 그 끝에서 나가는 엣지만 제거(하위프로세스 끝당 교체)", () => {
+    const ends = [
+      { id: "p", source: "S", target: "X", sourceHandle: PRIMARY_END_HANDLE },
+      { id: "r", source: "S", target: "Y", sourceHandle: "반려" },
+      { id: "o", source: "O", target: "S" },
+    ] as Edge[];
+    expect(removeOutgoingEdges(ends, "S", "반려").map((e) => e.id)).toEqual(["p", "o"]);
+    expect(removeOutgoingEdges(ends, "S").map((e) => e.id)).toEqual(["o"]);
+  });
 });
 
 describe("flow stepper helpers (F14)", () => {

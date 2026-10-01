@@ -36,7 +36,13 @@ import { AiChatPanel } from "@/components/ai-chat-panel";
 import { FrameworkBrowseModal } from "@/components/framework-browse-modal";
 import { FrameworkChip } from "@/components/framework-chip";
 import { FrameworkPeekTrigger } from "@/components/framework-peek-pill";
-import { canQuickConnect, getQuickTargetHandleId, QuickConnectLine } from "@/components/quick-connect-line";
+import {
+  canQuickConnect,
+  getQuickSourceHandleId,
+  getQuickTargetHandleId,
+  QuickConnectLine,
+} from "@/components/quick-connect-line";
+import { EdgeEndModal } from "@/components/edge-end-modal";
 import { IconTip } from "@/components/icon-tip";
 import { SubprocessInspectorCard } from "@/components/subprocess-inspector-card";
 import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
@@ -1098,8 +1104,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     | null
   >(null);
   // 출력 1개 충돌 시 삽입/교체/취소 모달 — source의 기존 출력이 있을 때 새 target 연결을 어떻게 할지.
+  // sourceHandle: 하위프로세스 끝 키(끝 ≥ 2) — 교체·삽입을 그 끝의 출력에 한정한다(끝당 출력 1개 규칙).
   const [edgeAction, setEdgeAction] = useState<
-    { source: string; target: string; at: { x: number; y: number } } | null
+    { source: string; target: string; at: { x: number; y: number }; sourceHandle?: string } | null
   >(null);
   // 다중 출력 노드에 삽입 시 — 어느 출력선으로 들어갈지 선택 (F1). source 출력선 중 1개 픽.
   const [edgeSelect, setEdgeSelect] = useState<
@@ -1108,6 +1115,18 @@ function MapEditor({ mapId }: { mapId: number }) {
         target: string;
         options: { edgeId: string; branchKind: BranchKind; edgeLabel: string; targetLabel: string }[];
         at: { x: number; y: number };
+        sourceHandle?: string;
+      }
+    | null
+  >(null);
+  // 하위프로세스 출구 선택 목록 — 끝이 2개 이상인 SP에서 끝을 모르는 경로(드롭존 앞/뒤·역방향 몸체 드롭)의
+  // 드롭을 보류했다가, 고른 끝 키로 기존 게이트 함수들을 재개한다. 취소=엣지 변경 없음(분기 pendingInsert와 같은 계약).
+  const [endPrompt, setEndPrompt] = useState<
+    | {
+        ends: SubEnd[];
+        connectedTargets: Record<string, string>;
+        at: { x: number; y: number };
+        resume: (endKey: string) => void;
       }
     | null
   >(null);
@@ -1390,6 +1409,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     aId: string;
     bId: string;
     rect: ScreenRect;
+    /** 하위프로세스 소스의 끝 키(끝 ≥ 2, 출구 목록에서 고른 값) — 삽입·재연결을 그 끝에 한정. */
+    sourceHandle?: string;
   } | null>(null);
 
   // 현재 버전 객체 — StatusBadge·워크플로우 역할 판정 공용
@@ -3736,6 +3757,40 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // ── 편집 조작 (모두 히스토리 + 자동 저장 대상) ─────────
 
+  // 하위프로세스 노드의 끝 목록(링크 맵 resolved 캐시 기준) — 미로드면 빈 배열.
+  const subEndsOf = useCallback(
+    (nodeId: string): SubEnd[] => {
+      const node = nodesRef.current.find((n) => n.id === nodeId);
+      if (!node || node.data.nodeType !== "subprocess") {
+        return [];
+      }
+      const k = linkKey({
+        linked_map_id: node.data.linkedMapId ?? null,
+        follow_latest: node.data.followLatest ?? false,
+        linked_version_id: node.data.linkedVersionId ?? null,
+      });
+      const resolved = k ? resolvedCache.get(k) : undefined;
+      return resolved ? deriveSubEnds(resolved) : [];
+    },
+    [resolvedCache],
+  );
+
+  // 하위프로세스 출구 선택 목록 열기 — 끝별 현재 타깃 제목(정보용)을 붙여 포인터 위치에 띄우고, 선택 시 resume(끝 키).
+  const openEndPrompt = useCallback(
+    (sourceId: string, ends: SubEnd[], resume: (endKey: string) => void) => {
+      const connectedTargets: Record<string, string> = {};
+      for (const edge of getOutgoingEdges(edgesRef.current, sourceId)) {
+        const key = edge.sourceHandle ?? PRIMARY_END_HANDLE;
+        if (!connectedTargets[key]) {
+          connectedTargets[key] =
+            nodesRef.current.find((node) => node.id === edge.target)?.data.label ?? edge.target;
+        }
+      }
+      setEndPrompt({ ends, connectedTargets, at: { ...pointerScreenRef.current }, resume });
+    },
+    [],
+  );
+
   // 라벨 지정해 엣지 생성 (기본은 빈 라벨)
   const createEdge = useCallback(
     (connection: Connection, label: string) => {
@@ -3794,17 +3849,29 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       // 출력 1개 — 이미 출력이 있으면 삽입/교체/취소 모달(마우스 위치). 없으면 즉시 생성.
-      if (connection.source && getOutgoingEdges(edgesRef.current, connection.source).length > 0) {
-        setEdgeAction({
-          source: connection.source,
-          target: connection.target ?? "",
-          at: { ...pointerScreenRef.current },
-        });
-        return;
+      // 하위프로세스 소스의 끝이 2개 이상이면 충돌 판정을 그 끝(connection.sourceHandle)의 출력만으로(끝당 1개 규칙).
+      if (connection.source) {
+        const endScoped =
+          source?.data.nodeType === "subprocess" &&
+          subEndsOf(connection.source).length >= 2 &&
+          isSubprocessEndHandle(connection.sourceHandle);
+        const sourceHandle = endScoped ? (connection.sourceHandle ?? undefined) : undefined;
+        const outgoing = getOutgoingEdges(edgesRef.current, connection.source).filter(
+          (edge) => sourceHandle === undefined || edge.sourceHandle === sourceHandle,
+        );
+        if (outgoing.length > 0) {
+          setEdgeAction({
+            source: connection.source,
+            target: connection.target ?? "",
+            at: { ...pointerScreenRef.current },
+            sourceHandle,
+          });
+          return;
+        }
       }
       createEdge(connection, "");
     },
-    [readOnly, createEdge, showToast, t],
+    [readOnly, createEdge, showToast, t, subEndsOf],
   );
 
   // 연결 제약 — 시작 노드는 도착(들어오는 연결) 불가/끝 노드는 출발 불가(터미널).
@@ -3840,7 +3907,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const connection: Connection = reverse
         ? {
             source: over.id,
-            sourceHandle: sourceHandleId("right"),
+            sourceHandle: getQuickSourceHandleId(over.data.nodeType),
             target: fromNode.id,
             targetHandle: fromHandle.id ?? null,
           }
@@ -3851,9 +3918,15 @@ function MapEditor({ mapId }: { mapId: number }) {
             targetHandle: getQuickTargetHandleId(over.data.nodeType),
           };
       if (!isValidConnection(connection)) return;
+      // 역방향 몸체 드롭의 소스가 끝 2개 이상인 하위프로세스면 출구 목록으로 끝을 고른 뒤 연결
+      const ends = reverse && over.data.nodeType === "subprocess" ? subEndsOf(over.id) : [];
+      if (ends.length >= 2) {
+        openEndPrompt(over.id, ends, (endKey) => onConnect({ ...connection, sourceHandle: endKey }));
+        return;
+      }
       onConnect(connection);
     },
-    [readOnly, isValidConnection, onConnect],
+    [readOnly, isValidConnection, onConnect, subEndsOf, openEndPrompt],
   );
 
   // 드롭존 흐름 삽입이 시작/끝 규칙을 어기는지 — front=A→B(드래그→대상), back=B→A(대상→드래그).
@@ -4345,8 +4418,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
 
   // 흐름 엣지 적용 — rewire면 B의 기존 연결을 끊고 A를 중간에 삽입
+  // sourceHandle: 새 엣지가 나갈 하위프로세스 끝 키(front=A의 끝, back=B의 끝) — 끝 ≥ 2일 때 출구 목록이 정한다.
   const applyFlowEdges = useCallback(
-    (aId: string, bId: string, zone: DropZone, rewire: boolean) => {
+    (aId: string, bId: string, zone: DropZone, rewire: boolean, sourceHandle?: string) => {
       const current = edgesRef.current;
       const isDecision = (nodeId: string): boolean =>
         nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "decision";
@@ -4354,8 +4428,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "subprocess";
       const inserted =
         zone === "front"
-          ? insertNodeBefore(current, aId, bId, rewire)
-          : insertNodeAfter(current, aId, bId, rewire, isDecision(bId));
+          ? insertNodeBefore(current, aId, bId, rewire, sourceHandle)
+          : insertNodeAfter(current, aId, bId, rewire, isDecision(bId), sourceHandle);
       // 삽입/재연결로 끝점이 하위프로세스가 된 엣지는 전용 핸들(in/__primary__)로 보정 — 안 그러면 RF가 못 붙임.
       const next = inserted.map((edge) => withSubprocessHandles(edge, isSubprocess));
       // 마름모에서 새로 출발하는(라벨 없는) 엣지가 생기면, 분기 선택 전엔 삽입을 적용하지 않는다
@@ -4767,24 +4841,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     [setNodes, setEdges, scheduleAutoSave, toSavedPoint],
   );
 
-  // 하위프로세스 노드의 끝 목록(링크 맵 resolved 캐시 기준) — 미로드면 빈 배열.
-  const subEndsOf = useCallback(
-    (nodeId: string): SubEnd[] => {
-      const node = nodesRef.current.find((n) => n.id === nodeId);
-      if (!node || node.data.nodeType !== "subprocess") {
-        return [];
-      }
-      const k = linkKey({
-        linked_map_id: node.data.linkedMapId ?? null,
-        follow_latest: node.data.followLatest ?? false,
-        linked_version_id: node.data.linkedVersionId ?? null,
-      });
-      const resolved = k ? resolvedCache.get(k) : undefined;
-      return resolved ? deriveSubEnds(resolved) : [];
-    },
-    [resolvedCache],
-  );
-
   // 출력 자리 바꾸기 모달의 한쪽 열 — 직접 엣지(상대 노드로 가는 출력)는 끝점 교환이라 목록에서 뺀다.
   // SP 출구는 끝 ≥ 2일 때 직접 라벨이 없으면 끝 제목을 미러 라벨로 보여 준다(§3.5와 같은 규칙).
   const buildSwapSide = useCallback(
@@ -4865,46 +4921,60 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       placeBeside(aId, bId, zone);
       scheduleAutoSave();
-      const conflict =
-        zone === "front"
-          ? getIncomingEdges(edgesRef.current, bId).some((edge) => edge.source !== aId)
-          : getOutgoingEdges(edgesRef.current, bId).some((edge) => edge.target !== aId);
-      const rect = conflict ? screenRectOf(bId) : null;
-      if (conflict && rect) {
-        if (zone === "back") {
-          // B의 기존 출력선(A행 제외). source=B(드롭 대상), target=A(드래그 노드).
-          const bOut = getOutgoingEdges(edgesRef.current, bId).filter((edge) => edge.target !== aId);
-          const at = { ...pointerScreenRef.current };
-          const options = bOut.map((edge) => {
-            const targetTitle =
-              nodesRef.current.find((node) => node.id === edge.target)?.data.label ?? edge.target;
-            return {
-              edgeId: edge.id,
-              branchKind: branchKindOf(edge.label),
-              edgeLabel: typeof edge.label === "string" ? edge.label : "",
-              targetLabel: targetTitle,
-            };
-          });
-          const bIsDecision =
-            nodesRef.current.find((node) => node.id === bId)?.data.nodeType === "decision";
-          // 디시전 노드 + 출력 ≥1 → 분기/인터셉트/취소 (F1)
-          if (bIsDecision) {
-            setDecisionDrop({ aId, bId, options, at });
+      // 새 엣지의 소스(front=A, back=B)가 끝 2개 이상인 하위프로세스면 먼저 출구 목록으로 끝을 고른다.
+      // 고른 끝 키는 충돌 판정(그 끝의 출력만)·삽입·재연결 전부에 한정 적용된다(끝당 출력 1개 규칙).
+      const continueDrop = (sourceHandle?: string) => {
+        const conflict =
+          zone === "front"
+            ? getIncomingEdges(edgesRef.current, bId).some((edge) => edge.source !== aId)
+            : getOutgoingEdges(edgesRef.current, bId).some(
+                (edge) => edge.target !== aId && (sourceHandle === undefined || edge.sourceHandle === sourceHandle),
+              );
+        const rect = conflict ? screenRectOf(bId) : null;
+        if (conflict && rect) {
+          if (zone === "back") {
+            // B의 기존 출력선(A행 제외, 끝 키가 있으면 그 끝만). source=B(드롭 대상), target=A(드래그 노드).
+            const bOut = getOutgoingEdges(edgesRef.current, bId).filter(
+              (edge) => edge.target !== aId && (sourceHandle === undefined || edge.sourceHandle === sourceHandle),
+            );
+            const at = { ...pointerScreenRef.current };
+            const options = bOut.map((edge) => {
+              const targetTitle =
+                nodesRef.current.find((node) => node.id === edge.target)?.data.label ?? edge.target;
+              return {
+                edgeId: edge.id,
+                branchKind: branchKindOf(edge.label),
+                edgeLabel: typeof edge.label === "string" ? edge.label : "",
+                targetLabel: targetTitle,
+              };
+            });
+            const bIsDecision =
+              nodesRef.current.find((node) => node.id === bId)?.data.nodeType === "decision";
+            // 디시전 노드 + 출력 ≥1 → 분기/인터셉트/취소 (F1)
+            if (bIsDecision) {
+              setDecisionDrop({ aId, bId, options, at });
+              return;
+            }
+            // 비-디시전: 2개 이상이면 어느 선에 끼울지 선택, 1개면 삽입/교체/취소.
+            if (bOut.length >= 2) {
+              setEdgeSelect({ source: bId, target: aId, options, at, sourceHandle });
+              return;
+            }
+            setEdgeAction({ source: bId, target: aId, at, sourceHandle });
             return;
           }
-          // 비-디시전: 2개 이상이면 어느 선에 끼울지 선택, 1개면 삽입/교체/취소.
-          if (bOut.length >= 2) {
-            setEdgeSelect({ source: bId, target: aId, options, at });
-            return;
-          }
-          setEdgeAction({ source: bId, target: aId, at });
+          setPending({ mode: zone, aId, bId, rect, sourceHandle });
           return;
         }
-        setPending({ mode: zone, aId, bId, rect });
+        // 충돌 없음(또는 위치 계산 실패) → 기본 삽입
+        applyFlowEdges(aId, bId, zone, true, sourceHandle);
+      };
+      const ends = subEndsOf(newSource);
+      if (ends.length >= 2) {
+        openEndPrompt(newSource, ends, continueDrop);
         return;
       }
-      // 충돌 없음(또는 위치 계산 실패) → 기본 삽입
-      applyFlowEdges(aId, bId, zone, true);
+      continueDrop();
     },
     [
       swapNodes,
@@ -4917,6 +4987,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       flowZoneViolates,
       showToast,
       t,
+      subEndsOf,
+      openEndPrompt,
     ],
   );
 
@@ -8733,7 +8805,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (edgeAction === null) {
         return;
       }
-      const { source, target } = edgeAction;
+      const { source, target, sourceHandle } = edgeAction;
       setEdgeAction(null);
       if (!target) {
         return;
@@ -8744,8 +8816,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       setEdges((current) => {
         // insert: source→target + source의 기존 출력을 target 뒤로 재연결(흐름 삽입).
         // replace: source의 기존 출력 제거 후 source→target만.
-        const base = action === "replace" ? removeOutgoingEdges(current, source) : current;
-        const next = insertNodeAfter(base, target, source, action === "insert");
+        // sourceHandle(하위프로세스 끝 키)이 있으면 제거·재연결·새 엣지 모두 그 끝에 한정.
+        const base = action === "replace" ? removeOutgoingEdges(current, source, sourceHandle) : current;
+        const next = insertNodeAfter(base, target, source, action === "insert", false, sourceHandle);
         return next.map((edge) => withSubprocessHandles(edge, isSub));
       });
       scheduleAutoSave();
@@ -8755,7 +8828,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 선택한 출력선(source→X)에 끼워넣기: source→target→X (해당 선만, 라벨 보존, 다른 분기 유지).
   const interceptIntoEdge = useCallback(
-    (source: string, target: string, edgeId: string) => {
+    (source: string, target: string, edgeId: string, sourceHandle?: string) => {
       pushHistory();
       const isSub = (nodeId: string): boolean =>
         nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "subprocess";
@@ -8766,8 +8839,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
         const x = picked.target;
         const pickedLabel = picked.label;
+        // 고른 선의 끝 키(하위프로세스 소스)를 새 첫 구간이 이어받는다
+        const endKey = sourceHandle ?? (isSub(source) ? (picked.sourceHandle ?? undefined) : undefined);
         let next = current.filter((edge) => edge.id !== edgeId); // source→X 제거
-        next = insertNodeAfter(next, target, source, false); // source→target
+        next = insertNodeAfter(next, target, source, false, false, endKey); // source→target
         next = insertNodeAfter(next, x, target, false); // target→X
         // 분기 라벨은 source→target(첫 구간)에 보존
         next = next.map((edge) =>
@@ -8786,9 +8861,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (edgeSelect === null) {
         return;
       }
-      const { source, target } = edgeSelect;
+      const { source, target, sourceHandle } = edgeSelect;
       setEdgeSelect(null);
-      interceptIntoEdge(source, target, edgeId);
+      interceptIntoEdge(source, target, edgeId, sourceHandle);
     },
     [edgeSelect, interceptIntoEdge],
   );
@@ -10277,11 +10352,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             <FlowConflictModal
               rect={pending.rect}
               onKeep={() => {
-                applyFlowEdges(pending.aId, pending.bId, pending.mode, false);
+                applyFlowEdges(pending.aId, pending.bId, pending.mode, false, pending.sourceHandle);
                 setPending(null);
               }}
               onInsertBetween={() => {
-                applyFlowEdges(pending.aId, pending.bId, pending.mode, true);
+                applyFlowEdges(pending.aId, pending.bId, pending.mode, true, pending.sourceHandle);
                 setPending(null);
               }}
               onClose={() => setPending(null)}
@@ -12166,6 +12241,19 @@ function MapEditor({ mapId }: { mapId: number }) {
           onPick={handlePickBranch}
           onClose={() => setBranchPrompt(null)}
           position={branchPrompt.at}
+        />
+      )}
+      {endPrompt && (
+        <EdgeEndModal
+          position={endPrompt.at}
+          ends={endPrompt.ends}
+          connectedTargets={endPrompt.connectedTargets}
+          onPick={(endKey) => {
+            const { resume } = endPrompt;
+            setEndPrompt(null);
+            resume(endKey);
+          }}
+          onClose={() => setEndPrompt(null)}
         />
       )}
       {bulkEdgeStyle !== null &&
