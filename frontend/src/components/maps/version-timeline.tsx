@@ -27,6 +27,7 @@ const EVENT_LABEL: Record<string, MessageKey> = {
   published: "home.verEvent.published",
   confirmed: "home.verEvent.confirmed",
   withdrawn: "home.verEvent.withdrawn",
+  expired: "home.verEvent.expired",
   external_linked: "home.verEvent.external_linked",
 };
 
@@ -40,6 +41,7 @@ function EventIcon({ type }: { type: string }) {
   if (type === "confirmed") return <BadgeCheck size={12} strokeWidth={1.5} />;
   if (type === "withdrawn") return <Undo2 size={12} strokeWidth={1.5} />;
   if (type === "external_linked") return <Link2 size={12} strokeWidth={1.5} />;
+  if (type === "expired") return <TimerOff size={12} strokeWidth={1.5} />;
   return <GitCommit size={12} strokeWidth={1.5} />;
 }
 
@@ -52,11 +54,10 @@ const EVENT_CHIP: Record<string, string> = {
   confirmed: "border-accent-tint-border bg-accent-tint text-accent",
   rejected: "border-error/40 bg-error/10 text-error",
   withdrawn: "border-changed/40 bg-changed/10 text-changed",
+  expired: "border-hairline bg-surface-alt text-ink-tertiary", // 만료 — 상태 필(expired)과 같은 중립 톤
   external_linked: "border-accent-tint-border bg-accent-tint text-accent",
 };
 
-// 만료 버전의 우측 게시 필 — 상태 필(expired)과 같은 중립 톤
-const EXPIRED_CHIP = "border-hairline bg-surface-alt text-ink-tertiary";
 // 만료 버전의 타임라인 노드 — 중립 테두리 + TimerOff(홈 최근 변경 카드의 만료 아이콘과 동일, 게시 Upload와 구분)
 const EXPIRED_NODE: { cls: string; Icon: LucideIcon } = { cls: "border-hairline bg-surface-alt text-ink-tertiary", Icon: TimerOff };
 
@@ -250,12 +251,16 @@ export function VersionTimeline({
         const publishedEvt = events.find(
           (evt) => evt.event_type === "published" || evt.event_type === "confirmed",
         );
-        // 다음 버전이 게시되면 이 버전은 expired — 우측 필도 게시(green) 대신 만료(중립)로. 게시 이력은 툴팁·펼침 상세에 남는다
+        // 다음 버전이 게시되면 이 버전은 expired(백엔드가 expired 이벤트 기록) — 우측 고정 필은 만료가 되고, 게시는 칩 줄 맨 앞(최신순)으로 돌아간다.
+        // 구 데이터처럼 expired 이벤트 없이 상태만 expired여도 우측은 만료 필(이벤트 없음 = 행위자 툴팁 생략)
         const isExpired = version.status === "expired";
-        const publishedLabel = t(publishedEvt?.event_type === "confirmed" ? "home.verEvent.confirmed" : "home.verEvent.published");
-        const chipEvents = events.filter(
-          (evt) => evt.event_type !== "published" && evt.event_type !== "confirmed",
-        );
+        const expiredEvt = events.find((evt) => evt.event_type === "expired");
+        const rightEvt = isExpired ? expiredEvt : publishedEvt;
+        const rightType = isExpired ? "expired" : (publishedEvt?.event_type ?? "published");
+        const rightLabel = EVENT_LABEL[rightType] ? t(EVENT_LABEL[rightType]) : rightType;
+        const chipEvents = isExpired
+          ? events.filter((evt) => evt.event_type !== "expired")
+          : events.filter((evt) => evt.event_type !== "published" && evt.event_type !== "confirmed");
         // 상세행 — 날짜/시각 분리. 같은 날짜 연속이면 날짜 박스 1개가 그 행들 높이만큼 span(rowspan), 날짜 윗 정렬 (H3)
         const rawRows = events.map((evt) => {
           const full = formatStamp(evt.created_at);
@@ -401,7 +406,7 @@ export function VersionTimeline({
                   >
                     <div className="overflow-hidden">
                       {/* 1줄 고정(칩 높이 18px) — 안 들어가는 칩은 통째로 숨은 둘째 줄로 넘어가 반쯤 잘린 칩이 남지 않는다.
-                          칩 하나가 줄보다 넓을 때만 이름 말줄임. 게시 칩은 우측 고정·이름 생략(이름은 툴팁) */}
+                          칩 하나가 줄보다 넓을 때만 이름 말줄임. 우측 고정 필(게시, 만료 버전이면 만료)은 이름 생략(이름은 툴팁) */}
                       <div className="mt-1.5 flex items-center gap-1.5">
                         <div className="flex h-[18px] min-w-0 flex-1 flex-wrap gap-x-1.5 gap-y-2 overflow-hidden">
                           {chipEvents.map((evt) => (
@@ -418,17 +423,14 @@ export function VersionTimeline({
                             </span>
                           ))}
                         </div>
-                        {publishedEvt && (
+                        {(isExpired || publishedEvt) && (
                           <span
-                            data-id={`version-event-${publishedEvt.id}`}
-                            data-expired={isExpired || undefined}
-                            title={`${publishedLabel} - ${nameOf(publishedEvt.actor)}${isExpired ? ` · ${t("home.verStatus.expired")}` : ""}`}
-                            className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
-                              isExpired ? EXPIRED_CHIP : (EVENT_CHIP[publishedEvt.event_type] ?? EVENT_CHIP.published)
-                            }`}
+                            data-id={rightEvt ? `version-event-${rightEvt.id}` : `version-expired-${version.id}`}
+                            title={rightEvt ? `${rightLabel} - ${nameOf(rightEvt.actor)}` : rightLabel}
+                            className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${EVENT_CHIP[rightType] ?? EVENT_CHIP.published}`}
                           >
-                            {isExpired ? <TimerOff size={12} strokeWidth={1.5} /> : <EventIcon type={publishedEvt.event_type} />}
-                            {isExpired ? t("home.verStatus.expired") : publishedLabel}
+                            <EventIcon type={rightType} />
+                            {rightLabel}
                           </span>
                         )}
                       </div>
