@@ -84,6 +84,12 @@ def test_render_existing_row_lists_actions_fields_and_edges() -> None:
     assert "- 1→2 branch 완결" in text
 
 
+def test_render_existing_row_shows_the_parallel_gateway() -> None:
+    """병렬 출구를 보여 주지 않으면 정정 에코가 kind=branch만 돌려줘 어댑터가 택일 분기(◇)로 바꾼다."""
+    row = {**EXISTING_ROW, "relations": {"edges": [{"src": 1, "dst": 2, "kind": "branch", "gateway": "parallel"}]}}
+    assert "- 1→2 branch parallel" in c.render_existing_row(row)
+
+
 def test_questionnaire_out_requires_activities_ordered() -> None:
     with pytest.raises(ValidationError):
         c.QuestionnaireOut.model_validate({"questions": [
@@ -172,3 +178,16 @@ def test_questionnaire_contract_targets_ambiguity_and_asks_for_why() -> None:
     assert "exceptions 3~5" in text
     assert "—" not in text  # AI 프롬프트에 긴 대시 금지
     assert c.Question(id="q1", kind="text", maps_to="conditions", text="t", suggested="s").why == ""
+
+
+def test_row_field_keys_match_the_adapter_and_reach_both_row_prompts() -> None:
+    """fields 키는 어댑터 _FIELD_KEYS가 단일 진실 — 프롬프트·정규화가 부분집합이면 *_min·annual_count가 증발한다."""
+    from app.framework_interview.normalize import ROW_FIELD_KEYS as NORMALIZE_KEYS
+    from scripts.consultant_interview import _FIELD_KEYS
+
+    assert set(c.ROW_FIELD_KEYS) == _FIELD_KEYS - {"done_criterial"}  # 별칭은 정규화가 done_criteria로 접는다
+    assert NORMALIZE_KEYS == set(c.ROW_FIELD_KEYS)
+    for text in (c.L6_ROW_DRAFTER_CONTRACT, c.ROW_FEEDBACK_CONTRACT):
+        assert "fields 키: " + ", ".join(c.ROW_FIELD_KEYS) in text
+        assert "분 단위 정수" in text
+        assert "—" not in text

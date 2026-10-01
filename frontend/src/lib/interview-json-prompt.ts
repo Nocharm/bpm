@@ -22,9 +22,11 @@ const SKELETON = {
       ownerRole: "역할명",
       approvers: [],
       department: null,
+      // 키 집합 = 어댑터 _FIELD_KEYS(별칭 done_criterial 제외) = 백엔드 contracts.ROW_FIELD_KEYS
       fields: {
-        start_condition: "", input_data: "", output_data: "", done_criteria: "",
-        systems: "", total_time: "", frequency: "", headcount: null, fte: null, gmp: "",
+        start_condition: "", input_data: "", output_data: "", done_criteria: "", systems: "", frequency: "",
+        total_time: "", total_time_min: null, touch_time: "", touch_time_min: null,
+        annual_count: null, headcount: null, fte: null, gmp: "", artifact_role: "",
       },
       actions: [
         { seq: 1, label: "활동명", name: "한 문장 설명", kind: "action", variant: "normal", rule: null, input: [], output: [], system: "" },
@@ -75,7 +77,8 @@ export function buildInterviewJsonPromptText(target?: InterviewPromptTarget): st
     "[rows 규칙, L6 하나가 rows 원소 하나]",
     "- taskId는 'L5코드-01', 'L5코드-02'처럼 유일하게. l6는 동사형 업무명.",
     "- owner는 null(실명 금지). ownerRole은 역할명. department는 부서명 또는 null.",
-    "- fields: start_condition, input_data, output_data, done_criteria, systems, total_time, frequency, headcount, fte, gmp 중 아는 것만.",
+    "- fields: start_condition, input_data, output_data, done_criteria, systems, frequency, total_time, total_time_min, touch_time, touch_time_min, annual_count, headcount, fte, gmp, artifact_role 중 아는 것만.",
+    "- total_time_min, touch_time_min은 분 단위 정수(1시간 30분이면 90)로 회당 소요 시간과 실작업 시간의 대표값입니다. total_time, touch_time에는 원문 표현을 그대로 둡니다. input_data, output_data는 개행으로 구분한 문자열 또는 배열(한 항목 = 한 줄)입니다.",
     "- actions: seq는 1부터, label은 동사형 20자 이내, kind는 action, handoff, decision 중 하나. variant는 normal 또는 exception.",
     "- input/output은 문자열 배열입니다(한 항목 = 한 줄). 앞 활동의 output 항목을 다음 활동의 input에 같은 표기로 다시 쓰면 자동으로 이어집니다.",
     "- 활동의 input은 그 활동이 받는 것, output은 그 활동이 만들어 내는 것입니다. 같은 활동의 input과 output에 같은 항목을 적지 마세요. L6 전체의 입력물·산출물은 fields.input_data/output_data에 적고, 활동에는 첫 활동의 input과 마지막 활동의 output으로만 넣습니다.",

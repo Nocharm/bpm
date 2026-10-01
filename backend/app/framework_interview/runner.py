@@ -149,9 +149,10 @@ async def _draw_row(db: AsyncSession, session: FrameworkInterviewSession, task: 
     role_catalog = format_managed_catalog(await get_assignee_roles(db))
     system_catalog = format_managed_catalog(await get_systems(db))
     card = _card_of(session, task)
+    existing_row = _existing_row_of_task(session, task)
     messages = build_row_messages(
         lang=session.lang, card=card, questionnaire=task.questionnaire or {}, answers=task.answers or {},
-        existing_row=_existing_row_of_task(session, task),
+        existing_row=existing_row,
         role_catalog=role_catalog, system_catalog=system_catalog, overrides=await get_prompt_overrides(db),
     )
     usage: list = []
@@ -160,7 +161,7 @@ async def _draw_row(db: AsyncSession, session: FrameworkInterviewSession, task: 
         # 행 JSON은 길어(활동 12개·IO 배열) 사고를 켜면 예산을 다 쓰고 빈 응답이 오기 쉽다 — 사고 없이 바로 쓴다.
         # 설문 답을 옮겨 적는 작업이라 사고가 품질에 기여하는 바도 작다(실사용 실패 2026-09-28)
         out = await ask_schema(messages, RowOut, normalizer=normalize_row, reasoning="none")
-        row = finalize_row_output(out, card)
+        row = finalize_row_output(out, card, existing_row)
         chain = await load_category_chain(db, session.category_id)
         l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]}
         issues = validate_row(chain, l5, {"taskId": task.task_id, **row})
