@@ -1,6 +1,6 @@
 # 출력 규칙 통일 — 끝당 1개 · 병렬 출구 · SP 핸들 (feat/output-rules)
 
-> 상태: P1~P7 구현 완료(2026-10-01, feat/output-rules). 사용자 결정은 아래 "결정"이 단일 출처. P5 시각 강조는 흐름 펄스로 확정(PROGRESS 참조).
+> 상태: P1~P7 구현 완료, dev 머지 완료(036489d9, 2026-10-01). main 머지 시 삭제 예정(열린 점은 CLAUDE.md 하위프로세스 핸들 계약의 알려진 한계로 흡수). 사용자 결정은 아래 "결정"이 단일 출처. P5 시각 강조는 흐름 펄스로 확정(PROGRESS 참조).
 
 ## 목표
 
@@ -36,7 +36,7 @@
 
 ### P4 — `parallel_outputs` 컬럼 (BE+FE 표면)
 노드 속성 추가 체크리스트(CLAUDE.md) 전부: `models.py` · `db.py _ADDED_COLUMNS`(`JSON`) · `schemas.NodeIn`/Out(+검증: 문자열·중복 제거) · `graph.py` upsert · `versions.py` clone_graph ·
-`csv-import.ts`(NODE_DEFAULTS·mergeNode pick 보존) · AI 변환 2곳(보존만, AI가 쓰지 않음) · 비교/확정 시그니처 3곳 · `node-clipboard.ts` · `buildGraph`/`toAppNodes`.
+`csv-import.ts`(NODE_DEFAULTS·mergeNode pick 보존) · AI 변환 2곳(AI `attributes.parallel` → `applyParallelFlag`, 생략=유지) · CSV `Parallel` 열(Y/N, 빈 칸=유지) · 비교/확정 시그니처 3곳 · `node-clipboard.ts` · `buildGraph`/`toAppNodes`.
 - verify: pytest 왕복(PUT→GET·clone), vitest 왕복.
 
 ### P5 — 병렬 토글 UI + 시각 강조 (FE)

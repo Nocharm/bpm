@@ -133,7 +133,7 @@ DECK = {
                 ]},
                 {"title": "Connecting nodes", "shot": True, "pts": [
                     ("Drag a handle", "Dropping on a node's body connects to the default handle (snap preview)."),
-                    ("One output", "Branch with a <b>Decision</b> node. Its edges carry Yes/No labels."),
+                    ("One connection per exit", "One-of-several uses a <b>Decision</b> (Yes/No labels); concurrent work uses a right-click <b>Parallel exit</b> (two or more)."),
                     ("Edge labels", "Right-click or <code>F2</code>. Line breaks supported."),
                     ("Line style", "Per edge: curved / stepped / straight. Change all in the Map tab's <b>Edge style</b>."),
                     ("Drop zones", "Drag a node near another to insert before / after / swap / group."),
@@ -153,7 +153,7 @@ DECK = {
                 ]},
                 {"title": "Saving &amp; validation", "pts": [
                     ("Autosave", "About 2 s after you stop. The Save button shows Saving / Saved / Failed."),
-                    ("Save checklist", "One Start · one primary End · unique End names · no multi-output plain nodes."),
+                    ("Save checklist", "One Start · one primary End · unique End names · one connection per exit (parallel exits two or more, Decisions exempt)."),
                     ("Editing needs", "A draft (#Draft / #Rejected) plus <b>your checkout</b>. Otherwise read-only."),
                     ("Pending downgrade", "While your permission downgrade is pending, checkout and submission are refused."),
                 ]},
@@ -193,7 +193,7 @@ DECK = {
                 ]},
                 {"title": "Per-run metrics (seven)", "shot": True, "pts": [
                     ("Per single run", "Duration · touch time · cost (₩/$) · headcount · annual volume · FTE."),
-                    ("h.mm notation", "<code>1.30</code> = 1 h 30 m. Shown as typed while editing, <code>1h30m</code> elsewhere."),
+                    ("h.mm notation", "<code>1.30</code> = 1 h 30 m. Shown as typed while editing and in CSV/Excel, <code>1h30m</code> elsewhere."),
                     ("One currency", "₩ / $ toggle. Switching warns that the other value clears, with Undo."),
                     ("Section Save", "Metrics and I/O sections apply via their <b>section Save button</b>."),
                     ("Subprocess nodes", "Only annual volume and FTE are edited directly. The other five inherit."),
@@ -343,7 +343,7 @@ DECK = {
             "desc": "Fill from CSV, export as PNG · Excel · CSV, and draw with the AI assistant.",
             "slides": [
                 {"title": "CSV import", "shot": True, "pts": [
-                    ("Import CSV", "Top bar. Download the template, fill, upload. 21 columns, max 500 rows."),
+                    ("Import CSV", "Top bar. Download the template, fill, upload. 25 columns, max 500 rows."),
                     ("Merge rule", "By name. Existing nodes keep color / comments / groups; blank cells keep values."),
                     ("Unknown column", "Columns outside the list are rejected."),
                     ("Normalization", "Assignees match by name. Role and system aliases become canonical; unknown systems become <b>Other</b>."),
@@ -351,13 +351,13 @@ DECK = {
                 ]},
                 {"title": "Export (PNG · Excel · CSV)", "shot": True, "pts": [
                     ("PNG", "2× resolution with a map info card. <code>Ctrl+Shift+E</code>."),
-                    ("Excel", "<b>Process Map</b> / <b>WBS</b>, per-currency number formatting. 2,000-row cap."),
-                    ("CSV", "The same 21 columns as import. Edit and re-import to round-trip."),
-                    ("CSV skips", "Non-primary End nodes, edges into End, duplicate titles, with a warning."),
+                    ("Excel", "<b>Process Map</b> / <b>WBS</b>, then <b>pick columns</b>. Per-currency number formatting. 2,000-row cap."),
+                    ("CSV", "The same 25 columns as import, <b>picked columns</b> only. Round-trips; left-out columns keep their values."),
+                    ("CSV skips", "Non-primary End nodes, edges into End, duplicate titles, with a warning. Secondary SP end links warn; per-end parallel is not carried."),
                 ]},
                 {"title": "AI assistant", "shot": True, "pts": [
                     ("Generate", "Flowcharts from plain language, attributes and metrics included. <b>Roles only</b>, never assignee names."),
-                    ("Incremental edits", "Layout, colors and groups preserved. Nodes, links, inserts, labels, I/O. Preview, then Apply."),
+                    ("Incremental edits", "Layout, colors and groups preserved. Nodes, links, inserts, labels, attributes, metrics, I/O, conditions, color, URL, parallel exits. Preview, then Apply."),
                     ("Analyze", "<b>Find issues</b> · summarize · walk-through · <b>Suggest improvements</b> · manual-grounded how-to."),
                     ("Chats stored", "Server-side, following you across devices. Several chats, other maps' chats readable."),
                     ("Input", "<code>Ctrl+Enter</code> sends · 2,000-char limit · adjustable text size."),
@@ -415,7 +415,7 @@ DECK = {
                     ("Origin badge", "Click for that L5's drill-in peek. \"Search other frameworks\" opens the browse modal."),
                 ]},
                 {"title": "Confirm &amp; versions", "shot": True, "pts": [
-                    ("Six gates", "All L6 placed · no placeholders · no stale links · all L6 published · no exit-less loops · branches use a decision."),
+                    ("Six gates", "All L6 placed · no placeholders · no stale links · all L6 published · no exit-less loops · one connection per exit."),
                     ("Who confirms", "The checkout holder if they are the <b>direct admin</b> (or a sysadmin). Higher admins send a confirm request."),
                     ("Versions", "v1.0 → v1.1 …, <b>Major</b> makes v2.0 and prunes intermediate minors."),
                     ("Changes required", "Layout-only moves can't confirm. The section shows changes since the last confirm."),
@@ -468,7 +468,7 @@ DECK = {
                     ("Can't submit?", "Assign at least one approver first."),
                     ("Can't create a version?", "Finish the current draft cycle through publish."),
                     ("Copy disabled?", "Only maps published at least once can be copied."),
-                    ("Won't save?", "One Start · one primary End · unique End names · no multi-output plain nodes."),
+                    ("Won't save?", "One Start · one primary End · unique End names · one connection per exit."),
                     ("Subprocess locked?", "It's undesignated. Request registration, or publish and designate."),
                     ("No draft on the canvas?", "Drafts are admin / sysadmin only. Everyone else lands on the latest confirmed snapshot."),
                     ("\"Owner unconfirmed\"?", "An interview-imported map. Map Settings → Danger Zone → Transfer ownership."),

@@ -169,7 +169,7 @@ DECK = {
                 ]},
                 {"title": "Confirmation governance", "shot": True, "pts": [
                     ("confirmed state", "Apart from publishing. Snapshots and the draft can't be deleted. Regular workflows are blocked server-side."),
-                    ("Six gates", "All L6 placed · no placeholders · no stale links · all L6 published · no exit-less loops · branches use a decision."),
+                    ("Six gates", "All L6 placed · no placeholders · no stale links · all L6 published · no exit-less loops · one connection per exit."),
                     ("Single source", "The Approval tab's <b>Confirm readiness</b> checklist. One failing gate disables Confirm."),
                     ("Who confirms", "The checkout holder if <b>direct admin</b> or sysadmin. Higher admins send a confirm request."),
                     ("Draft visibility", "Admins and sysadmins only. Everyone else lands on the latest confirmed snapshot."),
@@ -196,10 +196,10 @@ DECK = {
                 ]},
                 {"title": "Interview import · landing rules, placeholders, notes", "pts": [
                     ("Department path", "Exact → leading levels dropped → unique suffix → mirror chain. No match registers the path as-is."),
-                    ("Landing", "Activities (L7) become nodes, flow edges become connectors. branch → decision, self-loop → \"Repeat?\" branch."),
+                    ("Landing", "Activities (L7) become nodes, flow edges become connectors. Exclusive branch → decision, parallel branch → parallel exit, self-loop or non-parallel fan-out → auto branch node."),
                     ("Fields and notes", "Conditions, times and systems land as fields, originals kept as source notes. Systems matched to the catalog."),
                     ("Automatic", "Exact output = input matches link as IO, horizontal auto-layout, a draft right after publish."),
-                    ("L5 canvas", "Built or extended from top-level L6 flows. Redelivery only adds nodes."),
+                    ("L5 canvas", "Built or extended from top-level L6 flows (exclusive → decision, parallel → parallel exit). Redelivery only adds nodes."),
                     ("Notes", "Exceptions, VOC and regulatory basis become map notes; L5 entry / flow become category notes."),
                 ]},
                 {"title": "③ Connections · ④ Register", "shot": True, "pts": [

@@ -15,25 +15,46 @@
 - **선후 (sequence)** — Edge로 표현. 같은 버전 캔버스 안에서 화살표 연결
 - **상하 (hierarchy)** — **하위프로세스 참조 모델(Call Activity)**. 옛 인라인 계층(`parent_node_id`)은 폐기 — subprocess 노드가 `linked_map_id`로 다른 맵을 링크하고, 그 맵을 읽기전용으로 인라인 임베드/드릴인한다. 편집은 루트 맵에서만, 임베드 자식은 읽기전용. 설계: git history `2026-06-20-subprocess-reference-model-design.md`
 
-## 2. 데이터 모델 (초안)
+## 2. 데이터 모델
+
+정본은 코드다: 컬럼은 `backend/app/models.py`, API 입출력과 검증은 `backend/app/schemas.py`(`NodeIn`/`EdgeIn`/`NodeOut` 등). 아래는 필드군 요약이며, 새 노드 필드를 넣을 때 갱신할 지점은 CLAUDE.md "노드 속성 추가 체크리스트"가 열거한다.
 
 ```
-process_maps   id, name, description, created_by, created_at, updated_at,
-               owner_id, visibility(private/public)        # 권한 (RBAC, 후속 절)
-map_versions   id, map_id(FK), label(As-Is/To-Be/custom), created_by, created_at, updated_at,
-               status(draft/pending/approved/rejected/published),  # 버전 게시 워크플로
-               checked_out_by, checked_out_at              # 체크아웃 잠금 (§7 Phase C)
-nodes          id, version_id(FK), title, description, node_type, pos_x, pos_y, sort_order,
-               color,                                      # 노드 색 지정 (§7 Phase A)
-               assignee, department, system, duration,     # BPM 속성 (§7 Phase B)
-               source_node_id,                             # 복제 출처 — diff 계보 매칭 (§7 Phase B)
-               group_id, group_ids,                        # 업무 그룹(다중 태그) 소속
-               linked_map_id, linked_version_id, follow_latest,  # subprocess 참조(Call Activity)
-               is_primary_end                              # 대표 끝(프로세스당 1개, 버전업 유지)
-edges          id, version_id(FK), source_node_id, target_node_id, label  # node FK 없이 앱 계층 검증
-comments       id, version_id(FK), node_id, author, body, resolved, created_at  # 노드 코멘트 (§7 Phase C)
+process_maps   id, name, description, created_by, created_at, updated_at, deleted_at(휴지통),
+               owner_id, visibility(private/public), owning_department,   # 권한 (RBAC)
+               mode(normal/framework=L5 연계 캔버스),
+               category_id, consultant_code, consultant_owner_pending,    # 업무 체계 슬롯·컨설턴트 임포트
+               sp_designated_at, sp_department, sp_assignee, sp_assignee_role, sp_system,
+               sp_duration, sp_touch_time, sp_cost_krw, sp_cost_usd, sp_headcount,
+               sp_annual_count, sp_fte, sp_url, sp_url_label, sp_input, sp_output,
+               sp_input_forms, sp_output_forms, sp_input_ids, sp_output_ids,
+               sp_start_condition, sp_end_condition, sp_gmp,               # 서브프로세스 지정값(링크 노드가 상속)
+               sp_*_fallback                                               # 임포트 원문 메모 5종
+map_versions   id, map_id(FK), label, created_by, created_at, updated_at,
+               status(draft/pending/approved/rejected/published/expired, 연계 캔버스는 confirmed),
+               version_number, fw_major, fw_minor, submitted_by, reject_reason,
+               checked_out_by, checked_out_at, checked_out_from           # 체크아웃 잠금
+nodes          id, version_id(FK), title, description, node_type, color, width,
+               pos_x, pos_y, sort_order, source_node_id(복제 출처, diff 계보 매칭),
+               assignee, assignee_role, department, system, system_fallback, gmp, url, url_label,
+               duration, touch_time, cost_krw, cost_usd, headcount, annual_count, fte,  # 회당 파라미터 7종
+               input, output, input_flags, input_forms, output_forms,      # 입출력(줄 단위 항목)
+               output_ids, input_links, output_links,                      # IO 링크(항목 id 기반)
+               start_condition, end_condition,
+               group_id, group_ids,                                        # 업무 그룹(다중 태그) 소속
+               linked_map_id, linked_version_id, follow_latest,            # subprocess 참조(Call Activity)
+               placeholder_category_id,                                    # 미등록 L6 자리 표시
+               is_primary_end,                                             # 대표 끝(프로세스당 1개)
+               parallel_outputs                                            # 병렬 출구 키 JSON 리스트(§3.1 출력 규칙)
+edges          id, version_id(FK), source_node_id, target_node_id, label,  # node FK 없이 앱 계층 검증
+               source_side, target_side, source_handle, target_handle,     # 변·핸들(SP는 끝 키·in 변형, §3.1)
+               line_style,                                                 # 엣지별 선 모양
+               gateway                                                     # 임포트 출처 기록, "parallel"만 레거시 병렬 도출에 쓰임
+groups         id, version_id(FK), parent_group_id, label, color
+comments       id, version_id(FK), node_id, author, body, resolved, created_at  # 노드 코멘트
 ```
 
+- 폐기 컬럼(`process_maps.doc_*`, `nodes.section_anchor`, `interview_sessions.mode`)은 모델에 매핑만 남기고 읽지 않는다(CLAUDE.md Lessons).
 - 노드는 평면(버전 스코프) — 계층은 subprocess 노드의 `linked_map_id` 참조로 표현(§1).
 - `map_notes`(맵 또는 L5 카테고리 스코프, `kind` 태그·`source` consultant-import|user·`edited_at`) — 인터뷰 임포트 노트 + 사용자 노트. API: `GET/POST/PATCH/DELETE /maps/{id}/notes[/{note_id}]`(열람 viewer, 쓰기 owner) · `/categories/{id}/notes[/{note_id}]`(열람 전원, 쓰기 체인 관리자/sysadmin). 맵 단위 원문 메모(구 인터뷰 원문 메모) 5종(`sp_*_fallback`)은 `PATCH /maps/{id}/fallback-notes`(editor)로 편집 (2026-09-03).
 - 버전 생성: 기존 버전(예: As-Is)의 노드/엣지 전체를 깊은 복사해 새 라벨(To-Be)로 생성. 권한·버전 워크플로 데이터 모델은 권한 설계 문서 참조(git history `2026-06-20-permission-management-design.md`).
@@ -43,7 +64,8 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 ### 3.1 캔버스 에디터 (React Flow 기반)
 - 노드 추가/편집(제목·설명·유형)/삭제, 드래그 이동
 - 노드 핸들 드래그로 선후 Edge 연결, Edge 삭제
-- 하위프로세스 노드 핸들(2026-10-01): 들어오는 문은 네 변(`in`=좌 레거시, `in:top`·`in:right`·`in:bottom`), 출구는 링크 맵의 끝마다 하나(`__primary__`=대표 끝, 그 외=끝 제목)이며 끝마다 출력 1개 규칙. 끝이 2개 이상인데 끝을 모르는 생성 경로(드롭존 앞/뒤·역방향 몸체 드롭)는 출구 선택 목록(`EdgeEndModal`, 대표 끝 첫 행)을 거친다. 출구 엣지에 라벨이 없으면 끝 제목을 **미러**(점선 알약·링크 아이콘, 저장 안 함)로 표시한다. 가운데 스왑은 양쪽 출력 + 한쪽 2개 이상이면 출력 자리 바꾸기 모달(짝=타깃만 교환, 라벨·끝 키는 노드에 잔류, 짝 없는 출력은 남김, 확인해야 실행). 펼침 게이트웨이는 끝별 호스트 엣지에만 매핑되고 점선이 흐른다.
+- 출력 규칙(2026-10-01, 일반 맵·L5 연계 캔버스 공통, 단일 소스 `frontend/src/lib/output-rules.ts` ↔ `backend/app/subprocess.py` `find_output_rule_violations`): 출구(일반 노드는 `__primary__` 하나, 하위프로세스는 끝 키)마다 엣지 1개. **병렬 출구**(`nodes.parallel_outputs`, 또는 엣지 2개 이상이 전부 `gateway="parallel"`인 레거시 도출)는 2개 이상. 분기(decision)는 규칙 밖(택일 다중 출력). 삽입 재연결 중 일시 초과는 허용하고 저장 체크리스트가 수동 저장·승인 시작을 막는다(자동 저장은 막지 않음). L5 확정 게이트 6과 동치. 병렬 토글은 노드 우클릭(하위프로세스는 끝별 하위 메뉴), AI `attributes.parallel`·CSV `Parallel` 열은 노드 기본 출구만 다룬다.
+- 하위프로세스 노드 핸들(2026-10-01): 들어오는 문은 네 변(`in`=좌 레거시, `in:top`·`in:right`·`in:bottom`)이며 받기 전용(연결 드래그 중에만 보임). 출구는 링크 맵의 끝마다 하나(`__primary__`=대표 끝, 그 외=끝 제목)이고 우측 한 점에 겹쳐 그려지며, 끝마다 위 출력 규칙이 적용된다. 끝이 2개 이상이면 라벨 우측에 출구 사용량/끝 수 배지(초과는 `+N`). 끝이 2개 이상인데 끝을 모르는 생성 경로(드롭존 앞/뒤·역방향 몸체 드롭)는 출구 선택 목록(`EdgeEndModal`, 대표 끝 첫 행)을 거친다. 출구 엣지에 라벨이 없으면 끝 제목을 **미러**(점선 알약·링크 아이콘, 저장 안 함)로 표시한다. 가운데 스왑은 양쪽 출력 + 한쪽 2개 이상이면 출력 자리 바꾸기 모달(짝=타깃만 교환, 라벨·끝 키는 노드에 잔류, 짝 없는 출력은 남김, 확인해야 실행). 펼침 게이트웨이는 끝별 호스트 엣지에만 매핑되고 점선이 흐른다. CSV·AI가 새로 만드는 엣지는 대표 끝·좌측 `in`에 붙고, 같은 맵 재가져오기는 기존 엣지의 끝·입구 변·선 모양·gateway를 (출발→도착) 쌍으로 이월한다(새 맵 만들기는 대표 끝). 확정 서명·변경 요약·비교 화면·AI 비교 보고서는 SP 출구 끝 키 변경을 내용 변경으로 세고(같은 쌍의 두 끝은 별개 엣지), 변·입구 위치 이동은 레이아웃이라 세지 않는다. 알려진 한계: 끝 키가 끝 제목이라 링크 맵이 끝을 개명·삭제하면 부모의 해당 엣지와 끝별 병렬 설정이 고아가 되고(별도 출구 그룹으로 세어져 게이트가 잡지 못함), 끝 제목이 `in`·`in:<변>`·변 이름이면 대표 끝으로 오분류된다(상세는 CLAUDE.md 하위프로세스 핸들 계약).
 - 같은 핸들(변)로 모이는 엣지는 렌더 시 팬아웃(2026-09-30, `frontend/src/lib/edge-fanout.ts`): 핸들 앞 레인(14px + 10px 간격)에서 반경이 다른 원호로 접선 진입해 끝점에서만 만난다. 대향 진입은 먼 소스가 안쪽, 루프백(동측)은 가까운 소스가 안쪽. 곡선은 제어점 중첩, 직선은 끝점을 핸들 안에서 ±3.5px 분산. 저장 데이터·핸들 변은 불변(표시 전용), 에디터·비교 화면·SVG 미리보기(역행)에 적용
 - 저장은 명시적 저장 버튼 + 주기적 자동 저장
 
@@ -64,6 +86,7 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 - 맵 상세에서 버전 목록·생성(기존 버전 복제)·라벨 변경·삭제
 - **비교 화면**: 두 버전을 좌우 나란히 읽기 전용 렌더 (1차). 노드 추가/삭제/변경 하이라이트는 §7 Phase B에서 구현
 - **비교 화면 확장 (2026-09-18)**: 노드 위 속성 칩·조건·입출력 `+N −M` 요약(`lib/io-diff.ts`)과 변경 필드 힌트(`data.diffFieldStatus`), 속성 패널 "모두/변경만" 범위 토글, 실측 크기 기반 재배치. 세 번째 탭 **AI 요약** — FE가 계산한 병합 diff(`CompareDiffPayload`, 노드/엣지 각 200 상한, 추가 노드는 설명·역할·부서·시스템 동봉, `assignee` 실명 제외)와 흐름 문맥(변경 노드의 이웃 무변경 노드·남긴 노드 사이 모든 엣지, 엣지 400)·버전 파라미터 합계(`metrics`, 요약 탭과 동일)·입출력 항목 변경과 소비처(`io_changes`)를 `POST /api/maps/{id}/compare/ai-summary`로 보내 **개조식 보고서 4블록**(title·opening·`sections`=의도별 개정 요지·`impacts`=흐름·통제 영향·`unmentioned`=제출 코멘트 대비 미언급(`has_submit_note`)·`questions[]`=결재 전 확인 질문·closing; 요지 절 항목·영향·미언급은 공통 `{point, kind, refs}`이고 `kind`(added/removed/changed/increase/decrease/flow/control/risk/note, 미지 값은 서버가 note로)를 FE가 Lucide 아이콘+상태색으로 그린다)을 받는다(프롬프트 키 `compare_summary_contract`, 계량 `ai_usage_events kind=compare_summary`). 변경 목록 나열은 왼쪽 패널 몫이라 보고서에서 뺀다(2026-09-21). 서버는 맵 이름·오너 부서·제출자·제출 코멘트를 프롬프트 맥락으로 넣고, `ai_compare_summaries`에 (맵, base, target, 언어)당 1행을 캐시한다 — diff+언어+프롬프트 계약의 sha256이 같으면 모델 호출 없이 `cached=true`로 반환, `force`면 재생성 후 교체. FE는 AI 탭을 열 때만 호출한다(선행 생성 없음, 2026-09-20). `?base=&target=` 딥링크. **제출 코멘트 AI 초안(2026-09-21)**: 승인 요청 다이얼로그(에디터·설정>버전 패널 공용 `SubmitConfirmDialog`)의 "AI 초안" 버튼 → FE `lib/submit-note-draft.ts`가 최신 게시본(없으면 null=첫 제출) 대비 같은 페이로드로 `POST /api/maps/{id}/compare/submit-note-draft`(editor 게이트, 캐시 없음, `kind=submit_note`, 프롬프트 키 `submit_note_contract`) → 개조식 2~4줄을 textarea에 채운다(제출자가 고쳐 올림).
+- **비교 대상 확장 (2026-10-02)**: 링크(`url`·`url_label`)가 비교 필드(`lib/diff.ts` FIELD_KEYS·속성 패널·확정 서명·AI 비교 페이로드)에 들어가고, 하위프로세스 출구 끝 변경은 엣지 변경으로 잡힌다(§3.1). 컨설턴트 임포트의 재전달 감지 서명은 전달 필드 전용이라 링크를 넣지 않는다.
 - **승인자 착지 (2026-09-18)**: 내가 결재할 pending 버전이 있으면 에디터가 그 버전으로 착지(`?version=` 우선). 다른 버전에서는 상단 배너 링크 + 승인 탭 워크플로 섹션 덮개(`SectionOverlay`), pending 버전에는 "게시본과 비교" CTA(최신 게시본 ↔ pending 딥링크).
 
 ### 3.5 맵 목록
