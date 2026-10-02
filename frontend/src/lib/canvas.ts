@@ -1078,6 +1078,8 @@ export function insertNodeBefore(
  * bIsDecision(=B가 마름모)이면 분기 라벨이 항상 마름모에서 출발하도록 유지한다:
  * 기존 B--Yes-->C 를 B--Yes-->A 로 재타깃하고 A-->C 는 일반 엣지로 잇는다(라벨을 A로 옮기지 않음).
  * sourceHandle(B가 하위프로세스일 때 선택한 끝 키)을 주면 재연결·새 엣지 모두 그 끝에 한정한다.
+ * newEdgeHandles — 핸들 드래그 연결이 삽입/교체 모달을 거칠 때 잡은·놓은 핸들을 새 B→A 엣지에 그대로 싣는다
+ * (미리보기와 결과 일치, 2026-10-02). 없으면 기본 변(오른쪽 출발·왼쪽 도착).
  */
 export function insertNodeAfter(
   edges: Edge[],
@@ -1086,6 +1088,7 @@ export function insertNodeAfter(
   rewire: boolean,
   bIsDecision = false,
   sourceHandle?: string,
+  newEdgeHandles?: { sourceHandle?: string | null; targetHandle?: string | null },
 ): Edge[] {
   const isFromB = (edge: Edge): boolean =>
     edge.source === bId &&
@@ -1106,7 +1109,18 @@ export function insertNodeAfter(
   if (rewire) {
     next = next.map((edge) => (isFromB(edge) ? { ...edge, source: aId } : edge));
   }
-  return withEdge(next, bId, aId, sourceHandle);
+  const result = withEdge(next, bId, aId, sourceHandle);
+  // withEdge는 새 엣지를 끝에 붙인다 — 추가되지 않았으면(중복·역행) 그대로
+  if (!newEdgeHandles || result.length === next.length) return result;
+  const added = result[result.length - 1];
+  return [
+    ...result.slice(0, -1),
+    {
+      ...added,
+      sourceHandle: newEdgeHandles.sourceHandle ?? added.sourceHandle,
+      targetHandle: newEdgeHandles.targetHandle ?? added.targetHandle,
+    },
+  ];
 }
 
 /** 선후(엣지) 흐름 기준 좌→우 자동 배치 (spec §3.3). */

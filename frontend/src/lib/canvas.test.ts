@@ -94,6 +94,36 @@ describe("insertNodeAfter / insertNodeBefore (하위프로세스 끝 한정)", (
   });
 });
 
+describe("insertNodeAfter newEdgeHandles (잡은 핸들 유지)", () => {
+  const edges = [{ id: "x", source: "B", target: "X", sourceHandle: "s-right", targetHandle: "t-left" }] as Edge[];
+
+  it("puts the grabbed source and dropped target handles on the new edge", () => {
+    const result = insertNodeAfter(edges, "A", "B", false, false, undefined, {
+      sourceHandle: "s-bottom",
+      targetHandle: "t-top",
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe(edges[0]);
+    expect(result[1]).toMatchObject({ source: "B", target: "A", sourceHandle: "s-bottom", targetHandle: "t-top" });
+  });
+
+  it("keeps the default sides when no handles are given or a handle is null", () => {
+    const result = insertNodeAfter(edges, "A", "B", true, false, undefined, { sourceHandle: null });
+
+    expect(result.find((edge) => edge.id === "x")).toMatchObject({ source: "A", target: "X" });
+    expect(result[1]).toMatchObject({ source: "B", target: "A", sourceHandle: "s-right", targetHandle: "t-left" });
+  });
+
+  it("leaves the edges untouched when the new edge is a duplicate", () => {
+    const dup = [{ id: "d", source: "B", target: "A", sourceHandle: "s-right", targetHandle: "t-left" }] as Edge[];
+
+    const result = insertNodeAfter(dup, "A", "B", false, false, undefined, { sourceHandle: "s-top" });
+
+    expect(result).toEqual(dup);
+  });
+});
+
 describe("violatesTerminalRule (source→target 방향)", () => {
   it("blocks connecting INTO a start node (start cannot receive)", () => {
     expect(violatesTerminalRule("process", "start")).toBe(true);

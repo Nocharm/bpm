@@ -1197,6 +1197,34 @@ function ParallelHoverBadge({
   );
 }
 
+// 병렬 노드 안쪽 링 — 기존 1.5px 테두리 안쪽에 노드색(--nc) 옅은 1px 선을 한 겹 더해 병렬임을 약하게 드러낸다
+// (사용자 요청 2026-10-02). 판정은 호버 배지와 같은 출구 그룹(병렬 ∧ 엣지 ≥2), 분기 노드엔 쓰지 않는다.
+// radius = 바깥 곡률 - 3px(테두리 1.5 + 간격 1.5)이라 호출부가 노드 모양별로 넘긴다.
+function ParallelInnerRing({
+  nodeId,
+  nodeType,
+  parallelOutputs,
+  radius,
+}: {
+  nodeId: string;
+  nodeType: string;
+  parallelOutputs?: string[];
+  radius: number;
+}) {
+  const isParallel = useNodeOutputGroups(nodeId, nodeType, parallelOutputs).some(
+    (group) => group.parallel && group.count >= 2,
+  );
+  if (!isParallel) return null;
+  return (
+    <span
+      data-id="node-parallel-ring"
+      aria-hidden
+      className="pointer-events-none absolute inset-[1.5px]"
+      style={{ borderRadius: radius, border: "1px solid color-mix(in srgb, var(--nc) 40%, transparent)" }}
+    />
+  );
+}
+
 // SP 끝 개수 배지 — 제목 끝에 인라인으로 붙는 알약 하나(제목 폭을 따로 먹지 않게). 끝 ≥2면 `출구 사용량/끝 수`(병렬 출구는 1로 셈),
 // 한 출구에 엣지가 넘치면 끝 1개여도 같은 알약이 에러 톤 `+N`이 되고 호버 시 틴트 그대로 `출구 사용량/끝 수`(예: 4/3)로 페이드(사용자 결정 2026-10-01).
 function SpOutputBadge({ nodeId, ends, parallelOutputs }: { nodeId: string; ends: SubEnd[]; parallelOutputs?: string[] }) {
@@ -1425,13 +1453,17 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         )}
         {/* 비교 화면 SP는 끝 핸들 없이 변 핸들로 그려 끝 키가 사라진다 — SpOutputBadge와 같은 가드 */}
         {!diff && data.sideHandles !== true && (
-          <ParallelHoverBadge
-            nodeId={id}
-            nodeType="subprocess"
-            parallelOutputs={data.parallelOutputs}
-            ends={data.subEnds}
-            visible={hovered}
-          />
+          <>
+            <ParallelHoverBadge
+              nodeId={id}
+              nodeType="subprocess"
+              parallelOutputs={data.parallelOutputs}
+              ends={data.subEnds}
+              visible={hovered}
+            />
+            {/* rounded-sm(8px) 안쪽 */}
+            <ParallelInnerRing nodeId={id} nodeType="subprocess" parallelOutputs={data.parallelOutputs} radius={5} />
+          </>
         )}
         <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
         {/* SP 마크는 라벨 앞에만 — 아래 줄들(필드·IO)이 노드 전체 폭을 쓴다 (사용자 요청 2026-08-23) */}
@@ -1711,12 +1743,21 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       {diff && <DiffBadge status={diff} />}
       {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
       {!diff && (
-        <ParallelHoverBadge
-          nodeId={id}
-          nodeType={data.nodeType}
-          parallelOutputs={data.parallelOutputs}
-          visible={hovered}
-        />
+        <>
+          <ParallelHoverBadge
+            nodeId={id}
+            nodeType={data.nodeType}
+            parallelOutputs={data.parallelOutputs}
+            visible={hovered}
+          />
+          {/* 터미널 19px·일반 rounded-sm 8px 곡률 안쪽 */}
+          <ParallelInnerRing
+            nodeId={id}
+            nodeType={data.nodeType}
+            parallelOutputs={data.parallelOutputs}
+            radius={isTerminal ? 16 : 5}
+          />
+        </>
       )}
       <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
       {customTerminal && (

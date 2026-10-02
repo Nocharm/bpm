@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { applyParallelFlag, getOutputGroups, getOutputViolations } from "./output-rules";
+import {
+  applyParallelFlag,
+  getOutputGroups,
+  getOutputViolations,
+  getParallelOutputKeys,
+  setOutputParallel,
+} from "./output-rules";
 
 const node = (id: string, nodeType: string, parallelOutputs?: string[]) => ({ id, nodeType, parallelOutputs });
 
@@ -108,5 +114,57 @@ describe("applyParallelFlag", () => {
     expect(applyParallelFlag(["Hold"], undefined)).toBeUndefined();
     expect(applyParallelFlag(["Hold"], true)).toEqual(["Hold", "__primary__"]);
     expect(applyParallelFlag(["Hold", "__primary__"], false)).toEqual(["Hold"]);
+  });
+});
+
+describe("getParallelOutputKeys", () => {
+  it("includes flagged exits and exits derived parallel from legacy gateways", () => {
+    const edges = [
+      { source: "S", sourceHandle: "__primary__", gateway: "parallel" },
+      { source: "S", sourceHandle: "__primary__", gateway: "parallel" },
+      { source: "S", sourceHandle: "Hold", gateway: null },
+    ];
+
+    const keys = getParallelOutputKeys(node("S", "subprocess", ["Done"]), edges);
+
+    expect(keys.sort()).toEqual(["Done", "__primary__"]);
+  });
+});
+
+describe("setOutputParallel", () => {
+  const edges = [
+    { id: "e1", source: "A", sourceHandle: "s-right", gateway: "parallel" },
+    { id: "e2", source: "A", sourceHandle: "s-bottom", gateway: "parallel" },
+    { id: "e3", source: "B", sourceHandle: "s-right", gateway: "parallel" },
+  ];
+
+  it("adds the key without touching gateways when turned on", () => {
+    const result = setOutputParallel(node("A", "process"), edges, "__primary__", true);
+
+    expect(result).toEqual({ parallelOutputs: ["__primary__"], clearGatewayEdgeIds: [] });
+  });
+
+  it("removes the key and clears the exit's parallel gateways when turned off", () => {
+    const result = setOutputParallel(node("A", "process", ["__primary__"]), edges, "__primary__", false);
+
+    expect(result).toEqual({ parallelOutputs: [], clearGatewayEdgeIds: ["e1", "e2"] });
+    // 소거 후엔 레거시 도출도 병렬이 아니라 출력 규칙 위반으로 잡힌다
+    const cleared = edges.map((edge) =>
+      result.clearGatewayEdgeIds.includes(edge.id) ? { ...edge, gateway: null } : edge,
+    );
+    expect(getOutputViolations([node("A", "process", result.parallelOutputs)], cleared)).toEqual([
+      { nodeId: "A", excess: 1, shortParallel: 0 },
+    ]);
+  });
+
+  it("only clears gateways on the toggled subprocess end", () => {
+    const spEdges = [
+      { id: "p1", source: "S", sourceHandle: "__primary__", gateway: "parallel" },
+      { id: "h1", source: "S", sourceHandle: "Hold", gateway: "parallel" },
+    ];
+
+    const result = setOutputParallel(node("S", "subprocess", ["Hold"]), spEdges, "Hold", false);
+
+    expect(result).toEqual({ parallelOutputs: [], clearGatewayEdgeIds: ["h1"] });
   });
 });

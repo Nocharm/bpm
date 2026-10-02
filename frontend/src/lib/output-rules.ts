@@ -99,3 +99,36 @@ export function applyParallelFlag(
   const rest = (current ?? []).filter((key) => key !== PRIMARY_END_HANDLE);
   return flag ? [...rest, PRIMARY_END_HANDLE] : rest;
 }
+
+/** 실효 병렬 출구 키 — 속성에 켠 키 ∪ 레거시 도출(gateway 전부 "parallel")로 병렬인 출구. 메뉴·출구 목록 체크 상태용. */
+export function getParallelOutputKeys(node: OutputRuleNode, edges: readonly OutputRuleEdge[]): string[] {
+  const keys = new Set(node.parallelOutputs ?? []);
+  for (const group of getOutputGroups(node, edges)) {
+    if (group.parallel) keys.add(group.key);
+  }
+  return [...keys];
+}
+
+/**
+ * 출구 병렬 켬/끔 — 켜면 키 추가, 끄면 키 제거 + 그 출구의 gateway="parallel" 엣지(소거 대상 id).
+ * 임포트 팬아웃은 속성과 gateway를 함께 싣는데 키만 빼면 레거시 도출이 여전히 병렬로 읽어
+ * 저장 체크리스트·확정 게이트 6이 위반을 못 잡는다(사용자 리포트 2026-10-02). 백엔드 게이트도 같은 도출이라 소거로 충분.
+ */
+export function setOutputParallel(
+  node: OutputRuleNode,
+  edges: readonly (OutputRuleEdge & { id: string })[],
+  key: string,
+  on: boolean,
+): { parallelOutputs: string[]; clearGatewayEdgeIds: string[] } {
+  const rest = (node.parallelOutputs ?? []).filter((item) => item !== key);
+  if (on) return { parallelOutputs: [...rest, key], clearGatewayEdgeIds: [] };
+  const clearGatewayEdgeIds = edges
+    .filter(
+      (edge) =>
+        edge.source === node.id &&
+        edge.gateway === "parallel" &&
+        getOutputKey(node.nodeType, edge.sourceHandle) === key,
+    )
+    .map((edge) => edge.id);
+  return { parallelOutputs: rest, clearGatewayEdgeIds };
+}
