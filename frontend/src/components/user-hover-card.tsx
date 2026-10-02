@@ -3,7 +3,7 @@
 // 유저 호버 카드 — 앵커를 1초 이상 호버하거나 **클릭하면 즉시** 유저 정보 팝오버. 맵 상세 '허용 인원'
 // 확장 카드 디자인을 미러(아바타+이름 · 아이디/직급/부서 레벨 필). portal+fixed라 컨테이너 overflow에 안 잘림.
 
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import type { DirectoryUser } from "@/lib/api";
@@ -12,6 +12,8 @@ import { formatTitleWithPosition } from "@/lib/korean-dept";
 
 // 호버 후 카드가 뜨기까지 지연(ms) — 요청: 1초 경과
 const HOVER_DELAY_MS = 1000;
+// 마우스 아웃 후 닫힘 유예(ms) — 흔들림·즉시 재진입엔 카드 유지 (PersonHoverCard와 동일)
+const CLOSE_DELAY_MS = 400;
 
 // org_path(루트/…/리프) → 리프→루트 레벨 배열 (맵 상세 카드와 동일)
 function orgLevels(path: string): string[] {
@@ -30,7 +32,17 @@ export function UserHoverCard({
   const ref = useRef<HTMLSpanElement>(null);
   const cardRef = useRef<HTMLSpanElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  // 언마운트 시 잔여 타이머 정리 — 사라진 앵커에 카드가 뒤늦게 뜨거나 닫히지 않게
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    },
+    [],
+  );
 
   // 화면 가장자리 보정 — 인스펙터는 화면 오른쪽 끝이라 필 왼쪽에 맞춰 띄우면 카드가 밖으로 나간다.
   // 부서 레벨 필 개수에 따라 높이가 달라져 추정이 불가능하므로 붙인 뒤 실측해 민다.
@@ -51,10 +63,19 @@ export function UserHoverCard({
   const title = formatTitleWithPosition(user?.title ?? "", user?.position ?? "");
   const levels = orgLevels(user?.org_path ?? "");
 
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
   const scheduleShow = () => {
+    cancelClose();
     const el = ref.current;
-    if (!el) return;
+    // 닫힘 유예 중 재진입이면 이미 떠 있는 카드를 유지한다
+    if (!el || pos !== null || timer.current) return;
     timer.current = setTimeout(() => {
+      timer.current = null;
       const rect = el.getBoundingClientRect();
       setPos({ x: rect.left, y: rect.bottom });
     }, HOVER_DELAY_MS);
@@ -68,15 +89,21 @@ export function UserHoverCard({
       clearTimeout(timer.current);
       timer.current = null;
     }
+    cancelClose();
     const rect = el.getBoundingClientRect();
     setPos({ x: rect.left, y: rect.bottom });
   };
-  const hide = () => {
+  const scheduleHide = () => {
     if (timer.current) {
       clearTimeout(timer.current);
       timer.current = null;
     }
-    setPos(null);
+    if (pos === null) return;
+    cancelClose();
+    closeTimer.current = setTimeout(() => {
+      closeTimer.current = null;
+      setPos(null);
+    }, CLOSE_DELAY_MS);
   };
 
   return (
@@ -84,7 +111,7 @@ export function UserHoverCard({
       ref={ref}
       className="inline-flex min-w-0 cursor-pointer"
       onMouseEnter={scheduleShow}
-      onMouseLeave={hide}
+      onMouseLeave={scheduleHide}
       onClick={showNow}
     >
       {children}

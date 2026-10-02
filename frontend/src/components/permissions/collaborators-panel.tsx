@@ -74,8 +74,10 @@ interface CollaboratorsPanelProps {
   onCountChange?: (count: number) => void;
 }
 
-// 행 그리드 — 아바타 · 이름 · 소속 · 부여 · 역할(+태그) · 제거. 역할 열은 내용 폭(태그가 붙으면 늘어난다)
-const ROW_GRID = "grid grid-cols-[28px_minmax(0,1fr)_150px_112px_auto_24px] items-center gap-2.5";
+// 행 그리드 — 아바타 · 이름 · 소속 · 부여 · 역할(+태그) · 제거. 역할 열은 내용 폭(태그가 붙으면 늘어난다)이라
+// 행마다 독립 grid면 태그 길이에 따라 소속·부여 열이 어긋난다 → 목록이 열을 소유하고 행은 subgrid로 공유.
+const LIST_GRID = "grid grid-cols-[28px_minmax(0,1fr)_150px_112px_auto_24px] gap-x-2.5 gap-y-0.5";
+const ROW_GRID = "col-span-full grid grid-cols-subgrid items-center";
 
 // 표시명 해석 — 실 디렉터리/그룹 우선, 없으면 principalId 폴백 /
 // Resolve display name from real directory (users/depts) and real groups; fall back to id.
@@ -331,8 +333,9 @@ function CollaboratorRow({
       {affiliation}
       <GrantedCell label={t("perm.collab.grantedBy")} by={grantedByName} at={perm.granted_at} />
 
-      {/* 역할 열 — 뱃지 또는 메뉴 + pending/스택 태그 / role column: badge or menu, plus pending/staged tags */}
-      <span className="flex items-center justify-end gap-1.5">
+      {/* 역할 열 — 태그(위)·뱃지 또는 메뉴(아래) 두 줄. 한 줄로 나란히 두면 긴 태그가 열 폭을 먹는다 /
+          role column: pending/staged tags stacked above the badge or menu */}
+      <span className="flex flex-col items-end justify-center gap-1">
         {pendingChange && (
           <PendingChangePill
             dataId={`perm-pending-withdraw-${perm.id}`}
@@ -597,6 +600,7 @@ export function CollaboratorsPanel({
 
       {/* 오우닝 부서 잠금 행 — 합성 표시(MapPermission 아님), 실 권한 목록 위에 고정 /
           Owning-department locked row: synthetic display, not a real permission, pinned above the list. */}
+      <div className={LIST_GRID}>
       {!loading && owningDepartment && (
         <div data-id="owning-dept-locked-row" className={`${ROW_GRID} rounded-sm bg-surface-alt py-1.5 pl-1.5 pr-1`}>
           <Avatar principalType="department" name={owningDepartment} id={owningDepartment} />
@@ -657,6 +661,7 @@ export function CollaboratorsPanel({
           onWithdrawPending={(p) => void handleWithdrawPending(p)}
         />
       ))}
+      </div>
 
       {/* 스택에 적립된 추가 예정 — 고스트 행(점선 테두리) + 태그(호버 시 Cancel로 스왑) /
           Staged "to add" rows — dashed ghost row with a hover-to-cancel tag. */}
