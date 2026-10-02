@@ -5,13 +5,13 @@
 // 한 번에 하나만 열리고(호출부의 previewCode 단일 상태), 뷰포트는 5노드 높이 고정, 기본 배율은 노드가 읽히는 크기,
 // 드래그 팬·휠 줌·+/−/맞춤 버튼 — 서브프로세스 피크와 같은 조작감 (사용자 결정 2026-09-08).
 
-import { Maximize2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { AlertTriangle, Maximize2, X, ZoomIn, ZoomOut } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { VersionGraph } from "@/lib/api";
 import { NODE_HEIGHT, nodeSizeOf, normalizeNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
-import { buildL5PreviewGraph, buildPreviewGraph, layoutPreviewGraph } from "@/lib/interview-preview";
+import { buildL5PreviewGraph, buildPreviewGraph, layoutPreviewGraph, readPreviewNotices } from "@/lib/interview-preview";
 import { ScopePreview } from "@/components/scope-preview";
 
 const VIEW_HEIGHT = 266; // px — 노드 52 × 5 + 여백 (3배에서 더 키움, 사용자 지시 2026-09-09)
@@ -51,6 +51,9 @@ export function ImportMapPreview({ source, scope = "map", dataId, onClose, hideC
     const built = scope === "canvas" ? buildL5PreviewGraph(source) : buildPreviewGraph(source);
     return built ? layoutPreviewGraph(built) : null;
   }, [source, scope]);
+  // 흐름 노티(병행 갈래가 되돌아가기·건너뛰기와 섞여 택일로 접힘 등) — 그림만으로는 안 보여 미리보기 아래에 적는다.
+  // 어댑터 경고 미러라 L6 행(scope="map")에만 있다
+  const notices = useMemo(() => (scope === "map" ? readPreviewNotices(source) : []), [source, scope]);
   const [zoom, setZoom] = useState<number | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   // 기본 배율이 1보다 크면 SVG가 컨테이너보다 커서 좌상단 빈 여백부터 보인다 — 마운트 시 Start 노드가 왼쪽에,
@@ -88,43 +91,60 @@ export function ImportMapPreview({ source, scope = "map", dataId, onClose, hideC
     return clamped;
   };
   return (
-    <div
-      ref={wrapRef}
-      data-id={dataId}
-      className="relative overflow-hidden rounded-sm border border-hairline"
-      style={{ height: fill ? "100%" : VIEW_HEIGHT }}
-    >
-      <ScopePreview
-        fullGraph={graph}
-        scopeParentId={null}
-        zoom={current}
-        onZoom={(direction) => applyZoom(current + direction * ZOOM_STEP)}
-      />
-      <div className="absolute right-1.5 top-1.5 flex gap-1">
-        <button type="button" aria-label={t("editor.zoomOut")} className={ZOOM_BTN} onClick={() => applyZoom(current - ZOOM_STEP)}>
-          <ZoomOut size={12} strokeWidth={1.5} />
-        </button>
-        <button type="button" aria-label={t("editor.zoomIn")} className={ZOOM_BTN} onClick={() => applyZoom(current + ZOOM_STEP)}>
-          <ZoomIn size={12} strokeWidth={1.5} />
-        </button>
-        <button type="button" aria-label={t("framework.report.previewFit")} className={ZOOM_BTN} onClick={() => setZoom(null)}>
-          <Maximize2 size={12} strokeWidth={1.5} />
-        </button>
-        {!hideClose && (
-          <button
-            type="button"
-            aria-label={t("framework.report.previewClose")}
-            data-id={`${dataId}-close`}
-            className={ZOOM_BTN}
-            onClick={onClose}
-          >
-            <X size={12} strokeWidth={1.5} />
+    <>
+      <div
+        ref={wrapRef}
+        data-id={dataId}
+        className="relative overflow-hidden rounded-sm border border-hairline"
+        style={{ height: fill ? "100%" : VIEW_HEIGHT }}
+      >
+        <ScopePreview
+          fullGraph={graph}
+          scopeParentId={null}
+          zoom={current}
+          onZoom={(direction) => applyZoom(current + direction * ZOOM_STEP)}
+        />
+        <div className="absolute right-1.5 top-1.5 flex gap-1">
+          <button type="button" aria-label={t("editor.zoomOut")} className={ZOOM_BTN} onClick={() => applyZoom(current - ZOOM_STEP)}>
+            <ZoomOut size={12} strokeWidth={1.5} />
           </button>
-        )}
+          <button type="button" aria-label={t("editor.zoomIn")} className={ZOOM_BTN} onClick={() => applyZoom(current + ZOOM_STEP)}>
+            <ZoomIn size={12} strokeWidth={1.5} />
+          </button>
+          <button type="button" aria-label={t("framework.report.previewFit")} className={ZOOM_BTN} onClick={() => setZoom(null)}>
+            <Maximize2 size={12} strokeWidth={1.5} />
+          </button>
+          {!hideClose && (
+            <button
+              type="button"
+              aria-label={t("framework.report.previewClose")}
+              data-id={`${dataId}-close`}
+              className={ZOOM_BTN}
+              onClick={onClose}
+            >
+              <X size={12} strokeWidth={1.5} />
+            </button>
+          )}
+        </div>
+        <span className="pointer-events-none absolute bottom-1 left-1.5 rounded-sm bg-surface/80 px-1 text-fine text-ink-tertiary">
+          {t("framework.report.previewHint")}
+        </span>
       </div>
-      <span className="pointer-events-none absolute bottom-1 left-1.5 rounded-sm bg-surface/80 px-1 text-fine text-ink-tertiary">
-        {t("framework.report.previewHint")}
-      </span>
-    </div>
+      {notices.length > 0 && (
+        <div data-id={`${dataId}-notices`} className="mt-1.5 rounded-sm border border-hairline bg-surface-alt px-2 py-1.5">
+          <p className="flex items-center gap-1.5 text-caption text-ink-secondary">
+            <AlertTriangle size={16} strokeWidth={1.5} className="shrink-0 text-changed" />
+            {t("framework.report.previewNotices")}
+          </p>
+          <ul className="mt-1 flex flex-col gap-0.5 pl-[22px]">
+            {notices.map((notice, i) => (
+              <li key={i} data-id={`${dataId}-notice-${i}`} className="text-fine text-ink-secondary">
+                {notice}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
   );
 }

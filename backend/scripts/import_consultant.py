@@ -193,7 +193,10 @@ def link_matching_io(nodes: list[Node], edges: list[Edge], map_code: str) -> int
 # 승계 조건: None=항상, "input"/"output"=그 측 IO 텍스트가 그대로일 때(줄 정렬 기반이라 텍스트가 바뀌면 폐기),
 # "link"=같은 링크 맵을 가리킬 때(버전 고정은 그 맵 기준), "nonlink"=링크 노드가 아닐 때(링크 노드의 연간 건수·FTE는
 # 전달물 params가 진실이라 승계하지 않는다 — L7 활동·Start/End에 오너가 넣은 값만 옮긴다). output_ids는 사용자가 건 미러가 가리키는 원본
-# 항목 id라 output 측 링크와 같이 옮겨야 링크가 산다. 폼 두 필드는 줄 정렬 승계만 공유하고 성격이 다르다 —
+# 항목 id라 output 측 링크와 같이 옮겨야 링크가 산다. "end"=끝 노드 제목 — 전달물은 끝 제목을 싣지 않고 빌더가 빈
+# 제목으로 만든다(단순 "End"는 정보가 없어 오너가 바로 라벨을 쓰게, 사용자 결정 2026-10-02). 오너가 붙인 제목과
+# 이 변경 전에 만든 맵의 "End"를 그대로 두어야 재전달이 라벨을 지우거나 제목 차이만으로 새 버전을 찍지 않는다
+# (승계가 서명 전에 돌아 `_graph_signature`의 title이 직전 값과 같아진다). 폼 두 필드는 줄 정렬 승계만 공유하고 성격이 다르다 —
 # input_forms는 검토 입력값이라 `_graph_signature` 밖, output_forms는 전달 필드(dataForm)라 서명 안이다(C40).
 # 아웃풋 텍스트가 그대로면 검토 입력값이 전달분을 이기는 기존 계약(2026-08-20)을 유지한다. group_ids는 그룹 행 복제·리맵이 필요해 `_inherit_prior_fields`가 따로 다룬다.
 INHERITED_NODE_FIELDS: tuple[tuple[str, str | None], ...] = (
@@ -220,6 +223,7 @@ INHERITED_NODE_FIELDS: tuple[tuple[str, str | None], ...] = (
     ("output_links", "output"),
     ("follow_latest", "link"),
     ("linked_version_id", "link"),
+    ("title", "end"),
 )
 
 
@@ -250,6 +254,8 @@ def _inherit_prior_fields(
             if guard == "output" and (node.output or "") != (old.output or ""):
                 continue
             if guard == "nonlink" and node.linked_map_id is not None:
+                continue
+            if guard == "end" and (node.node_type != "end" or old.node_type != "end"):
                 continue
             if guard == "link":
                 if node.linked_map_id is None or node.linked_map_id != old.linked_map_id:
@@ -407,7 +413,8 @@ def build_graph_rows(
     code_to_id[end] = uuid.uuid4().hex
     nodes.append(Node(
         id=code_to_id[end], source_node_id=make_node_id(cmap.code, end),
-        title="End", node_type="end",
+        # 빈 제목 — 재전달은 직전 게시본 끝 제목을 승계한다(INHERITED_NODE_FIELDS "end")
+        title="", node_type="end",
         is_primary_end=True, pos_x=ex, pos_y=ey, sort_order=len(nodes),
     ))
 

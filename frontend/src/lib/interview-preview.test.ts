@@ -29,6 +29,9 @@ describe("buildPreviewGraph", () => {
     expect(graph?.nodes.map((n) => n.id)).toEqual(["__start__", "a01", "a02", "__end__"]);
     expect(pairsOf(graph!)).toEqual(["a01>a02", "__start__>a01", "a02>__end__"]);
     expect(graph?.nodes.find((n) => n.id === "__end__")?.is_primary_end).toBe(true);
+    // 끝은 빈 제목, 시작은 "Start" — import_consultant.build_graph_rows 동치
+    expect(graph?.nodes.find((n) => n.id === "__end__")?.title).toBe("");
+    expect(graph?.nodes.find((n) => n.id === "__start__")?.title).toBe("Start");
   });
 
   it("promotes an exclusive branch source to decision and joins label + condition", () => {
@@ -238,6 +241,7 @@ describe("buildL5PreviewGraph", () => {
     expect(graph?.nodes.map((n) => n.id)).toEqual(["__start__", "t1", "t2", "__end__"]);
     expect(graph?.nodes.find((n) => n.id === "t1")?.node_type).toBe("subprocess");
     expect(pairsOf(graph!)).toEqual(["t1>t2", "__start__>t1", "t2>__end__"]);
+    expect(graph?.nodes.find((n) => n.id === "__end__")?.title).toBe("");
   });
 
   it("names undeclared endpoints by code and declared externals by their L5 label", () => {
