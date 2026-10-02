@@ -333,8 +333,9 @@ function CollaboratorRow({
       {affiliation}
       <GrantedCell label={t("perm.collab.grantedBy")} by={grantedByName} at={perm.granted_at} />
 
-      {/* 역할 열 — 뱃지 또는 메뉴 + pending/스택 태그 / role column: badge or menu, plus pending/staged tags */}
-      <span className="flex items-center justify-end gap-1.5">
+      {/* 역할 열 — 태그(위)·뱃지 또는 메뉴(아래) 두 줄. 한 줄로 나란히 두면 긴 태그가 열 폭을 먹는다 /
+          role column: pending/staged tags stacked above the badge or menu */}
+      <span className="flex flex-col items-end justify-center gap-1">
         {pendingChange && (
           <PendingChangePill
             dataId={`perm-pending-withdraw-${perm.id}`}
@@ -362,15 +363,9 @@ function CollaboratorRow({
                 ) : (
                   <Zap size={12} strokeWidth={1.5} />
                 )}
-                {/* 변경 태그는 두 줄(전이 / 상태) — 한 줄이면 역할 열이 넓어져 이름 열을 먹는다 */}
-                {stagedChange ? (
-                  <span className="flex flex-col items-start leading-tight">
-                    <span className="whitespace-nowrap">{`${t(role === "editor" ? "perm.roleEditor" : "perm.roleViewer")} → ${t(stagedChange.toRole === "editor" ? "perm.roleEditor" : "perm.roleViewer")}`}</span>
-                    <span className="whitespace-nowrap">{t("perm.staged.change")}</span>
-                  </span>
-                ) : (
-                  t("perm.staged.remove")
-                )}
+                {stagedChange
+                  ? `${t(role === "editor" ? "perm.roleEditor" : "perm.roleViewer")} → ${t(stagedChange.toRole === "editor" ? "perm.roleEditor" : "perm.roleViewer")} · ${t("perm.staged.change")}`
+                  : t("perm.staged.remove")}
               </span>
             }
           />
