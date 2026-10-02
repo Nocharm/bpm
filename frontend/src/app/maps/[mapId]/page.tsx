@@ -325,7 +325,15 @@ import {
   subprocessInHandle,
   type SubEnd,
 } from "@/lib/subprocess-embed";
-import { applyParallelFlag, getOutputGroups, getOutputKey, type OutputRuleEdge, type OutputRuleNode } from "@/lib/output-rules";
+import {
+  applyParallelFlag,
+  getOutputGroups,
+  getOutputKey,
+  getParallelOutputKeys,
+  setOutputParallel,
+  type OutputRuleEdge,
+  type OutputRuleNode,
+} from "@/lib/output-rules";
 import { assignEdgePulses } from "@/lib/edge-pulse";
 import { ParallelExitIcon } from "@/lib/parallel-icon";
 import {
@@ -1133,8 +1141,16 @@ function MapEditor({ mapId }: { mapId: number }) {
   >(null);
   // 출력 1개 충돌 시 삽입/교체/취소 모달 — source의 기존 출력이 있을 때 새 target 연결을 어떻게 할지.
   // sourceHandle: 하위프로세스 끝 키(끝 ≥ 2) — 교체·삽입을 그 끝의 출력에 한정한다(끝당 출력 1개 규칙).
+  // connectHandles: 핸들 드래그 연결에서 잡은·놓은 핸들 — 새 엣지가 미리보기와 같은 변으로 붙는다(드롭존 경로는 없음).
   const [edgeAction, setEdgeAction] = useState<
-    { source: string; target: string; at: { x: number; y: number }; sourceHandle?: string } | null
+    | {
+        source: string;
+        target: string;
+        at: { x: number; y: number };
+        sourceHandle?: string;
+        connectHandles?: { sourceHandle: string | null; targetHandle: string | null };
+      }
+    | null
   >(null);
   // 다중 출력 노드에 삽입 시 — 어느 출력선으로 들어갈지 선택 (F1). source 출력선 중 1개 픽.
   const [edgeSelect, setEdgeSelect] = useState<
@@ -3814,13 +3830,32 @@ function MapEditor({ mapId }: { mapId: number }) {
     [endsOfNode],
   );
 
-  // 출구 선택 목록의 끝 모드 전환(병렬↔단일) — 노드 우클릭 "병렬 출구" 하위 메뉴와 같은 데이터, 모달은 유지
-  const toggleEndParallel = (sourceId: string, endKey: string) => {
-    const current = nodesRef.current.find((node) => node.id === sourceId)?.data.parallelOutputs ?? [];
-    patchNode(sourceId, {
-      parallelOutputs: current.includes(endKey) ? current.filter((key) => key !== endKey) : [...current, endKey],
-    });
-  };
+  // 출구 병렬 전환(병렬↔단일) — 출구 선택 목록과 노드 우클릭 "병렬 출구"가 공유. 켜짐 판정은 실효 상태
+  // (속성 ∪ 임포트 gateway 도출)라 끄면 키와 함께 그 출구의 gateway="parallel"도 지운다(lib/output-rules setOutputParallel).
+  // 히스토리 한 번으로 노드 속성·엣지 소거를 함께 되돌린다. 우클릭 메뉴(useMemo) 의존성이라 useCallback,
+  // 뒤에 선언된 patchNode 대신 setNodes 직행(병렬 키는 IO 전파 대상이 아니다).
+  const toggleEndParallel = useCallback(
+    (sourceId: string, endKey: string) => {
+      const source = nodesRef.current.find((node) => node.id === sourceId);
+      if (!source || readOnly) return;
+      const checkNode = buildCheckNode(source);
+      const checkEdges = edgesRef.current.map((edge) => ({ ...buildCheckEdge(edge), id: edge.id }));
+      const isOn = getParallelOutputKeys(checkNode, checkEdges).includes(endKey);
+      const { parallelOutputs, clearGatewayEdgeIds } = setOutputParallel(checkNode, checkEdges, endKey, !isOn);
+      pushHistory();
+      setNodes((current) =>
+        current.map((node) => (node.id === sourceId ? { ...node, data: { ...node.data, parallelOutputs } } : node)),
+      );
+      if (clearGatewayEdgeIds.length > 0) {
+        const cleared = new Set(clearGatewayEdgeIds);
+        setEdges((current) =>
+          current.map((edge) => (cleared.has(edge.id) ? { ...edge, data: { ...edge.data, gateway: null } } : edge)),
+        );
+      }
+      scheduleAutoSave();
+    },
+    [readOnly, pushHistory, setNodes, setEdges, scheduleAutoSave],
+  );
   // 끝 행 호버 → 그 끝에서 나가는 엣지 강조(떠나면 해제)
   const hoverEndEdges = (sourceId: string, endKey: string | null) => {
     setEndHoverEdgeIds(
@@ -3851,16 +3886,13 @@ function MapEditor({ mapId }: { mapId: number }) {
   const createEdge = useCallback(
     (connection: Connection, label: string) => {
       pushHistory();
-      // 기본 출발/도착 면을 source=오른쪽 / target=왼쪽으로 고정 — 잡은 핸들 면에 의존하지 않게
-      // (끝 노드를 후속으로 끌면 왼쪽 핸들이 잡혀 시작이 왼쪽이 되던 문제). 면 변경은 엣지 우클릭 메뉴로.
-      // 예외: decision(분기를 여러 면에 분산) source·subprocess(전용 in/__primary__ 핸들) 끝점은 잡은 핸들 유지.
-      const sourceNode = nodesRef.current.find((n) => n.id === connection.source);
-      const targetNode = nodesRef.current.find((n) => n.id === connection.target);
-      const keepSource =
-        sourceNode?.data.nodeType === "decision" || sourceNode?.data.nodeType === "subprocess";
-      const keepTarget = targetNode?.data.nodeType === "subprocess";
-      const sourceHandle = keepSource ? connection.sourceHandle : sourceHandleId("right");
-      const targetHandle = keepTarget ? connection.targetHandle : targetHandleId("left");
+      // 잡은 핸들·놓은 핸들 그대로 — 연결 미리보기와 결과가 같아야 한다(사용자 결정 2026-10-02, 모든 노드 타입).
+      // 예전엔 일반 노드를 오른쪽 출발/왼쪽 도착으로 강제해 변을 골라 끌어도 저장 후 기본 변으로 돌아갔다.
+      // 핸들이 없을 때만 타입별 기본(일반 오른쪽 출발·왼쪽 도착, SP 대표 끝·in). SP 끝 키·in 변형도 잡은 값이 그대로 남는다.
+      const sourceType = nodesRef.current.find((n) => n.id === connection.source)?.data.nodeType ?? "process";
+      const targetType = nodesRef.current.find((n) => n.id === connection.target)?.data.nodeType ?? "process";
+      const sourceHandle = connection.sourceHandle ?? getQuickSourceHandleId(sourceType);
+      const targetHandle = connection.targetHandle ?? getQuickTargetHandleId(targetType);
       // 출력 1개 충돌(이미 출력 있음)은 onConnect에서 삽입/교체/취소 모달로 처리 — 여기선 단순 추가.
       setEdges((current) =>
         addEdge(
@@ -3930,6 +3962,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             target: connection.target ?? "",
             at: { ...pointerScreenRef.current },
             sourceHandle,
+            connectHandles: { sourceHandle: connection.sourceHandle, targetHandle: connection.targetHandle },
           });
           return;
         }
@@ -6690,17 +6723,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 병렬 출구 토글 — 출구 엣지가 모두 동시 진행(2개 이상 필수, lib/output-rules). 분기·끝은 대상 아님.
       // SP 끝 ≥2면 끝별 하위 체크(출구가 끝마다 따로라서), 그 외는 노드 출구 하나 (사용자 결정 2026-10-01)
       const parallelTarget = injectedTarget;
-      const parallelKeys = parallelTarget?.data.parallelOutputs ?? [];
+      // 체크 상태는 실효 병렬(속성 ∪ 임포트 gateway 도출) — 레거시 병렬 출구도 켜짐으로 보여 끌 수 있게
+      const parallelKeys = parallelTarget
+        ? getParallelOutputKeys(buildCheckNode(parallelTarget), edges.map(buildCheckEdge))
+        : [];
       const toggleParallel = (key: string) => {
         if (!menu.targetId) return;
-        patchNode(
-          menu.targetId,
-          {
-            parallelOutputs: parallelKeys.includes(key)
-              ? parallelKeys.filter((item) => item !== key)
-              : [...parallelKeys, key],
-          },
-        );
+        toggleEndParallel(menu.targetId, key);
       };
       const parallelEnds = parallelTarget?.data.nodeType === "subprocess" ? (parallelTarget.data.subEnds ?? []) : [];
       const parallelItems: ContextMenuItem[] =
@@ -6809,7 +6838,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     applyAutoLayout,
     reactFlow,
     promptOpenLinkedMap,
-    patchNode,
+    toggleEndParallel,
     t,
   ]);
 
@@ -8924,7 +8953,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (edgeAction === null) {
         return;
       }
-      const { source, target, sourceHandle } = edgeAction;
+      const { source, target, sourceHandle, connectHandles } = edgeAction;
       setEdgeAction(null);
       if (!target) {
         return;
@@ -8936,8 +8965,17 @@ function MapEditor({ mapId }: { mapId: number }) {
         // insert: source→target + source의 기존 출력을 target 뒤로 재연결(흐름 삽입).
         // replace: source의 기존 출력 제거 후 source→target만.
         // sourceHandle(하위프로세스 끝 키)이 있으면 제거·재연결·새 엣지 모두 그 끝에 한정.
+        // connectHandles(핸들 드래그 출신)는 새 source→target 엣지에 잡은·놓은 핸들을 그대로 싣는다.
         const base = action === "replace" ? removeOutgoingEdges(current, source, sourceHandle) : current;
-        const next = insertNodeAfter(base, target, source, action === "insert", false, sourceHandle);
+        const next = insertNodeAfter(
+          base,
+          target,
+          source,
+          action === "insert",
+          false,
+          sourceHandle,
+          connectHandles,
+        );
         return next.map((edge) => withSubprocessHandles(edge, isSub));
       });
       scheduleAutoSave();
@@ -12370,7 +12408,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           position={endPrompt.at}
           ends={endPrompt.ends}
           connectedTargets={endPrompt.connectedTargets}
-          parallelKeys={nodes.find((node) => node.id === endPrompt.sourceId)?.data.parallelOutputs ?? []}
+          parallelKeys={(() => {
+            // 실효 병렬(속성 ∪ 임포트 gateway 도출) — 우클릭 메뉴와 같은 체크 상태
+            const source = nodes.find((node) => node.id === endPrompt.sourceId);
+            return source ? getParallelOutputKeys(buildCheckNode(source), edges.map(buildCheckEdge)) : [];
+          })()}
           onToggleParallel={readOnly ? undefined : (endKey) => toggleEndParallel(endPrompt.sourceId, endKey)}
           onHoverEnd={(endKey) => hoverEndEdges(endPrompt.sourceId, endKey)}
           onPick={(endKey) => {
