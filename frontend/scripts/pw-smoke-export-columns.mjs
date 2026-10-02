@@ -114,6 +114,7 @@ try {
     "CSV: Name checkbox is locked",
     await page.locator('[data-id="export-column-name"]').isDisabled(),
   );
+  await page.waitForTimeout(300); // 체크 표시 페이드(150ms)가 끝난 뒤 찍는다
   await page.locator('[data-id="csv-export-modal"]').screenshot({ path: `${SHOTS}/export-columns-csv.png` });
   const csvDownload = page.waitForEvent("download");
   await page.locator('[data-id="csv-export-download"]').click();
@@ -134,6 +135,7 @@ try {
   await page.waitForSelector('[data-id="export-columns-excel"]', { timeout: 5000 });
   await page.locator('[data-id="export-columns-excel-select-all"]').click();
   await page.locator('[data-id="export-column-groups"]').click();
+  await page.waitForTimeout(300); // 체크 표시 페이드(150ms)가 끝난 뒤 찍는다
   await page.locator('[data-id="excel-export-modal"]').screenshot({ path: `${SHOTS}/export-columns-excel.png` });
   await page.waitForSelector('[data-id="excel-export-download"]:not([disabled])', { timeout: 8000 });
   const xlsxDownload = page.waitForEvent("download");
