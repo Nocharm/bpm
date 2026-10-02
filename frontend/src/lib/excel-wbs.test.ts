@@ -108,7 +108,7 @@ describe("buildWbsModel", () => {
     const model = await build(map1);
     const nodeRows = model.rows.filter((r) => r.kind === "node");
     expect(nodeRows.map((r) => r.title)).toEqual(["A", "B"]);
-    expect(nodeRows.find((r) => r.title === "A")?.next).toBe("B");
+    expect(nodeRows.find((r) => r.title === "A")?.next).toBe("2. B");
   });
 
   it("규칙4 주석: 일반 대상은 [No:라벨], SP 대상은 행이 없어 주석 소멸(next 라벨은 잔존)", async () => {
@@ -136,7 +136,7 @@ describe("buildWbsModel", () => {
     expect(nodeRows.map((r) => [r.no, r.title])).toEqual([
       [1, "D"], [2, "P"], [3, "B [1:no]"],
     ]);
-    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("Sub:ok;B:no");
+    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("Sub [ok]; 3. B [no]");
   });
 
   it("다이아몬드: 같은 맵 2회 참조는 블록 2회 전개, 레벨 경로·주석 번호가 인스턴스별", async () => {
@@ -213,7 +213,7 @@ describe("buildWbsModel", () => {
     // 잎 행 값 — 1안 SP 행과 동일 소스: 파라미터는 지정정보 상속, 설명은 베이스+추가분 합성
     expect(model.rows[0]).toMatchObject({
       type: "subprocess", duration: "72", cost_krw: "2000000", headcount: "6",
-      annual_count: "12", description: "base desc\nlocal add", next: "SubGone",
+      annual_count: "12", description: "base desc\nlocal add", next: "2. SubGone",
       department: "Ops", // 식별 필드도 지정정보(캔버스와 같은 소스, C19)
     });
     expect(model.maxLevel).toBe(2); // denied 노트의 레벨 경로가 2단을 차지
@@ -249,7 +249,7 @@ describe("buildWbsModel", () => {
     const nodeRows = model.rows.filter((r) => r.kind === "node");
     expect(nodeRows.find((r) => r.title === "A")?.next).toBe("New name");
     expect(nodeRows.find((r) => r.title === "Child")?.levels).toEqual(["Root", "New name"]);
-    expect(nodeRows.find((r) => r.title === "Locked SP")?.next).toBe("B;C:반려");
+    expect(nodeRows.find((r) => r.title === "Locked SP")?.next).toBe("4. B; 5. C [반려]");
   });
 
   it("행 상한 도달 시 rowLimit 1개 + truncated, 이미 출력된 행의 주석은 보존", async () => {

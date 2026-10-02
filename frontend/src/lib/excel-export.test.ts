@@ -6,7 +6,7 @@ import { Workbook } from "exceljs";
 import { describe, expect, it } from "vitest";
 
 import type { Graph, GraphEdge, GraphGroup, GraphNode } from "./api";
-import { buildExcelModel, COLUMNS, writeExcelSheet } from "./excel-export";
+import { buildExcelModel, COLUMNS, formatExcelNextCell, writeExcelSheet } from "./excel-export";
 import { EXCEL_COLUMNS } from "./export-columns";
 
 /** GraphNode 조립 헬퍼 — csv-export.test.ts 스타일 재사용. */
@@ -371,7 +371,7 @@ describe("buildExcelModel", () => {
     const nodeRows = model.rows.filter((r) => r.kind === "node");
     expect(nodeRows.map((r) => r.title)).toEqual(["Start", "A", "B [2:approve]"]);
     const aRow = nodeRows.find((r) => r.title === "A");
-    expect(aRow?.next).toBe("B:approve;End:reject");
+    expect(aRow?.next).toBe("3. B [approve]; End [reject]");
     const bRow = nodeRows[2];
     expect(bRow?.next).toBe("End");
   });
@@ -553,7 +553,8 @@ describe("buildExcelModel", () => {
     expect(titles).toEqual(["Start", "A", "출하 종료"]);
     // 행만 삭제 — next의 종착 표기는 유지된다
     const aRow = model.rows.find((r) => r.kind === "node" && r.title === "A");
-    expect(aRow && aRow.kind === "node" ? aRow.next : "").toBe("  END ;출하 종료");
+    // 기본 end는 행이 없어 번호 없이 제목만, 커스텀 end는 행 번호로 가리킨다
+    expect(aRow && aRow.kind === "node" ? aRow.next : "").toBe("  END ; 3. 출하 종료");
   });
 
   it("규칙3: 빈 제목 end도 기본 end로 보고 행을 만들지 않는다", async () => {
@@ -616,7 +617,7 @@ describe("buildExcelModel", () => {
     });
     const nodeRows = model.rows.filter((r) => r.kind === "node");
     expect(nodeRows.map((r) => r.title)).toEqual(["Start", "A", "B", "C"]);
-    expect(nodeRows.find((r) => r.title === "A")?.next).toBe("B;C");
+    expect(nodeRows.find((r) => r.title === "A")?.next).toBe("3. B; 4. C");
   });
 
   it("규칙1: 연쇄 무라벨 디시전은 재귀 통과하고 삭제 디시전 간 순환은 무한루프 없이 닫힌다", async () => {
@@ -642,7 +643,7 @@ describe("buildExcelModel", () => {
     });
     const nodeRows = model.rows.filter((r) => r.kind === "node");
     expect(nodeRows.map((r) => r.title)).toEqual(["Start", "A", "B"]);
-    expect(nodeRows.find((r) => r.title === "A")?.next).toBe("B");
+    expect(nodeRows.find((r) => r.title === "A")?.next).toBe("3. B");
   });
 
   it("규칙1: 일부 분기만 라벨이면(혼합) 행 유지", async () => {
@@ -667,7 +668,7 @@ describe("buildExcelModel", () => {
     });
     const nodeRows = model.rows.filter((r) => r.kind === "node");
     expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D", "B [2:yes]", "C"]);
-    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("B:yes;C");
+    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("3. B [yes]; 4. C");
   });
 
   it("규칙1: 나가는 엣지 없는 디시전은 유지(WIP 보호)", async () => {
@@ -708,7 +709,7 @@ describe("buildExcelModel", () => {
     });
     const nodeRows = model.rows.filter((r) => r.kind === "node");
     expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D", "A [2:go]", "B [2:go]"]);
-    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("A:go;B:go");
+    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("3. A [go]; 4. B [go]");
   });
 
   it("규칙4: 라벨 분기 대상 Name에 [디시전No:라벨] 주석 - 역방향(앞 행) 대상도 최종 No 참조", async () => {
@@ -736,7 +737,7 @@ describe("buildExcelModel", () => {
       [1, "Start"], [2, "A [3:retry]"], [3, "D"], [4, "B [3:pass]"],
     ]);
     // next는 주석 없는 원제목 기준 — 주석이 섞이지 않는다
-    expect(nodeRows.find((r) => r.no === 3)?.next).toBe("A:retry;B:pass");
+    expect(nodeRows.find((r) => r.no === 3)?.next).toBe("2. A [retry]; 4. B [pass]");
   });
 
   it("규칙4: 복수 디시전의 대상이면 주석이 연접된다", async () => {
@@ -820,6 +821,38 @@ describe("buildExcelModel", () => {
     ]);
   });
 
+  it("Next는 대상을 줄 번호로 가리킨다 — 같은 제목의 두 대상이 따로 남고, 제목·라벨의 ':'·';'가 구분자와 섞이지 않는다", async () => {
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("h1", "Hub", "decision", 1),
+        makeNode("f1", "Fix", "process", 2),
+        makeNode("f2", "Fix", "process", 3),
+        makeNode("p1", "Step 1: Prep", "process", 4),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "h1"),
+        makeEdge("x2", "h1", "f1", "a"), makeEdge("x3", "h1", "f2", "b"),
+        makeEdge("x4", "h1", "p1", "late; partial"),
+      ],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-10-02T00:00:00+09:00", fetchResolved,
+    });
+    const hub = model.rows.find((r) => r.kind === "node" && r.title === "Hub");
+    expect(hub && hub.kind === "node" ? hub.next : "").toBe("3. Fix [a]; 4. Fix [b]; 5. Step 1: Prep [late; partial]");
+  });
+
+  it("formatExcelNextCell - 행이 있으면 'N. 제목', 없으면 제목만, 라벨은 [대괄호]", () => {
+    const rowNo = new Map([["b", 4]]);
+    expect(formatExcelNextCell(
+      [{ targetId: "b", title: "B", label: "" }, { targetId: "e", title: "End", label: "done" }],
+      (id) => rowNo.get(id),
+    )).toBe("4. B; End [done]");
+  });
+
   it("재수렴: 삭제 디시전 경유로 같은 대상에 두 번 도달해도 next는 중복 없이 1회 표기", async () => {
     // A→P(무라벨)→B, P→Q(무라벨)→B — 중복 제거 전엔 A.next가 "B;B"
     const map1: Graph = {
@@ -843,7 +876,7 @@ describe("buildExcelModel", () => {
     });
     const nodeRows = model.rows.filter((r) => r.kind === "node");
     expect(nodeRows.map((r) => r.title)).toEqual(["Start", "A", "B"]);
-    expect(nodeRows.find((r) => r.title === "A")?.next).toBe("B");
+    expect(nodeRows.find((r) => r.title === "A")?.next).toBe("3. B");
   });
 
   it("재수렴: 라벨 디시전이 삭제 디시전 경유로 같은 대상에 재수렴해도 주석은 1회", async () => {
@@ -869,7 +902,7 @@ describe("buildExcelModel", () => {
     });
     const nodeRows = model.rows.filter((r) => r.kind === "node");
     expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D", "B [2:go]"]);
-    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("B:go");
+    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("3. B [go]");
   });
 
   it("행 상한 도달 시 이미 출력된 행의 주석은 보존된다", async () => {
@@ -920,7 +953,7 @@ describe("buildExcelModel", () => {
     });
     const nodeRows = model.rows.filter((r) => r.kind === "node");
     expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D", "B [2:yes]", "C"]);
-    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("B:yes;C");
+    expect(nodeRows.find((r) => r.title === "D")?.next).toBe("3. B [yes]; 4. C");
   });
 });
 
@@ -1116,7 +1149,7 @@ describe("buildExcelModel - IO·조건·GMP·병렬·식별 열", () => {
       graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-10-02T00:00:00+09:00", fetchResolved,
     });
     const rows = model.rows.filter((r) => r.kind === "node");
-    expect(rows.find((r) => r.title === "A")?.next).toBe("Renamed");
+    expect(rows.find((r) => r.title === "A")?.next).toBe("2. Renamed");
     expect(rows.find((r) => r.type === "subprocess")).toMatchObject({
       title: "Renamed", assignee: "kim", assignee_role: "Owner", department: "Ops", system: "SAP",
       url: "https://sp.example.com", urlLabel: "SP doc", input: "Order\nSpec · PDF", start_condition: "Order in",
@@ -1166,6 +1199,6 @@ describe("buildExcelModel - IO·조건·GMP·병렬·식별 열", () => {
       fetchResolved: async () => child,
     });
     const subRow = model.rows.find((r) => r.kind === "node" && r.type === "subprocess");
-    expect(subRow).toMatchObject({ next: "B:승인 완료;C:반려;D:직접 라벨", parallel: "반려" });
+    expect(subRow).toMatchObject({ next: "4. B [승인 완료]; 5. C [반려]; 6. D [직접 라벨]", parallel: "반려" });
   });
 });

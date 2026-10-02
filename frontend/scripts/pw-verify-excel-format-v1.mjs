@@ -139,10 +139,14 @@ try {
   check("규칙2: start 타입 행은 정확히 1개", rows.filter((r) => r.type === "start").length === 1);
   check("규칙3: 기본 End 행 없음·커스텀 end(Archived) 유지",
     rows.every((r) => r.name !== "End") && rows.some((r) => r.name === "Archived"));
+  // Next는 대상을 줄 번호로 가리킨다("3. 대상 [라벨]", 행 없는 기본 End는 번호 없이) — 번호는 시트에서 찾는다
+  const noOf = (prefix) => rows.find((r) => r.name.startsWith(prefix))?.no;
   const prepare = rows.find((r) => r.name === "Prepare");
-  check("규칙1: Prepare.next가 flow-through로 대상들", prepare?.next === "Branch B;Branch C", prepare?.next);
+  check("규칙1: Prepare.next가 flow-through로 대상들(줄 번호)",
+    prepare?.next === `${noOf("Branch B")}. Branch B; ${noOf("Branch C")}. Branch C`, prepare?.next);
   const approve = rows.find((r) => r.name.startsWith("Approve?"));
-  check("디시전 행 next는 기존 표기 유지(End 텍스트 포함)", approve?.next === "Ship:yes;End:no", approve?.next);
+  check("디시전 행 next는 줄 번호+[라벨], 행 없는 End는 제목만",
+    approve?.next === `${noOf("Ship")}. Ship [yes]; End [no]`, approve?.next);
   check("규칙4: Ship에 [디시전No:yes] 주석", rows.some((r) => r.name === `Ship [${approve?.no}:yes]`),
     rows.map((r) => r.name).join("|"));
   check("규칙4: 삭제 행(기본 End) 주석 소멸", rows.every((r) => !r.name.includes(":no]")));

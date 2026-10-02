@@ -6,9 +6,12 @@ import { orderNodesByFlow } from "./csv-export";
 import {
   applyExcelCellFormats,
   buildNodeRowFields,
+  dedupeExcelNextRefs,
   EXCEL_MAX_ROWS,
+  type ExcelNextRef,
   type ExcelRowFields,
   downloadWorkbookXlsx,
+  formatExcelNextCell,
   getExcelEdgeLabel,
   getNodeDisplayTitle,
   getSubprocessExitTitles,
@@ -61,6 +64,8 @@ export async function buildWbsModel({
   let truncated = false;
   // 규칙4 주석 — 행 "객체" 참조로 기록해 번호 부여 후 일괄 조립(역방향 분기·다이아몬드 안전, 1안과 동일)
   const annotations: Array<{ target: WbsNodeRow; decision: WbsNodeRow; label: string }> = [];
+  // Next 칸 — 같은 맵 인스턴스의 행으로 풀고 번호 부여 뒤 조립(1안과 동일). 시작·끝·펼친 SP는 행이 없어 제목만
+  const pendingNext: Array<{ row: WbsNodeRow; refs: ExcelNextRef[]; scopeRows: ReadonlyMap<string, WbsNodeRow> }> = [];
   const cache = new Map<string, Promise<Graph>>();
   const fetchMemo = (mapId: number, followLatest: boolean, pinned: number | null): Promise<Graph> => {
     const key = `${mapId}:${followLatest}:${pinned}`;
@@ -108,17 +113,14 @@ export async function buildWbsModel({
 
     const rowByNodeId = new Map<string, WbsNodeRow>(); // 스코프(맵 인스턴스) 한정
 
-    // Set 중복 제거 — 삭제 디시전 경유 재수렴 시 같은 (대상, 라벨) 2회 도달 방지(1안과 동일).
+    // 같은 (대상 노드, 라벨)은 한 번만 — 삭제 디시전 경유 재수렴 대비(1안과 동일).
     // SP 출구의 무라벨 엣지는 끝 제목을 라벨로(1안과 같은 미러), 대상 SP는 링크 맵 현재 이름
-    const nextOf = (node: GraphNode, exitTitles: ReadonlyMap<string, string> | null): string =>
-      Array.from(new Set(
+    const nextRefsOf = (node: GraphNode, exitTitles: ReadonlyMap<string, string> | null): ExcelNextRef[] =>
+      dedupeExcelNextRefs(
         (outgoing.get(node.id) ?? [])
           .flatMap((e) => resolveTargets(e, getExcelEdgeLabel(e, node, exitTitles), new Set()))
-          .map(({ node: t, label }) => {
-            const targetTitle = getNodeDisplayTitle(g, t);
-            return label === "" ? targetTitle : `${targetTitle}:${label}`;
-          }),
-      )).join(";");
+          .map(({ node: t, label }) => ({ targetId: t.id, title: getNodeDisplayTitle(g, t), label })),
+      );
 
     for (const node of ordered) {
       if (isRowRemoved(node)) continue; // 삭제 노드는 상한(maxRows)을 소비하지 않는다
@@ -152,10 +154,11 @@ export async function buildWbsModel({
           kind: "node",
           no: 0, // finalize에서 부여
           levels,
-          ...buildNodeRowFields(g, node, { groupLabel, next: nextOf(node, exitTitles), exitTitles }),
+          ...buildNodeRowFields(g, node, { groupLabel, next: "", exitTitles }),
         };
         rows.push(spRow);
         rowByNodeId.set(node.id, spRow);
+        pendingNext.push({ row: spRow, refs: nextRefsOf(node, exitTitles), scopeRows: rowByNodeId });
         rows.push({ kind: "denied", levels: [...levels, displayTitle], title: displayTitle });
         continue;
       }
@@ -163,10 +166,11 @@ export async function buildWbsModel({
         kind: "node",
         no: 0, // finalize에서 부여
         levels,
-        ...buildNodeRowFields(g, node, { groupLabel, next: nextOf(node, null), exitTitles: null }),
+        ...buildNodeRowFields(g, node, { groupLabel, next: "", exitTitles: null }),
       };
       rows.push(row);
       rowByNodeId.set(node.id, row);
+      pendingNext.push({ row, refs: nextRefsOf(node, null), scopeRows: rowByNodeId });
     }
 
     // 규칙4 주석 수집 — 전개된 SP는 rowByNodeId에 없어 주석 자동 소멸(잠긴 SP 잎 행은 대상 유지).
@@ -193,13 +197,16 @@ export async function buildWbsModel({
 
   await emit(graph, [mapName], new Set(rootMapId != null ? [rootMapId] : []));
 
-  // 번호 부여(1..n 연속) → 주석 조립 — next는 emit 시점 확정이라 주석이 섞이지 않는다
+  // 번호 부여(1..n 연속) → Next 조립(대상 제목은 emit 시점 값이라 주석이 섞이지 않는다) → 주석 조립
   let no = 0;
   for (const row of rows) {
     if (row.kind === "node") {
       no += 1;
       row.no = no;
     }
+  }
+  for (const { row, refs, scopeRows } of pendingNext) {
+    row.next = formatExcelNextCell(refs, (targetId) => scopeRows.get(targetId)?.no);
   }
   for (const { target, decision, label } of annotations) {
     target.title += ` [${decision.no}:${label}]`;

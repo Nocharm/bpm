@@ -292,6 +292,12 @@ try {
     shipWbsRow?.title === `Ship [${approveWbsRow?.no}:yes]`,
     `got="${shipWbsRow?.title}" decisionNo=${approveWbsRow?.no}`,
   );
+  // Next는 줄 번호로 가리키고, 행이 없는 대상(끝·펼친 SP)은 제목만
+  check(
+    "체크9c: Next는 줄 번호+[라벨], 행 없는 End·펼친 SubWork는 제목만",
+    approveWbsRow?.next === `${shipWbsRow?.no}. Ship [yes]; End [no]` && prepareWbsRow?.next === "SubWork",
+    `approve="${approveWbsRow?.next}" prepare="${prepareWbsRow?.next}"`,
+  );
 
   const nodeNos = wbsRows.map((r) => r.no).filter((n) => n !== "" && n != null);
   check(

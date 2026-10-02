@@ -43,7 +43,7 @@ export interface ExcelRowFields {
   url: string;
   urlLabel: string;
   groups: string; // 그룹 라벨 ", " 조인
-  next: string; // "대상" | "대상:라벨" ";" 조인 — End 포함(읽기용)
+  next: string; // "3. 대상" | "3. 대상 [라벨]" "; " 조인(행 없는 대상은 번호 없이) — 번호 부여 뒤 formatExcelNextCell
 }
 
 export interface ExcelNodeRow extends ExcelRowFields {
@@ -204,6 +204,42 @@ export function getExcelEdgeLabel(
   return exitTitles.get(endKeyOfEdge({ sourceHandle: edge.source_handle })) ?? "";
 }
 
+/** Next 칸 한 항목 — 대상 노드 id(같은 맵 인스턴스 안)·표시 제목·엣지 라벨. 번호는 행 번호 부여 뒤에 붙인다. */
+export interface ExcelNextRef {
+  targetId: string;
+  title: string;
+  label: string;
+}
+
+/**
+ * Next 칸 문자열 — 대상을 줄 번호로 가리킨다: "3. 검토 [예]; 5. 반려" (사용자 결정 2026-10-02).
+ * 제목으로만 가리키면 같은 제목의 두 대상이 하나로 합쳐지고, 제목·라벨의 `;`·`:`가 구분자와 섞였다.
+ * 행이 없는 대상(기본 End·WBS의 시작/끝/펼친 하위프로세스·행 상한 밖)은 번호 없이 제목만.
+ */
+export function formatExcelNextCell(
+  refs: readonly ExcelNextRef[],
+  rowNoOf: (targetId: string) => number | undefined,
+): string {
+  return refs
+    .map(({ targetId, title, label }) => {
+      const no = rowNoOf(targetId);
+      const target = no === undefined ? title : `${no}. ${title}`;
+      return label === "" ? target : `${target} [${label}]`;
+    })
+    .join("; ");
+}
+
+/** 같은 (대상 노드, 라벨)은 한 번만 — 삭제된 무라벨 디시전을 거쳐 같은 대상에 두 번 닿는 재수렴 대비. 다른 노드는 제목이 같아도 따로 남는다. */
+export function dedupeExcelNextRefs(refs: readonly ExcelNextRef[]): ExcelNextRef[] {
+  const seen = new Set<string>();
+  return refs.filter((ref) => {
+    const key = `${ref.targetId}\u0000${ref.label}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /**
  * 병렬 셀 — 분기·끝은 병렬 대상이 아니라 빈칸, SP는 병렬로 켠 끝 이름(제목을 모르는 대표 끝은 "Y").
  * 켠 키 ∪ 실제로 2갈래 이상 병렬로 갈라지는 출구(시작 노드 기본 병렬·임포트 레거시 gateway=parallel, lib/output-rules).
@@ -274,6 +310,8 @@ export async function buildExcelModel({
   let truncated = false;
   // 규칙4 주석 — 행 "객체" 참조로 기록해 번호 부여 후 일괄 조립(역방향 분기·다이아몬드 이중 인라인 안전)
   const annotations: Array<{ target: ExcelNodeRow; decision: ExcelNodeRow; label: string }> = [];
+  // Next 칸 — 대상은 같은 맵 인스턴스(scopeRows)의 행으로 풀고 번호 부여 뒤 조립(앞쪽 행이 뒤 행을 가리켜도 안전)
+  const pendingNext: Array<{ row: ExcelNodeRow; refs: ExcelNextRef[]; scopeRows: ReadonlyMap<string, ExcelNodeRow> }> = [];
   // 같은 (mapId,followLatest,pinned) 조합은 fetch 1회 — 다이아몬드 참조(같은 맵 2회 인라인) 대비
   const cache = new Map<string, Promise<Graph>>();
   const fetchMemo = (mapId: number, followLatest: boolean, pinned: number | null): Promise<Graph> => {
@@ -355,23 +393,21 @@ export async function buildExcelModel({
       const out = outgoing.get(node.id) ?? [];
       const exitTitles =
         node.node_type === "subprocess" ? getSubprocessExitTitles(out, note === null ? resolved : null) : null;
-      // Set 중복 제거 — 삭제 디시전 경유 재수렴 시 같은 (대상, 라벨)이 2회 도달("B;B") 방지
-      const next = Array.from(new Set(
+      // Next는 대상 행 번호가 정해진 뒤 조립 — 여기선 (대상 노드, 제목, 라벨)만 모은다
+      const nextRefs = dedupeExcelNextRefs(
         out
           .flatMap((e) => resolveTargets(e, getExcelEdgeLabel(e, node, exitTitles), new Set()))
-          .map(({ node: t, label }) => {
-            const targetTitle = getNodeDisplayTitle(g, t);
-            return label === "" ? targetTitle : `${targetTitle}:${label}`;
-          }),
-      )).join(";");
+          .map(({ node: t, label }) => ({ targetId: t.id, title: getNodeDisplayTitle(g, t), label })),
+      );
       const row: ExcelNodeRow = {
         kind: "node",
         no: 0, // finalize에서 부여
         depth,
-        ...buildNodeRowFields(g, node, { groupLabel, next, exitTitles }),
+        ...buildNodeRowFields(g, node, { groupLabel, next: "", exitTitles }),
       };
       rows.push(row);
       rowByNodeId.set(node.id, row);
+      pendingNext.push({ row, refs: nextRefs, scopeRows: rowByNodeId });
       if (note !== null) {
         rows.push({ kind: note, depth: depth + 1, title: row.title });
         continue;
@@ -405,13 +441,16 @@ export async function buildExcelModel({
 
   await emit(graph, 0, new Set(rootMapId != null ? [rootMapId] : []));
 
-  // 번호 부여(삭제 후 1..n 연속) → 주석 조립. next 문자열은 emit 시점 확정이라 주석이 섞이지 않는다.
+  // 번호 부여(삭제 후 1..n 연속) → Next 조립(대상 제목은 emit 시점 값이라 주석이 섞이지 않는다) → 주석 조립
   let no = 0;
   for (const row of rows) {
     if (row.kind === "node") {
       no += 1;
       row.no = no;
     }
+  }
+  for (const { row, refs, scopeRows } of pendingNext) {
+    row.next = formatExcelNextCell(refs, (targetId) => scopeRows.get(targetId)?.no);
   }
   for (const { target, decision, label } of annotations) {
     target.title += ` [${decision.no}:${label}]`;
