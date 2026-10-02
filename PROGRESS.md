@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-02 — 배포 복구: `# syntax` 지시어 제거·프런트 베이스 node 22 (dev)
+
+- 71번 서버 배포 실패. 이미지 프룬이 빌드 전용 베이스(node:20-alpine·python:3.11-slim)와 캐시돼 있던 `docker/dockerfile:1`을 지웠고, 서버는 Docker Hub 차단이라 `# syntax` 지시어가 빌드 첫 단계에서 죽었다. 두 Dockerfile에서 지시어를 지우고(내장 파서로 `RUN --mount` 충분) 프런트 베이스를 node:20-alpine(2026-04-30 EOL) → node:22-alpine으로 올렸다. 베이스는 amd64 tar 반입(`deploy.md` §0), `rules/backend/docker.md`·CLAUDE.md 운영 제약 갱신.
+- 검증: dev 그대로 amd64 빌드(FE 74s·BE 24s), node v22.23.3 컨테이너를 dev 백엔드에 붙여 홈·에디터·열 선택 모달·비교 콘솔 에러 0, node:22 컨테이너 게이트(tsc·lint·vitest 1245·카탈로그). 망 차단 dind(엔진 20.10·29)에서 tar load 뒤 지시어 없는 빌드·compose 통과, 지시어가 있으면 `failed to resolve source metadata for docker.io/docker/dockerfile:1` 재현.
+
 ## 2026-10-02 — 데이터 입출력 계약 최신화 (feat/io-contract-refresh → dev)
 
 - 전수 감사(10표면, 반박 검증 뒤 출력 규칙·병렬 출구 반영분까지 재검증)를 클러스터로 반영. 사용자 결정: CSV·Excel 내보내기 전 **열 체크박스**(`lib/export-columns.ts` 단일 소스, CSV 25열에 GMP·Input_Forms·Output_Forms), 재전달 **승계**(`INHERITED_NODE_FIELDS`), AI 표면의 담당자 실명 읽기·쓰기 제거, SP 끝별 출구는 머지 시 핸들 이월+내보내기 경고, 비교·요약·확정 엣지 정체성 통일(변·입구 제외, SP 끝 키만)+URL 비교, **Start 기본 병렬**(출력 규칙 밖, 문구 "갈래는 판단 노드나 병렬 출구로"). 그 밖에 캠페인 정정 경로 시간·Screen/Quote 손실, draft 재사용 판정·관계 캐시 만료, 클립보드 gateway, 이름·설명 변경 KB 재인덱싱, 구 패리티 설계 문서 흡수 후 삭제.

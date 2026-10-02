@@ -1,4 +1,5 @@
-# syntax=docker/dockerfile:1
+# `# syntax=` 지시어 금지 — 서버(사내 71번)는 Docker Hub 차단이라 프룬 뒤 docker/dockerfile 이미지 조회로 빌드가 죽는다.
+# 베이스 이미지는 amd64 tar로 반입(docker load)한다(docs/deploy/deploy.md §0).
 FROM python:3.11-slim
 
 WORKDIR /app

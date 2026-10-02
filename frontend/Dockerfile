@@ -1,12 +1,12 @@
-# syntax=docker/dockerfile:1
-# node:20-alpine 고정 — 서버(사내 71번)에서 node:22 이미지 풀 실패 → 풀 가능한 LTS로 다운
-FROM node:20-alpine AS deps
+# 서버(사내 71번)는 Docker Hub 차단 — 베이스 이미지는 amd64 tar로 반입(docker load)한다(docs/deploy/deploy.md §0).
+# `# syntax=` 지시어 금지: 빌드마다 docker/dockerfile 프런트엔드 이미지를 레지스트리에서 찾아 프룬 뒤 빌드가 죽는다. 내장 파서로 충분.
+FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
 
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -14,7 +14,7 @@ COPY . .
 RUN npm run build
 
 # standalone 산출물만 담은 런타임 이미지 (next.config.ts output: "standalone")
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 

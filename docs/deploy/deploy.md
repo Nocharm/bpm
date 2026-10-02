@@ -11,6 +11,21 @@
 - Keycloak public 클라이언트 등록 + 인증/AD 인프라 확인 → 아래 §1
 - **공유 브리지 `dbv-shared` 존재**(db-viewer 조회용, compose가 `external`로 참조) → [`setup-once.md`](setup-once.md) A9.
   없으면 `up`이 `network dbv-shared declared as external, but could not be found`로 **기동 전에 실패**한다
+- **베이스 이미지가 서버에 있을 것** — 서버는 Docker Hub 차단이라 `node:22-alpine`·`python:3.11-slim`·`nginx:1.27-alpine`·`postgres:16-alpine`을 tar로 반입한다.
+  빌드에만 쓰는 node·python은 실행 중 컨테이너가 참조하지 않아 `docker image prune -a`/`system prune -a`에 지워진다(2026-10-02 배포 실패) → 배포 전 `docker images`로 확인.
+  반입 tar는 서버 아키텍처(**linux/amd64**)여야 한다 — 다른 아키텍처면 태그가 그 아키텍처로 덮이고 빌드가 레지스트리로 나가 실패한다.
+  tar는 서버 고정 디렉터리에 보관해 두면 프룬 뒤 `docker load -i`만 다시 하면 된다(멱등, 수 초).
+- **npm·PyPI 레지스트리 접속** — 빌드 캐시가 없으면(베이스 교체·`builder prune`) `npm ci`·`pip install`이 다시 돈다. Docker Hub와 별개 경로다.
+
+```bash
+# Docker가 있는 연결된 PC (docker 명령은 bash·PowerShell 동일) — python:3.11-slim도 같은 방식
+docker pull --platform linux/amd64 node:22-alpine
+docker save --platform linux/amd64 node:22-alpine -o node22-alpine-amd64.tar   # containerd 저장소(Docker Desktop)는 --platform 필수 — 없으면 arm64 등이 섞인다
+#   save에 --platform이 없는 구버전 CLI(기존 저장소)는 플래그 없이 save해도 pull한 amd64만 담긴다 — 아래 inspect로 확인
+# 서버
+docker load -i node22-alpine-amd64.tar
+docker image inspect node:22-alpine --format '{{.Os}}/{{.Architecture}}'   # linux/amd64 여야 한다
+```
 
 ## 1. Keycloak 클라이언트 + AD 사전 준비 (최초 1회)
 
@@ -142,6 +157,8 @@ curl -s http://localhost:9900/api/auth/mode; echo  # issuer·clientId가 채워�
 | 증상 | 확인 |
 |------|------|
 | **로그인 버튼 무반응 + `/api/auth/mode` 무응답** | backend 기동 실패. 아래 두 행을 먼저 볼 것 |
+| build가 `docker/dockerfile:1: failed to resolve source metadata` | Dockerfile에 `# syntax=` 지시어가 남아 있다 — 빌드마다 Docker Hub에서 프런트엔드 이미지를 찾는다. 지운다(내장 파서로 충분, `rules/backend/docker.md`) |
+| build가 `node:22-alpine`/`python:3.11-slim` `failed to resolve source metadata` | 베이스 이미지가 서버에 없다(프룬) 또는 반입 tar가 amd64가 아니다 → §0 반입 절차 |
 | `up`이 `network dbv-shared ... could not be found` | 공유 브리지 미생성/삭제 — `docker network create --subnet 10.203.0.0/24 dbv-shared` 후 재실행 ([`db-viewer-readonly.md`](db-viewer-readonly.md) §2) |
 | backend 로그에 `SyntaxError`(import 단계) | **로컬 파이썬이 배포 런타임보다 높다.** 배포 이미지는 `python:3.11-slim` — 로컬 3.12+에서 짠 상위 문법(PEP 695 제네릭 `def f[T]()` 등)은 서버에서만 죽는다. `backend/ruff.toml`의 `target-version = "py311"`이 린트에서 잡는다(2026-08-31 실사고) |
 | backend 로그에 `AUTH_MODE=ldap requires AUTH_JWT_SECRET` | `.env`에 서명키 누락 — `openssl rand -hex 32` |
