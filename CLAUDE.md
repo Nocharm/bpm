@@ -40,7 +40,10 @@ node scripts/build-component-catalog.mjs --check   # COMPONENTS.md 최신 검사
 # 브라우저 검증: frontend/에서 BASE_URL=http://localhost:3000 node scripts/pw-<name>.mjs
 # 스모크·매뉴얼 캡처 산출물은 저장소 루트 `.shots/`(gitignore, 스크립트 기준 `../.shots`) — docs/qa에 PNG를 커밋하지 않는다.
 # 캡처 언어는 PW_LANG=ko|en(캠페인 스모크·pw-manual-shots*.mjs). 매뉴얼 슬라이드 재생성:
-#   캡처 → content/*.py 카피·shot 갱신 → python3 docs/manual/slides/build_deck.py(이미지는 직전 덱 순번 이월) → node scripts/check-deck-overflow.mjs → export-pdf.mjs
+#   캡처 → content/*.py 카피·shot 갱신 → python3 docs/manual/slides/build_deck.py(shot:True는 직전 덱의 같은 제목 슬라이드 이미지 이월, 없으면 순번 — 이월 슬라이드 제목을 바꾸면 파일 경로 지정) → node scripts/check-deck-overflow.mjs → export-pdf.mjs
+# AI 검증: 가짜 AI(frontend/scripts/fake-ai-server.mjs)는 고정 응답 — 배선 확인용. 프롬프트 품질은 실모델로:
+#   운영은 SGLang이라 ai_client가 chat_template_kwargs를 보낸다 → OpenAI 키로 직접 붙으면 400. 그 필드를 떼는 로컬 프록시를 거쳐
+#   AI_BASE_URL=http://localhost:<프록시>/v1 로 backend를 띄운다(작은 모델은 id만 준 힌트로 노드를 오인 — 힌트엔 제목 병기).
 # dev 인증 = localStorage `bpm.devUser` / 헤더 `X-Dev-User`. 역할 차등을 보려면 backend를
 # DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys 로 기동 (시드의 sysadmin은 admin.sys)
 ```

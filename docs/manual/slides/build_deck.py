@@ -1,8 +1,9 @@
 """매뉴얼 슬라이드 덱 빌더 — content/<deck>.py의 카피 + theme.css + 스크린샷으로 스탠드얼론 HTML을 다시 만든다.
 
-이미지 출처: 슬라이드의 `shot`이 True면 **직전 빌드 덱(같은 경로)의 같은 순번 이미지를 이월**하고, 문자열이면
-`.shots/` 아래 파일을 새로 임베드한다(예: "manual6/home-dashboard.png"). 이미지 슬라이드를 넣고 빼면 순번이 밀리므로
-그 회차의 새 이미지는 파일 경로로 지정한다. 폰트(Pretendard Variable)는 data URI로 임베드해 PDF·오프라인에서도 같은 렌더.
+이미지 출처: 슬라이드의 `shot`이 True면 **직전 빌드 덱(같은 경로)에서 같은 제목 슬라이드의 이미지를 이월**하고
+(제목이 덱 안에서 유일할 때. 아니면 같은 순번), 문자열이면 `.shots/` 아래 파일을 새로 임베드한다(예: "manual6/home-dashboard.png").
+제목으로 먼저 찾으므로 슬라이드를 끼우거나 빼도 뒤쪽 이미지가 밀리지 않는다(2026-10-02). 이월 슬라이드의 제목을 바꾸면
+순번 폴백이 되니 그 회차엔 파일 경로로 지정한다. 폰트(Pretendard Variable)는 data URI로 임베드해 PDF·오프라인에서도 같은 렌더.
 
 실행(저장소 루트):
   bash:        python3 docs/manual/slides/build_deck.py [user_ko user_en admin_ko admin_en]
@@ -80,27 +81,35 @@ def read_data_uri(path: Path, mime: str) -> str:
     return f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode()
 
 
-def harvest_previous_images(out_path: Path) -> list[str | None]:
-    """직전 빌드 덱의 슬라이드별 이미지 data URI(없으면 None) — 순번 이월의 소스."""
+def harvest_previous_images(out_path: Path) -> tuple[list[str | None], dict[str, str]]:
+    """직전 빌드 덱의 슬라이드별 이미지 data URI(없으면 None)와 제목→이미지(덱 안에서 유일한 제목만) — 이월의 소스."""
     if not out_path.exists():
-        return []
+        return [], {}
     doc = out_path.read_text(encoding="utf-8")
     sections = re.findall(r"<section[^>]*>.*?</section>", doc, re.S)
     out: list[str | None] = []
+    titled: dict[str, list[str]] = {}
     for sec in sections:
         m = re.search(r'<img class="shot" src="(data:[^"]+)"', sec)
         out.append(m.group(1) if m else None)
-    return out
+        t = re.search(r'<h2 class="title">(.*?)</h2>', sec, re.S)
+        if m and t:
+            titled.setdefault(t.group(1), []).append(m.group(1))  # 빌더가 제목을 원문 그대로 넣으므로 원문 비교
+    by_title = {title: images[0] for title, images in titled.items() if len(images) == 1}
+    return out, by_title
 
 
-def resolve_shot(spec: object, slide_index: int, previous: list[str | None], deck_name: str) -> str:
+def resolve_shot(
+    spec: object, slide_index: int, title: str, previous: tuple[list[str | None], dict[str, str]], deck_name: str
+) -> str:
     if isinstance(spec, str):
         path = SHOTS / spec
         if not path.exists():
             raise SystemExit(f"{deck_name}: slide {slide_index} shot file missing: {path}")
         mime = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
         return read_data_uri(path, mime)
-    carried = previous[slide_index] if slide_index < len(previous) else None
+    by_index, by_title = previous
+    carried = by_title.get(title) or (by_index[slide_index] if slide_index < len(by_index) else None)
     if carried is None:
         raise SystemExit(f"{deck_name}: slide {slide_index} expects a carried-over image but the previous deck has none there")
     return carried
@@ -185,7 +194,7 @@ def build(name: str) -> None:
                 note = f'<div class="note anim">{sl["note"]}</div>' if sl.get("note") else ""
                 body = f'<div class="anim">{sl["table"]}</div>{note}'
             elif sl.get("shot"):
-                src = resolve_shot(sl["shot"], i, previous, deck["name"])
+                src = resolve_shot(sl["shot"], i, sl["title"], previous, deck["name"])
                 caption = f'<div class="caption">{sl["caption"]}</div>' if sl.get("caption") else ""
                 body = (f'<div class="body"><div class="col-text">{render_points(sl["pts"])}</div>'
                         f'<div class="col-img anim"><div class="frame"><div class="bar"><i></i><i></i><i></i></div>'

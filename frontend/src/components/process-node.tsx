@@ -33,7 +33,6 @@ import {
   type LucideIcon,
   MessageSquare,
   Pin,
-  Pause,
   Play,
   Plus,
   RefreshCw,
@@ -67,6 +66,7 @@ import type { MessageKey } from "@/lib/i18n-messages";
 import { FrameworkPeekPill, FrameworkPeekTrigger } from "@/components/framework-peek-pill";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
 import { getOutputGroups, type OutputGroup } from "@/lib/output-rules";
+import { ParallelExitIcon } from "@/lib/parallel-icon";
 import {
   collectNodeWarnings,
   hasAssigneeWarning,
@@ -1187,7 +1187,7 @@ function ParallelHoverBadge({
             key={group.key}
             className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border border-accent-tint-border bg-accent-tint px-1.5 py-px text-fine text-accent"
           >
-            <Pause size={11} strokeWidth={1.5} className="shrink-0" />
+            <ParallelExitIcon size={11} strokeWidth={1.5} className="shrink-0" />
             {endTitle ? `${endTitle} · ` : ""}
             {t("node.parallelCount", { count: group.count })}
           </span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MessageSquare, Monitor, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pause, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MessageSquare, Monitor, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -318,6 +318,7 @@ import {
   applyMirroredEndLabels,
   buildCompositeTree,
   deriveSubEnds,
+  endKeyOfEdge,
   isSubprocessEndHandle,
   isSubprocessInHandle,
   PRIMARY_END_HANDLE,
@@ -326,6 +327,7 @@ import {
 } from "@/lib/subprocess-embed";
 import { applyParallelFlag, getOutputGroups, getOutputKey, type OutputRuleEdge, type OutputRuleNode } from "@/lib/output-rules";
 import { assignEdgePulses } from "@/lib/edge-pulse";
+import { ParallelExitIcon } from "@/lib/parallel-icon";
 import {
   NodeActionsContext,
   type IoListDisplayState,
@@ -1149,8 +1151,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 드롭을 보류했다가, 고른 끝 키로 기존 게이트 함수들을 재개한다. 취소=엣지 변경 없음(분기 pendingInsert와 같은 계약).
   const [endPrompt, setEndPrompt] = useState<
     | {
+        sourceId: string;
         ends: SubEnd[];
-        connectedTargets: Record<string, string>;
+        connectedTargets: Record<string, string[]>;
         at: { x: number; y: number };
         resume: (endKey: string) => void;
       }
@@ -1173,6 +1176,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   >(null);
   // 출력선 선택 모달에서 행 hover 중인 엣지 — 캔버스의 해당 엣지를 하이라이트(styledEdges).
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  // 출구 선택 목록에서 호버한 끝에 연결된 엣지들 — 입출력 항목 호버처럼 캔버스에서 함께 강조
+  const [endHoverEdgeIds, setEndHoverEdgeIds] = useState<readonly string[]>([]);
   // IO 링크 hover 하이라이트 — 인스펙터 행 hover와 불러오기 모달 행 hover가 공유하는 단일 상태 (io-linking §4-6)
   const [ioHighlight, setIoHighlight] = useState<{ nodeIds: string[]; edgeIds: string[] } | null>(null);
   // 안내 버튼 호버 미리보기 — 노드에 결과값(분류·색) 임시 반영, 렌더 전용(데이터 무변경) (#6 확장)
@@ -3809,18 +3814,35 @@ function MapEditor({ mapId }: { mapId: number }) {
     [endsOfNode],
   );
 
+  // 출구 선택 목록의 끝 모드 전환(병렬↔단일) — 노드 우클릭 "병렬 출구" 하위 메뉴와 같은 데이터, 모달은 유지
+  const toggleEndParallel = (sourceId: string, endKey: string) => {
+    const current = nodesRef.current.find((node) => node.id === sourceId)?.data.parallelOutputs ?? [];
+    patchNode(sourceId, {
+      parallelOutputs: current.includes(endKey) ? current.filter((key) => key !== endKey) : [...current, endKey],
+    });
+  };
+  // 끝 행 호버 → 그 끝에서 나가는 엣지 강조(떠나면 해제)
+  const hoverEndEdges = (sourceId: string, endKey: string | null) => {
+    setEndHoverEdgeIds(
+      endKey === null
+        ? []
+        : getOutgoingEdges(edgesRef.current, sourceId)
+            .filter((edge) => endKeyOfEdge(edge) === endKey)
+            .map((edge) => edge.id),
+    );
+  };
+
   // 하위프로세스 출구 선택 목록 열기 — 끝별 현재 타깃 제목(정보용)을 붙여 포인터 위치에 띄우고, 선택 시 resume(끝 키).
   const openEndPrompt = useCallback(
     (sourceId: string, ends: SubEnd[], resume: (endKey: string) => void) => {
-      const connectedTargets: Record<string, string> = {};
+      // 끝별 연결 타깃 전부 — 병렬 끝은 여럿(모달이 "첫 타깃 외 N"으로 보인다)
+      const connectedTargets: Record<string, string[]> = {};
       for (const edge of getOutgoingEdges(edgesRef.current, sourceId)) {
-        const key = edge.sourceHandle ?? PRIMARY_END_HANDLE;
-        if (!connectedTargets[key]) {
-          connectedTargets[key] =
-            nodesRef.current.find((node) => node.id === edge.target)?.data.label ?? edge.target;
-        }
+        const key = endKeyOfEdge(edge);
+        const label = nodesRef.current.find((node) => node.id === edge.target)?.data.label ?? edge.target;
+        (connectedTargets[key] ??= []).push(label);
       }
-      setEndPrompt({ ends, connectedTargets, at: { ...pointerScreenRef.current }, resume });
+      setEndPrompt({ sourceId, ends, connectedTargets, at: { ...pointerScreenRef.current }, resume });
     },
     [],
   );
@@ -6689,7 +6711,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             ? [
                 {
                   label: t("ctx.parallelOutput"),
-                  icon: Pause,
+                  icon: ParallelExitIcon,
                   submenu: parallelEnds.map((end) => ({
                     check: true as const,
                     label: end.title,
@@ -7758,6 +7780,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     const ctrlGhostIds = ctrlDragActive ? new Set(ctrlDragGhosts.map((g) => g.id)) : null;
     // IO 링크 hover — 원본↔미러 사이 흐름 경로 엣지(양방향 중 존재하는 쪽) 강조
     const ioHighlightEdgeIds = ioHighlight ? new Set(ioHighlight.edgeIds) : null;
+    const endHoverSet = new Set(endHoverEdgeIds);
     const anchorEdgesToGhosts = (list: Edge[]): Edge[] =>
       ctrlGhostIds
         ? list.map((edge) => {
@@ -7813,7 +7836,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 라벨이 있는 엣지(분기 Yes/No/기타 등) — 디자인 알약 스타일(lib/canvas, 펼침 자식과 공용)
       next = styleEdgeLabelPill(next);
       // 출력선 선택 모달에서 이 엣지 행 hover 시 캔버스 엣지 하이라이트 — className만 부여, 스타일은 globals.css.
-      if (edge.id === hoveredEdgeId || ioHighlightEdgeIds?.has(edge.id)) {
+      if (edge.id === hoveredEdgeId || ioHighlightEdgeIds?.has(edge.id) || endHoverSet.has(edge.id)) {
         next = {
           ...next,
           className: [next.className, "edge-hover-highlight"].filter(Boolean).join(" "),
@@ -7859,7 +7882,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ),
     );
     return finishEdges([...currentStyled, ...childStyled, ...gatewayStyled]);
-  }, [edges, nodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, ctrlDragActive, ctrlDragGhosts]);
+  }, [edges, nodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
@@ -12347,6 +12370,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           position={endPrompt.at}
           ends={endPrompt.ends}
           connectedTargets={endPrompt.connectedTargets}
+          parallelKeys={nodes.find((node) => node.id === endPrompt.sourceId)?.data.parallelOutputs ?? []}
+          onToggleParallel={readOnly ? undefined : (endKey) => toggleEndParallel(endPrompt.sourceId, endKey)}
+          onHoverEnd={(endKey) => hoverEndEdges(endPrompt.sourceId, endKey)}
           onPick={(endKey) => {
             const { resume } = endPrompt;
             setEndPrompt(null);

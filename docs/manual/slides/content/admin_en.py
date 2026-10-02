@@ -23,7 +23,7 @@ DECK = {
     "lang": "en",
     "html_title": "BPM Administrator Manual",
     "label": "Business Process Map · Administrator Manual",
-    "date": "2026-09-30",
+    "date": "2026-10-02",
     "cover": {
         "eyebrow": "Administrator Manual · English edition",
         "h1": "Business Process Map<br>Administrator Manual",
@@ -196,7 +196,8 @@ DECK = {
                 ]},
                 {"title": "Interview import · landing rules, placeholders, notes", "pts": [
                     ("Department path", "Exact → leading levels dropped → unique suffix → mirror chain. No match registers the path as-is."),
-                    ("Landing", "Activities (L7) become nodes, flow edges become connectors. Exclusive branch → decision, parallel branch → parallel exit, self-loop or non-parallel fan-out → auto branch node."),
+                    ("Landing", "Activities become nodes, edges connectors. Exclusive → decision, parallel → parallel exit, self-loop → repeat branch."),
+                    ("Fan-out", "Two or more outgoing edges that are not all parallel get a branch node after the activity."),
                     ("Fields and notes", "Conditions, times and systems land as fields, originals kept as source notes. Systems matched to the catalog."),
                     ("Automatic", "Exact output = input matches link as IO, horizontal auto-layout, a draft right after publish."),
                     ("L5 canvas", "Built or extended from top-level L6 flows (exclusive → decision, parallel → parallel exit). Redelivery only adds nodes."),

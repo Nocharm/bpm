@@ -216,7 +216,23 @@ await page.mouse.up();
 await sleep(700);
 const endModal = page.locator('[data-id="edge-end-modal"]');
 check("dropping from the right handle opens the end list", await endModal.isVisible().catch(() => false));
+const modalWidth = (await endModal.boundingBox())?.width ?? 0;
+check("end list is wide enough for end names and targets", modalWidth >= 340, `${Math.round(modalWidth)}px`);
+// 행 호버 → 그 끝에 연결된 엣지 강조(반려 → 재작업)
+await page.locator('[data-id="edge-end-row-반려"]').hover();
+await sleep(300);
+const rejectLit = await page.evaluate((id) => document.querySelector(`.react-flow__edge[data-id="${id}"]`)?.classList.contains("edge-hover-highlight"), nid("e-r"));
+check("hovering an end highlights its connected edge", rejectLit === true);
 await page.screenshot({ path: `${OUT}/output-rules-end-list.png` });
+// 맨 앞 아이콘 = 병렬/단일 전환, 모달은 유지
+const holdMode = page.locator('[data-id="edge-end-mode-보류"]');
+await holdMode.click();
+await sleep(300);
+check("mode icon toggles the end to parallel and keeps the list open", (await holdMode.getAttribute("aria-pressed")) === "true" && (await endModal.isVisible()));
+await page.screenshot({ path: `${OUT}/output-rules-end-list-parallel.png` });
+await holdMode.click();
+await sleep(300);
+check("mode icon toggles back to single", (await holdMode.getAttribute("aria-pressed")) === "false");
 await page.locator('[data-id="edge-end-row-보류"]').click();
 await sleep(900);
 check("picking an end connects from that end", (await edgeCount()) === before4 + 1, `${before4} -> ${await edgeCount()}`);

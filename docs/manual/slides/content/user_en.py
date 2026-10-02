@@ -5,7 +5,7 @@ DECK = {
     "lang": "en",
     "html_title": "BPM User Manual",
     "label": "Business Process Map · User Manual",
-    "date": "2026-09-30",
+    "date": "2026-10-02",
     "cover": {
         "eyebrow": "User Manual · English edition",
         "h1": "Business Process Map<br>User Manual",
@@ -138,6 +138,13 @@ DECK = {
                     ("Line style", "Per edge: curved / stepped / straight. Change all in the Map tab's <b>Edge style</b>."),
                     ("Drop zones", "Drag a node near another to insert before / after / swap / group."),
                 ]},
+                {"title": "Parallel exits and flow pulse", "shot": "manual8/en-parallel.jpg", "pts": [
+                    ("Turn on", "Right-click a node, <b>Parallel exit</b>. Subprocesses pick per end."),
+                    ("Rule", "A parallel exit needs two or more connections. No insert prompt."),
+                    ("Hover badge", "<b>N in parallel</b> above the node."),
+                    ("Flow pulse", "Parallel dots cross every branch in step; decisions take turns."),
+                    ("Reduced motion", "Hidden when the OS reduce-motion setting is on."),
+                ]},
                 {"title": "Tidying · layout, groups, bulk edit", "pts": [
                     ("Auto layout", "Horizontal <code>Shift+L</code> · vertical <code>Shift+K</code>. The main path snaps to one line."),
                     ("Axis lock · align · distribute", "<code>Shift</code>+drag locks the axis, <code>Alt+W/C/T/X</code> aligns, <code>Alt+R/V</code> distributes."),
@@ -217,6 +224,13 @@ DECK = {
                     ("Filter popover", "<b>Unregistered maps</b> switch · <b>Department</b> rows · <b>Role</b> pills."),
                     ("Version tracking", "New links follow the latest published version; pinning is possible. Duplicates are blocked."),
                     ("Subprocess tab", "On selection: designation info · maps linking this one · designated parameters."),
+                ]},
+                {"title": "Subprocess connections · exits per end", "shot": "manual8/en-sp-exits.jpg", "pts": [
+                    ("Incoming", "Any of the four sides. Handles show only while dragging in."),
+                    ("Outgoing", "Starts from one exit point on the right."),
+                    ("Pick the end", "With several ends, dropping asks <b>which end continues</b>."),
+                    ("One per end", "Per-end parallel in the right-click <b>Parallel exit</b> submenu."),
+                    ("End badge", "<code>2/3</code> after the title, red <code>+N</code> when over."),
                 ]},
                 {"title": "Preview peek · Node tab", "shot": True, "pts": [
                     ("Open the peek", "Click a library row (or hover 2.5 s). Map name · owner · version · framework path."),
@@ -319,7 +333,7 @@ DECK = {
                 ]},
                 {"title": "Reading the diff", "shot": True, "pts": [
                     ("Color rules", "Added = green · Removed = red · Changed = yellow. Edge labels too."),
-                    ("Per field", "New green, removed red struck-through, changed with <b>only the changed part</b> emphasized."),
+                    ("Per field", "New green, removed red struck-through. Parallel exit switches show as a field."),
                     ("Node chips", "Role, department, system and metric chips plus conditions. I/O collapses to <b>+N −M</b>."),
                     ("All / Changes only", "Properties pane toggle (default Changes only). Unchanged nodes are dimmed."),
                     ("Change list", "All / Nodes / Edges filter, click to focus. <b>Apply To-Be</b> · <b>Export</b> (PNG)."),
