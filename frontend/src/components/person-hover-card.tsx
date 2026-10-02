@@ -14,7 +14,7 @@ import { useI18n } from "@/lib/i18n";
 import { formatTitleWithPosition } from "@/lib/korean-dept";
 
 const OPEN_DELAY_MS = 700; // hover 의도 판정 — 스치는 이동엔 안 뜬다
-const CLOSE_DELAY_MS = 120; // 트리거→카드 포인터 이동 유예
+const CLOSE_DELAY_MS = 400; // 마우스 아웃 후 닫힘 유예 — 트리거↔카드 이동·흔들림·즉시 재진입엔 유지
 const CARD_WIDTH = 264; // 클램프 추정 폭(w-64)
 const CARD_EST_HEIGHT = 170; // 클램프 추정 높이 — 아코디언 접힘 기준 근사치
 
@@ -175,6 +175,7 @@ export function PersonHoverCard({ userId, className, notice, children }: PersonH
       openTimer.current = null;
     }
     if (pos === null) return;
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
     closeTimer.current = window.setTimeout(() => {
       closeTimer.current = null;
       setPos(null);
