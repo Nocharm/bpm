@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-02 — 협업자 목록 열 정렬 (dev)
+
+- 행마다 독립 grid라 역할 열(`auto`)이 태그 길이만큼 달라져 소속·부여 열이 어긋났다 → 목록이 열 템플릿을 소유하고 행은 `grid-cols-subgrid`로 공유(가장 넓은 역할 셀에 맞춰 전 행 정렬).
+
 ## 2026-10-02 — 출구 선택 목록 개선 (dev)
 
 - 폭 256→352px(영문 끝 이름 말줄임 해소), 타깃은 "첫 타깃 외 N". 맨 앞 아이콘 = 끝 모드(단일 깃발/병렬 새 아이콘)이자 전환 버튼 — 눌러도 목록 유지(행은 role=button div, 아이콘만 button). 행 호버 시 그 끝의 연결선 강조(`endHoverEdgeIds`, 닫힐 때 useEffectEvent로 1회 해제). 병렬 아이콘은 시안 10종 끝에 **엇갈린 화살표**(`lib/parallel-icon.ts` createLucideIcon)로 확정해 호버 배지·우클릭 메뉴의 ∥(Pause)도 교체. 이미 연결된 단일 끝 선택은 삽입/교체 창 유지(사용자 결정). 스모크 37/37.
