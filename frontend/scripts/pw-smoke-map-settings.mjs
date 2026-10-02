@@ -9,6 +9,8 @@ import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3047";
+// SP 지정 맵 id — 데모 시드마다 다르다(종합 시드 38, reset_db 기본 시드는 1·3·6·7)
+const SP_MAP = process.env.SP_MAP_ID ?? "38";
 const API = process.env.API_URL ?? "http://localhost:8048";
 const OUT = process.env.SHOT_DIR ?? "../.shots";
 mkdirSync(OUT, { recursive: true });
@@ -104,7 +106,7 @@ await page.screenshot({ path: `${OUT}/map-settings-06-transfer-menu.png` });
 await page.keyboard.press("Escape");
 
 // ── 2. SP 지정 맵 38: 타일 그리드 ──
-await page.goto(`${BASE}/maps/38/settings`, { waitUntil: "networkidle" });
+await page.goto(`${BASE}/maps/${SP_MAP}/settings`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1200);
 const sp = page.locator("#sec-subprocess");
 await sp.scrollIntoViewIfNeeded();
@@ -112,7 +114,7 @@ await page.waitForTimeout(500);
 await sp.screenshot({ path: `${OUT}/map-settings-07-sp-tiles.png` });
 check("sp tiles rendered", (await page.locator('[data-id^="sp-tile-"]').count()) >= 10);
 // 타일 편집 — 시스템 자동완성 팝오버 → 입력 커밋 → 저장 → API 확인 → 원복 (종전 조건·GMP 카드 흡수, 2026-10-01)
-const before38 = (await api("/maps/38")).body;
+const before38 = (await api(`/maps/${SP_MAP}`)).body;
 await page.locator('[data-id="sp-tile-system"]').click();
 await page.waitForTimeout(300);
 check("system tile popover open", (await page.locator('[data-id="sp-popover-system"]').count()) === 1);
@@ -127,7 +129,7 @@ if ((await noteReplace.count()) > 0) await noteReplace.click();
 await page.locator('[data-id="sp-popover-system-commit"]').click();
 await page.waitForTimeout(800);
 // 'SmokeSys'는 카탈로그 밖이라 경계(commit_system)가 Other + 원문 메모로 저장한다
-const saved38 = (await api("/maps/38")).body;
+const saved38 = (await api(`/maps/${SP_MAP}`)).body;
 check(
   "system tile saved via PATCH (Other + note)",
   saved38.sp_system === "Other" && saved38.sp_system_fallback === "SmokeSys",
@@ -138,10 +140,10 @@ await page.waitForTimeout(300);
 await page.locator('[data-id="sp-gmp-option-direct"]').click();
 await page.keyboard.press("Enter");
 await page.waitForTimeout(800);
-check("gmp tile saved via PATCH", (await api("/maps/38")).body.sp_gmp === "direct");
+check("gmp tile saved via PATCH", (await api(`/maps/${SP_MAP}`)).body.sp_gmp === "direct");
 const beforeSystem = before38.sp_system ?? "";
 const beforeNote = before38.sp_system_fallback ?? "";
-await api("/maps/38/process-fields", {
+await api(`/maps/${SP_MAP}/process-fields`, {
   method: "PATCH",
   body: JSON.stringify({ system: beforeSystem, system_fallback: beforeNote, gmp: before38.sp_gmp ?? "" }),
 });
@@ -151,7 +153,7 @@ const systemValues = new Set(["", "Other", ...((await api("/catalogs")).body?.sy
 const isCatalogSystem = systemValues.has(beforeSystem);
 const expectedSystem = isCatalogSystem ? beforeSystem : "Other";
 const expectedNote = isCatalogSystem || (beforeNote.trim() !== "" && beforeNote.trim() !== beforeSystem.trim()) ? beforeNote : beforeSystem.trim();
-const restored38 = (await api("/maps/38")).body;
+const restored38 = (await api(`/maps/${SP_MAP}`)).body;
 check(
   "map 38 fields restored",
   (restored38.sp_system ?? "") === expectedSystem && (restored38.sp_system_fallback ?? "") === expectedNote,
@@ -165,7 +167,7 @@ await page.waitForTimeout(300);
 check("undesignated map shows tiles", (await page.locator('[data-id^="sp-tile-"]').count()) >= 10 && (await page.locator('[data-id="subprocess-designation-designate"]').count()) === 1);
 await page.locator("#sec-subprocess").screenshot({ path: `${OUT}/map-settings-11-sp-undesignated.png` });
 check("old conditions card gone", (await page.locator('[data-id="settings-process-fields"]').count()) === 0);
-await page.goto(`${BASE}/maps/38/settings`, { waitUntil: "networkidle" });
+await page.goto(`${BASE}/maps/${SP_MAP}/settings`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1000);
 // ── 3. 소유권 이전 e2e — 임시 맵: 오너(sysadmin)가 오우닝 부서 소속(권한 행 없음)에게 이전 ──
 const dir = (await api("/directory")).body;

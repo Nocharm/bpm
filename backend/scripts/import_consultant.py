@@ -234,6 +234,14 @@ def _legacy_group_ids(node: Node) -> list[str]:
     return [node.group_id] if node.group_id else []
 
 
+_DEFAULT_END_TITLES = frozenset({"end", "종료"})
+
+
+def _is_default_end_title(title: str | None) -> bool:
+    """임포트가 예전에 붙이던 기본 끝 라벨 — 정보가 없어 빈 제목과 같게 본다(2026-10-02)."""
+    return (title or "").strip().lower() in _DEFAULT_END_TITLES
+
+
 def _inherit_prior_fields(
     nodes: list[Node], prior_nodes: list[Node], prior_groups: list[Group]
 ) -> list[Group]:
@@ -255,8 +263,10 @@ def _inherit_prior_fields(
                 continue
             if guard == "nonlink" and node.linked_map_id is not None:
                 continue
-            if guard == "end" and (node.node_type != "end" or old.node_type != "end"):
-                continue
+            if guard == "end" and (
+                node.node_type != "end" or old.node_type != "end" or _is_default_end_title(old.title)
+            ):
+                continue  # 옛 기본 라벨("End")은 잇지 않는다 — 새 버전이 생길 때 빈 제목으로 정리된다
             if guard == "link":
                 if node.linked_map_id is None or node.linked_map_id != old.linked_map_id:
                     continue
@@ -800,7 +810,10 @@ def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
     id_to_root = {n.id: (n.source_node_id or n.id) for n in nodes}
     return (
         sorted(
-            (n.source_node_id or n.id, n.title, n.node_type, n.description or "", n.color or "",
+            # 끝 노드의 옛 기본 라벨("End")은 빈 제목과 같게 — 라벨만 다른 기존 맵에 새 버전을 만들지 않는다
+            (n.source_node_id or n.id,
+             "" if n.node_type == "end" and _is_default_end_title(n.title) else n.title,
+             n.node_type, n.description or "", n.color or "",
              n.department or "", n.assignee or "", n.system or "", n.linked_map_id,
              # 연간 건수·FTE — 링크 노드는 전달 params라 진실, 그 외 노드는 서명 전에 승계돼 직전 값과 같다
              n.annual_count or "", n.fte or "", bool(n.is_primary_end),

@@ -151,7 +151,9 @@ try {
 
   // 선택 기억 — 모달을 다시 열면 Groups가 해제된 채로 남는다
   await page.locator('[data-id="export-excel"]').click();
-  await page.locator('[data-id="excel-export-columns-toggle"]').click();
+  // 모달은 닫혀도 마운트가 유지돼 Columns 펼침 상태가 남는다 — 접혀 있을 때만 펼친다
+  const columnsToggle = page.locator('[data-id="excel-export-columns-toggle"]');
+  if ((await columnsToggle.getAttribute("aria-expanded")) !== "true") await columnsToggle.click();
   check(
     "Excel: the column selection is remembered on reopen",
     !(await page.locator('[data-id="export-column-groups"]').isChecked()),

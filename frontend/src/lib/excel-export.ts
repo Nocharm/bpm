@@ -91,6 +91,8 @@ const isLinkedSubprocess = (node: GraphNode): node is GraphNode & { linked_map_i
 
 /** 노드 표시 제목 — SP는 링크 맵 현재 이름(캔버스 라이브 라벨과 같은 규칙, 삭제 맵은 저장 제목). */
 export function getNodeDisplayTitle(g: Graph, node: GraphNode): string {
+  // 빈 제목 끝(임포트 L6 기본·에디터 신규 끝)은 Next 셀이 빈칸이 되지 않게 "End" — 제목 있는 끝은 원문 그대로
+  if (node.node_type === "end" && node.title.trim() === "") return "End";
   if (!isLinkedSubprocess(node)) return node.title;
   // 빈 이름도 미수신으로 본다(캔버스 liveLabel의 truthy 판정과 같음)
   return g.subprocess_refs?.[node.linked_map_id]?.name || node.title;

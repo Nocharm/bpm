@@ -146,8 +146,9 @@ export function EdgeEndModal({
                   </span>
                 )}
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <span className={PILL_CLASS} title={end.title}>
-                    {end.title}
+                  <span className={PILL_CLASS} title={end.title || "End"}>
+                    {/* 빈 제목 대표 끝(임포트 L6 기본)은 캔버스 표기와 같은 "End" */}
+                    {end.title || "End"}
                   </span>
                   {end.isPrimary && (
                     <span className="shrink-0 rounded-full border border-accent-tint-border bg-surface px-1.5 text-[10px] font-semibold text-accent">

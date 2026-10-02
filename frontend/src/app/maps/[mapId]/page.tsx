@@ -3956,6 +3956,20 @@ function MapEditor({ mapId }: { mapId: number }) {
             getOutputGroups(buildCheckNode(source), edgesRef.current.map(buildCheckEdge)).some(
               (group) => group.key === exitKey && group.parallel,
             ));
+        // 같은 출구에서 같은 대상으로 가는 갈래는 이미 있으면 하나 더 만들지 않는다 — 잡은 핸들을 유지하므로
+        // 다른 변에서 그은 두 번째 A→B는 addEdge의 (출발·도착·핸들) 중복 판정에 걸리지 않는다
+        if (
+          isParallelExit &&
+          source !== undefined &&
+          outgoing.some(
+            (edge) =>
+              edge.target === connection.target &&
+              getOutputKey(source.data.nodeType, edge.sourceHandle) === exitKey,
+          )
+        ) {
+          showToast(t("edge.duplicateBranch"));
+          return;
+        }
         if (outgoing.length > 0 && !isParallelExit) {
           setEdgeAction({
             source: connection.source,

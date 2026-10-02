@@ -1443,6 +1443,22 @@ def test_legacy_end_title_alone_keeps_redelivery_unchanged(client) -> None:
     assert next(n for n in _published_nodes(code) if n.node_type == "end").title == "End"
 
 
+def test_legacy_end_title_is_cleared_when_a_real_change_makes_a_new_version(client) -> None:
+    """옛 기본 라벨("End")은 승계하지 않는다 — 다른 변경으로 새 버전이 생기면 끝 제목이 빈 값으로 정리된다."""
+    _seed_import_employees()
+    code = "IV-INH-ENDLEGACY2"
+    _run(_import_once(maps=[_canonical_map(code=code)]))
+    _edit_published(code, lambda _s, _v, nodes: setattr(
+        next(n for n in nodes if n.node_type == "end"), "title", "End"))
+    changed = _canonical_map(code=code)
+    changed.nodes[0].description = "개정된 설명"
+
+    report = _run(_import_once(maps=[changed]))
+
+    assert report.counts() == {"updated": 1}
+    assert next(n for n in _published_nodes(code) if n.node_type == "end").title == ""
+
+
 def test_link_node_annual_count_follows_the_delivery(client) -> None:
     """링크 노드의 연간 건수·FTE는 전달물(대상 맵 params)이 진실 — 게시본 편집값을 승계하지 않는다."""
     _seed_import_employees()

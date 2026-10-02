@@ -9,7 +9,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 
 import type { VersionGraph } from "@/lib/api";
 import { resolveNodeStroke } from "@/components/process-node";
-import { nodeSizeOf, normalizeNodeType } from "@/lib/canvas";
+import { nodeSizeOf, normalizeNodeType, terminalDisplayLabel } from "@/lib/canvas";
 import { buildRoundedOrthPath } from "@/lib/edge-detour";
 
 const ARROW_MARKER_ID = "scope-preview-arrow";
@@ -211,7 +211,8 @@ export function ScopePreview({
       cy: node.pos_y + size.h / 2,
       // 캔버스 정본 색 해석(resolveNodeStroke) — 무지정 노드도 타입 기본색으로 실캔버스와 동일하게
       color: resolveNodeStroke(node.color, type),
-      title: node.title,
+      // 시작·끝은 캔버스와 같은 표시 규칙 — 빈 제목 끝(임포트 L6 기본)이 빈 상자로 보이지 않게 "End"
+      title: type === "start" || type === "end" ? terminalDisplayLabel(type, node.title) : node.title,
     };
   });
   const centerById = new Map(boxes.map((box) => [box.id, box]));

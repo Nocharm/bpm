@@ -270,7 +270,8 @@ await page.screenshot({ path: `${OUT}/output-rules-checklist.png`, clip: { x: 0,
 await page.locator('[data-id="editor-save"]').click();
 await sleep(600);
 const toast = await page.getByText(/Cannot save/).first().textContent({ timeout: 3000 }).catch(() => null);
-check("manual save is blocked with the output rule", !!toast && toast.includes("No invalid branching"), String(toast));
+// 체크리스트 라벨은 갈래 규칙 문구(2026-10-02, 구 "No invalid branching")
+check("manual save is blocked with the output rule", !!toast && toast.includes("Splits use a decision or a parallel exit"), String(toast));
 
 // ── (6) 같은 상태에서 대표 끝을 병렬로 켜면 정상 — 초과 없음·병렬 출구는 1로 세어 3/3·체크리스트 통과
 const graph6 = await api("GET", `/api/versions/${host.draft.id}/graph`);

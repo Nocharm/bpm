@@ -1153,23 +1153,18 @@ function useNodeOutputGroups(nodeId: string, nodeType: string, parallelOutputs?:
 }
 
 // 병렬 출구 호버 배지 — 노드 위에 '동시 N갈래'(SP는 끝 제목 앞에). 엣지 펄스(lib/edge-pulse)와 짝, 분기 노드엔 없음.
+// 출구 그룹은 ProcessNode가 한 번만 구독해 배지·링·SP 끝 배지에 나눠 준다(노드마다 스토어 셀렉터 하나).
 function ParallelHoverBadge({
-  nodeId,
-  nodeType,
-  parallelOutputs,
+  outputGroups,
   ends,
   visible,
 }: {
-  nodeId: string;
-  nodeType: string;
-  parallelOutputs?: string[];
+  outputGroups: OutputGroup[];
   ends?: SubEnd[];
   visible: boolean;
 }) {
   const { t } = useI18n();
-  const groups = useNodeOutputGroups(nodeId, nodeType, parallelOutputs).filter(
-    (group) => group.parallel && group.count >= 2,
-  );
+  const groups = outputGroups.filter((group) => group.parallel && group.count >= 2);
   if (groups.length === 0) return null;
   const titleOf = (key: string): string | null =>
     (ends?.length ?? 0) >= 2 ? (ends?.find((end) => end.key === key)?.title ?? key) : null;
@@ -1200,20 +1195,8 @@ function ParallelHoverBadge({
 // 병렬 노드 안쪽 링 — 기존 1.5px 테두리 안쪽에 노드색(--nc) 옅은 1px 선을 한 겹 더해 병렬임을 약하게 드러낸다
 // (사용자 요청 2026-10-02). 판정은 호버 배지와 같은 출구 그룹(병렬 ∧ 엣지 ≥2), 분기 노드엔 쓰지 않는다.
 // radius = 바깥 곡률 - 3px(테두리 1.5 + 간격 1.5)이라 호출부가 노드 모양별로 넘긴다.
-function ParallelInnerRing({
-  nodeId,
-  nodeType,
-  parallelOutputs,
-  radius,
-}: {
-  nodeId: string;
-  nodeType: string;
-  parallelOutputs?: string[];
-  radius: number;
-}) {
-  const isParallel = useNodeOutputGroups(nodeId, nodeType, parallelOutputs).some(
-    (group) => group.parallel && group.count >= 2,
-  );
+function ParallelInnerRing({ outputGroups, radius }: { outputGroups: OutputGroup[]; radius: number }) {
+  const isParallel = outputGroups.some((group) => group.parallel && group.count >= 2);
   if (!isParallel) return null;
   return (
     <span
@@ -1227,9 +1210,8 @@ function ParallelInnerRing({
 
 // SP 끝 개수 배지 — 제목 끝에 인라인으로 붙는 알약 하나(제목 폭을 따로 먹지 않게). 끝 ≥2면 `출구 사용량/끝 수`(병렬 출구는 1로 셈),
 // 한 출구에 엣지가 넘치면 끝 1개여도 같은 알약이 에러 톤 `+N`이 되고 호버 시 틴트 그대로 `출구 사용량/끝 수`(예: 4/3)로 페이드(사용자 결정 2026-10-01).
-function SpOutputBadge({ nodeId, ends, parallelOutputs }: { nodeId: string; ends: SubEnd[]; parallelOutputs?: string[] }) {
+function SpOutputBadge({ outputGroups: groups, ends }: { outputGroups: OutputGroup[]; ends: SubEnd[] }) {
   const { t } = useI18n();
-  const groups = useNodeOutputGroups(nodeId, "subprocess", parallelOutputs);
   const excess = groups.reduce((sum, group) => sum + (group.parallel ? 0 : Math.max(0, group.count - 1)), 0);
   const total = Math.max(1, ends.length);
   // 분자 = 출구 사용량 — 병렬 출구는 엣지가 여럿이어도 1(정상), 일반 출구는 엣지 수 그대로라
@@ -1355,6 +1337,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
   // 휴식↔활성 배선 — 호버 또는 선택이면 활성(NodeFields의 NODE_ALT_DELAY_MS 카운트 시작 트리거)
   const [hovered, setHovered] = useState(false);
   const fieldsActive = hovered || (selected ?? false);
+  // 출구 그룹 — 병렬 배지·안쪽 링·SP 끝 배지 공용 구독 하나(드래그 중 엣지 스토어 갱신마다 셀렉터가 돈다)
+  const outputGroups = useNodeOutputGroups(id, data.nodeType, data.parallelOutputs);
   const [spDragWidth, setSpDragWidth] = useState<number | null>(null);
   const spResizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; zoom: number } | null>(null);
   // 표시 폭 — 드래그 로컬 > 저장값 > 기본. 저장값도 렌더에서 클램프(경계 밖 값 방어)
@@ -1454,15 +1438,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         {/* 비교 화면 SP는 끝 핸들 없이 변 핸들로 그려 끝 키가 사라진다 — SpOutputBadge와 같은 가드 */}
         {!diff && data.sideHandles !== true && (
           <>
-            <ParallelHoverBadge
-              nodeId={id}
-              nodeType="subprocess"
-              parallelOutputs={data.parallelOutputs}
-              ends={data.subEnds}
-              visible={hovered}
-            />
+            <ParallelHoverBadge outputGroups={outputGroups} ends={data.subEnds} visible={hovered} />
             {/* rounded-sm(8px) 안쪽 */}
-            <ParallelInnerRing nodeId={id} nodeType="subprocess" parallelOutputs={data.parallelOutputs} radius={5} />
+            <ParallelInnerRing outputGroups={outputGroups} radius={5} />
           </>
         )}
         <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
@@ -1478,7 +1456,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             {/* 타이틀 = 링크된 맵 이름 고정 — 인라인 이름 편집 차단 (F5) */}
             <NodeTitle id={id} label={data.label} editable={false} />
             {!diff && data.sideHandles !== true && (
-              <SpOutputBadge nodeId={id} ends={data.subEnds ?? []} parallelOutputs={data.parallelOutputs} />
+              <SpOutputBadge outputGroups={outputGroups} ends={data.subEnds ?? []} />
             )}
           </div>
           {/* 업무체계 필 — 일반 맵에서 링크맵이 프레임워크 소속일 때, 3초 호버로 체계 피크 (2026-08-30) */}
@@ -1744,19 +1722,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
       {!diff && (
         <>
-          <ParallelHoverBadge
-            nodeId={id}
-            nodeType={data.nodeType}
-            parallelOutputs={data.parallelOutputs}
-            visible={hovered}
-          />
+          <ParallelHoverBadge outputGroups={outputGroups} visible={hovered} />
           {/* 터미널 19px·일반 rounded-sm 8px 곡률 안쪽 */}
-          <ParallelInnerRing
-            nodeId={id}
-            nodeType={data.nodeType}
-            parallelOutputs={data.parallelOutputs}
-            radius={isTerminal ? 16 : 5}
-          />
+          <ParallelInnerRing outputGroups={outputGroups} radius={isTerminal ? 16 : 5} />
         </>
       )}
       <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>

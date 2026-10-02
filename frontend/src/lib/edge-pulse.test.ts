@@ -94,6 +94,15 @@ describe("buildDecisionWinners", () => {
     expect(first).toHaveLength(DECISION_CYCLES);
     expect(first.every((w) => Number.isInteger(w) && w >= 0 && w < 3)).toBe(true);
   });
+
+  it("lets every branch win at least once when there are no more branches than rounds", () => {
+    for (const seed of ["a", "node-1", "decision-xyz", "42"]) {
+      for (const count of [2, 3, 5, DECISION_CYCLES]) {
+        const winners = buildDecisionWinners(seed, count);
+        expect(new Set(winners).size).toBe(count);
+      }
+    }
+  });
 });
 
 describe("buildPulseTimeline (parallel)", () => {
@@ -177,8 +186,17 @@ describe("buildDecisionTimeline", () => {
 });
 
 describe("getDecisionTravel", () => {
-  it("stops after about one second at the decision speed, capped at 20% of the edge", () => {
-    expect(getDecisionTravel(0, 0, 40, 0)).toBe(0.2);
+  it("stops after about one second at the decision speed, capped at 35% of the edge", () => {
+    expect(getDecisionTravel(0, 0, 40, 0)).toBe(0.35);
+    // 약 105px 이상이면 분기 속도 그대로(상한 미적용)
+    expect(getDecisionTravel(0, 0, 120, 0)).toBeCloseTo(DECISION_SPEED_PX_S / 120);
     expect(getDecisionTravel(0, 0, 400, 0)).toBeCloseTo(DECISION_SPEED_PX_S / 400);
+  });
+
+  it("dims a focused decision dot slightly so its blinks still lift", () => {
+    const focused = buildDecisionTimeline(decision(0, [0, 1], { focused: true }), 0.15);
+    const values = nums(focused.opacityValues);
+    expect(Math.max(...values)).toBe(1);
+    expect(values).toContain(0.9);
   });
 });

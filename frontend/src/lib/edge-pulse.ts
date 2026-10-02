@@ -68,8 +68,9 @@ const DECISION_WIN_MOVE_S = 1.3;
 const DECISION_WIN_FADE_S = 0.4;
 const DECISION_LOSE_FADE_S = 0.6;
 const DECISION_REST_S = 0.9;
-// 멈춤 지점 상한(경로 비율) — 짧은 엣지에서도 승자가 더 나아갈 여지를 남긴다
-const DECISION_STOP_MAX = 0.2;
+// 멈춤 지점 상한(경로 비율) — 짧은 엣지에서도 승자가 더 나아갈 여지를 남긴다. 0.2면 맨해튼 약 180px보다
+// 짧은 엣지에서 점이 분기 속도보다 느려져(1초 고정 이동) 0.35로 둔다(승자 0.5까지 여유 유지)
+const DECISION_STOP_MAX = 0.35;
 // 승자가 도달하는 경로 비율
 export const DECISION_WINNER_REACH = 0.5;
 // 미리 뽑는 회차 수 — 이만큼이 SMIL 반복 단위(형제 공유)라 순수 SMIL로 무작위처럼 보인다
@@ -121,8 +122,11 @@ function addKey(track: Track, time: number, value: number, spline: string = LINE
   track.values.push(value);
 }
 
+// 포커스 시 분기 기본 불투명도 — 1이면 반짝임이 반경 변화만 남아 강조 상태에서 오히려 약해진다
+const DECISION_OPACITY_FOCUSED = 0.9;
+
 const getBaseOpacity = (pulse: EdgePulse): number => {
-  if (pulse.focused) return 1;
+  if (pulse.focused) return pulse.kind === "decision" ? DECISION_OPACITY_FOCUSED : 1;
   if (pulse.kind === "parallel") return pulse.onDark ? PARALLEL_OPACITY_DARK : PARALLEL_OPACITY;
   return pulse.onDark ? DECISION_OPACITY_DARK : DECISION_OPACITY;
 };
@@ -250,7 +254,15 @@ export function buildDecisionWinners(seed: string, count: number, cycles: number
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-  return Array.from({ length: cycles }, () => Math.floor(next() * Math.max(1, count)));
+  const branches = Math.max(1, count);
+  // 앞쪽은 갈래 순서를 시드로 섞은 한 바퀴(모든 갈래가 한 번은 이긴다 — 한 갈래만 계속 이기면 무작위로 안 보인다),
+  // 나머지 회차는 독립 추첨. 갈래가 회차보다 많으면 앞 회차만큼만 쓴다
+  const order = Array.from({ length: branches }, (_, i) => i);
+  for (let i = order.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(next() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return Array.from({ length: cycles }, (_, round) => (round < order.length ? order[round] : Math.floor(next() * branches)));
 }
 
 export interface PulseNode extends OutputRuleNode {
