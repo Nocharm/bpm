@@ -362,9 +362,15 @@ function CollaboratorRow({
                 ) : (
                   <Zap size={12} strokeWidth={1.5} />
                 )}
-                {stagedChange
-                  ? `${t(role === "editor" ? "perm.roleEditor" : "perm.roleViewer")} → ${t(stagedChange.toRole === "editor" ? "perm.roleEditor" : "perm.roleViewer")} · ${t("perm.staged.change")}`
-                  : t("perm.staged.remove")}
+                {/* 변경 태그는 두 줄(전이 / 상태) — 한 줄이면 역할 열이 넓어져 이름 열을 먹는다 */}
+                {stagedChange ? (
+                  <span className="flex flex-col items-start leading-tight">
+                    <span className="whitespace-nowrap">{`${t(role === "editor" ? "perm.roleEditor" : "perm.roleViewer")} → ${t(stagedChange.toRole === "editor" ? "perm.roleEditor" : "perm.roleViewer")}`}</span>
+                    <span className="whitespace-nowrap">{t("perm.staged.change")}</span>
+                  </span>
+                ) : (
+                  t("perm.staged.remove")
+                )}
               </span>
             }
           />
