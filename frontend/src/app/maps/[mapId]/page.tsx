@@ -7815,12 +7815,22 @@ function MapEditor({ mapId }: { mapId: number }) {
       })),
       edges.map((edge) => ({ ...buildCheckEdge(edge), id: edge.id, hidden: hiddenIds?.has(edge.id) })),
     );
+    // 형제 갈래 하나만 선택하면 같은 묶음의 나머지는 이번 회차 뒤 정지, 소스 노드 선택은 강조+배속,
+    // L5 차콜 하늘 위에선 밝은 점(사용자 결정 2026-10-02)
+    const selectedPulseGroup = selectedEdgeId ? pulses.get(selectedEdgeId)?.group : undefined;
     const withPulse = (list: Edge[]): Edge[] =>
       pulses.size === 0
         ? list
         : list.map((edge) => {
             const pulse = pulses.get(edge.id);
-            return pulse ? { ...edge, data: { ...edge.data, pulse } } : edge;
+            if (!pulse) return edge;
+            const live = {
+              ...pulse,
+              focused: edge.source === selectedId,
+              paused: selectedPulseGroup === pulse.group && edge.id !== selectedEdgeId,
+              onDark: l5Charcoal,
+            };
+            return { ...edge, data: { ...edge.data, pulse: live } };
           });
     const finishEdges = (list: Edge[]): Edge[] => injectFanLanes(anchorEdgesToGhosts(withPulse(list)), fanGeom);
     const currentStyled = mirroredEdges.map((edge) => {
@@ -7882,7 +7892,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ),
     );
     return finishEdges([...currentStyled, ...childStyled, ...gatewayStyled]);
-  }, [edges, nodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts]);
+  }, [edges, nodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
