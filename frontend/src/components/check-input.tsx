@@ -3,12 +3,15 @@
 // 16px 박스에 rounded-sm(8px)은 원이 돼 버린다(사용자 지시 2026-09-07).
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, Minus } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 export interface CheckInputProps {
   checked: boolean;
   onChange: () => void;
   disabled?: boolean;
+  // 일부만 선택된 묶음 머리 — accent 채움+가로줄, 보조기기엔 mixed(checked가 false일 때만 의미)
+  indeterminate?: boolean;
   id?: string;
   "data-id"?: string;
   "aria-label"?: string;
@@ -19,14 +22,22 @@ export function CheckInput({
   checked,
   onChange,
   disabled,
+  indeterminate = false,
   id,
   className,
   "data-id": dataId,
   "aria-label": ariaLabel,
 }: CheckInputProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isMixed = indeterminate && !checked;
+  // indeterminate는 HTML 속성이 아니라 DOM 프로퍼티뿐이라 ref로 맞춘다(스크린리더·:indeterminate 상태)
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.indeterminate = isMixed;
+  }, [isMixed]);
   return (
     <span className={`relative h-4 w-4 shrink-0 ${className ?? ""}`}>
       <input
+        ref={inputRef}
         type="checkbox"
         id={id}
         data-id={dataId}
@@ -34,13 +45,16 @@ export function CheckInput({
         checked={checked}
         onChange={onChange}
         disabled={disabled}
-        className="peer absolute inset-0 h-4 w-4 cursor-pointer appearance-none rounded-xs border border-hairline bg-surface transition-colors duration-150 checked:border-accent checked:bg-accent hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+        className={`peer absolute inset-0 h-4 w-4 cursor-pointer appearance-none rounded-xs border ${isMixed ? "border-accent bg-accent" : "border-hairline bg-surface"} transition-colors duration-150 checked:border-accent checked:bg-accent hover:border-accent disabled:cursor-not-allowed disabled:opacity-50`}
       />
       <Check
         size={12}
         strokeWidth={2.5}
         className="pointer-events-none absolute left-0.5 top-0.5 text-on-accent opacity-0 transition-opacity duration-150 peer-checked:opacity-100"
       />
+      {isMixed && (
+        <Minus size={12} strokeWidth={2.5} className="pointer-events-none absolute left-0.5 top-0.5 text-on-accent" />
+      )}
     </span>
   );
 }

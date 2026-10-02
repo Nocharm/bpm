@@ -161,7 +161,9 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
           </button>
         </div>
 
-        <div className="shrink-0 border-b border-hairline px-4 py-2">
+        {/* 열 섹션은 줄어들 수 있는 플렉스 자식 — 낮은 화면에서 모달(max-h 80%) 안에 머리·미리보기 최소·하단 버튼을
+            남기고 나머지만 차지해 안에서 스크롤한다(고정 vh 상한은 650px대 노트북 화면에서 Download를 잘랐다, 리뷰 2026-10-02) */}
+        <div className="flex min-h-0 flex-col border-b border-hairline px-4 py-2">
           <button
             type="button"
             data-id="excel-export-columns-toggle"
@@ -173,7 +175,7 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
             {t("export.columnsLabel")} ({columns.length}/{EXCEL_COLUMNS.length})
           </button>
           {columnsOpen && (
-            <div className="mt-2">
+            <div data-id="excel-export-columns-scroll" className="mt-2 min-h-0 overflow-y-auto">
               <ExportColumnPicker
                 kind="excel"
                 defs={EXCEL_COLUMNS}

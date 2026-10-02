@@ -4,9 +4,15 @@
 
 export type ExportKind = "csv" | "excel";
 
+// 피커 묶음 — 흐름(잠금 열)·일반·속성·수행 지표·입출력·조건. 순서가 곧 피커 표시 순서(인스펙터 카드와 같은 속성→지표→입출력).
+// 내보내기 열 순서는 정의 배열 순서 그대로라 묶음과 무관하다.
+export const EXPORT_COLUMN_GROUPS = ["flow", "general", "attributes", "metrics", "details"] as const;
+export type ExportColumnGroup = (typeof EXPORT_COLUMN_GROUPS)[number];
+
 export interface ExportColumnDef<K extends string> {
   key: K;
   header: string;
+  group: ExportColumnGroup;
   // 잠금 열 — 선택 해제 불가. CSV는 다시 가져오기에 필요한 열, Excel은 맵을 다시 그릴 최소 열.
   required?: boolean;
   // 짝 열 — 이 키(값 열)가 선택돼 있는 동안 함께 고정. 값 열만 담아 줄을 고친 뒤 다시 가져오면
@@ -18,31 +24,31 @@ export interface ExportColumnDef<K extends string> {
 // 잠금(사용자 결정 2026-10-02, CSV 내보내기는 임포트의 전 단계): Name(식별·헤더 필수), Next(빠지면 연결·분기 라벨·SP 출구가
 // 전부 lostEdges), Parallel(빠지면 새 맵 만들기에서 병렬 노드가 경고 없이 판단 노드로 바뀜). 나머지는 빠지면 기존 값 유지.
 export const CSV_COLUMNS = [
-  { key: "name", header: "Name", required: true },
-  { key: "description", header: "Description" },
-  { key: "assignee", header: "Assignee" },
-  { key: "role", header: "Role" },
-  { key: "department", header: "Department" },
-  { key: "system", header: "System" },
-  { key: "duration", header: "Duration" },
-  { key: "touch_time", header: "Touch_Time" },
-  { key: "cost_krw", header: "Cost_KRW" },
-  { key: "cost_usd", header: "Cost_USD" },
-  { key: "headcount", header: "Headcount" },
-  { key: "annual_count", header: "Annual_Count" },
-  { key: "fte", header: "FTE" },
-  { key: "input", header: "Input" },
-  { key: "input_flags", header: "Input_Flags", pairedWith: "input" },
-  { key: "input_forms", header: "Input_Forms", pairedWith: "input" },
-  { key: "output", header: "Output" },
-  { key: "output_forms", header: "Output_Forms", pairedWith: "output" },
-  { key: "start_condition", header: "Start_Condition" },
-  { key: "end_condition", header: "End_Condition" },
-  { key: "gmp", header: "GMP" },
-  { key: "url", header: "URL" },
-  { key: "url_label", header: "URL_Label" },
-  { key: "parallel", header: "Parallel", required: true },
-  { key: "next", header: "Next", required: true },
+  { key: "name", group: "flow", header: "Name", required: true },
+  { key: "description", group: "general", header: "Description" },
+  { key: "assignee", group: "attributes", header: "Assignee" },
+  { key: "role", group: "attributes", header: "Role" },
+  { key: "department", group: "attributes", header: "Department" },
+  { key: "system", group: "attributes", header: "System" },
+  { key: "duration", group: "metrics", header: "Duration" },
+  { key: "touch_time", group: "metrics", header: "Touch_Time" },
+  { key: "cost_krw", group: "metrics", header: "Cost_KRW" },
+  { key: "cost_usd", group: "metrics", header: "Cost_USD" },
+  { key: "headcount", group: "metrics", header: "Headcount" },
+  { key: "annual_count", group: "metrics", header: "Annual_Count" },
+  { key: "fte", group: "metrics", header: "FTE" },
+  { key: "input", group: "details", header: "Input" },
+  { key: "input_flags", group: "details", header: "Input_Flags", pairedWith: "input" },
+  { key: "input_forms", group: "details", header: "Input_Forms", pairedWith: "input" },
+  { key: "output", group: "details", header: "Output" },
+  { key: "output_forms", group: "details", header: "Output_Forms", pairedWith: "output" },
+  { key: "start_condition", group: "details", header: "Start_Condition" },
+  { key: "end_condition", group: "details", header: "End_Condition" },
+  { key: "gmp", group: "attributes", header: "GMP" },
+  { key: "url", group: "general", header: "URL" },
+  { key: "url_label", group: "general", header: "URL_Label" },
+  { key: "parallel", group: "flow", header: "Parallel", required: true },
+  { key: "next", group: "flow", header: "Next", required: true },
 ] as const satisfies readonly ExportColumnDef<string>[];
 
 export type CsvColumnKey = (typeof CSV_COLUMNS)[number]["key"];
@@ -52,30 +58,30 @@ export type CsvColumnKey = (typeof CSV_COLUMNS)[number]["key"];
 // 이름·분기 주석), Type(노드 모양: 시작·끝·판단·하위프로세스), Parallel(병렬 출구 — 없으면 접힌 무라벨 분기와 구분 불가),
 // Next(유일한 연결 열: 방향·분기 라벨·SP 출구 끝 이름). Excel은 다시 가져오지 않으므로 짝 열 규칙은 없다.
 export const EXCEL_COLUMNS = [
-  { key: "no", header: "No", required: true },
-  { key: "name", header: "Name", required: true },
-  { key: "type", header: "Type", required: true },
-  { key: "description", header: "Description" },
-  { key: "assignee", header: "Assignee" },
-  { key: "role", header: "Role" },
-  { key: "department", header: "Department" },
-  { key: "system", header: "System" },
-  { key: "duration", header: "Duration (h)" },
-  { key: "touch_time", header: "Touch time (h)" },
-  { key: "cost_krw", header: "Cost (KRW)" },
-  { key: "cost_usd", header: "Cost (USD)" },
-  { key: "headcount", header: "Headcount" },
-  { key: "annual_count", header: "Annual volume" },
-  { key: "fte", header: "FTE" },
-  { key: "input", header: "Input" },
-  { key: "output", header: "Output" },
-  { key: "start_condition", header: "Start condition" },
-  { key: "end_condition", header: "End condition" },
-  { key: "gmp", header: "GMP" },
-  { key: "parallel", header: "Parallel", required: true },
-  { key: "url", header: "URL" },
-  { key: "groups", header: "Groups" },
-  { key: "next", header: "Next", required: true },
+  { key: "no", group: "flow", header: "No", required: true },
+  { key: "name", group: "flow", header: "Name", required: true },
+  { key: "type", group: "flow", header: "Type", required: true },
+  { key: "description", group: "general", header: "Description" },
+  { key: "assignee", group: "attributes", header: "Assignee" },
+  { key: "role", group: "attributes", header: "Role" },
+  { key: "department", group: "attributes", header: "Department" },
+  { key: "system", group: "attributes", header: "System" },
+  { key: "duration", group: "metrics", header: "Duration (h)" },
+  { key: "touch_time", group: "metrics", header: "Touch time (h)" },
+  { key: "cost_krw", group: "metrics", header: "Cost (KRW)" },
+  { key: "cost_usd", group: "metrics", header: "Cost (USD)" },
+  { key: "headcount", group: "metrics", header: "Headcount" },
+  { key: "annual_count", group: "metrics", header: "Annual volume" },
+  { key: "fte", group: "metrics", header: "FTE" },
+  { key: "input", group: "details", header: "Input" },
+  { key: "output", group: "details", header: "Output" },
+  { key: "start_condition", group: "details", header: "Start condition" },
+  { key: "end_condition", group: "details", header: "End condition" },
+  { key: "gmp", group: "attributes", header: "GMP" },
+  { key: "parallel", group: "flow", header: "Parallel", required: true },
+  { key: "url", group: "general", header: "URL" },
+  { key: "groups", group: "general", header: "Groups" },
+  { key: "next", group: "flow", header: "Next", required: true },
 ] as const satisfies readonly ExportColumnDef<string>[];
 
 export type ExcelColumnKey = (typeof EXCEL_COLUMNS)[number]["key"];
@@ -93,6 +99,45 @@ export function getExportColumnDefs(kind: ExportKind): readonly ExportColumnDef<
 /** 해제할 수 없는 열인지 — 잠금 열이거나, 짝 값 열이 선택돼 있는 줄 정렬 열. 피커 비활성과 정규화가 같은 판정을 쓴다. */
 export function isExportColumnForced(def: ExportColumnDef<string>, picked: ReadonlySet<string>): boolean {
   return def.required === true || (def.pairedWith !== undefined && picked.has(def.pairedWith));
+}
+
+/** 묶음 머리 상태 — 잠금 열을 뺀 열 기준. 짝 열은 값 열과 함께 켜지고 꺼지므로 같은 묶음에 넣어 센다. */
+export function getExportGroupState(
+  defs: readonly ExportColumnDef<string>[],
+  selected: readonly string[],
+  group: ExportColumnGroup,
+): { isLocked: boolean; onCount: number; total: number; isAllOn: boolean; isSomeOn: boolean } {
+  const picked = new Set(selected);
+  const members = defs.filter((def) => def.group === group);
+  const togglable = members.filter((def) => def.required !== true);
+  const isOn = (def: ExportColumnDef<string>) => isExportColumnForced(def, picked) || picked.has(def.key);
+  const togglableOn = togglable.filter(isOn).length;
+  return {
+    isLocked: togglable.length === 0,
+    onCount: members.filter(isOn).length,
+    total: members.length,
+    isAllOn: togglable.length > 0 && togglableOn === togglable.length,
+    isSomeOn: togglableOn > 0,
+  };
+}
+
+/**
+ * 묶음 일괄 체크/해제 — 잠금 열을 뺀 묶음 열이 전부 켜져 있으면 모두 끄고, 하나라도 꺼져 있으면 모두 켠다.
+ * 짝 열도 함께 끈다(값 열이 같이 꺼지면 풀리고, 값 열이 다른 묶음에 켜져 있으면 정규화가 다시 붙인다).
+ */
+export function toggleExportColumnGroup<K extends string>(
+  defs: readonly ExportColumnDef<K>[],
+  selected: readonly string[],
+  group: ExportColumnGroup,
+): K[] {
+  const picked = new Set(selected);
+  const { isAllOn } = getExportGroupState(defs, selected, group);
+  for (const def of defs) {
+    if (def.group !== group || def.required === true) continue;
+    if (isAllOn) picked.delete(def.key);
+    else picked.add(def.key);
+  }
+  return normalizeExportColumns(defs, [...picked]);
 }
 
 /** 선택 키 → 정식 순서로 정렬·잠금/짝 열 강제·미지 키 제거. 미지정(undefined)이면 전부. */

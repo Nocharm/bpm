@@ -4,10 +4,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CSV_COLUMNS,
   EXCEL_COLUMNS,
+  EXPORT_COLUMN_GROUPS,
   isExportColumnForced,
   loadExportColumns,
   normalizeExportColumns,
   saveExportColumns,
+  toggleExportColumnGroup,
 } from "./export-columns";
 
 afterEach(() => {
@@ -34,6 +36,31 @@ describe("normalizeExportColumns", () => {
     expect(normalizeExportColumns(CSV_COLUMNS, ["output"])).toEqual(["name", "output", "output_forms", "parallel", "next"]);
     // 값 열이 없으면 짝 열은 자유(병합 시 기존 텍스트에 맞춰 정렬돼 해가 없다)
     expect(normalizeExportColumns(CSV_COLUMNS, ["input_flags"])).toEqual(["name", "input_flags", "parallel", "next"]);
+  });
+});
+
+describe("toggleExportColumnGroup", () => {
+  const all = CSV_COLUMNS.map((c) => c.key);
+  const metrics = ["duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte"];
+
+  it("묶음이 전부 켜져 있으면 해제 가능한 열만 끄고, 하나라도 꺼져 있으면 전부 켠다", () => {
+    const off = toggleExportColumnGroup(CSV_COLUMNS, all, "metrics");
+    expect(off).toEqual(all.filter((key) => !metrics.includes(key)));
+    expect(toggleExportColumnGroup(CSV_COLUMNS, off, "metrics")).toEqual(all);
+    const partial = off.concat(["fte"]);
+    expect(toggleExportColumnGroup(CSV_COLUMNS, partial, "metrics")).toEqual(all);
+  });
+
+  it("잠금 열·짝 강제 열은 묶음 해제에도 남는다", () => {
+    expect(toggleExportColumnGroup(CSV_COLUMNS, all, "flow")).toEqual(all); // 흐름 묶음은 전부 잠금
+    const detailsOff = toggleExportColumnGroup(CSV_COLUMNS, all, "details");
+    // Input이 꺼지면 짝 열도 풀려 함께 꺼진다 — 입출력·조건 묶음이 통째로 빠짐
+    expect(detailsOff.filter((key) => CSV_COLUMNS.find((c) => c.key === key)?.group === "details")).toEqual([]);
+    expect(detailsOff).toEqual(expect.arrayContaining(["name", "parallel", "next"]));
+  });
+
+  it("모든 열은 피커 묶음 중 하나에 속한다(CSV·Excel)", () => {
+    for (const def of [...CSV_COLUMNS, ...EXCEL_COLUMNS]) expect(EXPORT_COLUMN_GROUPS).toContain(def.group);
   });
 });
 

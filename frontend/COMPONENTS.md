@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 293개 · 2026-10-01 기준
+총 293개 · 2026-10-02 기준
 
 ## components/
 
@@ -54,7 +54,7 @@
 | `editor-toolbar.tsx` | `EditorToolbar` | 편집 툴바 | `app/maps/[mapId]/page.tsx` |
 | `excel-export-modal.tsx` | `ExcelExportModal` | Excel 내보내기 형식 선택 모달 | `app/maps/[mapId]/page.tsx` |
 | `expand-invariant-modal.tsx` | `ExpandInvariantModal` | 하위 프로세스 불변식 확인 모달 | (미사용) |
-| `export-column-picker.tsx` | `ExportColumnPicker` | 내보내기 열 선택 체크박스 그리드 | `components/csv-export-modal.tsx`, `components/excel-export-modal.tsx` |
+| `export-column-picker.tsx` | `ExportColumnPicker` | 내보내기 열 선택 체크박스 | `components/csv-export-modal.tsx`, `components/excel-export-modal.tsx` |
 | `fallback-hint.tsx` | `FallbackHint` | 폴백 원문 힌트 | `app/maps/[mapId]/page.tsx`, `components/attribute-read-rows.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/maps/map-fallback-notes.tsx`, `components/node-metrics-card.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/permissions/subprocess-designation-panel.tsx`, `components/subprocess-usage-tab.tsx` |
 | `feedback-detail-modal.tsx` | `FeedbackDetailModal` | 피드백 상세/관리 모달 | `app/feedback/page.tsx` |
 | `feedback-notes-flyout.tsx` | `FeedbackNotesFlyout` | 피드백 노트 플라이아웃 | `app/feedback/page.tsx` |
@@ -115,7 +115,7 @@
 | `notification-bell.tsx` | `NotificationBell` | 인앱 알림 벨 | `components/top-nav.tsx` |
 | `org-info-modal.tsx` | `OrgInfoModal` | 조직 정보 모달 | `components/dept-pill.tsx`, `components/maps/map-detail-card.tsx`, `components/permissions/collaborators-panel.tsx`, `components/process-library-panel.tsx` |
 | `pagination.tsx` | `Pagination` | 간단 페이지네이션 | `app/feedback/page.tsx`, `components/notices/notices-manage-panel.tsx` |
-| `param-icons.ts` | - | 수행 지표(Metrics) 아이콘 단일 소스 | `app/maps/[mapId]/compare/page.tsx`, `components/group-bulk-modal.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/maps/map-fallback-notes.tsx`, `components/node-metrics-card.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/process-node.tsx`, `components/subprocess-preview-peek.tsx`, `components/subprocess-usage-tab.tsx` |
+| `param-icons.ts` | - | 수행 지표(Metrics) 아이콘 단일 소스 | `app/maps/[mapId]/compare/page.tsx`, `components/export-column-picker.tsx`, `components/group-bulk-modal.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/maps/map-fallback-notes.tsx`, `components/node-metrics-card.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/process-node.tsx`, `components/subprocess-preview-peek.tsx`, `components/subprocess-usage-tab.tsx` |
 | `param-input.tsx` | `ParamInput` | 숫자 파라미터 공용 입력 | `components/group-bulk-modal.tsx`, `components/interview/params-table-dialog.tsx`, `components/node-metrics-card.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/permissions/subprocess-designation-panel.tsx` |
 | `person-hover-card.tsx` | `PersonHoverCard`, `PersonInfoPopup` | 인물 카드 | `app/inbox/page.tsx`, `components/admin/ref-group-card.tsx`, `components/approval-panel.tsx`, `components/assignee-pills.tsx`, `components/maps/framework-drill.tsx`, `components/maps/map-card.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/version-timeline.tsx`, `components/org-info-modal.tsx`, `components/permissions/collaborators-panel.tsx`, `components/permissions/subprocess-designation-panel.tsx`, `components/permissions/versions-publish-panel.tsx` |
 | `popover-action-bar.tsx` | `PopoverActionBar` | 소형 입력 팝오버 공용 푸터 | `components/fallback-hint.tsx`, `components/maps/map-notes-section.tsx`, `components/node-summary-modal.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/role-tile.tsx`, `components/permissions/sp-field-popover.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/permissions/subprocess-designation-panel.tsx`, `components/subprocess-usage-tab.tsx` |

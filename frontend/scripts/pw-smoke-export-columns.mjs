@@ -111,7 +111,7 @@ try {
   // 다시 가져오기에 필요한 열은 Clear로도 못 뺀다 — 잠금 열만 체크된 채 남는다
   await page.locator('[data-id="export-columns-csv-deselect-all"]').click();
   const lockedAfterClear = await page.evaluate(() =>
-    [...document.querySelectorAll('[data-id="export-columns-csv"] input[type="checkbox"]')]
+    [...document.querySelectorAll('[data-id="export-columns-csv"] input[type="checkbox"]')].filter((box) => !box.getAttribute("data-id").startsWith("export-columns-"))
       .filter((box) => box.checked)
       .map((box) => ({ key: box.getAttribute("data-id").replace("export-column-", ""), disabled: box.disabled })),
   );
@@ -138,6 +138,42 @@ try {
     pairedOn.every(Boolean) && pairedOff.every((disabled) => !disabled),
     JSON.stringify({ pairedOn, pairedOff }),
   );
+
+  // 묶음 일괄 체크/해제 — 머리 체크박스로 수행 지표 7열을 한 번에 끄고 켜고, 일부만 켜지면 머리는 중간 상태
+  await page.locator('[data-id="export-columns-csv-select-all"]').click();
+  const groupChecked = (group) =>
+    page.evaluate(
+      (g) =>
+        [...document.querySelectorAll(`[data-id="export-columns-csv-group-${g}"] input[type="checkbox"]`)]
+          .slice(1)
+          .map((box) => box.checked),
+      group,
+    );
+  const metricsToggle = page.locator('[data-id="export-columns-csv-group-metrics-toggle"]');
+  await metricsToggle.click();
+  const metricsOff = await groupChecked("metrics");
+  await csvBox("fte").click();
+  const isMixed = await metricsToggle.evaluate((box) => box.indeterminate && !box.checked);
+  await page.waitForTimeout(300);
+  await page.locator('[data-id="csv-export-modal"]').screenshot({ path: `${SHOTS}/export-columns-csv-groups.png` });
+  await metricsToggle.click();
+  const metricsOn = await groupChecked("metrics");
+  check(
+    "CSV: the Metrics group header clears all 7, shows a mixed state for one, and selects all again",
+    metricsOff.length === 7 && metricsOff.every((on) => !on) && isMixed && metricsOn.every(Boolean),
+    JSON.stringify({ metricsOff, isMixed, metricsOn }),
+  );
+  await page.locator('[data-id="export-columns-csv-group-details-toggle"]').click();
+  const detailsAfterClear = await groupChecked("details");
+  check(
+    "CSV: clearing the I/O group also releases the paired flag and form columns",
+    detailsAfterClear.length === 7 && detailsAfterClear.every((on) => !on),
+    JSON.stringify(detailsAfterClear),
+  );
+  check(
+    "CSV: the Flow group header is locked (always included)",
+    await page.locator('[data-id="export-columns-csv-group-flow-toggle"]').isDisabled(),
+  );
   await page.locator('[data-id="export-columns-csv-select-all"]').click();
   await page.locator('[data-id="export-column-description"]').click();
   await page.waitForTimeout(300); // 체크 표시 페이드(150ms)가 끝난 뒤 찍는다
@@ -162,7 +198,7 @@ try {
   // 맵을 다시 그릴 최소 열(No·Name·Type·Parallel·Next)은 Clear로도 못 뺀다
   await page.locator('[data-id="export-columns-excel-deselect-all"]').click();
   const excelLocked = await page.evaluate(() =>
-    [...document.querySelectorAll('[data-id="export-columns-excel"] input[type="checkbox"]')]
+    [...document.querySelectorAll('[data-id="export-columns-excel"] input[type="checkbox"]')].filter((box) => !box.getAttribute("data-id").startsWith("export-columns-"))
       .filter((box) => box.checked)
       .map((box) => ({ key: box.getAttribute("data-id").replace("export-column-", ""), disabled: box.disabled })),
   );
@@ -201,6 +237,27 @@ try {
     !(await page.locator('[data-id="export-column-groups"]').isChecked()),
   );
   await page.locator('[data-id="export-columns-excel-select-all"]').click();
+  // 낮은 화면(노트북 브라우저 ~650px)에서도 Columns를 펼친 채 Download가 모달 안에 보인다 — 열 섹션이 줄어들며 안에서 스크롤
+  const footerFits = [];
+  for (const height of [900, 650, 600]) {
+    await page.setViewportSize({ width: 1440, height });
+    await page.waitForTimeout(250);
+    const fit = await page.evaluate(() => {
+      const modal = document.querySelector('[data-id="excel-export-modal"]').getBoundingClientRect();
+      const download = document.querySelector('[data-id="excel-export-download"]').getBoundingClientRect();
+      return download.bottom <= modal.bottom + 0.5 && download.top >= modal.top;
+    });
+    footerFits.push({ height, fit });
+    if (height === 650) {
+      await page.locator('[data-id="excel-export-modal"]').screenshot({ path: `${SHOTS}/export-columns-excel-650.png` });
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  check(
+    "Excel: with Columns open, Download stays inside the modal at 900/650/600px tall viewports",
+    footerFits.every((row) => row.fit),
+    JSON.stringify(footerFits),
+  );
   await page.keyboard.press("Escape");
 } catch (err) {
   results.push({ name: "fatal", ok: false });
