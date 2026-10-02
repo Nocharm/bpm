@@ -556,6 +556,26 @@ describe("buildExcelModel", () => {
     expect(aRow && aRow.kind === "node" ? aRow.next : "").toBe("  END ;출하 종료");
   });
 
+  it("규칙3: 빈 제목 end도 기본 end로 보고 행을 만들지 않는다", async () => {
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("a1", "A", "process", 1),
+        makeNode("e1", " ", "end", 2, { is_primary_end: true }),
+      ],
+      edges: [makeEdge("x1", "s1", "a1"), makeEdge("x2", "a1", "e1")],
+      groups: [],
+    };
+    const fetchResolved = async (): Promise<Graph> => { throw new Error("unused"); };
+
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-10-02T00:00:00+09:00",
+      fetchResolved,
+    });
+
+    expect(model.rows.filter((r) => r.kind === "node").map((r) => r.title)).toEqual(["Start", "A"]);
+  });
+
   it("규칙2: 루트에 start가 2개면 BFS 기점만 남는다", async () => {
     const map1: Graph = {
       nodes: [

@@ -1396,6 +1396,53 @@ def test_activity_annual_count_edit_alone_keeps_redelivery_unchanged(client) -> 
     assert (node.annual_count, node.fte) == ("240", "0.5")
 
 
+def test_build_graph_rows_end_title_is_empty() -> None:
+    """임포트 끝 노드는 빈 제목 — 단순 "End"는 정보가 없어 오너가 바로 라벨을 쓰게 둔다(사용자 결정 2026-10-02).
+    Start는 그대로 "Start"."""
+    from scripts.import_consultant import build_graph_rows
+
+    nodes, _, _ = build_graph_rows(_canonical_map(), link_targets={})
+
+    titles = {n.node_type: n.title for n in nodes if n.node_type in ("start", "end")}
+    assert titles == {"start": "Start", "end": ""}
+
+
+def test_redelivery_keeps_owner_end_title(client) -> None:
+    """끝 제목은 전달물이 싣지 않는 승계 값 — 오너가 붙인 끝 라벨은 재전달 새 버전에도 남는다."""
+    _seed_import_employees()
+    code = "IV-INH-ENDTITLE"
+
+    def _make(desc: str = ""):
+        cmap = _canonical_map(code=code, name="끝 제목 승계")
+        cmap.nodes[0].description = desc
+        return cmap
+
+    _run(_import_once(maps=[_make()]))
+    assert next(n for n in _published_nodes(code) if n.node_type == "end").title == ""
+    _edit_published(code, lambda _s, _v, nodes: setattr(
+        next(n for n in nodes if n.node_type == "end"), "title", "발주 완료"))
+
+    report = _run(_import_once(maps=[_make("개정된 설명")]))
+
+    assert report.counts() == {"updated": 1}
+    assert next(n for n in _published_nodes(code) if n.node_type == "end").title == "발주 완료"
+
+
+def test_legacy_end_title_alone_keeps_redelivery_unchanged(client) -> None:
+    """빈 끝 제목 이전에 만든 맵(게시본 끝 = "End")에 같은 전달물을 다시 넣어도 제목 차이만으로
+    새 버전이 찍히지 않고 "End"가 그대로 남는다."""
+    _seed_import_employees()
+    code = "IV-INH-ENDLEGACY"
+    _run(_import_once(maps=[_canonical_map(code=code)]))
+    _edit_published(code, lambda _s, _v, nodes: setattr(
+        next(n for n in nodes if n.node_type == "end"), "title", "End"))
+
+    report = _run(_import_once(maps=[_canonical_map(code=code)]))
+
+    assert report.counts() == {"unchanged": 1}
+    assert next(n for n in _published_nodes(code) if n.node_type == "end").title == "End"
+
+
 def test_link_node_annual_count_follows_the_delivery(client) -> None:
     """링크 노드의 연간 건수·FTE는 전달물(대상 맵 params)이 진실 — 게시본 편집값을 승계하지 않는다."""
     _seed_import_employees()

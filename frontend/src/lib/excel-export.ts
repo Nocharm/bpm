@@ -285,9 +285,10 @@ export async function buildExcelModel({
     };
     // 규칙2: 루트 스코프 BFS 기점 start만 유지 — 서브프로세스 인라인·미도달 추가 start는 행 미생성
     const keptStartId = depth === 0 ? ordered.find((n) => n.node_type === "start")?.id : undefined;
-    // 규칙3: 기본 제목 end는 행 미생성(커스텀 제목 end는 유지) — next의 "End" 표기는 그대로 남는다
+    // 규칙3: 기본 제목 end는 행 미생성(커스텀 제목 end는 유지) — next의 "End" 표기는 그대로 남는다.
+    // 빈 제목도 기본 — 에디터·임포트가 끝을 빈 제목으로 만들고 표시는 "End"라 같은 노드다(2026-10-02)
     const isDefaultEnd = (n: GraphNode): boolean =>
-      n.node_type === "end" && n.title.trim().toLowerCase() === "end";
+      n.node_type === "end" && ["", "end"].includes(n.title.trim().toLowerCase());
     const isRowRemoved = (n: GraphNode): boolean =>
       (n.node_type === "start" && n.id !== keptStartId) || isDefaultEnd(n) || isRemovedDecision(n);
 

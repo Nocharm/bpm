@@ -232,7 +232,8 @@ export function buildPreviewGraph(row: unknown): VersionGraph | null {
   const nodes: FlatNode[] = [
     makeFlatNode(PREVIEW_START_ID, "Start", "start", "", 0),
     ...withLoops.map((node, i) => makeFlatNode(node.code, node.name, node.type, node.color, i + 1)),
-    makeFlatNode(PREVIEW_END_ID, "End", "end", "", withLoops.length + 1),
+    // 끝은 빈 제목 — import_consultant.build_graph_rows 동치(단순 "End"는 정보가 없어 오너가 라벨을 쓰게)
+    makeFlatNode(PREVIEW_END_ID, "", "end", "", withLoops.length + 1),
   ];
   const edges: GraphEdge[] = flow.map((edge, i) => ({
     id: `e${i}`,
@@ -370,7 +371,7 @@ export function buildL5PreviewGraph(file: unknown): VersionGraph | null {
   const nodes: FlatNode[] = [
     makeFlatNode(PREVIEW_START_ID, "Start", "start", "", 0),
     ...withBranches.map((node, i) => makeFlatNode(node.code, node.name, node.type, "", i + 1)),
-    makeFlatNode(PREVIEW_END_ID, "End", "end", "", withBranches.length + 1),
+    makeFlatNode(PREVIEW_END_ID, "", "end", "", withBranches.length + 1),
   ];
   return {
     nodes,
