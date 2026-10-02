@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CSV_COLUMNS,
   EXCEL_COLUMNS,
+  isExportColumnForced,
   loadExportColumns,
   normalizeExportColumns,
   saveExportColumns,
@@ -17,8 +18,32 @@ afterEach(() => {
 describe("normalizeExportColumns", () => {
   it("미지정이면 전부, 지정이면 정식 순서로 정렬하고 잠금 열을 강제한다", () => {
     expect(normalizeExportColumns(CSV_COLUMNS, undefined)).toEqual(CSV_COLUMNS.map((c) => c.key));
-    expect(normalizeExportColumns(CSV_COLUMNS, ["next", "gmp", "unknown"])).toEqual(["name", "gmp", "next"]);
-    expect(normalizeExportColumns(EXCEL_COLUMNS, [])).toEqual(["no", "name"]);
+    expect(normalizeExportColumns(CSV_COLUMNS, ["next", "gmp", "unknown"])).toEqual(["name", "gmp", "parallel", "next"]);
+  });
+
+  it("CSV는 다시 가져오기에 필요한 Name·Parallel·Next를 전부 해제해도 남긴다", () => {
+    expect(normalizeExportColumns(CSV_COLUMNS, [])).toEqual(["name", "parallel", "next"]);
+  });
+
+  it("Excel은 맵을 다시 그릴 최소 열 No·Name·Type·Parallel·Next를 전부 해제해도 남긴다", () => {
+    expect(normalizeExportColumns(EXCEL_COLUMNS, [])).toEqual(["no", "name", "type", "parallel", "next"]);
+  });
+
+  it("CSV 줄 정렬 열은 값 열을 따라간다 — Input이 있으면 Input_Flags·Input_Forms, Output이 있으면 Output_Forms", () => {
+    expect(normalizeExportColumns(CSV_COLUMNS, ["input"])).toEqual(["name", "input", "input_flags", "input_forms", "parallel", "next"]);
+    expect(normalizeExportColumns(CSV_COLUMNS, ["output"])).toEqual(["name", "output", "output_forms", "parallel", "next"]);
+    // 값 열이 없으면 짝 열은 자유(병합 시 기존 텍스트에 맞춰 정렬돼 해가 없다)
+    expect(normalizeExportColumns(CSV_COLUMNS, ["input_flags"])).toEqual(["name", "input_flags", "parallel", "next"]);
+  });
+});
+
+describe("isExportColumnForced", () => {
+  it("잠금 열은 항상, 짝 열은 값 열이 선택된 동안만 강제한다", () => {
+    const byKey = new Map(CSV_COLUMNS.map((c) => [c.key, c]));
+    expect(isExportColumnForced(byKey.get("next")!, new Set())).toBe(true);
+    expect(isExportColumnForced(byKey.get("input_forms")!, new Set(["input"]))).toBe(true);
+    expect(isExportColumnForced(byKey.get("input_forms")!, new Set())).toBe(false);
+    expect(isExportColumnForced(byKey.get("description")!, new Set(["input"]))).toBe(false);
   });
 });
 
@@ -29,8 +54,8 @@ describe("loadExportColumns / saveExportColumns", () => {
   });
 
   it("제외한 키만 저장해 다시 읽으면 같은 선택이 되고, 종류별로 따로 기억한다", () => {
-    saveExportColumns("csv", ["name", "description", "next"]);
-    expect(loadExportColumns("csv")).toEqual(["name", "description", "next"]);
+    saveExportColumns("csv", ["name", "description", "parallel", "next"]);
+    expect(loadExportColumns("csv")).toEqual(["name", "description", "parallel", "next"]);
     expect(loadExportColumns("excel")).toEqual(EXCEL_COLUMNS.map((c) => c.key));
     const stored = JSON.parse(window.localStorage.getItem("bpm.exportColumns.csv") ?? "[]") as string[];
     expect(stored).not.toContain("name"); // 잠금 열은 제외 목록에 들어가지 않는다

@@ -347,12 +347,17 @@ describe("buildCsvFromGraph - column selection", () => {
     groups: [],
   };
 
-  it("writes only the selected columns in canonical order and always keeps Name", () => {
-    const { csv } = buildCsvFromGraph(graph, { columns: ["next", "description"] });
+  it("writes only the selected columns in canonical order and always keeps the import columns Name, Parallel, Next", () => {
+    const { csv } = buildCsvFromGraph(graph, { columns: ["description"] });
     const lines = csv.split("\r\n");
-    expect(lines[0]).toBe("Name,Description,Next");
-    expect(lines[1]).toBe("A,first,B");
-    expect(lines.every((line) => line.split(",").length === 3)).toBe(true);
+    expect(lines[0]).toBe("Name,Description,Parallel,Next");
+    expect(lines[1]).toBe("A,first,,B");
+    expect(lines.every((line) => line.split(",").length === 4)).toBe(true);
+  });
+
+  it("keeps Input_Flags and Input_Forms with Input, and Output_Forms with Output", () => {
+    const { csv } = buildCsvFromGraph(graph, { columns: ["input", "output"] });
+    expect(csv.split("\r\n")[0]).toBe("Name,Input,Input_Flags,Input_Forms,Output,Output_Forms,Parallel,Next");
   });
 
   it("writes every column when no selection is given", () => {

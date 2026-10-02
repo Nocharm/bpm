@@ -9,6 +9,7 @@ import { formatSystemCell, orderNodesByFlow } from "./csv-export";
 import { EXCEL_COLUMNS, type ExcelColumnKey, normalizeExportColumns } from "./export-columns";
 import { formatGmp } from "./gmp";
 import { getIoLine } from "./io-items";
+import { getOutputGroups } from "./output-rules";
 import { getInheritedParams } from "./params";
 import { deriveSubEnds, endKeyOfEdge, PRIMARY_END_HANDLE } from "./subprocess-embed";
 import { mergeSubprocessDescription } from "./subprocess-description";
@@ -203,10 +204,26 @@ export function getExcelEdgeLabel(
   return exitTitles.get(endKeyOfEdge({ sourceHandle: edge.source_handle })) ?? "";
 }
 
-/** 병렬 셀 — 분기·끝은 병렬 대상이 아니라 빈칸, SP는 병렬로 켠 끝 이름(제목을 모르는 대표 끝은 "Y"). */
-export function formatParallelCell(node: GraphNode, exitTitles: ReadonlyMap<string, string> | null): string {
+/**
+ * 병렬 셀 — 분기·끝은 병렬 대상이 아니라 빈칸, SP는 병렬로 켠 끝 이름(제목을 모르는 대표 끝은 "Y").
+ * 켠 키 ∪ 실제로 2갈래 이상 병렬로 갈라지는 출구(시작 노드 기본 병렬·임포트 레거시 gateway=parallel, lib/output-rules).
+ * 속성만 보면 이 둘이 빈칸이 돼 접힌 무라벨 분기(여러 Next)와 구분되지 않는다 — Parallel은 맵을 다시 그릴 잠금 열(2026-10-02).
+ */
+export function formatParallelCell(
+  node: GraphNode,
+  edges: readonly GraphEdge[],
+  exitTitles: ReadonlyMap<string, string> | null,
+): string {
   if (node.node_type === "decision" || node.node_type === "end") return "";
-  const keys = node.parallel_outputs ?? [];
+  const keySet = new Set(node.parallel_outputs ?? []);
+  const groups = getOutputGroups(
+    { id: node.id, nodeType: node.node_type, parallelOutputs: node.parallel_outputs },
+    edges.map((edge) => ({ source: edge.source_node_id, sourceHandle: edge.source_handle, gateway: edge.gateway })),
+  );
+  for (const group of groups) {
+    if (group.parallel && group.count >= 2) keySet.add(group.key);
+  }
+  const keys = [...keySet];
   if (node.node_type !== "subprocess") return keys.includes(PRIMARY_END_HANDLE) ? "Y" : "";
   return keys.map((key) => exitTitles?.get(key) ?? (key === PRIMARY_END_HANDLE ? "Y" : key)).join(", ");
 }
@@ -229,7 +246,7 @@ export function buildNodeRowFields(
     annual_count: node.annual_count ?? "",
     fte: node.fte ?? "",
     ...getNodeDetailFields(g, node),
-    parallel: formatParallelCell(node, opts.exitTitles),
+    parallel: formatParallelCell(node, g.edges, opts.exitTitles),
     groups: node.group_ids.map((id) => opts.groupLabel.get(id) ?? "").filter(Boolean).join(", "),
     next: opts.next,
   };
@@ -461,7 +478,7 @@ export const COLUMNS: readonly ExcelColumnSpec[] = EXCEL_COLUMNS.map((def) => ({
   ...EXCEL_COLUMN_FORMATS[def.key],
 }));
 
-/** 선택 키 → 열 정의(정식 순서, No·Name 강제). 미지정이면 전부. */
+/** 선택 키 → 열 정의(정식 순서, 잠금 열 No·Name·Type·Parallel·Next 강제). 미지정이면 전부. */
 export function selectExcelColumns(keys?: readonly ExcelColumnKey[]): ExcelColumnSpec[] {
   const selected = new Set<string>(normalizeExportColumns(EXCEL_COLUMNS, keys));
   return COLUMNS.filter((column) => selected.has(column.key));

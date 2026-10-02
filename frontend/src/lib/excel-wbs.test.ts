@@ -372,15 +372,15 @@ describe("writeWbsSheet", () => {
     expect(values[values.length - 1]).toBe("Next step");
   });
 
-  it("열 선택 - 꼬리는 선택한 열만 정식 순서로, 서식·하이퍼링크 위치도 선택 열에서 파생", () => {
-    const sheet = buildSheet(model, ["next", "url", "duration"]);
+  it("열 선택 - 꼬리는 선택한 열+잠금 열(Type·Parallel·Next)만 정식 순서로, 서식·하이퍼링크 위치도 선택 열에서 파생", () => {
+    const sheet = buildSheet(model, ["url", "duration"]);
     expect((sheet.getRow(4).values as unknown[]).slice(1)).toEqual([
-      "No", "Level 1", "Level 2", "Task", "Duration (h)", "URL", "Next",
+      "No", "Level 1", "Level 2", "Task", "Type", "Duration (h)", "Parallel", "URL", "Next",
     ]);
     const r = sheet.getRow(5);
-    expect(r.getCell(5).numFmt).toBe("0.00");
-    expect(r.getCell(6).value).toEqual({ text: "Doc", hyperlink: "https://example.com/doc" });
-    expect(r.getCell(7).value).toBe("Next step");
+    expect(r.getCell(6).numFmt).toBe("0.00");
+    expect(r.getCell(8).value).toEqual({ text: "Doc", hyperlink: "https://example.com/doc" });
+    expect(r.getCell(9).value).toBe("Next step");
   });
 
   it("URL 하이퍼링크·노트 행 이탤릭이 시프트된 위치에 기록된다", () => {

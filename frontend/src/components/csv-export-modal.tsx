@@ -58,13 +58,14 @@ export function CsvExportModal({ open, onClose, onDownload }: CsvExportModalProp
         </div>
 
         <div className="flex-1 overflow-auto px-4 py-3">
-          <ExportColumnPicker kind="csv" defs={CSV_COLUMNS} selected={selected} onChange={handleChange} />
+          <ExportColumnPicker
+            kind="csv"
+            defs={CSV_COLUMNS}
+            selected={selected}
+            onChange={handleChange}
+            lockedHintKey="export.csvColumnsHint"
+          />
           <p className="mt-2 text-fine text-ink-tertiary">{t("export.csvOmittedHint")}</p>
-          {!selected.includes("next") && (
-            <p data-id="csv-export-no-next" className="mt-1 text-fine text-error">
-              {t("export.csvNoNextWarning")}
-            </p>
-          )}
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-1.5 border-t border-hairline px-4 py-2">

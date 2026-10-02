@@ -180,6 +180,7 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
                 selected={columns}
                 onChange={handleColumnsChange}
                 showLabel={false}
+                lockedHintKey="export.excelColumnsHint"
               />
             </div>
           )}

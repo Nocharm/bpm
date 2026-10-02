@@ -108,12 +108,38 @@ try {
   // ── CSV: 모달 → Description 해제 → 다운로드 헤더에서 빠짐 ──
   await page.locator('[data-id="export-csv"]').click();
   await page.waitForSelector('[data-id="csv-export-modal"]', { timeout: 5000 });
+  // 다시 가져오기에 필요한 열은 Clear로도 못 뺀다 — 잠금 열만 체크된 채 남는다
+  await page.locator('[data-id="export-columns-csv-deselect-all"]').click();
+  const lockedAfterClear = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-id="export-columns-csv"] input[type="checkbox"]')]
+      .filter((box) => box.checked)
+      .map((box) => ({ key: box.getAttribute("data-id").replace("export-column-", ""), disabled: box.disabled })),
+  );
+  check(
+    "CSV: Clear keeps exactly the import columns Name, Parallel, Next (locked)",
+    lockedAfterClear.map((box) => box.key).join(",") === "name,parallel,next" && lockedAfterClear.every((box) => box.disabled),
+    JSON.stringify(lockedAfterClear),
+  );
+  check(
+    "CSV: the locked hint says why (importing back needs them)",
+    /importing this file back/.test(await page.locator('[data-id="export-columns-csv-locked-hint"]').innerText()),
+    await page.locator('[data-id="export-columns-csv-locked-hint"]').innerText(),
+  );
+  // 줄 정렬 짝 — Input을 담으면 Input_Flags·Input_Forms가 함께 고정되고, Input을 빼면 다시 풀린다
+  const csvBox = (key) => page.locator(`[data-id="export-columns-csv"] [data-id="export-column-${key}"]`);
+  await csvBox("input").click();
+  const pairedOn = await Promise.all(["input_flags", "input_forms"].map(async (key) => (await csvBox(key).isChecked()) && (await csvBox(key).isDisabled())));
+  await page.waitForTimeout(300);
+  await page.locator('[data-id="csv-export-modal"]').screenshot({ path: `${SHOTS}/export-columns-csv-cleared.png` });
+  await csvBox("input").click();
+  const pairedOff = await Promise.all(["input_flags", "input_forms"].map((key) => csvBox(key).isDisabled()));
+  check(
+    "CSV: Input locks Input_Flags and Input_Forms on, and unticking Input releases them",
+    pairedOn.every(Boolean) && pairedOff.every((disabled) => !disabled),
+    JSON.stringify({ pairedOn, pairedOff }),
+  );
   await page.locator('[data-id="export-columns-csv-select-all"]').click();
   await page.locator('[data-id="export-column-description"]').click();
-  check(
-    "CSV: Name checkbox is locked",
-    await page.locator('[data-id="export-column-name"]').isDisabled(),
-  );
   await page.waitForTimeout(300); // 체크 표시 페이드(150ms)가 끝난 뒤 찍는다
   await page.locator('[data-id="csv-export-modal"]').screenshot({ path: `${SHOTS}/export-columns-csv.png` });
   const csvDownload = page.waitForEvent("download");
@@ -133,6 +159,20 @@ try {
   await page.locator('[data-id="excel-format-map"]').click();
   await page.locator('[data-id="excel-export-columns-toggle"]').click();
   await page.waitForSelector('[data-id="export-columns-excel"]', { timeout: 5000 });
+  // 맵을 다시 그릴 최소 열(No·Name·Type·Parallel·Next)은 Clear로도 못 뺀다
+  await page.locator('[data-id="export-columns-excel-deselect-all"]').click();
+  const excelLocked = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-id="export-columns-excel"] input[type="checkbox"]')]
+      .filter((box) => box.checked)
+      .map((box) => ({ key: box.getAttribute("data-id").replace("export-column-", ""), disabled: box.disabled })),
+  );
+  check(
+    "Excel: Clear keeps exactly the redraw columns No, Name, Type, Parallel, Next (locked)",
+    excelLocked.map((box) => box.key).join(",") === "no,name,type,parallel,next" && excelLocked.every((box) => box.disabled),
+    JSON.stringify(excelLocked),
+  );
+  await page.waitForTimeout(300);
+  await page.locator('[data-id="excel-export-modal"]').screenshot({ path: `${SHOTS}/export-columns-excel-cleared.png` });
   await page.locator('[data-id="export-columns-excel-select-all"]').click();
   await page.locator('[data-id="export-column-groups"]').click();
   await page.waitForTimeout(300); // 체크 표시 페이드(150ms)가 끝난 뒤 찍는다

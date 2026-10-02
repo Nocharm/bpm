@@ -365,8 +365,8 @@ DECK = {
                 ]},
                 {"title": "Export (PNG · Excel · CSV)", "shot": True, "pts": [
                     ("PNG", "2× resolution with a map info card. <code>Ctrl+Shift+E</code>."),
-                    ("Excel", "<b>Process Map</b> / <b>WBS</b>, then <b>pick columns</b>. Per-currency number formatting. 2,000-row cap."),
-                    ("CSV", "The same 25 columns as import, <b>picked columns</b> only. Round-trips; left-out columns keep their values (except Next)."),
+                    ("Excel", "<b>Process Map</b> / <b>WBS</b>, then <b>pick columns</b>. No, Name, Type, Parallel and Next always stay. 2,000-row cap."),
+                    ("CSV", "The same 25 columns as import, <b>picked columns</b> only. Round-trips; left-out columns keep their values. Name, Parallel and Next always stay."),
                     ("CSV skips", "Non-primary End nodes, edges into End, duplicate titles, with a warning. Secondary SP end links warn; per-end parallel is not carried."),
                 ]},
                 {"title": "AI assistant", "shot": True, "pts": [

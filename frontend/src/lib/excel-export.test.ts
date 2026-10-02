@@ -1012,14 +1012,14 @@ describe("writeExcelSheet", () => {
     expect(sheet?.getRow(5).getCell(1).value).toBe(7);
   });
 
-  it("열 선택 - 선택한 열만 정식 순서로(No·Name 강제), 서식·하이퍼링크 위치도 선택 열에서 파생", () => {
-    const sheet = buildSheetWithOneRow({ url: "https://example.com/doc", urlLabel: "Doc" }, ["next", "url", "cost_krw"]);
-    expect((sheet.getRow(4).values as unknown[]).slice(1)).toEqual(["No", "Name", "Cost (KRW)", "URL", "Next"]);
+  it("열 선택 - 선택한 열+잠금 열(No·Name·Type·Parallel·Next)만 정식 순서로, 서식·하이퍼링크 위치도 선택 열에서 파생", () => {
+    const sheet = buildSheetWithOneRow({ url: "https://example.com/doc", urlLabel: "Doc" }, ["url", "cost_krw"]);
+    expect((sheet.getRow(4).values as unknown[]).slice(1)).toEqual(["No", "Name", "Type", "Cost (KRW)", "Parallel", "URL", "Next"]);
     const r = sheet.getRow(5);
-    expect(r.getCell(3).numFmt).toBe("#,##0");
-    expect(r.getCell(4).value).toEqual({ text: "Doc", hyperlink: "https://example.com/doc" });
-    expect(r.getCell(5).value).toBe("Q");
-    expect(sheet.getColumn(3).width).toBe(14);
+    expect(r.getCell(4).numFmt).toBe("#,##0");
+    expect(r.getCell(6).value).toEqual({ text: "Doc", hyperlink: "https://example.com/doc" });
+    expect(r.getCell(7).value).toBe("Q");
+    expect(sheet.getColumn(4).width).toBe(14);
   });
 });
 
@@ -1063,6 +1063,33 @@ describe("buildExcelModel - IO·조건·GMP·병렬·식별 열", () => {
     });
     // 분기 노드에 남은 병렬 플래그는 표기하지 않는다(병렬 대상 아님)
     expect(rows.find((r) => r.title === "D")?.parallel).toBe("");
+  });
+
+  it("병렬 열은 실제 병렬 갈래도 Y — 시작 노드 팬아웃·레거시 gateway=parallel, 한 갈래 시작은 빈칸", async () => {
+    const legacy = (id: string, source: string, target: string): GraphEdge => ({ ...makeEdge(id, source, target), gateway: "parallel" });
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("a1", "A", "process", 1),
+        makeNode("b1", "B", "process", 2),
+        makeNode("c1", "C", "process", 3),
+        makeNode("d1", "D", "process", 4),
+        makeNode("s2", "Lone start", "start", 5),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "a1"), makeEdge("x2", "s1", "b1"),
+        legacy("x3", "a1", "c1"), legacy("x4", "a1", "d1"),
+        makeEdge("x5", "s2", "c1"),
+      ],
+      groups: [],
+    };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-10-02T00:00:00+09:00", fetchResolved: unusedFetch,
+    });
+    const rows = model.rows.filter((r) => r.kind === "node");
+    expect(rows.find((r) => r.title === "Start")?.parallel).toBe("Y");
+    expect(rows.find((r) => r.title === "A")?.parallel).toBe("Y");
+    expect(rows.find((r) => r.title === "B")?.parallel).toBe("");
   });
 
   it("지정된 SP 행 - 이름·담당·역할·부서·시스템·URL·IO·조건·GMP는 링크 맵 지정값, Next의 SP 대상도 현재 이름", async () => {

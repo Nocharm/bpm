@@ -365,8 +365,8 @@ DECK = {
                 ]},
                 {"title": "내보내기(PNG · Excel · CSV)", "shot": True, "pts": [
                     ("PNG", "2배 해상도 + 맵 정보 카드. <code>Ctrl+Shift+E</code>."),
-                    ("Excel", "<b>Process Map</b> / <b>WBS</b> 선택 후 <b>열 선택</b>. 통화별 숫자 서식. 2,000행 상한."),
-                    ("CSV", "가져오기와 같은 25열 중 <b>고른 열</b>만. 왕복 가능, 뺀 열은 기존 값 유지(Next 제외)."),
+                    ("Excel", "<b>Process Map</b> / <b>WBS</b> 선택 후 <b>열 선택</b>. No·Name·Type·Parallel·Next는 항상 포함. 2,000행 상한."),
+                    ("CSV", "가져오기와 같은 25열 중 <b>고른 열</b>만. 왕복 가능, 뺀 열은 기존 값 유지. Name·Parallel·Next는 항상 포함."),
                     ("CSV 건너뜀", "대표 끝 외 종료 · 종료로 들어가는 연결 · 제목 중복은 경고와 함께 제외. SP 보조 끝 연결은 경고, 끝별 병렬은 미포함."),
                 ]},
                 {"title": "AI 도우미", "shot": True, "pts": [
