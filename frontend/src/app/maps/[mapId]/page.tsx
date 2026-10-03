@@ -334,7 +334,7 @@ import {
   type OutputRuleEdge,
   type OutputRuleNode,
 } from "@/lib/output-rules";
-import { assignEdgePulses } from "@/lib/edge-pulse";
+import { assignEdgePulses, isEdgePulse } from "@/lib/edge-pulse";
 import { ParallelExitIcon } from "@/lib/parallel-icon";
 import {
   NodeActionsContext,
@@ -7936,6 +7936,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     );
     return finishEdges([...currentStyled, ...childStyled, ...gatewayStyled]);
   }, [edges, nodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal]);
+  // 흐름 점 범례(우하단 노드 표시 정보 카드) — 펄스가 붙은 엣지가 하나라도 있을 때만
+  const hasFlowPulse = styledEdges.some((edge) => isEdgePulse(edge.data?.pulse));
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
@@ -10244,6 +10246,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         leading={
                           <NodeDisplayFloat
                             idPrefix="canvas"
+                            pulseLegend={hasFlowPulse ? "motion" : undefined}
                             displayFields={displayFields}
                             onToggle={toggleDisplayField}
                             onSetCategory={setCategoryDisplayFields}

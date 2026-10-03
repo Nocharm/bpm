@@ -1,19 +1,21 @@
 // 엣지 흐름 펄스 — 병렬 출구는 형제 갈래에 점이 같은 박자로 경로의 75%까지 건너고(동시), 분기(decision)는
 // 갈래 전부에서 점이 동시에 나와 잠깐 나아가다 함께 멈추고, 함께 한 번·갈래 순서대로 한 번씩 반짝인 뒤
 // 무작위 한 갈래만 더 나아가고 나머지는 제자리에서 사라진다(택일).
-// 렌더 전용 파생(저장·서명 무관) — 에디터 styledEdges가 edge.data.pulse로 주입, components/edge-pulse-dot.tsx가 SMIL로 그린다.
+// 렌더 전용 파생(저장·서명 무관) — 에디터 styledEdges·비교 appEdges(still)가 edge.data.pulse로 주입, components/edge-pulse-dot.tsx가 SMIL로 그린다.
 // SMIL은 문서 타임라인 하나를 공유해 begin/dur이 같으면 엣지끼리 박자가 맞는다.
 // (사용자 결정 2026-10-01, 2026-10-02: 병렬 75%·분기 동시 출발→반짝임→랜덤 1갈래·포커스 강조·형제 선택 시 정지·L5 어두운 배경 대비)
 
 import { getOutputGroups, getOutputKey, type OutputRuleEdge, type OutputRuleNode } from "@/lib/output-rules";
 
 // 표면이 엣지마다 얹는 상태 — group: 같은 출구 묶음(형제 판정), focused: 소스 노드 선택(강조+1.25배속),
-// paused: 형제 한 갈래만 선택(이번 회차 끝나면 반복 중지), onDark: L5 차콜 하늘 위(밝은 점)
+// paused: 형제 한 갈래만 선택(이번 회차 끝나면 반복 중지), onDark: L5 차콜 하늘 위(밝은 점),
+// still: 움직임 없이 정지 장면만(읽기 전용 비교 화면)
 interface PulseState {
   group: string;
   focused?: boolean;
   paused?: boolean;
   onDark?: boolean;
+  still?: boolean;
 }
 
 export interface ParallelPulse extends PulseState {
@@ -84,6 +86,12 @@ const SEQ_BLINK_SCALE = 1.2;
 // 갈래별 반짝임 불투명도 상승분(기본→1 사이 비율) — "부드럽게"
 const SEQ_BLINK_LIFT = 0.6;
 
+// 이 줌 미만이면 움직이는 점을 그리지 않는다 — 점 반경이 1~2px로 줄어 뜻이 안 읽히고, 엣지마다 SMIL 시계가 돌아
+// 큰 맵을 멀리서 볼 때 화면 전체가 반짝인다(사용자 결정 2026-10-03). 정지 장면 점은 PNG 출력용이라 유지
+export const PULSE_MIN_ZOOM = 0.5;
+// 정지 장면 점 불투명도 — 움직임이 없으면 점이 유일한 단서라 움직이는 점(병렬 0.5·분기 0.75)보다 진하게
+export const PULSE_STILL_OPACITY = 0.85;
+
 // 포커스(소스 노드 선택) 시 배속 — 형제가 모두 같은 소스라 함께 빨라져 박자가 유지된다
 export const FOCUS_SPEED = 1.25;
 
@@ -142,6 +150,14 @@ export function getDecisionCycle(count: number): number {
     DECISION_WIN_MOVE_S +
     DECISION_REST_S
   );
+}
+
+/**
+ * 정지 장면의 점 위치(경로 비율) — 병렬은 갈래 끝 쪽 도달점, 분기는 함께 멈춰 반짝이는 지점.
+ * 모션 축소·PNG 출력·비교 화면에서 움직임 대신 이 한 장면으로 병렬/분기를 구분한다(사용자 결정 2026-10-03).
+ */
+export function getPulseStillAt(pulse: EdgePulse, travel: number): number {
+  return pulse.kind === "parallel" ? PARALLEL_REACH : travel;
 }
 
 /** 병렬 SMIL 타임라인 — 같은 속도로 경로의 PARALLEL_REACH까지 가며 사라지고, 재방출 간격은 그대로. */

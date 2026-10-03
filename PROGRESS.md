@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-03 — 흐름 펄스 정지 장면·줌 문턱·범례·비교 화면 (dev)
+
+- 기본은 지금처럼 계속 재생. 움직임이 멈추는 곳(모션 축소 설정·PNG 출력·비교 화면)은 점을 사라지게 두지 않고 **정지 장면**(병렬 75% 도달점·분기 멈춤 지점, 불투명 0.85)으로 남겨 병렬/분기를 구분한다(사용자 결정, 갈래점 기호 대신 기존 점 언어 재사용). 줌 50% 미만은 움직이는 점을 끔(엣지별 SMIL 시계·1px 점 소음). 노드 표시 정보 카드에 "흐름 점" 범례 두 줄(펄스 있는 맵만, 비교는 정지 견본). 비교 화면은 대상 버전 그래프로 같은 판정(출구 키는 변 id 재매핑 전 `exit`).
+- 검증: `pw-verify-pulse-still.mjs` 15/15(기본·줌 0.2·모션 축소·PNG 출력 후 원복·범례·비교), tsc·lint·vitest 1247·카탈로그.
+
 ## 2026-10-02 — 배포 복구: `# syntax` 지시어 제거·프런트 베이스 node 22 (dev)
 
 - 71번 서버 배포 실패. 이미지 프룬이 빌드 전용 베이스(node:20-alpine·python:3.11-slim)와 캐시돼 있던 `docker/dockerfile:1`을 지웠고, 서버는 Docker Hub 차단이라 `# syntax` 지시어가 빌드 첫 단계에서 죽었다. 두 Dockerfile에서 지시어를 지우고(내장 파서로 `RUN --mount` 충분) 프런트 베이스를 node:20-alpine(2026-04-30 EOL) → node:22-alpine으로 올렸다. 베이스는 amd64 tar 반입(`deploy.md` §0), `rules/backend/docker.md`·CLAUDE.md 운영 제약 갱신.

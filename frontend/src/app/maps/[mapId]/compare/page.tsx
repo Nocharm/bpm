@@ -61,7 +61,8 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
 import { NodeDisplayFloat } from "@/components/node-display-float";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
-import { ProcessNode } from "@/components/process-node";
+import { EdgePulseDot } from "@/components/edge-pulse-dot";
+import { ProcessNode, resolveNodeStroke } from "@/components/process-node";
 import {
   aiCompareSummary,
   ApiError,
@@ -119,6 +120,7 @@ import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status
 import { exportFramedPng } from "@/lib/export";
 import { getObstacles } from "@/components/multiline-edge";
 import { isPolylineBlocked } from "@/lib/edge-detour";
+import { assignEdgePulses, getDecisionTravel, isEdgePulse } from "@/lib/edge-pulse";
 import {
   FAN_GAP,
   buildFanBezierPath,
@@ -237,9 +239,14 @@ function LabeledSmoothEdge({
         : fannedStep
           ? [fannedStep.d, fannedStep.labelX, fannedStep.labelY]
           : getSmoothStepPath(pathArgs);
+  // 흐름 펄스 정지 장면(병렬 도달점·분기 멈춤 지점) — 비교는 읽기 전용이라 움직임 없이 한 장면만(appEdges가 still로 주입)
+  const pulse = isEdgePulse(data?.pulse) ? data.pulse : null;
   return (
     <>
       <BaseEdge path={path} markerEnd={markerEnd} style={style} />
+      {pulse ? (
+        <EdgePulseDot path={path} pulse={pulse} travel={getDecisionTravel(sourceX, sourceY, targetX, targetY)} />
+      ) : null}
       {label && (
         <EdgeLabelRenderer>
           {/* 최대폭 + 자동 줄바꿈 — 수평 연결에서 긴 라벨이 이웃 노드를 덮거나 잘리지 않게 */}
@@ -1200,10 +1207,30 @@ function ComparePane({
   }, [laidNodes]);
 
   // 포커스된 엣지는 굵게 강조. 마지막에 같은 핸들 형제 팬 레인(data.fan)을 얹는다 — 에디터 styledEdges와 동일 규칙.
-  const appEdges = useMemo(
-    () =>
-      injectFanLanes(buildAppEdges(merged.edges, keptKeys, spKeys).map((edge) => {
+  // 흐름 펄스는 대상 버전 그래프(삭제 제외)로 에디터와 같은 판정 — 출구 키는 변 id 재매핑 전 merged exit로 센다
+  const appEdges = useMemo(() => {
+    const pulses = assignEdgePulses(
+      merged.nodes
+        .filter((m) => m.status !== "removed")
+        .map((m) => {
+          const nodeType = normalizeNodeType(m.node.node_type);
+          return {
+            id: m.id,
+            nodeType,
+            parallelOutputs: m.node.parallel_outputs ?? [],
+            color: resolveNodeStroke(m.node.color, nodeType),
+          };
+        }),
+      merged.edges
+        .filter((e) => e.status !== "removed")
+        .map((e) => ({ id: e.id, source: e.source, sourceHandle: e.exit, gateway: e.gateway ?? null })),
+    );
+    return injectFanLanes(buildAppEdges(merged.edges, keptKeys, spKeys).map((edge) => {
         let styled = edge;
+        const pulse = pulses.get(edge.id);
+        if (pulse) {
+          styled = { ...styled, data: { ...styled.data, pulse: { ...pulse, still: true } } };
+        }
         // handleSides가 정한 변으로 핸들 지정. 비교뷰 하위프로세스 노드는 4변 핸들(NodeHandles)을 렌더하므로
         // 편집기용 전용 핸들 remap(withSubprocessHandles)은 쓰지 않는다(TB에서 상/하 진입이 막히던 원인).
         const sides = handleSides.get(edge.id);
@@ -1218,9 +1245,8 @@ function ComparePane({
           styled = { ...styled, selected: true, style: { ...(styled.style ?? {}), strokeWidth: 3 } };
         }
         return styled;
-      }), fanGeom),
-    [merged, focusId, keptKeys, spKeys, handleSides, fanGeom],
-  );
+      }), fanGeom);
+  }, [merged, focusId, keptKeys, spKeys, handleSides, fanGeom]);
 
   const titleByKey = useMemo(
     () => new Map(merged.nodes.map((m) => [m.id, m.node.title])),
@@ -1995,6 +2021,7 @@ function ComparePane({
               <NodeDisplayFloat
                 idPrefix="compare"
                 compact
+                pulseLegend={appEdges.some((edge) => isEdgePulse(edge.data?.pulse)) ? "still" : undefined}
                 displayFields={displayFields}
                 onToggle={(field) => commitDisplayFields(toggleDisplayToggle(displayFields, field))}
                 onSetCategory={(fields, on) =>

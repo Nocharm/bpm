@@ -11,6 +11,7 @@ import {
   FOCUS_SPEED,
   getDecisionCycle,
   getDecisionTravel,
+  getPulseStillAt,
   PARALLEL_CYCLE_S,
   PARALLEL_REACH,
   type DecisionPulse,
@@ -198,5 +199,29 @@ describe("getDecisionTravel", () => {
     const values = nums(focused.opacityValues);
     expect(Math.max(...values)).toBe(1);
     expect(values).toContain(0.9);
+  });
+});
+
+describe("getPulseStillAt", () => {
+  it("freezes a parallel dot where its live run fades out", () => {
+    // Arrange
+    const pulse = { kind: "parallel" as const, group: "a::__primary__" };
+
+    // Act
+    const at = getPulseStillAt(pulse, 0.2);
+
+    // Assert
+    expect(at).toBe(PARALLEL_REACH);
+  });
+
+  it("freezes a decision dot at the shared stop point so it reads as a pause before the pick", () => {
+    // Arrange
+    const pulse: DecisionPulse = { kind: "decision", group: "d", index: 1, count: 2, color: "#c7a062", winners: [0, 1] };
+
+    // Act
+    const at = getPulseStillAt(pulse, 0.27);
+
+    // Assert
+    expect(at).toBe(0.27);
   });
 });

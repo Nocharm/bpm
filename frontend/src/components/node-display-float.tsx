@@ -7,6 +7,7 @@ import { Eye } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { NodeDisplaySection } from "@/components/node-display-section";
+import { PulseLegend } from "@/components/pulse-legend";
 import { useI18n } from "@/lib/i18n";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
 
@@ -18,6 +19,8 @@ interface NodeDisplayFloatProps {
   idPrefix: string;
   // 비교 화면 줌 바(h-7·rounded-sm)와 키 맞춤. 기본은 에디터 줌 필(h-9·rounded-full)과 동일.
   compact?: boolean;
+  // 흐름 점 범례 — 맵에 병렬·분기 펄스가 있을 때만. "still"은 정지 장면으로만 그리는 표면(비교 화면)
+  pulseLegend?: "motion" | "still";
 }
 
 export function NodeDisplayFloat({
@@ -26,6 +29,7 @@ export function NodeDisplayFloat({
   onSetCategory,
   idPrefix,
   compact = false,
+  pulseLegend,
 }: NodeDisplayFloatProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -81,6 +85,11 @@ export function NodeDisplayFloat({
             onToggle={onToggle}
             onSetCategory={onSetCategory}
           />
+          {pulseLegend ? (
+            <div className="mt-2 border-t border-divider pt-2">
+              <PulseLegend still={pulseLegend === "still"} />
+            </div>
+          ) : null}
         </div>
       )}
     </div>

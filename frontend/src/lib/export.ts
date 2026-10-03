@@ -85,6 +85,13 @@ function applyEdgeFixups(viewport: HTMLElement, dark: boolean): () => void {
     setImportant(span, "display", "inline");
     setImportant(span, "overflow", "visible");
   }
+  // 흐름 펄스 — 출력은 정지 화면이라 움직이는 점(캡처 순간의 아무 프레임)을 빼고 정지 장면 점으로 병렬/분기를 남긴다
+  for (const dot of viewport.querySelectorAll(".bpm-edge-pulse")) {
+    setImportant(dot, "display", "none");
+  }
+  for (const dot of viewport.querySelectorAll(".bpm-edge-pulse-still")) {
+    setImportant(dot, "display", "inline");
+  }
   // SP "최신본 따르는 중"은 화면 전용 상태 표시(정상 상태 안내) — 출력물엔 불필요.
   // display:none이라 노드 높이도 그만큼 줄어든다 (사용자 요청 2026-08-31)
   for (const banner of viewport.querySelectorAll('[data-id="sp-banner-following"]')) {

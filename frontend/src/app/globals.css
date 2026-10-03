@@ -368,10 +368,17 @@ button:not(:disabled):active {
   }
 }
 
-/* 엣지 흐름 펄스(병렬·분기, components/edge-pulse-dot) — SMIL이라 animation:none이 안 먹어 점 자체를 숨긴다 */
+/* 엣지 흐름 펄스(병렬·분기, components/edge-pulse-dot) — SMIL이라 animation:none이 안 먹어 점 자체를 숨기고,
+   대신 정지 장면 점(병렬 도달점·분기 멈춤 지점)을 보여 병렬/분기 구분을 남긴다 */
+.bpm-edge-pulse-still {
+  display: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .bpm-edge-pulse {
     display: none;
+  }
+  .bpm-edge-pulse-still {
+    display: inline;
   }
 }
 
