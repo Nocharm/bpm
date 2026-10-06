@@ -1,4 +1,4 @@
-// 엣지 편집 스모크 — 끝점 재연결(핸들·몸체 드롭·빈 곳 취소·출력 규칙 차단)·연결 변 다시 고르기·라벨 편집 박스 위치.
+// 엣지 편집 스모크 — 끝점 재연결(핸들·몸체 드롭·빈 곳 취소·출력 규칙 차단·판단 노드 분기 라벨)·연결 변 다시 고르기·라벨 편집 박스 위치.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3055 BACKEND_URL=http://localhost:8055 node scripts/pw-smoke-edge-reconnect.mjs
 //   KEEP=1 이면 시드 맵을 지우지 않는다. 산출물은 저장소 루트 .shots/edge-reconnect-*.png (gitignore).
 // 전제: 백엔드 DEV_ENFORCE_PERMISSIONS=false, dev 유저 admin.sys.
@@ -46,6 +46,10 @@ const nodes = [
   { id: nid("x1"), title: "Collect", node_type: "process", pos_x: 200, pos_y: 600 },
   { id: nid("x2"), title: "Check", node_type: "process", pos_x: 480, pos_y: 600 },
   { id: nid("x3"), title: "Close", node_type: "process", pos_x: 760, pos_y: 600 },
+  // 재연결 분기 라벨 시나리오: F→G의 출발을 판단 노드 Q로 옮기면 분기 모달, 다시 F로 옮기면 라벨 소거
+  { id: nid("f"), title: "Prepare", node_type: "process", pos_x: 200, pos_y: 760 },
+  { id: nid("g"), title: "Publish", node_type: "process", pos_x: 760, pos_y: 760 },
+  { id: nid("q"), title: "Approved?", node_type: "decision", pos_x: 480, pos_y: 860 },
 ];
 const edges = [
   { id: nid("e-sa"), source_node_id: S, target_node_id: A, label: "" },
@@ -53,6 +57,7 @@ const edges = [
   { id: nid("e-be"), source_node_id: B, target_node_id: E, label: "" },
   { id: nid("e-x12"), source_node_id: nid("x1"), target_node_id: nid("x2"), label: "" },
   { id: nid("e-x23"), source_node_id: nid("x2"), target_node_id: nid("x3"), label: "" },
+  { id: nid("e-fg"), source_node_id: nid("f"), target_node_id: nid("g"), label: "" },
 ];
 
 const maps = await api("GET", "/api/maps");
@@ -166,6 +171,28 @@ await settle();
 const graph7 = await api("GET", `/api/versions/${draft.id}/graph`);
 check("insert that would create a two-way pair is refused", rewireToast && graph7.edges.length === edgesBefore, `toast=${rewireToast} edges ${edgesBefore}->${graph7.edges.length}`);
 await page.screenshot({ path: `${OUT}/edge-reconnect-4-rewire-toast.png` });
+
+// 8) 출발 끝을 판단 노드로 옮기면 분기 모달 — 취소면 무변경, Yes면 라벨 Yes로 재연결
+const EFG = nid("e-fg");
+const branchModal = '[data-id="edge-branch-modal"]';
+await drag(await centerOf(anchor(EFG, "source")), await centerOf(handle(nid("q"), "s-right")));
+const askedOnce = await page.locator(branchModal).isVisible().catch(() => false);
+await page.locator(branchModal).getByRole("button", { name: "Cancel" }).click();
+await settle();
+e = await readEdge(EFG);
+check("reconnecting the source onto a decision asks for a branch; cancel keeps the edge", askedOnce && e?.source_node_id === nid("f"), `modal=${askedOnce} source=${e?.source_node_id}`);
+await drag(await centerOf(anchor(EFG, "source")), await centerOf(handle(nid("q"), "s-right")));
+await page.locator(branchModal).locator("button", { hasText: "Yes" }).first().click();
+await settle();
+e = await readEdge(EFG);
+check("picking Yes reconnects from the decision with the Yes label", e?.source_node_id === nid("q") && e?.label === "Yes", JSON.stringify(e));
+await page.screenshot({ path: `${OUT}/edge-reconnect-5-decision-branch.png` });
+
+// 9) 판단 노드에서 일반 노드로 출발을 되돌리면 분기 라벨을 지운다
+await drag(await centerOf(anchor(EFG, "source")), await centerOf(handle(nid("f"), "s-right")));
+await settle();
+e = await readEdge(EFG);
+check("moving the source off a decision clears the branch label", e?.source_node_id === nid("f") && !e?.label, JSON.stringify(e));
 
 await browser.close();
 if (!KEEP) await api("DELETE", `/api/maps/${map.id}`).catch(() => undefined);

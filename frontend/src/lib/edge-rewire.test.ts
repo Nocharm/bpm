@@ -7,9 +7,11 @@ import {
   applyReconnect,
   checkReconnect,
   decideExitConnection,
+  decideReconnectLabel,
   type ExitConnectEdge,
   findRewireProblem,
   inferFlowDirFromPositions,
+  isSourceExitChange,
   repickEdgeSides,
 } from "@/lib/edge-rewire";
 import { PRIMARY_END_HANDLE } from "@/lib/subprocess-embed";
@@ -170,6 +172,46 @@ describe("checkReconnect / applyReconnect (끝점 재연결)", () => {
       sourceHandle: "s-bottom",
       targetHandle: "in",
     });
+  });
+});
+
+describe("isSourceExitChange (재연결 출구 선택 목록)", () => {
+  it("출발 노드가 바뀌거나 같은 노드의 다른 출구 핸들이면 true — 보조 끝을 같은 SP 한 점에 다시 놓은 경우 포함", () => {
+    const old = edge("e1", "P", "B", { sourceHandle: "반려" });
+    expect(isSourceExitChange(old, { source: "Q", sourceHandle: "반려" })).toBe(true);
+    expect(isSourceExitChange(old, { source: "P", sourceHandle: PRIMARY_END_HANDLE })).toBe(true);
+  });
+
+  it("도착 끝만 옮긴 재연결(출발·출구 그대로)은 false", () => {
+    const old = edge("e1", "P", "B", { sourceHandle: "반려" });
+    expect(isSourceExitChange(old, { source: "P", sourceHandle: "반려" })).toBe(false);
+  });
+});
+
+describe("decideReconnectLabel (재연결 분기 라벨)", () => {
+  const types: Record<string, ProcessNodeType> = { A: "process", C: "process", D: "decision", E: "decision" };
+  const typeOf = (id: string): ProcessNodeType | undefined => types[id];
+
+  it("출발을 판단 노드로 옮기면 분기 라벨을 묻는다(다른 판단 노드에서 옮겨 와도)", () => {
+    expect(decideReconnectLabel(edge("e", "A", "B"), { source: "D" }, typeOf)).toBe("ask");
+    expect(decideReconnectLabel(edge("e", "E", "B", { label: "Yes" }), { source: "D" }, typeOf)).toBe("ask");
+  });
+
+  it("판단 노드에서 일반 노드로 출발을 옮기면 라벨을 지운다", () => {
+    expect(decideReconnectLabel(edge("e", "D", "B", { label: "No" }), { source: "A" }, typeOf)).toBe("clear");
+  });
+
+  it("도착만 옮기거나 일반 노드끼리 출발을 옮기면 라벨 유지", () => {
+    expect(decideReconnectLabel(edge("e", "D", "B", { label: "No" }), { source: "D" }, typeOf)).toBe("keep");
+    expect(decideReconnectLabel(edge("e", "A", "B", { label: "memo" }), { source: "C" }, typeOf)).toBe("keep");
+  });
+
+  it("applyReconnect 라벨 인자 — 문자열이면 바꾸고 빈 문자열이면 지운다", () => {
+    const old = edge("e1", "D", "B", { label: "No" });
+    const next = { source: "A", target: "B", sourceHandle: "s-right", targetHandle: "t-left" };
+    expect(applyReconnect(old, next, () => false, "").label).toBeUndefined();
+    expect(applyReconnect(old, { ...next, source: "E" }, () => false, "Yes").label).toBe("Yes");
+    expect(applyReconnect(old, next, () => false).label).toBe("No");
   });
 });
 

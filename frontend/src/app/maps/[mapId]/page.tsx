@@ -212,8 +212,10 @@ import {
   applyReconnect,
   checkReconnect,
   decideExitConnection,
+  decideReconnectLabel,
   findRewireProblem,
   inferFlowDirFromPositions,
+  isSourceExitChange,
   repickEdgeSides,
   type EdgePair,
   type ExitConnectEdge,
@@ -1150,6 +1152,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     // 노드 드롭 삽입이 마름모에서 나가는 엣지를 만들 때 — 분기 선택 전엔 삽입을 적용하지 않고 보류.
     // 픽 시 nextEdges(라벨 부여)로 삽입 적용, 취소 시 미적용(엣지가 먼저 생기지 않게).
     | { kind: "pendingInsert"; nextEdges: Edge[]; freshId: string; at: { x: number; y: number } }
+    // 끝점 재연결이 출발을 판단 노드로 옮길 때 — 선택 시 그 라벨로 재연결 적용, 취소면 엣지 그대로
+    | { kind: "reconnect"; oldEdge: Edge; connection: Connection; at: { x: number; y: number } }
     | null
   >(null);
   // 출력 1개 충돌 시 삽입/교체/취소 모달 — source의 기존 출력이 있을 때 새 target 연결을 어떻게 할지.
@@ -4021,8 +4025,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 엣지 끝점 재연결 적용(사용자 결정 2026-10-06) — 같은 id·라벨·선 모양·gateway를 유지하고 끝점·핸들만 바꾼다.
   // 새 연결과 같은 검사(자기루프·A↔B 역행·같은 출구 중복·출력 규칙, lib/edge-rewire checkReconnect)에 막히면
   // 같은 토스트로 안내하고 그대로 둔다. 빈 곳에 놓으면 RF가 onReconnect를 부르지 않아 자연히 취소된다.
+  // branchLabel: 분기 모달에서 고른 라벨(출발을 판단 노드로 옮긴 재연결의 두 번째 진입).
   const applyEdgeReconnect = useCallback(
-    (oldEdge: Edge, connection: Connection) => {
+    (oldEdge: Edge, connection: Connection, branchLabel?: string) => {
       if (readOnly || !connection.source || !connection.target) {
         return;
       }
@@ -4062,25 +4067,35 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (block === "selfLoop") {
         return;
       }
-      const isSub = (nodeId: string): boolean =>
-        nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "subprocess";
+      // 분기 라벨은 판단 출구의 것 — 판단 노드로 옮기면 새 연결처럼 묻고(취소=그대로), 판단에서 떼면 지운다
+      const typeOf = (nodeId: string) => nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType;
+      const labelAction = decideReconnectLabel(existing, next, typeOf);
+      if (labelAction === "ask" && branchLabel === undefined) {
+        setBranchPrompt({ kind: "reconnect", oldEdge, connection, at: { ...pointerScreenRef.current } });
+        return;
+      }
+      const label = labelAction === "ask" ? branchLabel : labelAction === "clear" ? "" : undefined;
+      const isSub = (nodeId: string): boolean => typeOf(nodeId) === "subprocess";
       pushHistory();
       setEdges((current) =>
-        current.map((edge) => (edge.id === existing.id ? applyReconnect(edge, next, isSub) : edge)),
+        current.map((edge) => (edge.id === existing.id ? applyReconnect(edge, next, isSub, label) : edge)),
       );
       scheduleAutoSave();
     },
     [readOnly, showToast, t, pushHistory, setEdges, scheduleAutoSave],
   );
 
-  // RF onReconnect 입구 — 출발 끝을 끝 ≥ 2인 하위프로세스로 옮기면 우측 한 점이라 어느 끝인지 몰라
-  // 핸들 연결(handleFlowConnect)처럼 출구 선택 목록으로 끝을 고른 뒤 적용한다.
+  // RF onReconnect 입구 — 출발 끝을 끝 ≥ 2인 하위프로세스에 놓으면 우측 한 점이라 어느 끝인지 몰라
+  // 핸들 연결(handleFlowConnect)처럼 출구 선택 목록으로 끝을 고른 뒤 적용한다(취소=그대로). 같은 SP에 다시 놓아도
+  // RF는 대표 끝 핸들을 잡으므로(보조 끝 엣지가 조용히 __primary__로 바뀌던 문제) 출구가 바뀌는 재연결이면 묻는다.
   const handleReconnect = useCallback(
     (oldEdge: Edge, connection: Connection) => {
       const sourceId = connection.source;
       const isSubprocessSource =
         nodesRef.current.find((node) => node.id === sourceId)?.data.nodeType === "subprocess";
-      const ends = sourceId && isSubprocessSource && sourceId !== oldEdge.source ? subEndsOf(sourceId) : [];
+      const exitChanges =
+        !!sourceId && isSourceExitChange(oldEdge, { source: sourceId, sourceHandle: connection.sourceHandle ?? null });
+      const ends = sourceId && isSubprocessSource && exitChanges ? subEndsOf(sourceId) : [];
       if (sourceId && ends.length >= 2) {
         openEndPrompt(sourceId, ends, (endKey) => applyEdgeReconnect(oldEdge, { ...connection, sourceHandle: endKey }));
         return;
@@ -4165,6 +4180,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       const label = kind === "yes" ? BRANCH_YES_LABEL : kind === "no" ? BRANCH_NO_LABEL : "";
       if (branchPrompt?.kind === "connection") {
         createEdge(branchPrompt.connection, label);
+      } else if (branchPrompt?.kind === "reconnect") {
+        applyEdgeReconnect(branchPrompt.oldEdge, branchPrompt.connection, label);
       } else if (branchPrompt?.kind === "pendingInsert") {
         // 보류했던 삽입을 이제 적용 — fresh 엣지에 분기 라벨 부여.
         const { nextEdges, freshId } = branchPrompt;
@@ -4177,7 +4194,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       setBranchPrompt(null);
     },
-    [branchPrompt, createEdge, setEdges, scheduleAutoSave],
+    [branchPrompt, createEdge, applyEdgeReconnect, setEdges, scheduleAutoSave],
   );
 
   // 새 노드가 기존 노드와 겹치지 않도록 충돌 시 대각선으로 밀어 빈 자리 탐색
@@ -4674,8 +4691,9 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 흐름 엣지 적용 — rewire면 B의 기존 연결을 끊고 A를 중간에 삽입
   // sourceHandle: 새 엣지가 나갈 하위프로세스 끝 키(front=A의 끝, back=B의 끝) — 끝 ≥ 2일 때 출구 목록이 정한다.
+  // 반환: 적용(또는 분기 라벨 모달로 보류)이면 true, 재배선 검사에 막혀 거부되면 false — 드롭이 노드 배치를 정한다.
   const applyFlowEdges = useCallback(
-    (aId: string, bId: string, zone: DropZone, rewire: boolean, sourceHandle?: string) => {
+    (aId: string, bId: string, zone: DropZone, rewire: boolean, sourceHandle?: string): boolean => {
       const current = edgesRef.current;
       const isDecision = (nodeId: string): boolean =>
         nodesRef.current.find((node) => node.id === nodeId)?.data.nodeType === "decision";
@@ -4696,7 +4714,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
       }
       if (blockRewire(current, inserted, required)) {
-        return;
+        return false;
       }
       // 삽입/재연결로 끝점이 하위프로세스가 된 엣지는 전용 핸들(in/__primary__)로 보정 — 안 그러면 RF가 못 붙임.
       const next = inserted.map((edge) => withSubprocessHandles(edge, isSubprocess));
@@ -4717,6 +4735,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setEdges(next);
       }
       scheduleAutoSave();
+      return true;
     },
     [setEdges, scheduleAutoSave, blockRewire],
   );
@@ -5187,8 +5206,15 @@ function MapEditor({ mapId }: { mapId: number }) {
         showToast(t("edge.reciprocalBlocked"));
         return;
       }
-      placeBeside(aId, bId, zone);
-      scheduleAutoSave();
+      // 노드 배치(B 옆) — 바로 적용하는 경로는 재배선 검사를 통과한 뒤에만(거부된 드롭이 노드만 옮기지 않게).
+      // 모달 경로(출구 목록·삽입/교체·출력선 선택·분기)는 모달이 떠 있는 동안 옆에 둔 채로 묻는다(현행 유지).
+      let isPlaced = false;
+      const placeDropped = () => {
+        if (isPlaced) return;
+        isPlaced = true;
+        placeBeside(aId, bId, zone);
+        scheduleAutoSave();
+      };
       // 새 엣지의 소스(front=A, back=B)가 끝 2개 이상인 하위프로세스면 먼저 출구 목록으로 끝을 고른다.
       // 고른 끝 키는 충돌 판정(그 끝의 출력만)·삽입·재연결 전부에 한정 적용된다(끝당 출력 1개 규칙).
       const continueDrop = (sourceHandle?: string) => {
@@ -5209,7 +5235,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             return;
           }
           if (exitKind === "branch") {
-            applyFlowEdges(aId, bId, zone, false, sourceHandle);
+            if (applyFlowEdges(aId, bId, zone, false, sourceHandle)) placeDropped();
             return;
           }
         }
@@ -5221,6 +5247,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               );
         const rect = conflict ? screenRectOf(bId) : null;
         if (conflict && rect) {
+          placeDropped();
           if (zone === "back") {
             // B의 기존 출력선(A행 제외, 끝 키가 있으면 그 끝만). source=B(드롭 대상), target=A(드래그 노드).
             const bOut = getOutgoingEdges(edgesRef.current, bId).filter(
@@ -5256,10 +5283,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           return;
         }
         // 충돌 없음(또는 위치 계산 실패) → 기본 삽입
-        applyFlowEdges(aId, bId, zone, true, sourceHandle);
+        if (applyFlowEdges(aId, bId, zone, true, sourceHandle)) placeDropped();
       };
       const ends = subEndsOf(newSource);
       if (ends.length >= 2) {
+        placeDropped();
         openEndPrompt(newSource, ends, continueDrop);
         return;
       }
@@ -8043,8 +8071,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     // 오버레이는 일부러 안 본다 — 프레임마다 재배정하면 레인이 흔들리고 전 엣지가 리렌더된다.
     // 평시엔 height-shift 표시 오프셋을 더한 표시 좌표로 — 저장 좌표로 배정하면 밀린 노드에서 레인이
     // 라이브 끝점과 어긋나 팬이 조용히 빠지거나 교차했다. 펼침 합성 좌표엔 이미 베이크돼 있다.
+    // 트윈 중간값(renderYOffsets)이 아니라 목표 오프셋(yOffsets)을 쓴다 — 350ms 트윈 동안 rAF마다 전 엣지를
+    // 다시 스타일링하고 레인이 중간에 뒤집히지 않게(정지 상태에선 두 값이 같아 표시는 동일).
     const fanGeom = buildFanGeom(
-      inlineComposition ? inlineComposition.nodes : shiftNodesByDisplayY(nodes, renderYOffsets),
+      inlineComposition ? inlineComposition.nodes : shiftNodesByDisplayY(nodes, yOffsets),
     );
     if (ctrlGhostIds) {
       for (const ghost of ctrlDragGhosts) {
@@ -8147,7 +8177,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ),
     );
     return finishEdges([...currentStyled, ...childStyled, ...gatewayStyled]);
-  }, [edges, nodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, renderYOffsets]);
+  }, [edges, nodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, yOffsets]);
   // 흐름 점 범례(우하단 노드 표시 정보 카드) — 펄스가 붙은 엣지가 하나라도 있을 때만
   const hasFlowPulse = styledEdges.some((edge) => isEdgePulse(edge.data?.pulse));
 
