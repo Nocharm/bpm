@@ -18,8 +18,10 @@ import { INTERVIEW_STAGES, addedNodeKeys, getGraphSignature, layoutWorkingGraph,
 import { PARAM_FIELDS, formatParamValue } from "@/lib/params";
 import { buildGraphFromAiProposal } from "@/lib/csv-import";
 import { useCatalogs } from "@/lib/catalogs";
-import { EDGE_DEFAULTS, getNextNodeAlongFlow, getPrevNodeAlongFlow } from "@/lib/canvas";
+import { EDGE_DEFAULTS, getNextNodeAlongFlow, getPrevNodeAlongFlow, styleEdgeLabelPill } from "@/lib/canvas";
+import { buildFanGeom, injectFanLanes } from "@/lib/edge-fanout";
 import { NodeActionsContext, type IoListDisplayState, type NodeActions } from "@/lib/node-actions";
+import { EDITOR_EDGE_TYPES } from "@/components/multiline-edge";
 import { ProcessNode } from "@/components/process-node";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ChoiceOverlay } from "@/components/interview/choice-card";
@@ -122,14 +124,17 @@ function PreviewCanvas({
   const [sizes, setSizes] = useState<Map<string, { width: number; height: number }>>(() => new Map());
   const { nodes, edges } = useMemo(() => {
     const laid = layoutWorkingGraph(graph, added, undefined, sizes);
-    // layoutWorkingGraph의 엣지는 스타일 미지정(화살표 없음) — 에디터/비교와 동일한 기본 엣지 스타일을 입힌다.
+    // layoutWorkingGraph의 엣지는 스타일 미지정(화살표 없음) — 에디터/비교와 동일한 기본 엣지 스타일·라벨 알약을 입힌다.
     // selected 주입 — elementsSelectable=false라 RF 대신 우리가 관리(ProcessNode 선택 링 재사용).
     return {
       nodes: laid.nodes.map((n) => ({ ...n, selected: n.id === focusedKey })),
-      // 포커스 노드의 입출 엣지는 액센트 강조 — 선택 링과 세트 (2026-07-30)
-      edges: highlightConnectedEdges(
-        laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })),
-        focusedKey ? new Set([focusedKey]) : EMPTY_KEYS,
+      // 포커스 노드의 입출 엣지는 액센트 강조 — 선택 링과 세트 (2026-07-30). 같은 핸들 형제는 팬 레인(렌더 전용)
+      edges: injectFanLanes(
+        highlightConnectedEdges(
+          laid.edges.map((e) => styleEdgeLabelPill({ ...EDGE_DEFAULTS, ...e })),
+          focusedKey ? new Set([focusedKey]) : EMPTY_KEYS,
+        ),
+        buildFanGeom(laid.nodes),
       ),
     };
   }, [graph, added, focusedKey, sizes]);
@@ -237,6 +242,8 @@ function PreviewCanvas({
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        // 에디터 엣지(최소 높이 40px·팬아웃·장애물 우회·다중행 HTML 라벨) — 수락하면 에디터에 그려질 모양 그대로
+        edgeTypes={EDITOR_EDGE_TYPES}
         onNodesChange={handleNodesChange}
         nodesDraggable={false}
         nodesConnectable={false}

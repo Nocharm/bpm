@@ -6,6 +6,7 @@ import type { ChoiceOption, InterviewMessage, WorkingGraph } from "./api";
 import type { AppNode } from "./canvas";
 import { nodeSizeOf, normalizeNodeType } from "./canvas";
 import { autoLayoutFlow } from "./flow-layout";
+import { toSideHandleEdges } from "./flow-side-handles";
 
 // 백엔드 engine.STAGES와 키·순서 동기 — 변경 시 양쪽 함께 (UI 라벨은 영어 고정)
 export const INTERVIEW_STAGES = [
@@ -190,7 +191,7 @@ export function layoutWorkingGraph(
   added: Set<string>,
   changed?: Set<string>,
   // 실측 크기(노드 key → w/h) — 속성 줄·파라미터 칩으로 커진 노드가 배치에서 이웃과 겹치지 않게.
-  // 없으면 nodeSizeOf 고정 박스(첫 렌더·선택지 카드).
+  // 없으면 nodeSizeOf 고정 박스(첫 렌더 — 프리뷰·선택지 카드 모두 실측 뒤 이 인자로 한 번 더 배치한다).
   sizes?: ReadonlyMap<string, { width: number; height: number }>,
 ): { nodes: AppNode[]; edges: Edge[] } {
   if (!graph || graph.nodes.length === 0) return { nodes: [], edges: [] };
@@ -245,7 +246,10 @@ export function layoutWorkingGraph(
     target: e.target,
     label: e.label || undefined,
   }));
-  return autoLayoutFlow(nodes, edges, "LR");
+  // 노드가 4변 핸들(sideHandles)뿐이라 자동정렬의 SP 들어오는 문(in:변)·끝 키 핸들을 s-변/t-변으로 —
+  // 없는 핸들 id면 RF가 그 엣지를 조용히 버린다
+  const laid = autoLayoutFlow(nodes, edges, "LR");
+  return { nodes: laid.nodes, edges: toSideHandleEdges(laid.edges) };
 }
 
 

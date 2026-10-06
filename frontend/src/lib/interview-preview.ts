@@ -6,8 +6,9 @@
 import type { Edge } from "@xyflow/react";
 
 import type { FlatNode, GraphEdge, VersionGraph } from "./api";
-import { buildNodeData, normalizeNodeType, type AppNode } from "./canvas";
+import { buildNodeData, normalizeNodeType, sideFromHandleId, type AppNode } from "./canvas";
 import { autoLayoutFlow } from "./flow-layout";
+import { getPreviewNodeSize } from "./preview-geometry";
 
 export const PREVIEW_EXCEPTION_COLOR = "#c2849a"; // consultant_interview.EXCEPTION_VARIANT_COLOR 동치
 export const PREVIEW_LOOP_BRANCH_NAME = "반복 여부(자동 생성됨)"; // consultant_interview.LOOP_BRANCH_NODE_NAME 동치
@@ -389,13 +390,21 @@ export function buildL5PreviewGraph(file: unknown): VersionGraph | null {
   };
 }
 
-/** 에디터 자동정렬(LR)로 좌표를 채운다 — 임포트 배치(consultant_layout.py)와 같은 계약이라 실제 맵과 같은 모양. */
+/**
+ * 에디터 자동정렬(LR)로 좌표·변을 채운다 — 임포트 배치(consultant_layout.py, rank+배리센터)의 근사치다(dagre라
+ * 좌표가 실제 임포트 맵과 다를 수 있다). 노드 박스는 프리뷰가 그리는 크기(getPreviewNodeSize)로 잡아 긴 제목이
+ * 이웃과 겹치지 않게 하고, 자동정렬이 고른 핸들(역행=위, 곁가지=위·아래)을 엣지 변으로 옮겨 미리보기도 같은 변을 쓴다.
+ */
 export function layoutPreviewGraph(graph: VersionGraph): VersionGraph {
-  const nodes: AppNode[] = graph.nodes.map((node) => ({
-    id: node.id,
-    position: { x: node.pos_x, y: node.pos_y },
-    data: buildNodeData(normalizeNodeType(node.node_type), node.title),
-  }));
+  const nodes: AppNode[] = graph.nodes.map((node) => {
+    const size = getPreviewNodeSize(node);
+    return {
+      id: node.id,
+      position: { x: node.pos_x, y: node.pos_y },
+      measured: { width: size.w, height: size.h },
+      data: buildNodeData(normalizeNodeType(node.node_type), node.title),
+    };
+  });
   const edges: Edge[] = graph.edges.map((edge) => ({
     id: edge.id,
     source: edge.source_node_id,
@@ -404,11 +413,22 @@ export function layoutPreviewGraph(graph: VersionGraph): VersionGraph {
   }));
   const laid = autoLayoutFlow(nodes, edges, "LR");
   const positions = new Map(laid.nodes.map((node) => [node.id, node.position]));
+  const handles = new Map(laid.edges.map((edge) => [edge.id, edge]));
   return {
     nodes: graph.nodes.map((node) => {
       const pos = positions.get(node.id);
       return pos ? { ...node, pos_x: pos.x, pos_y: pos.y } : node;
     }),
-    edges: graph.edges,
+    edges: graph.edges.map((edge) => {
+      const laidEdge = handles.get(edge.id);
+      if (!laidEdge) return edge;
+      return {
+        ...edge,
+        source_side: sideFromHandleId(laidEdge.sourceHandle, "right"),
+        target_side: sideFromHandleId(laidEdge.targetHandle, "left"),
+        source_handle: laidEdge.sourceHandle ?? null,
+        target_handle: laidEdge.targetHandle ?? null,
+      };
+    }),
   };
 }

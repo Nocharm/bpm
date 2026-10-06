@@ -196,8 +196,9 @@ const labelInput = page.locator('[data-id="fw-relations-edge-label"]');
 await labelInput.waitFor({ timeout: 5000 });
 await labelInput.fill("승인");
 await labelInput.press("Enter");
+// 라벨은 에디터 엣지(EDITOR_EDGE_TYPES)의 HTML 라벨 — SVG <text>가 아니다
 const labelShown = await canvas
-  .locator("text", { hasText: "승인" })
+  .locator(".react-flow__edgelabel-renderer div", { hasText: "승인" })
   .first()
   .waitFor({ timeout: 10000 })
   .then(() => true)
@@ -218,7 +219,7 @@ check("board row hides (not unmounts) the relations step", relationsHidden);
 await page.locator('[data-id="fw-consult-task-close"]').click();
 await page.locator('[data-id="fw-consult-relations"]').waitFor({ timeout: 10000 });
 const nodesAfterSelect = await canvas.locator(".react-flow__node").count();
-const labelKept = await canvas.locator("text", { hasText: "승인" }).count();
+const labelKept = await canvas.locator(".react-flow__edgelabel-renderer div", { hasText: "승인" }).count();
 check(
   "canvas edits survive opening and closing a board card",
   nodesAfterSelect === nodesBeforeSelect && labelKept > 0,

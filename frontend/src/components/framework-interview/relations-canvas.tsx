@@ -27,10 +27,13 @@ import { AtSign, Copy, GitBranch, LayoutTemplate, Maximize2, PenLine, Trash2, Un
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
+import { EDITOR_EDGE_TYPES } from "@/components/multiline-edge";
 import { ProcessNode } from "@/components/process-node";
 import type { FwCanvas, FwPlanCard } from "@/lib/api";
-import { type AppNode, getExternalL5ColorByCode } from "@/lib/canvas";
+import { type AppNode, getExternalL5ColorByCode, styleEdgeLabelPill } from "@/lib/canvas";
 import { copyText } from "@/lib/clipboard";
+import { buildFanGeom, injectFanLanes } from "@/lib/edge-fanout";
+import { deriveFlowSideHandles } from "@/lib/flow-side-handles";
 import { buildFlowHandleStyle } from "@/lib/flow-handle-style";
 import { autoLayoutFlow } from "@/lib/flow-layout";
 import { useI18n } from "@/lib/i18n";
@@ -67,38 +70,45 @@ interface PendingConnect {
   replaceEdgeId: string;  // 같은 노드에서 이미 나가는 엣지 — 확인 후 지우고 새 엣지를 잇는다
 }
 
-// 캔버스 엣지엔 핸들 개념이 없다 — 표시 단계에서 4변 핸들(sideHandles) + 우→좌로 못 박아 LR 흐름을 고정한다.
+// 캔버스 엣지엔 핸들 개념이 없다 — 표시 단계에서 4변 핸들(sideHandles)에 자동정렬과 같은 규칙(역행=위, 곁가지=위·아래,
+// 그 외 우→좌)으로 변을 고른다(flow-side-handles). 자동정렬 직후·새로고침 뒤에도 같은 좌표면 같은 변이다.
+// 라벨은 에디터와 같은 알약(styleEdgeLabelPill) — 엣지 타입이 에디터 HTML 라벨(EDITOR_EDGE_TYPES)이라 배경이 따로 필요하다.
 // deletable=false — L6 카드는 캔버스에 늘 남아야 하고 분기 마름모는 컨텍스트 메뉴로만 걷는다. Delete가
 // 노드까지 지우면 deleteElements가 연결 엣지를 먼저 떼어내 서버엔 고아 노드가, 화면엔 없는 노드가 남는다.
 // 라벨은 L6 카드 이름(taskNames)이 캔버스 title보다 우선 — 카드를 고쳐 부르면 노드도 새 이름으로 보인다.
 // 카드의 요약·역할·부서는 L5 맵의 L6 노드가 SP 지정값으로 보여주는 자리(sp*)에 넣어 같은 룩으로 읽힌다 —
 // 등록 전이라 링크 맵이 없으니 그 외 파라미터(Σ 등)는 비어 있다.
-function buildFlow(canvas: FwCanvas, taskNames: Map<string, string>, taskCards: Map<string, FwPlanCard>): { nodes: AppNode[]; edges: Edge[] } {
+function buildFlow(
+  canvas: FwCanvas,
+  taskNames: Map<string, string>,
+  taskCards: Map<string, FwPlanCard>,
+  // 실측 크기 — 이월하면 변 판정(중심점)이 자동정렬과 같은 박스를 본다
+  measured?: ReadonlyMap<string, AppNode["measured"]>,
+): { nodes: AppNode[]; edges: Edge[] } {
   const { nodes, edges } = canvasToFlow(canvas);
   const taskIdByNode = new Map(canvas.nodes.map((node) => [node.id, node.task_id]));
-  return {
-    nodes: nodes.map((node) => {
-      const taskId = taskIdByNode.get(node.id);
-      const name = taskId ? taskNames.get(taskId) : undefined;
-      const card = taskId ? taskCards.get(taskId) : undefined;
-      return {
-        ...node,
-        deletable: false,
-        data: {
-          ...node.data,
-          ...(name ? { label: name } : {}),
-          ...(card ? { description: card.summary, spAssigneeRole: card.owner_role || null, spDepartment: card.department || null } : {}),
-          // 외부 참조 카드는 연계 캔버스의 외부 L6 룩(출처 L5 배지·외부 스타일)으로 — 등록 후 플레이스홀더/링크가 되는 자리(2026-09-29)
-          ...(card?.mode === "external" && card.external
-            ? { spOriginPath: card.external.l5_label || card.external.l5_code, color: getExternalL5ColorByCode(card.external.l5_code) }
-            : {}),
-          sideHandles: true,
-          hideLinkBanner: true,
-        },
-      };
-    }),
-    edges: edges.map((edge) => ({ ...edge, sourceHandle: "s-right", targetHandle: "t-left" })),
-  };
+  const flowNodes = nodes.map((node): AppNode => {
+    const taskId = taskIdByNode.get(node.id);
+    const name = taskId ? taskNames.get(taskId) : undefined;
+    const card = taskId ? taskCards.get(taskId) : undefined;
+    return {
+      ...node,
+      deletable: false,
+      data: {
+        ...node.data,
+        ...(name ? { label: name } : {}),
+        ...(card ? { description: card.summary, spAssigneeRole: card.owner_role || null, spDepartment: card.department || null } : {}),
+        // 외부 참조 카드는 연계 캔버스의 외부 L6 룩(출처 L5 배지·외부 스타일)으로 — 등록 후 플레이스홀더/링크가 되는 자리(2026-09-29)
+        ...(card?.mode === "external" && card.external
+          ? { spOriginPath: card.external.l5_label || card.external.l5_code, color: getExternalL5ColorByCode(card.external.l5_code) }
+          : {}),
+        sideHandles: true,
+        hideLinkBanner: true,
+      },
+      ...(measured?.get(node.id) ? { measured: measured.get(node.id) } : {}),
+    };
+  });
+  return { nodes: flowNodes, edges: deriveFlowSideHandles(flowNodes, edges).map(styleEdgeLabelPill) };
 }
 
 interface RelationsCanvasProps {
@@ -141,13 +151,10 @@ function RelationsFlow({ canvas, taskNames, taskCards, onChange, onMention, busy
   }
 
   function commit(prev: FwCanvas, next: FwCanvas) {
-    const flow = buildFlow(next, taskNames, taskCards);
     // 실측(measured) 이월 — 노드 객체를 통째로 갈면 한 프레임 동안 엣지가 엉뚱한 자리에 붙는다
     const measured = new Map(nodes.map((node) => [node.id, node.measured]));
-    setNodes(flow.nodes.map((node) => {
-      const size = measured.get(node.id);
-      return size ? { ...node, measured: size } : node;
-    }));
+    const flow = buildFlow(next, taskNames, taskCards, measured);
+    setNodes(flow.nodes);
     setEdges(flow.edges);
     setUndoSnapshot(prev);
     onChange(next);
@@ -233,6 +240,7 @@ function RelationsFlow({ canvas, taskNames, taskCards, onChange, onMention, busy
 
   function handleAutoLayout() {
     const base = readCanvas();
+    // 좌표만 커밋 — 핸들은 commit의 buildFlow가 새 좌표로 같은 규칙(deriveFlowSideHandles)을 적용해 laid.edges와 같은 변이 된다
     const laid = autoLayoutFlow(nodes, edges, "LR");
     let next = base;
     for (const node of laid.nodes) next = moveNode(next, node.id, node.position.x, node.position.y);
@@ -302,8 +310,14 @@ function RelationsFlow({ canvas, taskNames, taskCards, onChange, onMention, busy
         <ReactFlow
           nodes={nodes}
           // 교체 확인 중인 엣지는 className으로 붉게 — 사용자가 무엇이 지워질지 보고 결정한다
-          edges={pendingConnect ? edges.map((edge) => (edge.id === pendingConnect.replaceEdgeId ? { ...edge, className: REPLACING_CLASS } : edge)) : edges}
+          // 같은 핸들 형제 팬 레인(렌더 전용, lib/edge-fanout) — 에디터 엣지 타입이 data.fan으로 펼친다
+          edges={injectFanLanes(
+            pendingConnect ? edges.map((edge) => (edge.id === pendingConnect.replaceEdgeId ? { ...edge, className: REPLACING_CLASS } : edge)) : edges,
+            buildFanGeom(nodes),
+          )}
           nodeTypes={nodeTypes}
+          // 에디터 엣지(최소 높이 40px·팬아웃·장애물 우회·다중행 HTML 라벨) — 같은 연결이 에디터와 같은 모양으로 그려진다
+          edgeTypes={EDITOR_EDGE_TYPES}
           nodesConnectable
           nodesDraggable
           elementsSelectable

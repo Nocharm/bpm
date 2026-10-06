@@ -1,132 +1,22 @@
 "use client";
 
-// 비활성(조상) 창의 정적 프리뷰 — ReactFlow 없이 SVG로 노드 박스+엣지선을 그려
+// 비활성(조상) 창·요약 모달·라이브러리 피크·임포트 리포트가 공유하는 정적 프리뷰 — ReactFlow 없이 SVG로 노드 박스+엣지를 그려
 // viewBox로 창 크기에 자동 맞춤. 라이브 인스턴스 N개의 부하를 피하는 경량 렌더(시각 전용).
-// 엣지는 화살표로 방향을 보이고, 흐름을 거슬러 되돌아가는 엣지(타겟이 왼쪽)는 노드 위로 돌아가는 직각 경로로 그린다 —
-// 중심점 직선이면 앞 노드들을 가로질러 순환이 안 보였다(사용자 지적 2026-09-28).
+// 기하(노드 크기·저장된 변·선 모양·우회·역행 통로·라벨)는 lib/preview-geometry 한 곳 — 역행 엣지는 노드 위(아래)
+// 통로로, 같은 줄을 건너뛰는 엣지는 노드 아래 통로로 돌려 순차 흐름처럼 묻히지 않게 한다(사용자 지적 2026-09-28).
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
+import { Link2 } from "lucide-react";
 
 import type { VersionGraph } from "@/lib/api";
-import { VERTICAL_EDGE_STUB } from "@/lib/edge-stub";
+import { EDGE_LABEL_MAX_WIDTH, EDGE_LABEL_PAD_X } from "@/lib/canvas";
+import { buildDiamondPoints, buildPreviewScene, PREVIEW_TITLE_MAX_LINES } from "@/lib/preview-geometry";
 import { resolveNodeStroke } from "@/components/process-node";
-import { nodeSizeOf, normalizeNodeType, terminalDisplayLabel } from "@/lib/canvas";
-import { buildRoundedOrthPath } from "@/lib/edge-detour";
 
-const ARROW_MARKER_ID = "scope-preview-arrow";
-const BACK_EDGE_MIN_DX = 40;   // 타겟 중심이 소스보다 이만큼 왼쪽이면 역행(flow-layout isBackEdge와 같은 문턱)
-const BACK_EDGE_CLEARANCE = VERTICAL_EDGE_STUB; // 역행 경로가 두 노드 위로 띄우는 높이 — 위·아래 변 최소 높이(lib/edge-stub)와 같은 값
-
-export interface PreviewBox {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  cx: number;
-  cy: number;
-}
-
-// 중심→중심 직선이 타겟 박스 테두리와 만나는 점 — 화살촉이 박스 밑에 묻히지 않게 거기서 끊는다
-function clipToBox(from: { cx: number; cy: number }, target: PreviewBox): { x: number; y: number } {
-  const dx = target.cx - from.cx;
-  const dy = target.cy - from.cy;
-  const kx = dx !== 0 ? target.w / 2 / Math.abs(dx) : Infinity;
-  const ky = dy !== 0 ? target.h / 2 / Math.abs(dy) : Infinity;
-  const k = Math.min(kx, ky, 1);
-  return { x: target.cx - dx * k, y: target.cy - dy * k };
-}
-
-/** 역행 엣지가 같은 노드 위에서 출발·도착할 때 통로를 레인별로 띄우는 간격(px) — 에디터 팬아웃 FAN_GAP과 동일 */
-const BACK_EDGE_LANE_GAP = 10;
-
-interface PreviewEdgeRef {
-  id: string;
-  source_node_id: string;
-  target_node_id: string;
-}
-
-/**
- * 역행 엣지 레인 — 같은 타깃(또는 같은 소스)의 역행 엣지끼리 가까운 상대가 안쪽(무지개 중첩, 교차 없는 유일한
- * 순서). 두 그룹에 모두 속하면 큰 레인. 정방향 엣지는 중심→중심 직선이라 이미 갈라져 대상 아님(맵에 없음).
- */
-export function assignPreviewBackLanes(
-  edges: readonly PreviewEdgeRef[],
-  centerById: ReadonlyMap<string, { cx: number }>,
-): Map<string, number> {
-  const back = edges.filter((edge) => {
-    const source = centerById.get(edge.source_node_id);
-    const target = centerById.get(edge.target_node_id);
-    return !!source && !!target && target.cx < source.cx - BACK_EDGE_MIN_DX;
-  });
-  const lanes = new Map<string, number>();
-  const span = (e: PreviewEdgeRef) =>
-    (centerById.get(e.source_node_id)?.cx ?? 0) - (centerById.get(e.target_node_id)?.cx ?? 0);
-  const byId = (a: PreviewEdgeRef, b: PreviewEdgeRef) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-  const groupsBy = (key: (edge: PreviewEdgeRef) => string) => {
-    const groups = new Map<string, PreviewEdgeRef[]>();
-    for (const edge of back) {
-      const k = key(edge);
-      groups.set(k, [...(groups.get(k) ?? []), edge]);
-    }
-    return [...groups.values()];
-  };
-  const groups = [...groupsBy((edge) => `t:${edge.target_node_id}`), ...groupsBy((edge) => `s:${edge.source_node_id}`)];
-  for (const group of groups) {
-    group.sort((a, b) => span(a) - span(b) || byId(a, b)).forEach((edge, k) => lanes.set(edge.id, Math.max(lanes.get(edge.id) ?? 0, k)));
-  }
-  // 두 그룹(같은 타깃·같은 소스)에 걸친 엣지가 같은 레인에 겹치면 긴 쪽을 한 칸 올린다 — 수렴할 때까지(역행 엣지는 소수)
-  for (let pass = 0; pass < 8; pass += 1) {
-    let changed = false;
-    for (const group of groups) {
-      let prev = -1;
-      for (const edge of [...group].sort((a, b) => (lanes.get(a.id) ?? 0) - (lanes.get(b.id) ?? 0) || span(a) - span(b) || byId(a, b))) {
-        const lane = lanes.get(edge.id) ?? 0;
-        if (lane <= prev) {
-          lanes.set(edge.id, prev + 1);
-          changed = true;
-          prev += 1;
-        } else {
-          prev = lane;
-        }
-      }
-    }
-    if (!changed) break;
-  }
-  return lanes;
-}
-
-/** 프리뷰 viewBox 위쪽 여백 — 가장 바깥 역행 레인의 통로가 잘리지 않게 레인만큼 더 띄운다 */
-export function previewPadTop(lanes: ReadonlyMap<string, number>): number {
-  let maxLane = 0;
-  for (const lane of lanes.values()) {
-    maxLane = Math.max(maxLane, lane);
-  }
-  return BACK_EDGE_CLEARANCE + 16 + maxLane * BACK_EDGE_LANE_GAP; // 통로 위 16px — 선·라운드가 잘리지 않는 여백
-}
-
-/** 프리뷰 엣지 경로 — 앞으로 가는 엣지는 직선(타겟 테두리에서 끝), 역행 엣지는 소스 위→두 노드 위 통로→타겟 위로 도는 직각 경로.
- *  lane(assignPreviewBackLanes)만큼 통로를 더 띄워 같은 노드의 역행 엣지가 포개지지 않게 한다. */
-export function buildPreviewEdgePath(source: PreviewBox, target: PreviewBox, lane = 0): { d: string; back: boolean } {
-  if (target.cx < source.cx - BACK_EDGE_MIN_DX) {
-    const yTop = Math.min(source.y, target.y) - BACK_EDGE_CLEARANCE - lane * BACK_EDGE_LANE_GAP;
-    const [d] = buildRoundedOrthPath([
-      { x: source.cx, y: source.y },
-      { x: source.cx, y: yTop },
-      { x: target.cx, y: yTop },
-      { x: target.cx, y: target.y },
-    ]);
-    return { d, back: true };
-  }
-  const end = clipToBox(source, target);
-  return { d: `M ${source.cx},${source.cy} L ${end.x},${end.y}`, back: false };
-}
-
-// 분기 노드는 실캔버스처럼 마름모 — 박스에 내접하는 네 꼭짓점(상·우·하·좌) (2026-09-23)
-export function buildDiamondPoints(x: number, y: number, w: number, h: number): string {
-  const cx = x + w / 2;
-  const cy = y + h / 2;
-  return `${cx},${y} ${x + w},${cy} ${cx},${y + h} ${x},${cy}`;
-}
+const EDGE_STROKE = "var(--color-border-strong)";
+// 라벨 foreignObject 상자 — 알약은 그 안 중앙에 놓이고 최대폭에서 줄바꿈(에디터 HTML 라벨과 같은 폭)
+const LABEL_BOX_W = EDGE_LABEL_MAX_WIDTH + EDGE_LABEL_PAD_X;
+const LABEL_BOX_H = 64;
 
 export function ScopePreview({
   fullGraph,
@@ -157,11 +47,13 @@ export function ScopePreview({
   const anchorRef = useRef<{ x: number; y: number } | null>(null);
   const prevZoomRef = useRef(zoom);
   const pannable = zoom > 1;
-  const scopeNodes = (fullGraph?.nodes ?? []).filter(
-    (node) => node.parent_node_id === scopeParentId,
-  );
+  const scene = useMemo(() => buildPreviewScene(fullGraph, scopeParentId), [fullGraph, scopeParentId]);
   // 빈 스코프는 팬 컨테이너 없이 조기 반환한다 — 그래프가 늦게 채워지면 리스너를 그때 붙여야 한다
-  const hasNodes = scopeNodes.length > 0;
+  const hasNodes = scene !== null;
+  // 화살촉 마커 id — 조상 창 N개·요약 모달·피크가 동시에 마운트되므로 인스턴스마다 유일해야 한다
+  // (같은 id면 첫 SVG를 참조하고, 그 SVG가 display:none이면 Chrome이 화살촉을 버린다)
+  const instanceId = useId();
+  const markerBase = `scope-preview-arrow-${instanceId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   // 휠 줌 — 피크 위 휠은 프리뷰가 전부 소비한다(뒤 캔버스·패널 스크롤과 동시 입력 금지).
   // React onWheel은 루트에 passive로 붙어 preventDefault가 무시되므로 네이티브 리스너로 단다.
@@ -194,42 +86,15 @@ export function ScopePreview({
     el.scrollTop = (el.scrollTop + anchor.y) * ratio - anchor.y;
   }, [zoom]);
 
-  if (!hasNodes) {
+  if (scene === null) {
     return <div className={`h-full w-full ${charcoal ? "bpm-l5-sky rounded-md" : "bg-canvas"}`} />;
   }
 
-  const boxes = scopeNodes.map((node) => {
-    const type = normalizeNodeType(node.node_type);
-    const size = nodeSizeOf(type);
-    return {
-      id: node.id,
-      type,
-      x: node.pos_x,
-      y: node.pos_y,
-      w: size.w,
-      h: size.h,
-      cx: node.pos_x + size.w / 2,
-      cy: node.pos_y + size.h / 2,
-      // 캔버스 정본 색 해석(resolveNodeStroke) — 무지정 노드도 타입 기본색으로 실캔버스와 동일하게
-      color: resolveNodeStroke(node.color, type),
-      // 시작·끝은 캔버스와 같은 표시 규칙 — 빈 제목 끝(임포트 L6 기본)이 빈 상자로 보이지 않게 "End"
-      title: type === "start" || type === "end" ? terminalDisplayLabel(type, node.title) : node.title,
-    };
-  });
-  const centerById = new Map(boxes.map((box) => [box.id, box]));
-  const ids = new Set(boxes.map((box) => box.id));
-  const edges = (fullGraph?.edges ?? []).filter(
-    (edge) => ids.has(edge.source_node_id) && ids.has(edge.target_node_id),
-  );
-  // 같은 노드 위로 도는 역행 엣지 레인(무지개 중첩) — 에디터 팬아웃과 같은 규칙의 SVG 판
-  const backLanes = assignPreviewBackLanes(edges, centerById);
-
-  const pad = 40;  // 좌·우·아래 여백 — 위쪽은 역행 통로까지 담는 previewPadTop
-  const minX = Math.min(...boxes.map((box) => box.x)) - pad;
-  const minY = Math.min(...boxes.map((box) => box.y)) - previewPadTop(backLanes); // 바깥 레인만큼 위 여백 추가
-  const maxX = Math.max(...boxes.map((box) => box.x + box.w)) + pad;
-  const maxY = Math.max(...boxes.map((box) => box.y + box.h)) + pad;
-  const viewBox = `${minX} ${minY} ${Math.max(1, maxX - minX)} ${Math.max(1, maxY - minY)}`;
+  const { boxes, edges, viewBox: vb } = scene;
+  const viewBox = `${vb.x} ${vb.y} ${vb.w} ${vb.h}`;
+  // 선 색별 화살촉(기본·분기 Yes/No) — marker는 선 색을 상속하지 못해 색마다 하나
+  const strokes = [EDGE_STROKE, ...new Set(edges.map((edge) => edge.stroke).filter((stroke): stroke is string => stroke !== null))];
+  const markerIdOf = (stroke: string | null) => `${markerBase}-${strokes.indexOf(stroke ?? EDGE_STROKE)}`;
 
   return (
     <div
@@ -283,70 +148,103 @@ export function ScopePreview({
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
-          <marker id={ARROW_MARKER_ID} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-            <path d="M0,0 L8,4 L0,8 z" style={{ fill: "var(--color-border-strong)" }} />
-          </marker>
+          {strokes.map((stroke, i) => (
+            <marker key={stroke} id={`${markerBase}-${i}`} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+              <path d="M0,0 L8,4 L0,8 z" style={{ fill: stroke }} />
+            </marker>
+          ))}
         </defs>
-        {edges.map((edge) => {
-          const source = centerById.get(edge.source_node_id);
-          const target = centerById.get(edge.target_node_id);
-          if (!source || !target) {
-            return null;
-          }
-          const { d, back } = buildPreviewEdgePath(source, target, backLanes.get(edge.id) ?? 0);
-          return (
-            <path
-              key={edge.id}
-              d={d}
-              fill="none"
-              strokeWidth={1.5}
-              strokeDasharray={back ? "4 3" : undefined}
-              markerEnd={`url(#${ARROW_MARKER_ID})`}
-              data-back={back || undefined}
-              style={{ stroke: "var(--color-border-strong)" }}
-            />
-          );
-        })}
+        {edges.map((edge) => (
+          <path
+            key={edge.id}
+            d={edge.d}
+            fill="none"
+            strokeWidth={1.5}
+            strokeDasharray={edge.back ? "4 3" : undefined}
+            markerEnd={`url(#${markerIdOf(edge.stroke)})`}
+            data-back={edge.back || undefined}
+            style={{ stroke: edge.stroke ?? EDGE_STROKE }}
+          />
+        ))}
         {boxes.map((box) => {
           const shapeClass = interactive
             ? "cursor-pointer [transition:all_.15s] hover:[stroke-width:3px] hover:[filter:brightness(0.92)]"
             : undefined;
-          const shapeStyle = { fill: `color-mix(in srgb, ${box.color} 18%, white)`, stroke: box.color };
+          // 캔버스 정본 색 해석(resolveNodeStroke) — 무지정 노드도 타입 기본색으로 실캔버스와 동일하게
+          const color = resolveNodeStroke(box.color, box.type);
+          const shapeStyle = { fill: `color-mix(in srgb, ${color} 18%, white)`, stroke: color };
+          const isDecision = box.type === "decision";
           return (
-          <g key={box.id}>
-            {box.type === "decision" ? (
-              <polygon
-                points={buildDiamondPoints(box.x, box.y, box.w, box.h)}
-                strokeWidth={1.5}
-                strokeLinejoin="round"
-                className={shapeClass}
-                style={shapeStyle}
-              />
-            ) : (
-              <rect
-                x={box.x}
-                y={box.y}
-                width={box.w}
-                height={box.h}
-                rx={8}
-                strokeWidth={1.5}
-                className={shapeClass}
-                style={shapeStyle}
-              />
-            )}
-            <text
-              x={box.cx}
-              y={box.cy}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fontSize={13}
-              style={{ fill: "var(--color-ink)" }}
-            >
-              {box.title}
-            </text>
-          </g>
+            <g key={box.id}>
+              {isDecision ? (
+                <polygon
+                  points={buildDiamondPoints(box.x, box.y, box.w, box.h)}
+                  strokeWidth={1.5}
+                  strokeLinejoin="round"
+                  className={shapeClass}
+                  style={shapeStyle}
+                />
+              ) : (
+                <rect
+                  x={box.x}
+                  y={box.y}
+                  width={box.w}
+                  height={box.h}
+                  rx={8}
+                  strokeWidth={1.5}
+                  className={shapeClass}
+                  style={shapeStyle}
+                />
+              )}
+              {/* 제목 — 노드 폭 안에서 줄바꿈(\n 존중), 최대 줄 수를 넘으면 말줄임. 에디터 노드처럼 HTML 텍스트라
+                  긴 한글 제목이 이웃 노드로 넘치지 않는다. pointer-events-none — 호버는 도형이 받는다 */}
+              <foreignObject x={box.x} y={box.y} width={box.w} height={box.h} className="pointer-events-none">
+                <div
+                  className={`flex h-full w-full items-center justify-center text-center ${isDecision ? "px-5" : "px-3"}`}
+                  style={{ color: "var(--color-ink)", fontSize: isDecision ? 12 : 14, lineHeight: isDecision ? "16px" : "20px" }}
+                >
+                  <span
+                    className="overflow-hidden whitespace-pre-line [overflow-wrap:anywhere]"
+                    style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: PREVIEW_TITLE_MAX_LINES }}
+                  >
+                    {box.title}
+                  </span>
+                </div>
+              </foreignObject>
+            </g>
           );
         })}
+        {/* 엣지 라벨 — 노드 위에 그려 가려지지 않게(에디터 EdgeLabelRenderer와 같은 층). 알약 스타일은 에디터와 같은 출처 */}
+        {edges.map((edge) =>
+          edge.label && edge.labelStyle ? (
+            <foreignObject
+              key={`label-${edge.id}`}
+              x={edge.labelX - LABEL_BOX_W / 2}
+              y={edge.labelY - LABEL_BOX_H / 2}
+              width={LABEL_BOX_W}
+              height={LABEL_BOX_H}
+              className="pointer-events-none overflow-visible"
+            >
+              <div className="flex h-full w-full items-center justify-center">
+                <span
+                  data-id={`scope-preview-edge-label-${edge.id}`}
+                  data-mirrored={edge.mirrored || undefined}
+                  className="whitespace-pre-wrap text-center leading-tight [overflow-wrap:break-word]"
+                  style={{ ...edge.labelStyle, maxWidth: EDGE_LABEL_MAX_WIDTH }}
+                >
+                  {edge.mirrored ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Link2 size={11} strokeWidth={1.5} className="shrink-0" aria-hidden />
+                      <span>{edge.label}</span>
+                    </span>
+                  ) : (
+                    edge.label
+                  )}
+                </span>
+              </div>
+            </foreignObject>
+          ) : null,
+        )}
       </svg>
     </div>
   );

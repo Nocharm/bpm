@@ -47,15 +47,13 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
 import { formatParamValue, PARAM_LABEL_KEY, SP_PARAM_FIELDS, type SpParamField } from "@/lib/params";
+import { usePreviewZoom } from "@/lib/use-preview-zoom";
 
 // 행 호버로 피크가 열리기까지의 지연 — 스침 오픈 방지(클릭은 즉시)
 export const PEEK_HOVER_DELAY_MS = 2500;
 // 패널 이탈 후 닫힘 유예 — 줌 버튼·스크롤바로 가는 도중 커서가 잠깐 패널을 벗어나도 안 꺼지게.
 // 재진입 시 취소 (사용자 요청 2026-08-31). FrameworkPeekTrigger와 같은 값.
 const CLOSE_GRACE_MS = 400;
-const ZOOM_STEP = 0.25;
-const ZOOM_MIN = 1; // 1=창 맞춤 — 그보다 축소하면 더 안 읽힌다(확대 전용)
-const ZOOM_MAX = 3;
 // 목업 높이 전환 — 호버 시 표시 필드가 바뀌며 점프하던 것을 아코디언으로 (사용자 요청 2026-08-31)
 const MOCK_HEIGHT_MS = 200;
 // 미리보기 위 액션·표기 공통 폭 — 추가/이동 버튼과 게시본 표기를 같은 폭으로 맞춘다(긴 라벨 기준, 한/영 공통)
@@ -402,17 +400,10 @@ export function SubprocessPreviewPeek({
     return () => observer.disconnect();
   }, [tab]); // 탭 전환으로 목업이 언마운트/재마운트되면 다시 붙인다
 
-  // 미리보기 줌 — 1=창 맞춤, 확대 시 ScopePreview가 컨테이너 스크롤로 이동시킨다
-  const [zoom, setZoom] = useState(1);
-  // 줌 스텝 단일 경로 — 버튼과 휠이 같은 클램프를 쓰고, 휠 앵커 계산용으로 적용된 배율을 돌려준다
-  const applyZoomStep = (direction: 1 | -1) => {
-    const next = Math.min(
-      ZOOM_MAX,
-      Math.max(ZOOM_MIN, Math.round((zoom + direction * ZOOM_STEP) * 100) / 100),
-    );
-    setZoom(next);
-    return next;
-  };
+  // 미리보기 줌 — 첫 배율은 노드가 읽히는 크기(임포트 미리보기와 같은 훅), 확대 시 ScopePreview가 컨테이너 스크롤로 이동시킨다
+  const { paneRef, zoom, canZoomIn, canZoomOut, stepZoom } = usePreviewZoom(
+    fetchState.status === "ready" ? fetchState.graph : null,
+  );
   // 목업 드래그 중 피크 숨김 — 드래그 소스를 언마운트하면 Chrome이 드래그를 취소하므로
   // visibility로만 숨기고(마운트 유지) 드롭/취소 후 dragend에서 닫는다
   const [dragging, setDragging] = useState(false);
@@ -939,7 +930,7 @@ export function SubprocessPreviewPeek({
           )}
         </div>
         {/* preview — 게시본 그래프(타입 색 SVG), 우하단 게시본 표기 워터마크 */}
-        <div className="relative h-full min-w-0 flex-1 bg-canvas">
+        <div ref={paneRef} className="relative h-full min-w-0 flex-1 bg-canvas">
           {!designated ? (
             <div data-id="library-peek-unregistered" className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
               <Lock size={16} strokeWidth={1.5} className="text-ink-tertiary" />
@@ -964,9 +955,9 @@ export function SubprocessPreviewPeek({
               {t("library.peekEmptyGraph")}
             </div>
           ) : (
-            <ScopePreview fullGraph={fetchState.graph} scopeParentId={null} zoom={zoom} onZoom={applyZoomStep} />
+            <ScopePreview fullGraph={fetchState.graph} scopeParentId={null} zoom={zoom} onZoom={stepZoom} />
           )}
-          {/* 줌 — 확대는 SVG를 키우고 컨테이너 스크롤로 이동(팬 구현 없이). 1배가 창 맞춤이라 하한 */}
+          {/* 줌 — 확대는 SVG를 키우고 컨테이너 스크롤로 이동(팬 구현 없이). 1배(창 맞춤)가 하한, 첫 배율은 노드가 읽히는 크기 */}
           {designated && fetchState.status === "ready" && fetchState.graph.nodes.length > 0 && (
             <div
               data-id="library-peek-zoom"
@@ -976,8 +967,8 @@ export function SubprocessPreviewPeek({
                 type="button"
                 data-id="library-peek-zoom-out"
                 title={t("library.peekZoomOut")}
-                disabled={zoom <= ZOOM_MIN}
-                onClick={() => applyZoomStep(-1)}
+                disabled={!canZoomOut}
+                onClick={() => stepZoom(-1)}
                 className="px-1.5 py-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 <ZoomOut size={14} strokeWidth={1.5} />
@@ -989,8 +980,8 @@ export function SubprocessPreviewPeek({
                 type="button"
                 data-id="library-peek-zoom-in"
                 title={t("library.peekZoomIn")}
-                disabled={zoom >= ZOOM_MAX}
-                onClick={() => applyZoomStep(1)}
+                disabled={!canZoomIn}
+                onClick={() => stepZoom(1)}
                 className="px-1.5 py-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 <ZoomIn size={14} strokeWidth={1.5} />
