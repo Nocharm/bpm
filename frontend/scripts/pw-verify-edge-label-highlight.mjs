@@ -115,7 +115,7 @@ check(baseLabel.color !== VIOLET && baseLabel.border !== VIOLET, `[0] idle label
   await sleep(400);
   check(await page.locator(`.react-flow__edge[data-id="${childEdge}"].selected`).count() === 1, "[3] child edge selected by click");
   check((await pathStroke(childEdge)) === VIOLET, `[3] child edge selected stroke violet (${await pathStroke(childEdge)})`);
-  const inspector = await page.evaluate(() => document.body.innerText.includes("엣지(임베드)") || document.body.innerText.includes("Edge (embedded)"));
+  const inspector = await page.evaluate(() => document.body.innerText.includes("연결선(임베드)") || document.body.innerText.includes("Edge (embedded)"));
   check(inspector, "[3] inspector shows embedded edge section");
   await page.screenshot({ path: `${SHOT_DIR}/edge-label-3-child-edge-selected.png`, clip: clipAround([await nodeBox("Order Fulfillment"), await nodeBox("Process Request", 1)], 50) });
   // 접기

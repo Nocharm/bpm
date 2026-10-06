@@ -60,7 +60,7 @@ describe("formatNotification", () => {
                  actor_name: "Lee B", reason: "숫자 파라미터 누락" },
     };
     const ko = formatNotification(item, makeT("ko"));
-    expect(ko.body).toBe("Lee B님이 'As-Is'을 반려했습니다 - 숫자 파라미터 누락");
+    expect(ko.body).toBe("Lee B님이 'As-Is'을 거절했습니다 - 숫자 파라미터 누락");
   });
 
   it("permission_superseded - 기계 코드 사유는 번역", () => {

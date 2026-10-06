@@ -277,7 +277,7 @@ if (menuPoint !== null) {
   const edgesBeforeMenu = await countEdges();
   await page.mouse.click(menuPoint.x, menuPoint.y, { button: "right" });
   await page.locator('[data-id="context-menu"]').waitFor({ timeout: 5000 });
-  await page.locator('[data-id="context-menu"] button').filter({ hasText: "엣지 삭제" }).click();
+  await page.locator('[data-id="context-menu"] button').filter({ hasText: "연결선 삭제" }).click();
   const menuDeleted = await page
     .waitForFunction(
       (want) => document.querySelectorAll('[data-id="fw-consult-relations-canvas"] .react-flow__edge').length === want,
