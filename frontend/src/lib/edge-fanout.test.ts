@@ -177,6 +177,19 @@ describe("assignFanLanes - 가족과 정렬", () => {
     expect(lanes.get("a")?.t).toMatchObject({ r: 50 });
   });
 
+  it("세로 정렬 좌→좌 루프백 레인도 최소 거리 40부터(반경 40+10k) — 좌·우 변도 위·아래와 같다", () => {
+    // Arrange — T 왼쪽 핸들로 아래 같은 열의 M(가까움)·N(멂)이 left→left로 되돌아온다
+    const geom = new Map([["T", proc(0, 0)], ["M", proc(0, 300)], ["N", proc(0, 600)]]);
+    // Act
+    const lanes = assignFanLanes(
+      [edge("m", "M", "T", "s-left", "t-left"), edge("n", "N", "T", "s-left", "t-left")],
+      geom,
+    );
+    // Assert
+    expect(lanes.get("m")?.t).toMatchObject({ k: 0, r: 40 });
+    expect(lanes.get("n")?.t).toMatchObject({ k: 1, r: 50 });
+  });
+
   it("하위프로세스 끝 핸들은 우측 한 점에 겹치므로 끝 키가 달라도 한 팬 그룹이다", () => {
     const sp: FanNodeGeom = { x: 0, y: 200, w: 180, h: 64, nodeType: "subprocess" };
     const geom = new Map([["S", sp], ["T", proc(400, 0)], ["U", proc(400, 400)]]);
@@ -319,7 +332,7 @@ describe("buildFanStepPath - 꺾은선 게이트 포인트 + 원호", () => {
     expect(outer!.d).toContain("L 135,150 A 50 50 0 0 0 85,200");
   });
 
-  it("raw 위·아래 끝도 최소 높이 40 — 레인까지 40px 못 뜨면 null(현행 경로가 40px 스텁으로 그린다)", () => {
+  it("정면 아닌 raw 끝은 네 변 모두 최소 거리 40 — 레인까지 40px 못 뜨면 null(현행 경로가 40px 스텁으로 그린다)", () => {
     const back: FanPathArgs = {
       sourceX: 385,
       sourceY: 200,
@@ -330,7 +343,7 @@ describe("buildFanStepPath - 꺾은선 게이트 포인트 + 원호", () => {
     };
     // 반경 34 레인 = raw 위쪽 소스가 34px만 뜬다(종전엔 20px 스텁만 요구해 통과)
     expect(buildFanStepPath(back, { t: laneR(0, 34) })).toBeNull();
-    // 아래 핸들 → 좌측 레인(같은 방향 2코너): 수직 여유 34px(< 40+1)면 null — 종전엔 20px만 뜨고 꺾었다
+    // 두 끝이 서로 정면인 아래→좌 연결은 최소 거리 대상이 아니다(lib/edge-stub와 같은 판정) — RF 스텁 20px로 꺾는다
     const branch: FanPathArgs = {
       sourceX: 58,
       sourceY: 170,
@@ -339,9 +352,19 @@ describe("buildFanStepPath - 꺾은선 게이트 포인트 + 원호", () => {
       sourcePosition: Position.Bottom,
       targetPosition: Position.Left,
     };
-    expect(buildFanStepPath(branch, { t: lane(0) })).toBeNull();
-    // 좌·우 raw 끝은 그대로 20px 스텁(LR 기본 케이스 회귀 없음)
+    expect(buildFanStepPath(branch, { t: lane(0) })).not.toBeNull();
+    // 마주 보는 좌·우 raw 끝도 20px 스텁(LR 기본 케이스 회귀 없음)
     expect(buildFanStepPath(LR, { t: lane(0) })).not.toBeNull();
+    // 세로 정렬의 좌→좌 루프백 — raw 좌측 끝도 최소 거리 40(반경 34 레인이면 null)
+    const tbBack: FanPathArgs = {
+      sourceX: 200,
+      sourceY: 385,
+      targetX: 200,
+      targetY: 85,
+      sourcePosition: Position.Left,
+      targetPosition: Position.Left,
+    };
+    expect(buildFanStepPath(tbBack, { t: laneR(0, 34) })).toBeNull();
   });
 
   it("분기 아래 핸들 → 노드 좌측 핸들(출발·도착 방향 같음): 중간 높이에서 한 번 꺾어 레인으로", () => {

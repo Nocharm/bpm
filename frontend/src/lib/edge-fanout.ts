@@ -10,7 +10,7 @@ import {
   sideFromHandleId,
 } from "@/lib/canvas";
 import { buildRoundedOrthPath, type ObstacleRect } from "@/lib/edge-detour";
-import { getBezierEndOffset, VERTICAL_EDGE_STUB } from "@/lib/edge-stub";
+import { EDGE_MIN_STUB, getBezierEndOffset, needsEdgeStub } from "@/lib/edge-stub";
 
 /** 첫 아크 반경(px) — 20px 스텁보다 짧아 촘촘한 배치에서도 성립 */
 export const FAN_R0 = 14;
@@ -141,14 +141,14 @@ function setLane(out: Map<string, EdgeFan>, ref: EndRef, lane: FanLane): void {
 
 /**
  * 한 앵커 그룹의 레인 배정. 측면 부호 × (동측 | 앞쪽 대향)의 네 가족을 따로 센다 —
- * 동측(루프백)은 가까운 상대가 안쪽(무지개, 기저 R0+스텁 — 위·아래 변은 최소 높이 VERTICAL_EDGE_STUB 이상), 대향은 먼 상대가 안쪽. 각각 교차가 생기지 않는
+ * 동측(루프백)은 가까운 상대가 안쪽(무지개, 기저 R0+스텁 — 최소 거리 EDGE_MIN_STUB 이상), 대향은 먼 상대가 안쪽. 각각 교차가 생기지 않는
  * 유일한 순서. 같은 측면에 둘 다 있으면 동측이 안쪽이고 대향은 그 바깥에서 시작한다(리뷰 C3).
  * 반경(r)은 공칭 base+10k를 형제의 측면 거리·수평 여유에 맞춰 바깥(가까운 쪽)부터 안으로 압축한다 —
  * 반경만 개별 클램프하면 순서가 뒤집혀 교차한다(리뷰 C2). 여유가 6px 미만이면 그 끝은 팬 없음(r=0). 동률은 엣지 id.
  */
-function assignGroup(members: EndRef[], out: Map<string, EdgeFan>, isVerticalSide: boolean): void {
-  // 루프백 레인 반경 = 변에서 뜨는 높이 — 위·아래 변은 최소 높이(lib/edge-stub) 아래로 내리지 않는다
-  const behindBase = isVerticalSide ? Math.max(FAN_R0 + FAN_STUB, VERTICAL_EDGE_STUB) : FAN_R0 + FAN_STUB;
+function assignGroup(members: EndRef[], out: Map<string, EdgeFan>): void {
+  // 루프백 레인 반경 = 변에서 뜨는 거리 — 네 변 모두 최소 거리(lib/edge-stub) 아래로 내리지 않는다
+  const behindBase = Math.max(FAN_R0 + FAN_STUB, EDGE_MIN_STUB);
   const n = members.length;
   const byLateral = [...members].sort((a, b) => a.v - b.v || compareId(a, b));
   const lanes = new Map<EndRef, FanLane>();
@@ -238,9 +238,9 @@ export function assignFanLanes(
     });
   }
   const out = new Map<string, EdgeFan>();
-  for (const [key, members] of groups) {
+  for (const members of groups.values()) {
     if (members.length >= 2) {
-      assignGroup(members, out, key.endsWith("|top") || key.endsWith("|bottom"));
+      assignGroup(members, out);
     }
   }
   return out;
@@ -370,22 +370,24 @@ function resolveFanEnd(p: Vec, position: Position, other: Vec, lane: FanLane | u
   return { p, out, lat, side, r, vertex, gate: add(vertex, lat, side * r) };
 }
 
-/** raw 끝이 꺾기 전 확보할 직진 거리 — 진행 방향이 세로(위·아래 변)면 최소 높이 40, 가로면 RF 스텁 20 */
-function rawStubOf(dir: Vec): number {
-  return dir.x === 0 ? Math.max(FAN_STUB, VERTICAL_EDGE_STUB) : FAN_STUB;
+/** raw 끝이 꺾기 전 확보할 직진 거리 — 두 끝이 서로 정면이면 RF 스텁 20, 아니면 최소 거리 40(lib/edge-stub와 같은 판정) */
+function rawStubOf(isFacing: boolean): number {
+  return isFacing ? FAN_STUB : Math.max(FAN_STUB, EDGE_MIN_STUB);
 }
 
 /**
  * 소형 직각 라우터 —P에서 d1 방향으로 출발해 Q에 d2 방향으로 도착하는 직각 폴리라인.
  * 직교면 코너 1개, 같은 방향이면 중간(절반 + bias)에서 코너 2개, 반대 방향·역행이면 null.
- * raw 끝(팬 없는 실제 핸들)은 RF와 같은 20px 스텁, 위·아래 변이면 최소 높이(VERTICAL_EDGE_STUB)를 확보해야 한다.
+ * raw 끝(팬 없는 실제 핸들)은 RF와 같은 20px 스텁, 두 끝이 서로 정면이 아니면 최소 거리(EDGE_MIN_STUB)를 확보해야 한다.
  * bias는 소스 레인만큼 중간 구간을 비켜 세우는 값 — 같은 두 노드를 반대로 잇는 양끝 팬 엣지 쌍의 중간 구간이
  * 정확히 포개지지 않게 한다.
  */
-function routeOrth(P: Vec, d1: Vec, Q: Vec, d2: Vec, pIsRaw: boolean, qIsRaw: boolean, bias = 0): Vec[] | null {
-  const pMin = pIsRaw ? rawStubOf(d1) : 0;
-  const qMin = qIsRaw ? rawStubOf(d2) : 0;
+function routeOrth(
+  P: Vec, d1: Vec, Q: Vec, d2: Vec, pIsRaw: boolean, qIsRaw: boolean, isFacing: boolean, bias = 0,
+): Vec[] | null {
   const rel = { x: Q.x - P.x, y: Q.y - P.y };
+  const pMin = pIsRaw ? rawStubOf(isFacing) : 0;
+  const qMin = qIsRaw ? rawStubOf(isFacing) : 0;
   const align = dot(d1, d2);
   if (Math.abs(align) < 0.5) {
     const t = dot(rel, d1);
@@ -440,7 +442,8 @@ export function buildFanStepPath(
   const d1 = head ? add({ x: 0, y: 0 }, head.lat, head.side) : sourceAxes.out;
   const Q = tail ? tail.gate : E;
   const d2 = tail ? add({ x: 0, y: 0 }, tail.lat, -tail.side) : add({ x: 0, y: 0 }, targetAxes.out, -1);
-  const rawRoute = routeOrth(P, d1, Q, d2, !head, !tail, head ? head.r - FAN_R0 : 0);
+  // 정면 판정은 게이트가 아닌 실제 두 핸들로 — 비팬 경로(lib/edge-stub)와 같은 대상에만 최소 거리
+  const rawRoute = routeOrth(P, d1, Q, d2, !head, !tail, !needsEdgeStub(args), head ? head.r - FAN_R0 : 0);
   if (!rawRoute) {
     return null;
   }
@@ -499,7 +502,7 @@ export function buildFanBezierPath(args: FanPathArgs, fan: EdgeFan): [string, nu
   }
   const sourceAxes = axesOf(sideOfPosition(args.sourcePosition));
   const targetAxes = axesOf(sideOfPosition(args.targetPosition));
-  // 팬 없는 끝은 RF 제어점 거리 + 위·아래 끝 최소 높이(lib/edge-stub)
+  // 팬 없는 끝은 RF 제어점 거리 + 정면 아닌 연결의 최소 거리(lib/edge-stub)
   const cs = head ? head.r * BEZIER_CONTROL_PER_RADIUS : getBezierEndOffset(args, "source");
   const ct = tail ? tail.r * BEZIER_CONTROL_PER_RADIUS : getBezierEndOffset(args, "target");
   const c1 = add(S, sourceAxes.out, cs);

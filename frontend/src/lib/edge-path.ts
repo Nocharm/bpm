@@ -1,5 +1,5 @@
 // 엣지 경로 단일 해석기 — 선 모양별 경로와 라벨 앵커를 한 곳에서 정한다(순수).
-// 꺾은선은 팬(lib/edge-fanout) → 장애물 우회(lib/edge-detour) → RF+최소 높이(lib/edge-stub) 순으로 시도한다.
+// 꺾은선은 팬(lib/edge-fanout) → 장애물 우회(lib/edge-detour) → RF+최소 거리(lib/edge-stub) 순으로 시도한다.
 // 에디터·L5(multiline-edge)와 비교(LabeledSmoothEdge)가 공유 — 표면마다 체인을 따로 두면 비교만 우회가 빠지는
 // 식으로 갈라진다(2026-10-06 감사). 라벨 위치도 여기서 나온다: 우회는 가리지 않는 구간 중앙, 팬은 팬 경로 규칙,
 // 곡선은 t=0.5.

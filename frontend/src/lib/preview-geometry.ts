@@ -26,7 +26,7 @@ import {
   isPolylineBlocked,
   toEdgeObstacle,
 } from "@/lib/edge-detour";
-import { getBezierPathWithStub, getSmoothStepPathWithStub, VERTICAL_EDGE_STUB } from "@/lib/edge-stub";
+import { EDGE_MIN_STUB, getBezierPathWithStub, getSmoothStepPathWithStub } from "@/lib/edge-stub";
 import { isBackEdge } from "@/lib/flow-layout";
 import { applyMirroredEndLabels, deriveSubEnds, PRIMARY_END_HANDLE, type SubEnd } from "@/lib/subprocess-embed";
 
@@ -38,8 +38,8 @@ const SP_MIN_WIDTH = 180;
 const SP_MAX_WIDTH = 216;
 // 좌·우 핸들을 제목 라인 높이에 고정(px) — process-node NodeHandles sideAnchorTop·SubprocessHandles anchorTop과 동기
 const SIDE_ANCHOR_TOP = 18;
-/** 역행 통로가 노드 위(아래)로 띄우는 높이 — 위·아래 변 최소 높이(lib/edge-stub)와 같은 값 */
-const BACK_EDGE_CLEARANCE = VERTICAL_EDGE_STUB;
+/** 역행 통로가 노드 위(아래)로 띄우는 높이 — 연결선 최소 거리(lib/edge-stub)와 같은 값 */
+const BACK_EDGE_CLEARANCE = EDGE_MIN_STUB;
 /** 같은 노드의 역행 엣지가 포개지지 않게 레인마다 더 띄우는 간격(px) — 에디터 팬아웃 FAN_GAP과 동일 */
 const BACK_EDGE_LANE_GAP = 10;
 // 같은 줄을 건너뛰는 정방향 엣지가 아래 통로로 내려가기 전 수평으로 빠지는 길이(px) — RF smoothstep 기본 스텁
@@ -381,6 +381,8 @@ export function buildPreviewScene(graph: VersionGraph | null, scopeParentId: str
 
   let edgeTop = Infinity;
   let edgeBottom = -Infinity;
+  let edgeLeft = Infinity;
+  let edgeRight = -Infinity;
   const edges = rawEdges.map((edge, i): PreviewEdgeShape => {
     const source = boxById.get(edge.source_node_id) as PreviewNodeBox;
     const target = boxById.get(edge.target_node_id) as PreviewNodeBox;
@@ -397,15 +399,19 @@ export function buildPreviewScene(graph: VersionGraph | null, scopeParentId: str
     } else {
       ({ d, labelX, labelY, points } = buildPreviewForwardPath(source, target, sides, edge.line_style, obstacles));
     }
-    // viewBox 세로 범위 — 통로·위아래 스텁이 잘리지 않게(점을 모르는 RF 경로는 위·아래 끝의 최소 높이로 근사)
+    // viewBox 범위 — 통로·스텁이 잘리지 않게(점을 모르는 RF 경로는 끝의 최소 거리로 근사, 세로 정렬의 좌→좌·우→우 포함)
     const ends = [getPreviewAnchor(source, sides.source), getPreviewAnchor(target, sides.target)];
     for (const p of points ?? ends) {
       edgeTop = Math.min(edgeTop, p.y);
       edgeBottom = Math.max(edgeBottom, p.y);
+      edgeLeft = Math.min(edgeLeft, p.x);
+      edgeRight = Math.max(edgeRight, p.x);
     }
     if (!points) {
       if (sides.source === "top" || sides.target === "top") edgeTop = Math.min(edgeTop, Math.min(ends[0].y, ends[1].y) - BACK_EDGE_CLEARANCE);
       if (sides.source === "bottom" || sides.target === "bottom") edgeBottom = Math.max(edgeBottom, Math.max(ends[0].y, ends[1].y) + BACK_EDGE_CLEARANCE);
+      if (sides.source === "left" || sides.target === "left") edgeLeft = Math.min(edgeLeft, Math.min(ends[0].x, ends[1].x) - BACK_EDGE_CLEARANCE);
+      if (sides.source === "right" || sides.target === "right") edgeRight = Math.max(edgeRight, Math.max(ends[0].x, ends[1].x) + BACK_EDGE_CLEARANCE);
     }
     const styled = labeled[i];
     const stroke = typeof styled.style?.stroke === "string" ? styled.style.stroke : null;
@@ -422,8 +428,8 @@ export function buildPreviewScene(graph: VersionGraph | null, scopeParentId: str
     };
   });
 
-  const minX = Math.min(...boxes.map((box) => box.x)) - VIEW_PAD;
-  const maxX = Math.max(...boxes.map((box) => box.x + box.w)) + VIEW_PAD;
+  const minX = Math.min(Math.min(...boxes.map((box) => box.x)) - VIEW_PAD, edgeLeft - EDGE_MARGIN);
+  const maxX = Math.max(Math.max(...boxes.map((box) => box.x + box.w)) + VIEW_PAD, edgeRight + EDGE_MARGIN);
   const minY = Math.min(Math.min(...boxes.map((box) => box.y)) - VIEW_PAD, edgeTop - EDGE_MARGIN);
   const maxY = Math.max(Math.max(...boxes.map((box) => box.y + box.h)) + VIEW_PAD, edgeBottom + EDGE_MARGIN);
   return {

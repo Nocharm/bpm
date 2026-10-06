@@ -6,7 +6,7 @@
 // RF가 그리는 U자와도 달라 판정이 어긋난다 → 그 쌍은 RF/최소 높이 경로(lib/edge-stub)에 맡긴다.
 import { Position } from "@xyflow/react";
 
-import { getFrontDistance, VERTICAL_EDGE_STUB } from "@/lib/edge-stub";
+import { EDGE_MIN_STUB, getFrontDistance } from "@/lib/edge-stub";
 
 export interface ObstacleRect {
   x: number;
@@ -33,7 +33,7 @@ const MARGIN = 12;
 // 모서리 라운드 반경 — RF smoothstep 기본 5와 통일 (px)
 const CORNER_RADIUS = 5;
 // 좌·우 끝이 회랑까지 확보하는 최소 직진 거리 — RF smoothstep 기본 offset과 같다 (px).
-// 위·아래 끝은 VERTICAL_EDGE_STUB(40). 두 끝 사이가 2배보다 좁으면 RF가 3구간이 아닌 S자를 그려 우회 대상 외
+// 위·아래 끝은 EDGE_MIN_STUB(40). 두 끝 사이가 2배보다 좁으면 RF가 3구간이 아닌 S자를 그려 우회 대상 외
 const SIDE_EDGE_STUB = 20;
 
 // 사전 인플레이트 장애물 — 프레임마다 엣지×노드 규모의 inflate 재할당을 없애기 위해
@@ -134,7 +134,7 @@ export function buildDetourPoints(a: DetourArgs): { x: number; y: number }[] | n
     (a.targetPosition === Position.Top || a.targetPosition === Position.Bottom);
   if (!horizontal && !vertical) return null;
   // 마주 보는 쌍만 — 두 끝의 정면 거리가 모두 스텁 2배 이상이어야 RF 기본 경로도 같은 3구간(중앙 회랑)이다
-  const stub = horizontal ? SIDE_EDGE_STUB : VERTICAL_EDGE_STUB;
+  const stub = horizontal ? SIDE_EDGE_STUB : EDGE_MIN_STUB;
   const sourceFront = getFrontDistance(a.sourceX, a.sourceY, a.sourcePosition, a.targetX, a.targetY);
   const targetFront = getFrontDistance(a.targetX, a.targetY, a.targetPosition, a.sourceX, a.sourceY);
   if (sourceFront < 2 * stub || targetFront < 2 * stub) return null;
