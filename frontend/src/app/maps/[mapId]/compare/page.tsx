@@ -90,6 +90,14 @@ import { useMe } from "@/lib/me";
 import { buildIoDiff } from "@/lib/io-diff";
 import { classifyFieldDiff } from "@/lib/compare-field-diff";
 import { pickInitialCompareVersions } from "@/lib/compare-initial";
+import {
+  type CompareRect,
+  getArcControlDepth,
+  getCompareEdgeLabel,
+  getDiffPillAllowance,
+  getRemovedArcLevel,
+  placeRemovedNodes,
+} from "@/lib/compare-layout";
 import { useResizableWidth } from "@/lib/use-resizable-width";
 import {
   FIELD_DIFF_LABEL_CLASS,
@@ -164,24 +172,28 @@ function ViewOnlyPill({ label }: { label: string }) {
 // 라벨이 이웃 노드를 덮기 쉽다. 넘치면 자동 줄바꿈 (사용자 결정 2026-09-18).
 const COMPARE_EDGE_LABEL_MAX_WIDTH = 120;
 
+// 첫 화면 맞춤 전 배치 안정 대기(ms) — 이 시간 동안 재측정·재배치가 없을 때 맞춘다. 길수록 첫 표시가 늦다.
+const LAYOUT_SETTLE_MS = 120;
+
 // passthrough-removed(양끝이 모두 유지 노드) 엣지 — 삽입 노드를 피해 우회하는 아크(red 점선). C2b.
 // 삭제된 직접 연결이 새 경로(A→X→B)와 겹치지 않게 부풀린 베지어. 방향은 핸들 변으로 결정:
 //   LR(bottom 핸들)=아래로 dip / TB(right 핸들)=오른쪽으로 bulge.
 // 같은 핸들에 삭제 아크가 여럿이면 팬 레인(data.fan, lib/edge-fanout)만큼 불룩함을 더해 겹치지 않게 한다.
+// 깊이는 data.arcLevel(양끝 노드·diff 필·구간 안 노드 아래 수위, lib/compare-layout)에 닿도록 역산 — 없으면 최소 깊이.
 function RemovedArcEdge({
   sourceX, sourceY, targetX, targetY, sourcePosition, markerEnd, style, data,
 }: EdgeProps) {
   const fan = isEdgeFan(data?.fan) ? data.fan : undefined;
   const lane = Math.max(fan?.s?.k ?? 0, fan?.t?.k ?? 0, 0);
-  const reach = 52 + lane * FAN_GAP;
+  const arcLevel = typeof data?.arcLevel === "number" ? data.arcLevel : Number.NEGATIVE_INFINITY;
   const side = sourcePosition === Position.Right || sourcePosition === Position.Left;
   const path = side
     ? (() => {
-        const bulge = Math.max(sourceX, targetX) + reach;
+        const bulge = getArcControlDepth(sourceX, targetX, arcLevel) + lane * FAN_GAP;
         return `M${sourceX},${sourceY} C${bulge},${sourceY} ${bulge},${targetY} ${targetX},${targetY}`;
       })()
     : (() => {
-        const dip = Math.max(sourceY, targetY) + reach;
+        const dip = getArcControlDepth(sourceY, targetY, arcLevel) + lane * FAN_GAP;
         return `M${sourceX},${sourceY} C${sourceX},${dip} ${targetX},${dip} ${targetX},${targetY}`;
       })();
   return <BaseEdge path={path} markerEnd={markerEnd} style={style} />;
@@ -549,6 +561,14 @@ const compareRenderH = (node: AppNode) => {
 };
 const compareRenderW = (node: AppNode) =>
   node.measured?.width ?? COMPARE_RENDER_W[node.data.nodeType] ?? nodeSizeOf(node.data.nodeType).w;
+// 노드 점유 사각형 — 실측(없으면 상수표) 크기 + 아래로 매달린 diff 필(절대배치라 실측에 없음) 여유.
+const getOccupiedRect = (node: AppNode, position: { x: number; y: number }): CompareRect => ({
+  id: node.id,
+  x: position.x,
+  y: position.y,
+  w: compareRenderW(node),
+  h: compareRenderH(node) + getDiffPillAllowance(node.data.diffFields?.length ?? 0),
+});
 
 function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>, spKeys: Set<string>): Edge[] {
   return merged.map((e) => {
@@ -563,11 +583,13 @@ function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>, spKeys: Set<
           : e.status === "changed"
             ? "var(--color-diff-changed)"
             : "var(--color-border-strong)";
+    const displayLabel = getCompareEdgeLabel(e.label, e.exit);
     return {
       id: e.id,
       source: e.source,
       target: e.target,
-      label: e.label || undefined,
+      // 무라벨 SP 보조 끝 출구는 끝 제목을 미러(렌더 전용) — 다중 출구를 구분한다
+      label: displayLabel.label,
       type: passthrough ? "removedArc" : "labeled",
       // 저장된 선 모양 그대로 렌더 — LabeledSmoothEdge가 경로 함수를 고른다.
       // gateway는 병렬 배지의 레거시 도출 입력 — 대상 버전 갈래만 세도록 removed 제외, SP 출발은 위 배지와 같은 이유로 제외.
@@ -576,6 +598,7 @@ function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>, spKeys: Set<
         lineStyle: e.lineStyle,
         gateway: e.status !== "removed" && !spKeys.has(e.source) ? (e.gateway ?? null) : null,
         diffRemoved: e.status === "removed",
+        ...(displayLabel.isMirrored ? { labelMirrored: true } : {}),
       },
       markerEnd: { type: MarkerType.ArrowClosed, color: markerColor },
       style:
@@ -911,11 +934,23 @@ function ComparePane({
   // 속성 탭 범위 — 모두 / 변경만(변경 노드에서 바뀐 필드만). 추가·삭제 노드는 전체가 새 값이라 모두로 취급.
   const [propsScope, setPropsScope] = useState<"all" | "changed">("changed");
   // 노드 실측 크기 — RF dimensions 변경에서 수집. 배치(dagre)·백본 정렬·핸들 중심이 이 값을 쓴다.
-  // 첫 렌더는 상수표로 배치하고 측정이 오면 1회 재배치 후 fitView.
+  // 첫 렌더는 상수표로 배치하고, 측정이 모두 도착해 배치가 안정되면 그때 1회 fitView 후 캔버스를 드러낸다.
   const [measuredSizes, setMeasuredSizes] = useState<Map<string, { width: number; height: number }>>(
     () => new Map(),
   );
-  const refitAfterMeasureRef = useRef(false);
+  // 측정 묶음 — 한 프레임 안의 dimensions 변경을 모아 rAF 1회로 반영(폰트 로드·연쇄 측정마다 재배치하지 않게)
+  const pendingSizesRef = useRef<Map<string, { width: number; height: number }>>(new Map());
+  const measureRafRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (measureRafRef.current !== null) window.cancelAnimationFrame(measureRafRef.current);
+    },
+    [],
+  );
+  // 화면 맞춤을 마친 레이아웃 키(방향·버전 쌍) — 같은 키에서는 크기가 바뀌어도(표시 필드 조정) 사용자 줌·팬 유지
+  const fittedKeyRef = useRef<string | null>(null);
+  // 캔버스를 드러낸 버전 쌍 — 첫 측정 배치 전 상수 배치가 보였다 튀는 것을 visibility로 가린다(측정은 계속됨)
+  const [revealedPair, setRevealedPair] = useState<string | null>(null);
   const [openParams, setOpenParams] = useState<ReadonlySet<string>>(new Set());
   const [hiddenSums, setHiddenSums] = useState<ReadonlySet<string>>(new Set());
   const [sumMenuOpen, setSumMenuOpen] = useState(false);
@@ -937,21 +972,30 @@ function ComparePane({
   // 재계산되어 전 노드/엣지가 새 identity로 재렌더 → 캔버스 전체가 새로고침되듯 끊겼다.
   const handleNodesChange = (changes: NodeChange<AppNode>[]) => {
     setRfNodes((nds) => applyNodeChanges(changes, nds));
-    // 실측 수집 — 값이 실제로 바뀐 노드가 있을 때만 state 교체(재배치 1회, 루프 없음)
-    let next: Map<string, { width: number; height: number }> | null = null;
+    // 실측 수집 — 프레임 단위로 모아 값이 실제로 바뀐 노드가 있을 때만 state 교체(재배치 1회, 루프 없음)
     for (const change of changes) {
       if (change.type !== "dimensions" || !change.dimensions) continue;
-      const width = Math.round(change.dimensions.width);
-      const height = Math.round(change.dimensions.height);
-      const prev = (next ?? measuredSizes).get(change.id);
-      if (prev && prev.width === width && prev.height === height) continue;
-      next ??= new Map(measuredSizes);
-      next.set(change.id, { width, height });
+      pendingSizesRef.current.set(change.id, {
+        width: Math.round(change.dimensions.width),
+        height: Math.round(change.dimensions.height),
+      });
     }
-    if (next) {
-      refitAfterMeasureRef.current = true;
-      setMeasuredSizes(next);
-    }
+    if (pendingSizesRef.current.size === 0 || measureRafRef.current !== null) return;
+    measureRafRef.current = window.requestAnimationFrame(() => {
+      measureRafRef.current = null;
+      const pending = pendingSizesRef.current;
+      pendingSizesRef.current = new Map();
+      setMeasuredSizes((prev) => {
+        let next: Map<string, { width: number; height: number }> | null = null;
+        for (const [id, size] of pending) {
+          const old = prev.get(id);
+          if (old && old.width === size.width && old.height === size.height) continue;
+          next ??= new Map(prev);
+          next.set(id, size);
+        }
+        return next ?? prev;
+      });
+    });
   };
   // 드롭 시점에만 세션 위치 커밋 — 핸들 변(handleSides)·센터 재계산이 1회로 끝난다.
   const handleNodeDragStop = (_e: unknown, _node: AppNode, nodes: AppNode[]) => {
@@ -1069,37 +1113,25 @@ function ComparePane({
         .map((node) => node.id),
     );
     const aligned = alignBackbone(laid, keptStatusIds, flowDir, spineIds, compareRenderW, compareRenderH);
-    // 삭제 노드는 삭제 엣지 이웃(배치된 유지 노드)의 평균 위치에서 곁가지로 밀어낸다(본류 라인 비우기).
-    // LR은 아래로(+y), TB는 오른쪽으로(+x) — 흐름축과 겹치지 않는 쪽.
-    const posByKey = new Map(aligned.map((node) => [node.id, node.position]));
-    // 같은 이웃을 공유하는 삭제 노드는 평균 위치가 동일해 완전히 포개진다 — 점유 슬롯을 추적해
-    // 곁가지 방향(LR=아래, TB=오른쪽)으로 순차 오프셋.
-    const occupiedSlots = new Set<string>();
-    const slotKey = (x: number, y: number) => `${Math.round(x / 40)}:${Math.round(y / 40)}`;
-    const removed = withMeasured(
+    // 삭제 노드는 삭제 엣지 이웃 기준 곁가지(LR=아래, TB=오른쪽)로 — 먼저 놓인 삭제 노드도 이웃으로 쳐서
+    // 삭제 사슬이 원점에 포개지지 않고, 실측 크기+diff 필 여유로 겹침을 판정한다(lib/compare-layout).
+    const removedNodes = withMeasured(
       buildAppNodes(
         merged.nodes.filter((node) => node.status === "removed"),
         noteOf,
         fieldsOf,
         spVisual,
       ),
-    ).map((node) => {
-      const neighbors = merged.edges
-        .filter((edge) => edge.status === "removed" && (edge.source === node.id || edge.target === node.id))
-        .map((edge) => (edge.source === node.id ? edge.target : edge.source))
-        .map((key) => posByKey.get(key))
-        .filter((pos): pos is { x: number; y: number } => !!pos);
-      if (neighbors.length === 0) return node;
-      const ax = neighbors.reduce((sum, pos) => sum + pos.x, 0) / neighbors.length;
-      const ay = neighbors.reduce((sum, pos) => sum + pos.y, 0) / neighbors.length;
-      let x = flowDir === "LR" ? ax : ax + 220;
-      let y = flowDir === "LR" ? ay + 150 : ay;
-      while (occupiedSlots.has(slotKey(x, y))) {
-        if (flowDir === "LR") y += 120;
-        else x += 220;
-      }
-      occupiedSlots.add(slotKey(x, y));
-      return { ...node, position: { x, y } };
+    );
+    const removedPos = placeRemovedNodes(
+      aligned.map((node) => getOccupiedRect(node, node.position)),
+      removedNodes.map((node) => ({ id: node.id, w: compareRenderW(node), h: compareRenderH(node) })),
+      merged.edges.filter((edge) => edge.status === "removed"),
+      flowDir,
+    );
+    const removed = removedNodes.map((node) => {
+      const position = removedPos.get(node.id);
+      return position ? { ...node, position } : node;
     });
     return [...aligned, ...removed];
   }, [merged, noteOf, fieldsOf, keptKeys, spKeys, flowDir, spineIds, mapMeta, baseGraph, targetGraph, measuredSizes]);
@@ -1153,31 +1185,58 @@ function ComparePane({
     return result;
   }, [merged, keptKeys, nodeCenters, flowDir, spineIds]);
 
-  // 포커스된 노드만 selected 표시 (재레이아웃 없이 얕은 갱신) + 세션 드래그 위치 오버라이드
+  // 세션 드래그 위치 오버라이드 — 포커스와 무관(포커스는 flowNodes에서 해당 노드만 얕게 패치해 배치 산출물을 보존)
   const laidNodes = useMemo(
     () =>
       positioned.map((node) => {
         const override = sessionPos.get(`${layoutKey}|${node.id}`);
-        return override
-          ? { ...node, position: override, selected: focusId === node.id }
-          : { ...node, selected: focusId === node.id };
+        return override ? { ...node, position: override } : node;
       }),
-    [positioned, focusId, sessionPos, layoutKey],
+    [positioned, sessionPos, layoutKey],
   );
 
   // React Flow에 넘기는 실제 노드 배열 — 드래그는 applyNodeChanges로 이 state에만 쌓이고,
-  // 레이아웃/포커스 산출물(laidNodes)이 바뀔 때만 통째로 리셋한다(드롭 커밋 포함 — 위치 동일해 점프 없음).
+  // 레이아웃 산출물(laidNodes)이 바뀔 때만 통째로 리셋한다(드롭 커밋 포함 — 위치 동일해 점프 없음).
   const [rfNodes, setRfNodes] = useState<AppNode[]>(laidNodes);
   useEffect(() => {
     // laidNodes는 rfNodes와 무관하게 산출 — cascade 루프 없음 (lessons react-ts §3)
     setRfNodes(laidNodes);
-    // 실측 재배치 직후 — 초기 fitView는 측정 전 좌표 기준이라 다시 맞춘다
-    if (refitAfterMeasureRef.current) {
-      refitAfterMeasureRef.current = false;
-      const id = window.requestAnimationFrame(() => void flow.fitView({ padding: 0.2 }));
-      return () => window.cancelAnimationFrame(id);
-    }
-  }, [laidNodes, flow]);
+  }, [laidNodes]);
+
+  // 첫 화면 맞춤 — 레이아웃 키(방향·버전 쌍)마다 1회. 측정이 전부 도착하고 배치가 LAYOUT_SETTLE_MS 동안
+  // 바뀌지 않으면(폰트 로드 후 재측정 포함) 맞추고 드러낸다. 이후 크기 변화는 재배치만(사용자 줌·팬 유지).
+  const pairKey = `${baseId}>${targetId}`;
+  const isAllMeasured = useMemo(
+    () => positioned.every((node) => measuredSizes.has(node.id)),
+    [positioned, measuredSizes],
+  );
+  useEffect(() => {
+    if (!graphsFresh || !isAllMeasured || fittedKeyRef.current === layoutKey) return;
+    let isCancelled = false;
+    let rafId: number | null = null;
+    const timer = window.setTimeout(() => {
+      void document.fonts.ready.then(() => {
+        if (isCancelled) return;
+        rafId = window.requestAnimationFrame(() => {
+          if (isCancelled) return;
+          fittedKeyRef.current = layoutKey;
+          void flow.fitView({ padding: 0.2 });
+          setRevealedPair(pairKey);
+        });
+      });
+    }, LAYOUT_SETTLE_MS);
+    return () => {
+      isCancelled = true;
+      window.clearTimeout(timer);
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+    };
+  }, [laidNodes, graphsFresh, isAllMeasured, layoutKey, pairKey, flow]);
+
+  // 포커스는 해당 노드만 selected로 얕게 패치 — 나머지 노드는 rfNodes 객체 그대로(identity 유지)
+  const flowNodes = useMemo(
+    () => (focusId ? rfNodes.map((node) => (node.id === focusId ? { ...node, selected: true } : node)) : rfNodes),
+    [rfNodes, focusId],
+  );
 
   // 팬 레인 배정용 노드 기하 — nodeCenters와 같은 소스(세션 드래그 위치·실측 크기, 없으면 비교 렌더 상수)
   const fanGeom = useMemo(() => {
@@ -1195,7 +1254,13 @@ function ComparePane({
     return geom;
   }, [laidNodes]);
 
-  // 포커스된 엣지는 굵게 강조. 마지막에 같은 핸들 형제 팬 레인(data.fan)을 얹는다 — 에디터 styledEdges와 동일 규칙.
+  // 삭제 직접연결 아크의 장애물 — 배치된 노드 점유 사각형(세션 드래그 위치·실측 크기·diff 필 여유)
+  const occupiedRects = useMemo(
+    () => new Map(laidNodes.map((node) => [node.id, getOccupiedRect(node, node.position)])),
+    [laidNodes],
+  );
+
+  // 마지막에 같은 핸들 형제 팬 레인(data.fan)을 얹는다 — 에디터 styledEdges와 동일 규칙. 포커스 강조는 displayEdges.
   // 흐름 펄스는 대상 버전 그래프(삭제 제외)로 에디터와 같은 판정 — 출구 키는 변 id 재매핑 전 merged exit로 센다
   const appEdges = useMemo(() => {
     const pulses = assignEdgePulses(
@@ -1230,12 +1295,31 @@ function ComparePane({
             targetHandle: targetHandleId(sides.target),
           };
         }
-        if (focusId === edge.id) {
-          styled = { ...styled, selected: true, style: { ...(styled.style ?? {}), strokeWidth: 3 } };
+        // 삭제 직접연결 아크 — 양끝·diff 필·구간 안 노드 아래로 비켜 갈 수위(RemovedArcEdge가 깊이로 역산)
+        if (styled.type === "removedArc") {
+          const source = occupiedRects.get(edge.source);
+          const target = occupiedRects.get(edge.target);
+          if (source && target) {
+            const arcLevel = getRemovedArcLevel(source, target, [...occupiedRects.values()], flowDir);
+            styled = { ...styled, data: { ...styled.data, arcLevel } };
+          }
         }
         return styled;
       }), fanGeom);
-  }, [merged, focusId, keptKeys, spKeys, handleSides, fanGeom]);
+  }, [merged, keptKeys, spKeys, handleSides, fanGeom, occupiedRects, flowDir]);
+
+  // 포커스된 엣지만 굵게 얕게 패치 — 나머지 엣지는 appEdges 객체 그대로(identity 유지)
+  const displayEdges = useMemo(
+    () =>
+      focusId
+        ? appEdges.map((edge) =>
+            edge.id === focusId
+              ? { ...edge, selected: true, style: { ...(edge.style ?? {}), strokeWidth: 3 } }
+              : edge,
+          )
+        : appEdges,
+    [appEdges, focusId],
+  );
 
   const titleByKey = useMemo(
     () => new Map(merged.nodes.map((m) => [m.id, m.node.title])),
@@ -1969,8 +2053,11 @@ function ComparePane({
           <NodeActionsContext.Provider value={nodeActions}>
           <ReactFlow
             key={flowDir}
-            nodes={rfNodes}
-            edges={appEdges}
+            nodes={flowNodes}
+            edges={displayEdges}
+            /* 첫 측정 배치·화면 맞춤 전에는 가린다 — 측정은 계속돼야 해서 display:none 금지, RF가 측정된 노드에
+               visibility:visible을 직접 박아 부모 visibility:hidden은 새므로 opacity로 가린다 */
+            style={revealedPair === pairKey ? undefined : { opacity: 0, pointerEvents: "none" }}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             /* 세션 한정 드래그 — 배치는 자동(dagre)이지만 검토 중 임시로 끌어 볼 수 있다.
