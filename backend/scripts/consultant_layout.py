@@ -3,7 +3,8 @@
 에디터 "자동 정렬"(`frontend/src/lib/flow-layout.ts` `autoLayoutFlow`, LR)과 **동형 목표**의
 파이썬 구현. dagre는 파이썬에 없으므로 레이어 배치를 rank(Kahn 최장경로) + 배리센터 정렬로
 대체하고, 그 뒤 단계(`computeSpine`·`alignBackbone`·`pickHandleSide`·`isBackEdge`)는 TS를 그대로
-이식했다. `duration.ts`↔`duration.py`와 같은 **동치 이중 구현** — 한쪽을 고치면 다른 쪽과
+이식했다(주 경로=최장 선행 경로·예 라벨 우선, 곁가지 사슬 직선화, 랭크 열 가운데 정렬, 척추 지름길
+아래 변). `duration.ts`↔`duration.py`와 같은 **동치 이중 구현** — 한쪽을 고치면 다른 쪽과
 테스트를 같이 옮긴다.
 
 좌표는 노드 좌상단(React Flow `position`), 정렬 판정은 중심 기준 — TS와 동일.
@@ -50,6 +51,8 @@ class LayoutNode:
     node_type: str
     x: float = 0.0
     y: float = 0.0
+    # layout_flow가 고른 주 경로(척추 시드) 소속 — compute_spine_for가 같은 시드를 재사용한다
+    on_main_path: bool = False
 
     @property
     def cx(self) -> float:
@@ -81,6 +84,24 @@ def estimate_label_width(label: str) -> float:
                 width += 6.1
         widest = max(widest, width)
     return min(float(EDGE_LABEL_MAX_WIDTH), widest)
+
+
+# "예/승인" 계열 분기 라벨 — 주 경로 동점 깨기·분기 세로 순서(위쪽)에 쓴다(사용자 결정 2026-10-06).
+# trim+소문자 완전 일치. frontend/src/lib/layout-graph.ts YES_LABELS와 같은 집합.
+_YES_LABELS = frozenset({"yes", "y", "예", "네", "승인", "approve", "approved", "ok"})
+
+
+def is_yes_label(label: str) -> bool:
+    return label.strip().lower() in _YES_LABELS
+
+
+def _edge_order_key(label: str, target_index: int) -> tuple[int, str, int]:
+    """형제 엣지 정규 순서 — 예 라벨 먼저 → 라벨 문자열 → 도착 노드 순서.
+
+    TS `sortLayoutEdges`와 같은 우선순위(파이썬엔 SP 끝 키 차원이 없다 = 항상 기본 출구).
+    배리센터 동점 깨기(행 0=위)·주 경로 동점 깨기가 공유한다.
+    """
+    return (0 if is_yes_label(label) else 1, label, target_index)
 
 
 def _gap_steps(
@@ -197,11 +218,14 @@ def split_forward_edges(
 
 
 def _order_by_barycenter(
-    layers: dict[int, list[str]], pairs: list[tuple[str, str]]
+    layers: dict[int, list[str]],
+    pairs: list[tuple[str, str]],
+    labels: dict[tuple[str, str], str] | None = None,
 ) -> dict[int, list[str]]:
     """레이어 내 순서를 선행 레이어 위치의 평균(배리센터)으로 정렬 — dagre 교차 감소의 축소판.
 
-    앞→뒤 1회 스윕. 선행이 없는 노드는 현재 순서를 유지한다(안정 정렬).
+    앞→뒤 1회 스윕. 배리센터가 같으면(같은 분기 노드의 형제) 들어오는 엣지의 정규 순서(예 라벨 먼저)로 —
+    배열 순서가 아니라 라벨이 위·아래를 정한다(TS dagre 입력 순서와 같은 결과). 그다음은 현재 순서(안정 정렬).
     """
     incoming: dict[str, list[str]] = {}
     for src, dst in pairs:
@@ -210,19 +234,17 @@ def _order_by_barycenter(
     for rank in sorted(layers):
         row = layers[rank]
         if rank > 0:
-            keyed = [
-                (
-                    sum(pos[p] for p in incoming.get(nid, []) if p in pos)
-                    / max(1, len([p for p in incoming.get(nid, []) if p in pos]))
-                    if any(p in pos for p in incoming.get(nid, []))
-                    else float(i),
-                    i,
-                    nid,
+            keyed = []
+            for i, nid in enumerate(row):
+                placed = [p for p in incoming.get(nid, []) if p in pos]
+                bary = sum(pos[p] for p in placed) / len(placed) if placed else float(i)
+                tie = min(
+                    (_edge_order_key((labels or {}).get((p, nid), ""), 0)[:2] for p in placed),
+                    default=(1, ""),
                 )
-                for i, nid in enumerate(row)
-            ]
+                keyed.append((bary, tie, i, nid))
             keyed.sort()
-            row = [nid for _, _, nid in keyed]
+            row = [nid for *_, nid in keyed]
             layers[rank] = row
         for i, nid in enumerate(row):
             pos[nid] = i
@@ -260,34 +282,59 @@ def compute_spine(
 
 
 def find_main_path(
-    nodes: list[LayoutNode], pairs: list[tuple[str, str]], primary_end_id: str | None
+    nodes: list[LayoutNode],
+    pairs: list[tuple[str, str]],
+    primary_end_id: str | None,
+    labeled: list[tuple[str, str, str]] | None = None,
 ) -> set[str]:
-    """시작→대표 끝 BFS 최단 경로 — 척추 시드. 시작/끝이 없거나 미연결이면 빈 집합(직선화 생략)."""
+    """주 경로(큰길) — 시작→대표 끝 **최장** 선행 경로, 길이가 같으면 예 라벨을 더 많이 지나는 쪽.
+
+    pairs는 되돌아가는 엣지를 뺀 forward(DAG) 전제. 최단 경로는 반려 지름길(D→No→끝)을 척추로 골라
+    실제 흐름을 곁가지로 밀어냈다(사용자 결정 2026-10-06). TS `findLongestPath`와 동치 — 위상 순서는
+    Kahn(노드 순서 큐), 형제 엣지는 `_edge_order_key` 순서, 그래도 동점이면 먼저 닿은 쪽.
+    시작/끝이 없거나 미연결이면 빈 집합(직선화 생략).
+    """
     start = next((n for n in nodes if n.node_type == "start"), None)
     end_id = primary_end_id or next((n.id for n in nodes if n.node_type == "end"), None)
     if start is None or end_id is None:
         return set()
-    adjacency: dict[str, list[str]] = {}
+    ids = [n.id for n in nodes]
+    index = {nid: i for i, nid in enumerate(ids)}
+    labels = {(s, d): text for s, d, text in (labeled or [])}
+    outs: dict[str, list[str]] = {nid: [] for nid in ids}
+    indeg = dict.fromkeys(ids, 0)
     for src, dst in pairs:
-        adjacency.setdefault(src, []).append(dst)
-    prev: dict[str, str] = {}
-    seen = {start.id}
-    queue = [start.id]
+        if src in outs and dst in indeg:
+            outs[src].append(dst)
+            indeg[dst] += 1
+    for src, targets in outs.items():
+        targets.sort(key=lambda dst, src=src: _edge_order_key(labels.get((src, dst), ""), index[dst]))
+    order: list[str] = []
+    queue = [nid for nid in ids if indeg[nid] == 0]
     while queue:
         current = queue.pop(0)
-        if current == end_id:
-            break
-        for nxt in adjacency.get(current, []):
-            if nxt in seen:
-                continue
-            seen.add(nxt)
-            prev[nxt] = current
-            queue.append(nxt)
-    if end_id not in seen:
+        order.append(current)
+        for nxt in outs[current]:
+            indeg[nxt] -= 1
+            if indeg[nxt] == 0:
+                queue.append(nxt)
+    best: dict[str, tuple[int, int]] = {start.id: (0, 0)}
+    prev: dict[str, str] = {}
+    for current in order:
+        score = best.get(current)
+        if score is None:
+            continue
+        for nxt in outs[current]:
+            candidate = (score[0] + 1, score[1] + (1 if is_yes_label(labels.get((current, nxt), "")) else 0))
+            known = best.get(nxt)
+            if known is None or candidate > known:
+                best[nxt] = candidate
+                prev[nxt] = current
+    if end_id not in best:
         return set()
     path: set[str] = set()
     cursor: str | None = end_id
-    while cursor is not None:
+    while cursor is not None and cursor not in path:
         path.add(cursor)
         cursor = prev.get(cursor)
     return path
@@ -383,7 +430,8 @@ def layout_flow(
     layers: dict[int, list[str]] = {}
     for nid in ids:
         layers.setdefault(ranks[nid], []).append(nid)
-    layers = _order_by_barycenter(layers, forward)
+    labels = {(s, d): text for s, d, text in (labeled or [])}
+    layers = _order_by_barycenter(layers, forward, labels)
 
     # 구간별 간격 — 라벨이 놓이는 구간만 그 라벨 폭만큼 넓힌다
     steps = _gap_steps(layers, ranks, [
@@ -400,14 +448,82 @@ def layout_flow(
     for rank in sorted(layers):
         for row, nid in enumerate(layers[rank]):
             node = by_id[nid]
-            node.x = rank_x[rank]
+            # 랭크 열 가운데 정렬 — dagre(TS)가 랭크마다 중심을 맞추는 것과 같게. 열 폭은 최대 노드폭 기준이라
+            # _gap_steps의 간격 보장(가장 넓은 노드의 오른쪽 끝 ~ 다음 열 왼쪽 끝)이 그대로 유지된다.
+            node.x = rank_x[rank] + (_MAX_NODE_W - node_size(node.node_type)[0]) / 2
             node.y = _Y0 + row * _Y_STEP
 
-    seed = find_main_path(nodes, forward, primary_end_id)
+    seed = find_main_path(nodes, forward, primary_end_id, labeled)
+    for node in nodes:
+        node.on_main_path = node.id in seed
     spine = compute_spine(present, seed, scoped) if seed else set()
     if seed:
         align_backbone(nodes, spine, seed)
+    straighten_side_chains(nodes, spine, scoped, forward)
     return ranks
+
+
+_CHAIN_GAP = 16  # 곁가지 직선화 때 이웃과 띄울 최소 간격(px) — flow-layout.ts CHAIN_GAP
+
+
+def straighten_side_chains(
+    nodes: list[LayoutNode],
+    spine: set[str],
+    pairs: list[tuple[str, str]],
+    forward: list[tuple[str, str]],
+) -> None:
+    """곁가지 사슬 직선화(LR) — 척추 밖 1입력·1출력 사슬(r1→r2→…)을 머리 노드의 Y에 맞춘다. 제자리 변형.
+
+    레이어마다 행 번호가 따로 매겨져 생기던 계단을 편다. 옮기면 겹치는 노드에서 사슬을 멈춘다.
+    flow-layout.ts straightenSideChains와 동치.
+    """
+    present = {n.id for n in nodes}
+    out_deg: dict[str, int] = {}
+    in_deg: dict[str, int] = {}
+    for src, dst in pairs:
+        if src in present and dst in present:
+            out_deg[src] = out_deg.get(src, 0) + 1
+            in_deg[dst] = in_deg.get(dst, 0) + 1
+    nxt: dict[str, str] = {}
+    linked_in: set[str] = set()
+    for src, dst in forward:
+        if src in spine or dst in spine:
+            continue
+        if out_deg.get(src) != 1 or in_deg.get(dst) != 1:
+            continue
+        nxt[src] = dst
+        linked_in.add(dst)
+    if not nxt:
+        return
+    by_id = {n.id: n for n in nodes}
+
+    def _collides(moved: LayoutNode, new_y: float) -> bool:
+        w, h = node_size(moved.node_type)
+        for other in nodes:
+            if other.id == moved.id:
+                continue
+            ow, oh = node_size(other.node_type)
+            if (
+                moved.x < other.x + ow + _CHAIN_GAP and moved.x + w + _CHAIN_GAP > other.x
+                and new_y < other.y + oh + _CHAIN_GAP and new_y + h + _CHAIN_GAP > other.y
+            ):
+                return True
+        return False
+
+    for node in nodes:
+        if node.id not in nxt or node.id in linked_in:
+            continue  # 사슬 머리만
+        line = node.cy
+        seen = {node.id}
+        cursor = nxt.get(node.id)
+        while cursor is not None and cursor not in seen:
+            seen.add(cursor)
+            target = by_id[cursor]
+            new_y = line - node_size(target.node_type)[1] / 2
+            if _collides(target, new_y):
+                break
+            target.y = new_y
+            cursor = nxt.get(cursor)
 
 
 
@@ -480,6 +596,10 @@ def resolve_handles(
         if s is None or t is None:
             continue
         back = is_back_edge(s, t)
+        if not back and src in spine and dst in spine and _is_straight_run_blocked(nodes, s, t):
+            # 척추 위 두 노드를 건너뛰는 지름길 — 흐름측이면 사이 노드를 관통한다(TS reassignHandles와 동일)
+            sides[(src, dst)] = ("bottom", "bottom")
+            continue
         sides[(src, dst)] = (
             pick_handle_side(s, t, src in spine, dst in spine, back),
             pick_handle_side(t, s, dst in spine, src in spine, back),
@@ -487,15 +607,32 @@ def resolve_handles(
     return sides
 
 
+def _is_straight_run_blocked(nodes: list[LayoutNode], s: LayoutNode, t: LayoutNode) -> bool:
+    """두 중심을 잇는 가로 직선이 다른 노드를 지나가는지(LR) — flow-layout.ts isStraightRunBlocked."""
+    line = s.cy
+    lo, hi = sorted((s.cx, t.cx))
+    for node in nodes:
+        if node.id in (s.id, t.id):
+            continue
+        w, h = node_size(node.node_type)
+        if node.x + w > lo and node.x < hi and node.y < line < node.y + h:
+            return True
+    return False
+
+
 def compute_spine_for(
     nodes: list[LayoutNode], pairs: list[tuple[str, str]], primary_end_id: str | None,
     back_pairs: set[tuple[str, str]] | None = None,
 ) -> set[str]:
-    """layout_flow와 동일한 seed/spine 재계산 — 핸들 지정에 쓴다."""
+    """layout_flow와 동일한 seed/spine 재계산 — 핸들 지정에 쓴다.
+
+    layout_flow를 거친 노드면 그때 고른 주 경로(`on_main_path`)를 그대로 쓴다 — 동점 깨기에 쓰인 라벨을
+    여기서 다시 받지 않아도 배치와 핸들의 척추가 어긋나지 않는다.
+    """
     present = {n.id for n in nodes}
     scoped = [(s, d) for s, d in pairs if s in present and d in present]
     forward, _ = split_forward_edges([n.id for n in nodes], scoped, back_pairs)
-    seed = find_main_path(nodes, forward, primary_end_id)
+    seed = {n.id for n in nodes if n.on_main_path} or find_main_path(nodes, forward, primary_end_id)
     if not seed:
         return set()
     return compute_spine(present, seed, scoped)

@@ -205,7 +205,7 @@ def test_unlabeled_gap_stays_compact() -> None:
     narrow = _gap(nodes, "s", "a1")
     wide = _gap(nodes, "a1", "a2")
     assert wide > narrow
-    assert narrow == 240 - 96  # 기본 스텝 − Start 노드 폭
+    assert narrow == 240 - (96 + 170) / 2  # 기본 스텝 − 두 노드 반폭(랭크 열 가운데 정렬)
 
 
 def test_multi_rank_edge_widens_every_gap_it_crosses() -> None:
@@ -470,3 +470,115 @@ def test_build_graph_rows_sp_target_handle_follows_the_layout_side(monkeypatch) 
     nodes, edges, _ = engine.build_graph_rows(cmap, targets)
     top = _sp_edge(edges, nodes)
     assert (top.target_side, top.target_handle) == ("top", "in:top")
+
+
+# ── 주 경로(최장 경로)·분기 순서·곁가지 직선화·가운데 정렬 — flow-layout.test.ts와 같은 시나리오 ──
+
+def _shortcut() -> tuple[list[LayoutNode], list[tuple[str, str]], list[tuple[str, str, str]]]:
+    """시작 → a → D ─예→ b → c → d → 끝, D ─아니오→ 끝(반려 지름길)."""
+    nodes = [
+        LayoutNode(id="start", node_type="start"),
+        LayoutNode(id="a", node_type="process"),
+        LayoutNode(id="D", node_type="decision"),
+        LayoutNode(id="b", node_type="process"),
+        LayoutNode(id="c", node_type="process"),
+        LayoutNode(id="d", node_type="process"),
+        LayoutNode(id="end", node_type="end"),
+    ]
+    pairs = [("start", "a"), ("a", "D"), ("D", "b"), ("b", "c"), ("c", "d"), ("d", "end"), ("D", "end")]
+    labeled = [("D", "b", "Yes"), ("D", "end", "No")]
+    return nodes, pairs, labeled
+
+
+def _fork(yes_first: bool) -> tuple[list[LayoutNode], list[tuple[str, str]], list[tuple[str, str, str]]]:
+    """시작 → D ─예→ y → 끝, D ─아니오→ n → 끝 (두 갈래 길이 같음)."""
+    nodes = [
+        LayoutNode(id="start", node_type="start"),
+        LayoutNode(id="D", node_type="decision"),
+        LayoutNode(id="y", node_type="process"),
+        LayoutNode(id="n", node_type="process"),
+        LayoutNode(id="end", node_type="end"),
+    ]
+    if not yes_first:  # 노드 나열 순서도 뒤집는다 — 배리센터 동점이 나열 순서가 아니라 라벨로 깨져야 한다
+        nodes[2], nodes[3] = nodes[3], nodes[2]
+    branches = [("D", "y"), ("D", "n")] if yes_first else [("D", "n"), ("D", "y")]
+    pairs = [("start", "D"), *branches, ("y", "end"), ("n", "end")]
+    return nodes, pairs, [("D", "y", "Yes"), ("D", "n", "No")]
+
+
+def test_main_path_prefers_the_long_flow_over_a_reject_shortcut() -> None:
+    nodes, pairs, labeled = _shortcut()
+    assert find_main_path(nodes, pairs, "end", labeled) == {"start", "a", "D", "b", "c", "d", "end"}
+
+
+def test_main_path_ties_go_to_the_yes_branch_whatever_the_pair_order() -> None:
+    for yes_first in (True, False):
+        nodes, pairs, labeled = _fork(yes_first)
+        path = find_main_path(nodes, pairs, "end", labeled)
+        assert "y" in path and "n" not in path
+
+
+def test_main_path_accepts_korean_approve_label() -> None:
+    nodes, pairs, _ = _fork(False)
+    path = find_main_path(nodes, pairs, "end", [("D", "y", "승인"), ("D", "n", "반려")])
+    assert "y" in path
+
+
+def test_layout_keeps_long_flow_on_backbone_and_routes_shortcut_below() -> None:
+    nodes, pairs, labeled = _shortcut()
+    layout_flow(nodes, pairs, primary_end_id="end", labeled=labeled)
+    assert len({round(n.cy, 3) for n in nodes}) == 1
+    spine = compute_spine_for(nodes, pairs, "end")
+    sides = resolve_handles(nodes, pairs, spine)
+    assert sides[("D", "end")] == ("bottom", "bottom")
+    assert sides[("D", "b")] == ("right", "left")
+
+
+def test_yes_branch_sits_above_no_regardless_of_input_order() -> None:
+    results = []
+    for yes_first in (True, False):
+        nodes, pairs, labeled = _fork(yes_first)
+        layout_flow(nodes, pairs, primary_end_id="end", labeled=labeled)
+        by_id = {n.id: n for n in nodes}
+        assert by_id["y"].cy < by_id["n"].cy
+        results.append({n.id: (n.x, n.y) for n in nodes})
+    assert results[0] == results[1]
+
+
+def test_compute_spine_for_reuses_the_layout_main_path() -> None:
+    """라벨 없이 불러도 layout_flow가 예 라벨로 고른 척추를 그대로 쓴다 — 배치와 핸들이 어긋나지 않게."""
+    nodes, pairs, labeled = _fork(False)
+    layout_flow(nodes, pairs, primary_end_id="end", labeled=labeled)
+    spine = compute_spine_for(nodes, pairs, "end")
+    assert "y" in spine and "n" not in spine
+
+
+def test_side_chain_is_straightened() -> None:
+    """곁가지 사슬 r1→r2는 레이어마다 행이 달라도 머리(r1)의 Y로 한 줄이 된다."""
+    nodes = [
+        LayoutNode(id="start", node_type="start"),
+        LayoutNode(id="a", node_type="process"),
+        LayoutNode(id="D", node_type="decision"),
+        LayoutNode(id="r1", node_type="process"),
+        LayoutNode(id="r2", node_type="process"),
+        LayoutNode(id="end", node_type="end"),
+    ]
+    pairs = [("start", "a"), ("a", "D"), ("D", "end"), ("D", "r1"), ("r1", "r2"), ("r2", "a")]
+    layout_flow(nodes, pairs, primary_end_id="end", labeled=[("D", "end", "Yes"), ("D", "r1", "No")])
+    by_id = {n.id: n for n in nodes}
+    assert by_id["r1"].cy == by_id["r2"].cy
+    assert by_id["r1"].cy > by_id["end"].cy  # 아니오 갈래는 아래
+
+
+def test_nodes_in_one_rank_share_a_center_line() -> None:
+    """랭크 열 가운데 정렬 — 폭이 다른 노드도 같은 랭크면 중심 X가 같다(TS dagre와 같은 기준)."""
+    nodes = [
+        LayoutNode(id="s", node_type="start"),
+        LayoutNode(id="d", node_type="decision"),
+        LayoutNode(id="p", node_type="process"),
+        LayoutNode(id="e", node_type="end"),
+    ]
+    pairs = [("s", "d"), ("s", "p"), ("d", "e"), ("p", "e")]
+    layout_flow(nodes, pairs, primary_end_id="e")
+    by_id = {n.id: n for n in nodes}
+    assert by_id["d"].cx == by_id["p"].cx

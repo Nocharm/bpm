@@ -8,6 +8,7 @@ import type { FieldDiffStatus } from "@/lib/compare-field-diff";
 import type { IoDiffSummary } from "@/lib/io-diff";
 import { genId } from "@/lib/id";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { getEdgeLabelText, sortLayoutEdges, splitForwardEdges } from "@/lib/layout-graph";
 import {
   isSubprocessEndHandle,
   isSubprocessInHandle,
@@ -1123,14 +1124,125 @@ export function insertNodeAfter(
   ];
 }
 
-/** 선후(엣지) 흐름 기준 좌→우 자동 배치 (spec §3.3). */
+/**
+ * 엣지 라벨 렌더 폭(px) 추정 — 논리 줄 중 가장 넓은 것, 최대폭에서 클램프(11px/600 근사).
+ * 한글·CJK 1em, 공백 0.32em, 그 외 0.55em. consultant_layout.py estimate_label_width와 동일 수치.
+ */
+export function estimateEdgeLabelWidth(label: string): number {
+  if (!label) return 0;
+  const widest = Math.max(...label.split("\n").map(measureLabelLine));
+  return Math.min(EDGE_LABEL_MAX_WIDTH, widest);
+}
+
+function measureLabelLine(line: string): number {
+  let width = 0;
+  for (const ch of line) {
+    width += ch === " " ? 3.5 : (ch.codePointAt(0) ?? 0) > 0x1100 ? 11 : 6.1;
+  }
+  return width;
+}
+
+// 라벨 한 줄 높이(px, 11px 글꼴 줄높이 근사)와 배경 상하 패딩 합
+const EDGE_LABEL_LINE_HEIGHT = 15;
+const EDGE_LABEL_PAD_Y = 8;
+// 라벨 상자와 노드 사이 최소 여백(좌우 각각) — consultant_layout.py _LABEL_MARGIN과 같은 값
+const EDGE_LABEL_MARGIN = 20;
+
+/** 엣지 라벨 렌더 높이(px) 추정 — 최대폭에서 자동 줄바꿈되는 줄까지 센다. */
+export function estimateEdgeLabelHeight(label: string): number {
+  if (!label) return 0;
+  const lines = label
+    .split("\n")
+    .reduce((sum, line) => sum + Math.max(1, Math.ceil(measureLabelLine(line) / EDGE_LABEL_MAX_WIDTH)), 0);
+  return lines * EDGE_LABEL_LINE_HEIGHT + EDGE_LABEL_PAD_Y;
+}
+
+/**
+ * dagre 엣지 라벨 — 라벨 상자 + 양옆 여백이 랭크 간격(ranksep)을 넘을 때만 그 초과분을 흐름축에 예약한다.
+ * dagre는 랭크를 반으로 쪼개 가운데 랭크에 라벨 더미를 두므로 노드 간 간격 = ranksep + 예약분
+ * = max(ranksep, 라벨 상자 + 여백 2개). consultant_layout.py _gap_steps(최대 노드폭 + 라벨 + 패딩 + 여백)와 같은 보장.
+ */
+function buildDagreEdgeLabel(
+  label: string,
+  isTB: boolean,
+  ranksep: number,
+): { width?: number; height?: number; labelpos?: "c" } {
+  if (!label.trim()) return {};
+  const boxW = estimateEdgeLabelWidth(label) + EDGE_LABEL_PAD_X;
+  const boxH = estimateEdgeLabelHeight(label);
+  const flowExtra = Math.max(0, (isTB ? boxH : boxW) + 2 * EDGE_LABEL_MARGIN - ranksep);
+  if (flowExtra <= 0) return {};
+  return isTB ? { width: boxW, height: flowExtra, labelpos: "c" } : { width: flowExtra, height: boxH, labelpos: "c" };
+}
+
+/** 출발 노드별 묶음 순서는 두고 묶음 안(형제) 순서만 뒤집는다 — 입력은 출발 노드순 정렬 전제. */
+function reverseSiblingOrder<T extends { source: string }>(sorted: T[]): T[] {
+  const result: T[] = [];
+  let start = 0;
+  for (let i = 1; i <= sorted.length; i++) {
+    if (i === sorted.length || sorted[i].source !== sorted[start].source) {
+      result.push(...sorted.slice(start, i).reverse());
+      start = i;
+    }
+  }
+  return result;
+}
+
+// dagre 클러스터 id 접두 — 노드 id와 충돌하지 않게
+const GROUP_CLUSTER_PREFIX = "__group:";
+
+/**
+ * 영역(그룹) → dagre 클러스터 트리. 노드는 자기가 속한 가장 작은 영역에, 영역은 자기를 포함하는 가장 작은
+ * 영역에 매단다(dagre 클러스터는 트리라 부분 겹침 다중 소속은 가장 작은 영역 하나만 반영 — 나머지 박스는
+ * 멤버 bbox대로 커질 수 있다).
+ */
+function buildGroupClusters(
+  nodes: AppNode[],
+  groups: ReadonlyArray<{ id: string }>,
+): { nodeParent: Map<string, string>; clusterParent: Map<string, string> } {
+  const membersOf = new Map<string, Set<string>>();
+  for (const group of groups) {
+    const members = new Set(nodes.filter((node) => node.data.groupIds.includes(group.id)).map((node) => node.id));
+    if (members.size > 0) membersOf.set(group.id, members);
+  }
+  // 큰 영역 먼저(동률은 id 순) — 앞선 것만 부모 후보라 트리가 보장된다
+  const ordered = [...membersOf.keys()].sort(
+    (a, b) => (membersOf.get(b)?.size ?? 0) - (membersOf.get(a)?.size ?? 0) || (a < b ? -1 : a > b ? 1 : 0),
+  );
+  const clusterParent = new Map<string, string>();
+  ordered.forEach((groupId, index) => {
+    const members = membersOf.get(groupId) as Set<string>;
+    for (let i = index - 1; i >= 0; i--) {
+      const candidate = membersOf.get(ordered[i]) as Set<string>;
+      if ([...members].every((id) => candidate.has(id))) {
+        clusterParent.set(GROUP_CLUSTER_PREFIX + groupId, GROUP_CLUSTER_PREFIX + ordered[i]);
+        break;
+      }
+    }
+  });
+  const nodeParent = new Map<string, string>();
+  for (const groupId of ordered) {
+    for (const nodeId of membersOf.get(groupId) as Set<string>) {
+      nodeParent.set(nodeId, GROUP_CLUSTER_PREFIX + groupId); // 뒤(작은 영역)가 덮어쓴다
+    }
+  }
+  return { nodeParent, clusterParent };
+}
+
+/** 선후(엣지) 흐름 기준 좌→우 자동 배치 (spec §3.3).
+ *  엣지는 정규 순서(예 라벨 먼저, lib/layout-graph)로 넣고 되돌아가는 엣지는 뒤집어 넣는다 — 배열 순서·
+ *  dagre 자체 비순환화에 배치가 흔들리지 않게. 라벨이 있는 엣지는 라벨 상자만큼 랭크 간격을 넓힌다.
+ *  groups가 오면 영역 멤버를 한 클러스터로 묶어 붙여 둔다(비멤버가 영역 박스 안에 끼지 않게). */
 export function layoutWithDagre(
   nodes: AppNode[],
   edges: Edge[],
   rankdir: "LR" | "TB" = "LR",
   spacing?: { nodesep?: number; ranksep?: number },
+  groups?: ReadonlyArray<{ id: string }>,
 ): AppNode[] {
-  const graph = new dagre.graphlib.Graph();
+  if (nodes.length === 0) return nodes;
+  const clusters = groups && groups.length > 0 ? buildGroupClusters(nodes, groups) : null;
+  const graph = new dagre.graphlib.Graph({ compound: clusters !== null && clusters.nodeParent.size > 0 });
   // 교차/겹침 최소화 — network-simplex 랭커 + 넉넉한 간격(노드끼리·랭크끼리·엣지끼리).
   // edgesep을 키워 평행 엣지가 노드 위로 겹쳐 지나가는 경우를 줄인다.
   const isTB = rankdir === "TB";
@@ -1161,9 +1273,25 @@ export function layoutWithDagre(
     const size = boxOf(node);
     graph.setNode(node.id, { width: size.w, height: size.h });
   });
-  edges.forEach((edge) => {
-    graph.setEdge(edge.source, edge.target);
-  });
+  if (clusters && clusters.nodeParent.size > 0) {
+    for (const cluster of new Set([...clusters.nodeParent.values(), ...clusters.clusterParent.values()])) {
+      graph.setNode(cluster, {});
+    }
+    for (const [cluster, parent] of clusters.clusterParent) graph.setParent(cluster, parent);
+    for (const [nodeId, cluster] of clusters.nodeParent) graph.setParent(nodeId, cluster);
+  }
+  const nodeIds = nodes.map((node) => node.id);
+  const sorted = sortLayoutEdges(nodeIds, edges);
+  const backSet = new Set<Edge>(splitForwardEdges(nodeIds, sorted).back);
+  const ranksep = (graph.graph() as { ranksep: number }).ranksep;
+  // dagre는 같은 출발의 형제 중 먼저 넣은 쪽을 아래(LR)·오른쪽(TB)에 둔다(실측) — 형제 순서를 뒤집어 넣어
+  // 정규 순서(예 먼저)가 위·왼쪽부터 놓이게 한다. 파이썬 배리센터 동점 깨기(행 0=위)와 같은 결과.
+  for (const edge of reverseSiblingOrder(sorted)) {
+    // 되돌아가는 엣지는 뒤집어 넣는다 — 랭크가 주 경로 계산(flow-layout)과 같은 비순환 그래프에서 나온다
+    const [from, to] = backSet.has(edge) ? [edge.target, edge.source] : [edge.source, edge.target];
+    if (from === to) continue;
+    graph.setEdge(from, to, buildDagreEdgeLabel(getEdgeLabelText(edge), isTB, ranksep));
+  }
   dagre.layout(graph);
 
   // 배치 결과를 좌상단(0,0) 기준으로 정규화 — 누적 드리프트 없이 항상 원점에서 시작(캔버스 비대화 방지).
@@ -1209,6 +1337,49 @@ export function layoutSubsetWithDagre(
     return positioned
       ? { ...node, position: { x: positioned.x + dx, y: positioned.y + dy } }
       : node;
+  });
+}
+
+/**
+ * 부분 정렬 뒤처리 — 다시 배치된 블록(ids)과 겹치는 비선택 노드를 흐름 방향으로 밀어 비켜 준다.
+ * 겹친 노드 중 가장 앞(LR=왼쪽 끝, TB=위 끝)부터 그 뒤의 비선택 노드 전부를 같은 거리만큼 옮긴다 —
+ * 함께 옮긴 노드끼리·옮기지 않은 노드와의 상대 배치는 그대로라 새 겹침이 생기지 않는다.
+ */
+export function pushApartFromBlock(
+  nodes: AppNode[],
+  ids: ReadonlySet<string>,
+  rankdir: "LR" | "TB" = "LR",
+): AppNode[] {
+  const boxOf = (node: AppNode) => {
+    const size = nodeSizeOf(node.data.nodeType);
+    const w = node.measured?.width ?? size.w;
+    const h = node.measured?.height ?? size.h;
+    return { x1: node.position.x, y1: node.position.y, x2: node.position.x + w, y2: node.position.y + h };
+  };
+  const block = nodes.filter((node) => ids.has(node.id)).map(boxOf);
+  if (block.length === 0) return nodes;
+  const overlapsBlock = (node: AppNode) => {
+    const box = boxOf(node);
+    return block.some(
+      (b) =>
+        box.x1 < b.x2 + COLLISION_GAP &&
+        box.x2 + COLLISION_GAP > b.x1 &&
+        box.y1 < b.y2 + COLLISION_GAP &&
+        box.y2 + COLLISION_GAP > b.y1,
+    );
+  };
+  const intruders = nodes.filter((node) => !ids.has(node.id) && overlapsBlock(node));
+  if (intruders.length === 0) return nodes;
+  const isTB = rankdir === "TB";
+  const leadOf = (node: AppNode) => (isTB ? node.position.y : node.position.x);
+  const threshold = Math.min(...intruders.map(leadOf));
+  const blockEnd = Math.max(...block.map((b) => (isTB ? b.y2 : b.x2)));
+  const shift = blockEnd + COLLISION_GAP * 5 - threshold;
+  return nodes.map((node) => {
+    if (ids.has(node.id) || leadOf(node) < threshold) return node;
+    return isTB
+      ? { ...node, position: { x: node.position.x, y: node.position.y + shift } }
+      : { ...node, position: { x: node.position.x + shift, y: node.position.y } };
   });
 }
 

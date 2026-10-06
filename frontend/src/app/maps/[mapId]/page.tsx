@@ -152,8 +152,6 @@ import {
   buildNodeData,
   buildOutline,
   distributeSelected,
-  layoutWithDagre,
-  layoutSubsetWithDagre,
   makeUniqueLabel,
   nodeSizeOf,
   normalizeNodeType,
@@ -274,7 +272,7 @@ import { buildCsvFromGraph } from "@/lib/csv-export";
 import type { CsvColumnKey } from "@/lib/export-columns";
 import { formatKst } from "@/lib/datetime";
 import { constrainToAxis } from "@/lib/drag-constrain";
-import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
+import { autoLayoutFlow, autoLayoutSubsetFlow, type FlowDir, inferFlowDir } from "@/lib/flow-layout";
 import { buildFlowHandleStyle } from "@/lib/flow-handle-style";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
@@ -4485,24 +4483,33 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, pushHistory, setNodes, scheduleAutoSave],
   );
 
-  // 자동정렬(가로/세로) — 전체는 dagre + 척추(시작→대표 끝) 직선화 + 엣지 핸들 재지정(lib/flow-layout),
-  // ids(2개 이상)가 오면 그 부분만 방향 dagre(직선화·핸들 변경 없음). 노드·엣지 한 스냅샷 = undo 1회.
+  // 자동정렬(가로/세로) — 전체는 dagre(영역 클러스터) + 척추(시작→대표 끝 최장 경로) 직선화 + 엣지 핸들 재지정
+  // (lib/flow-layout) 후 화면 맞춤, ids(2개 이상)가 오면 그 부분만 방향 dagre + 겹친 이웃 비켜 주기 + 선택 안 엣지 핸들.
+  // L5 캔버스는 임포트가 벌려 둔 분기 출구를 지키려 핸들을 유지한다. 노드·엣지 한 스냅샷 = undo 1회.
   const applyAutoLayout = useCallback(
     (dir: FlowDir, ids?: ReadonlySet<string> | null) => {
       if (readOnly) {
         return;
       }
       pushHistory();
+      const preserveHandles = isFrameworkMap;
       if (ids && ids.size >= 2) {
-        setNodes(layoutSubsetWithDagre(nodesRef.current, edgesRef.current, ids, dir));
-      } else {
-        const result = autoLayoutFlow(nodesRef.current, edgesRef.current, dir);
+        const result = autoLayoutSubsetFlow(nodesRef.current, edgesRef.current, ids, dir, { preserveHandles });
         setNodes(result.nodes);
         setEdges(result.edges);
+      } else {
+        const result = autoLayoutFlow(nodesRef.current, edgesRef.current, dir, {
+          groups: groupsRef.current,
+          preserveHandles,
+        });
+        setNodes(result.nodes);
+        setEdges(result.edges);
+        // 배치는 원점 기준이라 다른 곳을 보던 사용자는 빈 화면을 본다 — 커밋 뒤 전체 맞춤
+        window.setTimeout(() => void reactFlow.fitView({ padding: 0.1, duration: 300 }), 80);
       }
       scheduleAutoSave();
     },
-    [readOnly, pushHistory, setNodes, setEdges, scheduleAutoSave],
+    [readOnly, pushHistory, isFrameworkMap, setNodes, setEdges, reactFlow, scheduleAutoSave],
   );
 
   // ── 드래그-오버 드롭 영역 (앞/뒤 흐름 삽입, Phase 1) ─────────
@@ -12128,7 +12135,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 readOnly={readOnly}
                 onAddNode={() => handleAddNode(null, "process")}
                 onOpenLibrary={() => (isFrameworkMap ? setFrameworkPickerOpen(true) : setLibraryOpen(true))}
-                onAutoArrange={() => applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))}
+                onAutoArrange={() => applyAutoLayout(inferFlowDir(edgesRef.current))}
                 nodeCount={nodes.length}
                 edgeCount={edges.length}
                 subprocessCount={nodes.filter((node) => node.data.nodeType === "subprocess").length}
