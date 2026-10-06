@@ -6,12 +6,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
-import type { NodeTypes } from "@xyflow/react";
+import type { Node, NodeChange, NodeTypes } from "@xyflow/react";
 import { Check, Layers, Maximize2 } from "lucide-react";
 
 import type { ChoiceOption, WorkingGraph } from "@/lib/api";
 import { diffFromCurrentKeys, layoutWorkingGraph, type GraphDiffKeys, highlightConnectedEdges } from "@/lib/interview";
-import { EDGE_DEFAULTS } from "@/lib/canvas";
+import { EDGE_DEFAULTS, styleEdgeLabelPill } from "@/lib/canvas";
+import { buildFanGeom, injectFanLanes } from "@/lib/edge-fanout";
+import { EDITOR_EDGE_TYPES } from "@/components/multiline-edge";
 import { ProcessNode } from "@/components/process-node";
 
 const nodeTypes: NodeTypes = { process: ProcessNode };
@@ -47,8 +49,10 @@ function ChoiceCanvas({
   focusedTitle: string | null;
   onFocusNode: (title: string | null) => void;
 }) {
+  // 노드 실측 크기 — 속성 줄로 높이가 달라지므로 측정 뒤 1회 재배치(+재fit). 메인 프리뷰(interview-preview)와 같은 흐름
+  const [sizes, setSizes] = useState<Map<string, { width: number; height: number }>>(() => new Map());
   const { nodes, edges } = useMemo(() => {
-    const laid = layoutWorkingGraph(option.graph, diff.added, diff.changed);
+    const laid = layoutWorkingGraph(option.graph, diff.added, diff.changed, sizes);
     // 싱크 포커스 — 같은 제목 노드가 모든 안에서 동시에 선택 링·엣지 강조를 갖는다
     const focusedKeys = new Set(
       focusedTitle !== null
@@ -57,15 +61,34 @@ function ChoiceCanvas({
     );
     return {
       nodes: laid.nodes.map((n) => ({ ...n, selected: focusedKeys.has(n.id) })),
-      edges: highlightConnectedEdges(
-        laid.edges.map((e) => ({ ...EDGE_DEFAULTS, ...e })),
-        focusedKeys,
+      edges: injectFanLanes(
+        highlightConnectedEdges(
+          laid.edges.map((e) => styleEdgeLabelPill({ ...EDGE_DEFAULTS, ...e })),
+          focusedKeys,
+        ),
+        buildFanGeom(laid.nodes),
       ),
     };
-  }, [option.graph, diff, focusedTitle]);
+  }, [option.graph, diff, focusedTitle, sizes]);
   const { fitView, setCenter, getZoom, getNodes } = useReactFlow();
   // fitView는 그래프가 바뀔 때 1회만 — 포커스 클릭(nodes identity 변경)이 카메라를 되돌리지 않게
   const fitForRef = useRef<unknown>(null);
+  function handleNodesChange(changes: NodeChange<Node>[]) {
+    let next: Map<string, { width: number; height: number }> | null = null;
+    for (const change of changes) {
+      if (change.type !== "dimensions" || !change.dimensions) continue;
+      const width = Math.round(change.dimensions.width);
+      const height = Math.round(change.dimensions.height);
+      const prev = (next ?? sizes).get(change.id);
+      if (prev && prev.width === width && prev.height === height) continue;
+      next ??= new Map(sizes);
+      next.set(change.id, { width, height });
+    }
+    if (next) {
+      fitForRef.current = null; // 재배치 후 카메라를 다시 맞춘다
+      setSizes(next);
+    }
+  }
   useEffect(() => {
     if (nodes.length > 0 && fitForRef.current !== option.graph) {
       fitForRef.current = option.graph;
@@ -92,6 +115,9 @@ function ChoiceCanvas({
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      // 에디터 엣지(최소 높이 40px·팬아웃·장애물 우회·다중행 HTML 라벨) — 고르면 에디터에 그려질 모양 그대로
+      edgeTypes={EDITOR_EDGE_TYPES}
+      onNodesChange={handleNodesChange}
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={false}

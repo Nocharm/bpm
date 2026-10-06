@@ -112,6 +112,19 @@ describe("layoutWorkingGraph", () => {
     expect(nodes.find((n) => n.id === "s")!.data.department).toBe("");
   });
 
+  it("maps auto-layout handles to the 4-side ids the sideHandles preview nodes actually have", () => {
+    // SP 타깃은 자동정렬이 in:변 핸들을 고르지만 프리뷰 노드엔 그 핸들이 없다 — 그대로 두면 RF가 엣지를 버린다
+    const graph: WorkingGraph = {
+      ...GRAPH,
+      nodes: [...GRAPH.nodes, { key: "sp", title: "하위", node_type: "subprocess", description: "", attributes: null, group_key: null }],
+      edges: [{ source: "s", target: "a", label: "" }, { source: "a", target: "sp", label: "" }],
+    };
+    const { edges } = layoutWorkingGraph(graph, new Set());
+    const toSp = edges.find((e) => e.target === "sp");
+    expect(toSp?.targetHandle).toMatch(/^t-(left|right|top|bottom)$/);
+    expect(toSp?.sourceHandle).toMatch(/^s-(left|right|top|bottom)$/);
+  });
+
   it("dagre 배치 후 좌표·diffStatus 부여", () => {
     const { nodes, edges } = layoutWorkingGraph(GRAPH, new Set(["a"]));
     expect(nodes).toHaveLength(2);
