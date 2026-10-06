@@ -270,6 +270,23 @@ export function nodeSizeOf(nodeType: ProcessNodeType): { w: number; h: number } 
   }
 }
 
+/**
+ * 저장 좌표 노드에 height-shift 표시 Y 오프셋을 더한 사본 — 렌더 위치 기준 기하(팬 레인·변 다시 고르기)용.
+ * 오프셋이 하나도 없으면 같은 배열을 돌려준다(메모 유지).
+ */
+export function shiftNodesByDisplayY(
+  nodes: readonly AppNode[],
+  offsets: ReadonlyMap<string, number>,
+): AppNode[] {
+  if (!nodes.some((node) => (offsets.get(node.id) ?? 0) !== 0)) {
+    return nodes as AppNode[];
+  }
+  return nodes.map((node) => {
+    const dy = offsets.get(node.id) ?? 0;
+    return dy === 0 ? node : { ...node, position: { x: node.position.x, y: node.position.y + dy } };
+  });
+}
+
 function getNodeSize(node: AppNode): { w: number; h: number } {
   return nodeSizeOf(node.data.nodeType);
 }
@@ -312,11 +329,20 @@ function titleForEstimate(label: string, nodeType: ProcessNodeType): string {
 /**
  * 노드 렌더 폭 추정 — 타이틀 기준, `[nodeSizeOf.w, NODE_MAX_WIDTH]`로 클램프.
  * 인라인 펼침 자식(측정 불가)의 영역 경계 폭 계산용 — 긴 라벨은 상한에서 wrap되므로 상한을 넘지 않는다.
- * decision/subprocess는 고정폭이라 근사값 그대로. 폰트는 노드 타이틀(text-sm/font-medium) 근사.
+ * decision은 고정폭이라 근사값 그대로. subprocess는 사용자가 넓힌 폭(explicitWidth=data.nodeWidth)이 있으면
+ * 렌더와 같은 클램프로 그 폭, 없으면 기본폭. 폰트는 노드 타이틀(text-sm/font-medium) 근사.
  */
-export function estimateNodeWidth(label: string, nodeType: ProcessNodeType): number {
+export function estimateNodeWidth(
+  label: string,
+  nodeType: ProcessNodeType,
+  explicitWidth?: number | null,
+): number {
   const base = nodeSizeOf(nodeType).w;
-  if (nodeType === "decision" || nodeType === "subprocess") return base;
+  if (nodeType === "subprocess") {
+    // process-node.tsx SP_BASE_WIDTH..SP_MAX_WIDTH(기본폭 1.2배) 클램프와 동기
+    return explicitWidth != null ? Math.min(base * 1.2, Math.max(base, explicitWidth)) : base;
+  }
+  if (nodeType === "decision") return base;
   // 명시 줄바꿈(\n) 지원 — 가장 넓은 줄 기준
   const widest = Math.max(
     ...titleForEstimate(label, nodeType)
@@ -610,6 +636,42 @@ export function getEdgeDefaults(): Omit<typeof EDGE_DEFAULTS, "type"> & { type: 
   return { ...EDGE_DEFAULTS, type: newEdgeLineStyle };
 }
 
+export interface AppEdgeInput {
+  // 없으면 새 id(genId) — 붙여넣기·로드처럼 id가 정해진 경로는 넘긴다
+  id?: string;
+  source: string;
+  target: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+  label?: string | null;
+  // 선 모양 — 없으면 새 엣지 기본값(getNewEdgeLineStyle)
+  type?: string;
+  // 임포트 출처 게이트웨이(레거시 병렬 도출 재료) — 없으면 null(toAppEdges 왕복 형태)
+  gateway?: string | null;
+  // 주면 하위프로세스 끝점 핸들을 정규화(withSubprocessHandles) — 없으면 넘긴 핸들 그대로
+  isSubprocess?: (nodeId: string) => boolean;
+}
+
+/**
+ * 에디터 엣지 단일 생성기 — 기본 속성(선 모양·화살표·애니메이션) + 핸들 폴백(오른쪽 출발·왼쪽 도착)
+ * + `data.gateway` 기본값 + 하위프로세스 핸들 정규화를 한 곳에서 맞춘다. 생성 경로(연결·삽입·붙여넣기·
+ * Ctrl 드래그 복제·로드)가 저마다 조립하다 `data.gateway`가 빠지는 경로가 생겼다(2026-10-06).
+ */
+export function buildAppEdge(input: AppEdgeInput): Edge {
+  const edge: Edge = {
+    ...getEdgeDefaults(),
+    type: input.type ?? newEdgeLineStyle,
+    id: input.id ?? genId(),
+    source: input.source,
+    target: input.target,
+    sourceHandle: input.sourceHandle ?? sourceHandleId("right"),
+    targetHandle: input.targetHandle ?? targetHandleId("left"),
+    label: input.label || undefined,
+    data: { gateway: input.gateway ?? null },
+  };
+  return input.isSubprocess ? withSubprocessHandles(edge, input.isSubprocess) : edge;
+}
+
 // 판단(decision) 노드 분기 엣지 — Yes/No는 고정 라벨, 기타는 사용자 지정(빈 값 포함)
 export type BranchKind = "yes" | "no" | "other";
 export const BRANCH_YES_LABEL = "Yes";
@@ -744,6 +806,41 @@ export function targetHandleId(side: HandleSide): string {
 }
 
 const HANDLE_SIDES: HandleSide[] = ["left", "right", "top", "bottom"];
+
+// 프로세스·하위프로세스 좌/우 핸들의 라벨 라인 앵커(px, 노드 상단 기준) — process-node.tsx sideAnchorTop과 동기
+const SIDE_ANCHOR_TOP = 18;
+
+/**
+ * 렌더된 엣지 경로 요소가 싣는 라벨 좌표(data-label-x/y, 흐름 좌표)를 읽는다 — 우회·팬·스텁 경로의
+ * 실제 라벨 자리. 속성이 없거나 숫자가 아니면 null(호출부가 끝점 기하로 폴백).
+ */
+export function readEdgeLabelFlowPoint(el: Element | null | undefined): { x: number; y: number } | null {
+  const rawX = el?.getAttribute("data-label-x");
+  const rawY = el?.getAttribute("data-label-y");
+  if (rawX == null || rawY == null || rawX === "" || rawY === "") return null;
+  const x = Number(rawX);
+  const y = Number(rawY);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+/**
+ * 노드 화면 사각형에서 한 변 핸들의 화면 좌표 — 좌/우는 프로세스·하위프로세스면 라벨 라인(상단 18px·줌 반영),
+ * 그 외 노드는 세로 중앙. 상/하는 가로 중앙.
+ */
+export function getHandleScreenPoint(
+  rect: { left: number; top: number; width: number; height: number },
+  side: HandleSide,
+  nodeType: ProcessNodeType | undefined,
+  zoom: number,
+): { x: number; y: number } {
+  const midX = rect.left + rect.width / 2;
+  const anchoredTop = nodeType === "process" || nodeType === "subprocess";
+  const sideY = rect.top + (anchoredTop ? Math.min(SIDE_ANCHOR_TOP * zoom, rect.height / 2) : rect.height / 2);
+  if (side === "left") return { x: rect.left, y: sideY };
+  if (side === "right") return { x: rect.left + rect.width, y: sideY };
+  if (side === "top") return { x: midX, y: rect.top };
+  return { x: midX, y: rect.top + rect.height };
+}
 
 // "s-top"/"t-left" → "top"/"left", 하위프로세스 들어오는 문 "in"/"in:top" → "left"/"top".
 // 미일치(끝 키 등)·null은 fallback(구 데이터 대비).
@@ -923,11 +1020,13 @@ export function getFlowPathBackward(edges: Edge[], startId: string, hops: number
 // 자기루프·중복 없이 엣지 추가. 기본 핸들 변을 명시(source=right/target=left) —
 // 미지정 시 React Flow가 첫 렌더 핸들(left)에 붙어, toAppEdges·buildGraph의 right/left 폴백과 어긋난다.
 // sourceHandle(하위프로세스 끝 키)을 주면 중복 판정도 그 끝에 한정 — 다른 끝에서 같은 타깃은 허용.
+// handles는 새 엣지에만 싣는 잡은·놓은 핸들(중복 판정엔 쓰지 않는다, insertNodeAfter newEdgeHandles).
 function withEdge(
   edges: Edge[],
   source: string,
   target: string,
   sourceHandle?: string,
+  handles?: { sourceHandle?: string | null; targetHandle?: string | null },
 ): Edge[] {
   if (
     source === target ||
@@ -943,14 +1042,12 @@ function withEdge(
   }
   return [
     ...edges,
-    {
-      ...getEdgeDefaults(),
-      id: genId(),
+    buildAppEdge({
       source,
       target,
-      sourceHandle: sourceHandle ?? sourceHandleId("right"),
-      targetHandle: targetHandleId("left"),
-    },
+      sourceHandle: handles?.sourceHandle ?? sourceHandle,
+      targetHandle: handles?.targetHandle,
+    }),
   ];
 }
 
@@ -1110,18 +1207,7 @@ export function insertNodeAfter(
   if (rewire) {
     next = next.map((edge) => (isFromB(edge) ? { ...edge, source: aId } : edge));
   }
-  const result = withEdge(next, bId, aId, sourceHandle);
-  // withEdge는 새 엣지를 끝에 붙인다 — 추가되지 않았으면(중복·역행) 그대로
-  if (!newEdgeHandles || result.length === next.length) return result;
-  const added = result[result.length - 1];
-  return [
-    ...result.slice(0, -1),
-    {
-      ...added,
-      sourceHandle: newEdgeHandles.sourceHandle ?? added.sourceHandle,
-      targetHandle: newEdgeHandles.targetHandle ?? added.targetHandle,
-    },
-  ];
+  return withEdge(next, bId, aId, sourceHandle, newEdgeHandles);
 }
 
 /**

@@ -512,6 +512,7 @@ const en = {
   "subprocess.outputExcess": "{count} extra connection(s). Each exit takes one connection.",
   "node.parallelCount": "{count} in parallel",
   "ctx.parallelOutput": "Parallel exit",
+  "ctx.repickSides": "Re-pick connection sides",
   "edge.endParallel": "Parallel exit",
   "edge.endSingle": "Single exit",
   "edge.endToParallel": "Click to make it parallel",
@@ -1276,6 +1277,7 @@ const en = {
   "edge.outputSwapped": "A node has a single output - use a Decision node to branch.",
   "edge.reciprocalBlocked": "Can't loop back directly between two nodes - route it through a Decision node.",
   "edge.duplicateBranch": "This exit already connects to that node.",
+  "edge.rewireReciprocal": "Can't apply: {from} and {to} would link both ways. Route the loop through a Decision node.",
   "edge.outputConflict": "This node already has an output.",
   "edge.decisionPrompt": "Drop on a decision node",
   "edge.actionBranch": "Branch",
@@ -3496,6 +3498,7 @@ const ko: Record<MessageKey, string> = {
   // 노드 위 병렬 호버 필 — 언어 무관 영어 고정(한글 "동시 N갈래"가 어색, 사용자 결정 2026-10-06)
   "node.parallelCount": "{count} in parallel",
   "ctx.parallelOutput": "Parallel",
+  "ctx.repickSides": "연결 변 다시 고르기",
   // SP 출구 목록 모달 칩·툴팁 — 언어 무관 영어 고정(사용자 결정 2026-10-06)
   "edge.endParallel": "Parallel exit",
   "edge.endSingle": "Single exit",
@@ -4256,6 +4259,7 @@ const ko: Record<MessageKey, string> = {
   "edge.outputSwapped": "노드 출력은 1개입니다 - 분기가 필요하면 Decision 노드를 사용하세요.",
   "edge.reciprocalBlocked": "두 노드 간 직접 회귀(1:1 순환)는 불가합니다 - Decision 노드로 우회하세요.",
   "edge.duplicateBranch": "이 출구는 이미 그 노드로 연결되어 있습니다.",
+  "edge.rewireReciprocal": "{from}·{to} 두 노드가 서로 이어지게 되어 적용할 수 없습니다. 되돌아가는 흐름은 Decision 노드로 우회하세요.",
   "edge.outputConflict": "이미 출력이 있는 노드입니다.",
   "edge.decisionPrompt": "디시전 노드에 드롭",
   "edge.actionBranch": "분기",
