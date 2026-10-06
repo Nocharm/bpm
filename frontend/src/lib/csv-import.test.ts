@@ -105,6 +105,22 @@ describe("buildGraphFromCsv - 그래프 변환", () => {
     expect(graph.groups).toEqual([]);
   });
 
+  it("새 맵 배치는 분기 라벨 폭만큼 랭크 간격을 띄운다", () => {
+    // Arrange — 긴 라벨 갈래와 무라벨 갈래가 같은 판단 노드에서 나간다
+    const longLabel = "Approved after a second quality review round";
+    const graph = graphOf(
+      ["Name,Next", `Decide,Sign:${longLabel};Reject`, "Sign,", "Reject,"].join("\n"),
+    );
+    const byTitle = new Map(graph.nodes.map((n) => [n.title, n]));
+    // Act
+    const gap = (byTitle.get("Sign")?.pos_x ?? 0) - (byTitle.get("Decide")?.pos_x ?? 0);
+    // Assert — 라벨 없는 기본 간격(160 + 노드 폭)보다 넓다: 라벨이 dagre에 전달됐다
+    const plain = graphOf(["Name,Next", "Decide,Sign;Reject", "Sign,", "Reject,"].join("\n"));
+    const plainByTitle = new Map(plain.nodes.map((n) => [n.title, n]));
+    const plainGap = (plainByTitle.get("Sign")?.pos_x ?? 0) - (plainByTitle.get("Decide")?.pos_x ?? 0);
+    expect(gap).toBeGreaterThan(plainGap);
+  });
+
   it("헤더는 대소문자·순서 무관, 옵션 컬럼 생략 가능", () => {
     const graph = graphOf("next,NAME\nB,A\n,B");
     const byTitle = new Map(graph.nodes.map((n) => [n.title, n]));

@@ -461,7 +461,8 @@ function toLayoutNodes(nodes: GraphNode[]): AppNode[] {
 }
 
 function toFlowEdges(edges: GraphEdge[]) {
-  return edges.map((e) => ({ id: e.id, source: e.source_node_id, target: e.target_node_id }));
+  // label까지 넘겨야 layoutWithDagre가 라벨 폭만큼 랭크 간격을 잡고 예 갈래를 위에 둔다
+  return edges.map((e) => ({ id: e.id, source: e.source_node_id, target: e.target_node_id, label: e.label }));
 }
 
 function applyPositions(nodes: GraphNode[], laid: AppNode[]): GraphNode[] {
