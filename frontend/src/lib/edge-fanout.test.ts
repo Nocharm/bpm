@@ -166,15 +166,15 @@ describe("assignFanLanes - 가족과 정렬", () => {
     expect(lanes.get("a")?.t).toMatchObject({ k: 0, r: 14 });
   });
 
-  it("같은 측면에 동측·대향이 섞이면 동측(루프백)이 안쪽(34부터), 대향은 그 바깥에서 시작한다", () => {
+  it("같은 측면에 동측·대향이 섞이면 동측(루프백)이 안쪽(위·아래 변은 최소 높이 40부터), 대향은 그 바깥에서 시작한다", () => {
     // T 위쪽 핸들: 오른쪽 같은 줄 L(top→top 루프백)과 위-오른쪽 A(bottom→top 대향)
     const geom = new Map([["T", proc(0, 400)], ["L", proc(400, 400)], ["A", proc(300, 0)]]);
     const lanes = assignFanLanes(
       [edge("l", "L", "T", "s-top", "t-top"), edge("a", "A", "T", "s-bottom", "t-top")],
       geom,
     );
-    expect(lanes.get("l")?.t).toMatchObject({ r: 34 });
-    expect(lanes.get("a")?.t).toMatchObject({ r: 44 });
+    expect(lanes.get("l")?.t).toMatchObject({ r: 40 });
+    expect(lanes.get("a")?.t).toMatchObject({ r: 50 });
   });
 
   it("하위프로세스 끝 핸들은 우측 한 점에 겹치므로 끝 키가 달라도 한 팬 그룹이다", () => {

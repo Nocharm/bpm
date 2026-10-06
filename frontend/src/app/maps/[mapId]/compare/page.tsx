@@ -10,8 +10,6 @@ import {
   type EdgeTypes,
   EdgeLabelRenderer,
   applyNodeChanges,
-  getBezierPath,
-  getSmoothStepPath,
   getStraightPath,
   MarkerType,
   type NodeChange,
@@ -105,6 +103,7 @@ import {
 import { type ChangedField, FIELD_MSG, getLineageKey } from "@/lib/diff";
 import { formatGmp, getGmpBadgeStyle, GMP_OPTIONS } from "@/lib/gmp";
 import { formatDurationHm, formatThousands } from "@/lib/duration";
+import { getBezierPathWithStub, getSmoothStepPathWithStub } from "@/lib/edge-stub";
 import {
   getInheritedParams,
   isSpParamField,
@@ -235,10 +234,10 @@ function LabeledSmoothEdge({
     lineStyle === "straight"
       ? getStraightPath(fan ? spreadStraightEndpoints(pathArgs, fan) : pathArgs)
       : lineStyle === "default"
-        ? ((fan && buildFanBezierPath(pathArgs, fan)) ?? getBezierPath(pathArgs))
+        ? ((fan && buildFanBezierPath(pathArgs, fan)) ?? getBezierPathWithStub(pathArgs))
         : fannedStep
           ? [fannedStep.d, fannedStep.labelX, fannedStep.labelY]
-          : getSmoothStepPath(pathArgs);
+          : getSmoothStepPathWithStub(pathArgs);
   // 흐름 펄스 정지 장면(병렬 도달점·분기 멈춤 지점) — 비교는 읽기 전용이라 움직임 없이 한 장면만(appEdges가 still로 주입)
   const pulse = isEdgePulse(data?.pulse) ? data.pulse : null;
   return (

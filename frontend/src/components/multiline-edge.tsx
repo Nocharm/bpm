@@ -7,8 +7,6 @@
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getBezierPath,
-  getSmoothStepPath,
   getStraightPath,
   useNodes,
   type EdgeProps,
@@ -33,6 +31,7 @@ import {
   type EdgeFan,
 } from "@/lib/edge-fanout";
 import { getDecisionTravel, isEdgePulse } from "@/lib/edge-pulse";
+import { getBezierPathWithStub, getSmoothStepPathWithStub } from "@/lib/edge-stub";
 
 type LineVariant = "default" | "smoothstep" | "straight";
 
@@ -42,7 +41,8 @@ function fanOf(props: Pick<EdgeProps, "data">): EdgeFan | undefined {
   return isEdgeFan(fan) ? fan : undefined;
 }
 
-/** 선 모양별 경로 + 라벨 앵커 좌표. 팬 레인이 있으면 곡선은 제어점 중첩, 직선은 끝점 분산(lib/edge-fanout). */
+/** 선 모양별 경로 + 라벨 앵커 좌표. 팬 레인이 있으면 곡선은 제어점 중첩, 직선은 끝점 분산(lib/edge-fanout).
+ *  꺾은선·곡선은 위·아래 끝 최소 높이(lib/edge-stub)를 따른다. */
 function buildPath(variant: LineVariant, props: EdgeProps): [string, number, number] {
   const { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition } = props;
   const params = { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition };
@@ -58,9 +58,7 @@ function buildPath(variant: LineVariant, props: EdgeProps): [string, number, num
       return fanned;
     }
   }
-  const [path, labelX, labelY] =
-    variant === "default" ? getBezierPath(params) : getSmoothStepPath(params);
-  return [path, labelX, labelY];
+  return variant === "default" ? getBezierPathWithStub(params) : getSmoothStepPathWithStub(params);
 }
 
 // 장애물 목록 캐시 — RF 스토어 nodes 배열 identity당 1회 산출해 모든 꺾은선 엣지가 공유한다.

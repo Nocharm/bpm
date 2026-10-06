@@ -27,7 +27,7 @@ describe("buildPreviewEdgePath", () => {
     const { d, back } = buildPreviewEdgePath(box(400, 0), box(0, 0));
     expect(back).toBe(true);
     expect(d.startsWith("M 450,0")).toBe(true);
-    expect(d).toContain(",-24");  // 두 노드 위 24px 통로
+    expect(d).toContain(",-40");  // 두 노드 위 40px 통로(위·아래 변 최소 높이)
     expect(d.endsWith("L 50,0")).toBe(true);
   });
 
@@ -37,7 +37,7 @@ describe("buildPreviewEdgePath", () => {
 
   it("lifts the back-edge corridor 10px per lane so nested loops do not overlap", () => {
     const { d } = buildPreviewEdgePath(box(400, 0), box(0, 0), 1);
-    expect(d).toContain(",-34");
+    expect(d).toContain(",-50");
     expect(d.startsWith("M 450,0")).toBe(true);
     expect(d.endsWith("L 50,0")).toBe(true);
   });
@@ -79,7 +79,7 @@ describe("assignPreviewBackLanes", () => {
 
 describe("previewPadTop", () => {
   it("grows the top padding with the highest back-edge lane so nested loops stay inside the viewBox", () => {
-    expect(previewPadTop(new Map())).toBe(40);
-    expect(previewPadTop(new Map([["a", 0], ["b", 2]]))).toBe(60);
+    expect(previewPadTop(new Map())).toBe(56);
+    expect(previewPadTop(new Map([["a", 0], ["b", 2]]))).toBe(76);
   });
 });

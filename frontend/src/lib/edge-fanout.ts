@@ -10,6 +10,7 @@ import {
   sideFromHandleId,
 } from "@/lib/canvas";
 import { buildRoundedOrthPath, type ObstacleRect } from "@/lib/edge-detour";
+import { getBezierEndOffset, VERTICAL_EDGE_STUB } from "@/lib/edge-stub";
 
 /** 첫 아크 반경(px) — 20px 스텁보다 짧아 촘촘한 배치에서도 성립 */
 export const FAN_R0 = 14;
@@ -34,8 +35,6 @@ export const FAN_SPREAD = 3.5;
 export const FAN_SPREAD_CLIP = 4.5;
 /** 곡선 팬 끝 제어점 거리 = 반경 × 이 배수(원호 근사) */
 const BEZIER_CONTROL_PER_RADIUS = 1.2;
-/** RF getBezierPath 기본 curvature — 역방향(distance<0) 제어점 거리 공식에만 쓰인다 */
-const RF_CURVATURE = 0.25;
 /** 같은 줄 판정(px) — 측면 거리가 이보다 작으면 아크 없이 직선 진입(k=-1) */
 const ON_ROW_EPS = 4;
 /** 렌더 전용 복제 노드 접두(에디터 Ctrl 드래그 고스트) — 기하는 원본 노드 것을 쓴다 */
@@ -142,12 +141,14 @@ function setLane(out: Map<string, EdgeFan>, ref: EndRef, lane: FanLane): void {
 
 /**
  * 한 앵커 그룹의 레인 배정. 측면 부호 × (동측 | 앞쪽 대향)의 네 가족을 따로 센다 —
- * 동측(루프백)은 가까운 상대가 안쪽(무지개, 기저 R0+스텁), 대향은 먼 상대가 안쪽. 각각 교차가 생기지 않는
+ * 동측(루프백)은 가까운 상대가 안쪽(무지개, 기저 R0+스텁 — 위·아래 변은 최소 높이 VERTICAL_EDGE_STUB 이상), 대향은 먼 상대가 안쪽. 각각 교차가 생기지 않는
  * 유일한 순서. 같은 측면에 둘 다 있으면 동측이 안쪽이고 대향은 그 바깥에서 시작한다(리뷰 C3).
  * 반경(r)은 공칭 base+10k를 형제의 측면 거리·수평 여유에 맞춰 바깥(가까운 쪽)부터 안으로 압축한다 —
  * 반경만 개별 클램프하면 순서가 뒤집혀 교차한다(리뷰 C2). 여유가 6px 미만이면 그 끝은 팬 없음(r=0). 동률은 엣지 id.
  */
-function assignGroup(members: EndRef[], out: Map<string, EdgeFan>): void {
+function assignGroup(members: EndRef[], out: Map<string, EdgeFan>, isVerticalSide: boolean): void {
+  // 루프백 레인 반경 = 변에서 뜨는 높이 — 위·아래 변은 최소 높이(lib/edge-stub) 아래로 내리지 않는다
+  const behindBase = isVerticalSide ? Math.max(FAN_R0 + FAN_STUB, VERTICAL_EDGE_STUB) : FAN_R0 + FAN_STUB;
   const n = members.length;
   const byLateral = [...members].sort((a, b) => a.v - b.v || compareId(a, b));
   const lanes = new Map<EndRef, FanLane>();
@@ -166,7 +167,7 @@ function assignGroup(members: EndRef[], out: Map<string, EdgeFan>): void {
     behind.forEach((ref, k) => {
       const lane = lanes.get(ref)!;
       lane.k = k;
-      const r = Math.min(FAN_R0 + FAN_STUB + k * FAN_GAP, Math.abs(ref.v) - LANE_CLEAR);
+      const r = Math.min(behindBase + k * FAN_GAP, Math.abs(ref.v) - LANE_CLEAR);
       if (r < FAN_R_MIN || (innerR !== null && r < innerR + FAN_GAP_MIN)) {
         return;
       }
@@ -237,9 +238,9 @@ export function assignFanLanes(
     });
   }
   const out = new Map<string, EdgeFan>();
-  for (const members of groups.values()) {
+  for (const [key, members] of groups) {
     if (members.length >= 2) {
-      assignGroup(members, out);
+      assignGroup(members, out, key.endsWith("|top") || key.endsWith("|bottom"));
     }
   }
   return out;
@@ -475,11 +476,6 @@ export function buildFanStepPath(
   return { d, labelX, labelY, points };
 }
 
-/** RF getBezierPath의 제어점 거리 — 정면이면 거리의 절반, 뒤쪽이면 curvature·25·√(-distance) */
-function rfControlOffset(distance: number): number {
-  return distance >= 0 ? 0.5 * distance : RF_CURVATURE * 25 * Math.sqrt(-distance);
-}
-
 /**
  * 곡선 팬 경로 — 팬 끝의 제어점만 1.2r로 당겨 반경이 다른 중첩 아크가 되게 한다. 끝점 불변.
  * 반환 [path, labelX, labelY](t=0.5). null = 팬 없음.
@@ -494,12 +490,9 @@ export function buildFanBezierPath(args: FanPathArgs, fan: EdgeFan): [string, nu
   }
   const sourceAxes = axesOf(sideOfPosition(args.sourcePosition));
   const targetAxes = axesOf(sideOfPosition(args.targetPosition));
-  const cs = head
-    ? head.r * BEZIER_CONTROL_PER_RADIUS
-    : rfControlOffset(dot({ x: E.x - S.x, y: E.y - S.y }, sourceAxes.out));
-  const ct = tail
-    ? tail.r * BEZIER_CONTROL_PER_RADIUS
-    : rfControlOffset(dot({ x: S.x - E.x, y: S.y - E.y }, targetAxes.out));
+  // 팬 없는 끝은 RF 제어점 거리 + 위·아래 끝 최소 높이(lib/edge-stub)
+  const cs = head ? head.r * BEZIER_CONTROL_PER_RADIUS : getBezierEndOffset(args, "source");
+  const ct = tail ? tail.r * BEZIER_CONTROL_PER_RADIUS : getBezierEndOffset(args, "target");
   const c1 = add(S, sourceAxes.out, cs);
   const c2 = add(E, targetAxes.out, ct);
   const d = `M ${fmt(S.x)},${fmt(S.y)} C ${fmt(c1.x)},${fmt(c1.y)} ${fmt(c2.x)},${fmt(c2.y)} ${fmt(E.x)},${fmt(E.y)}`;

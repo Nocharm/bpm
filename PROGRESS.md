@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-06 — 위·아래 변 연결선 최소 높이 40px (dev)
+
+- 같은 높이 위→위 연결이 노드 위 20px(RF 기본 스텁) 안쪽에서 납작하게 돌아 답답했다(사용자 리포트, 40px 결정). `lib/edge-stub.ts` 한 곳: 위·아래 끝이 있고 두 끝이 서로 정면이 아니면 꺾은선 스텁 40px·곡선 꼭짓점 40px, 마주 보는 연결은 제외. 에디터·L5·비교·팬아웃 루프백 레인(34→40)·SP 미리보기 역행 통로(24→40) 공통.
+- 검증: vitest(신규 `edge-stub.test.ts`)·tsc·lint, `pw-smoke-edge-fanout.mjs` 25/25, 에디터 캡처(꺾은선 40px·곡선 꼭짓점 40px).
+
 ## 2026-10-06 — dev → main 머지: 출력 규칙·병렬 출구·IO 계약 최신화·흐름 펄스·node 22·용어 통일
 
 - **출력 규칙**(사용자 결정, 일반 맵·L5 공통): 출구(일반 `__primary__`, SP 끝 키)마다 연결 1개, 병렬 출구(노드 속성 `parallel_outputs`, 우클릭 `Parallel`)는 2개 이상, decision·start(기본 병렬)는 규칙 밖. 단일 소스 `lib/output-rules.ts` ↔ BE `find_output_rule_violations`(확정 게이트 6). SP in 핸들 받기 전용·출구 우측 한 점+출구 목록·`사용량/끝 수` 배지. 레거시 `gateway=parallel`은 도출만, 병렬 해제 시 소거. 병렬 노드는 속성만 켜도 안쪽 링(노드 자신의 `outline`이라 테두리와 함께 스냅).

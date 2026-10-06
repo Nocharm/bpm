@@ -8,13 +8,14 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 
 import type { VersionGraph } from "@/lib/api";
+import { VERTICAL_EDGE_STUB } from "@/lib/edge-stub";
 import { resolveNodeStroke } from "@/components/process-node";
 import { nodeSizeOf, normalizeNodeType, terminalDisplayLabel } from "@/lib/canvas";
 import { buildRoundedOrthPath } from "@/lib/edge-detour";
 
 const ARROW_MARKER_ID = "scope-preview-arrow";
 const BACK_EDGE_MIN_DX = 40;   // 타겟 중심이 소스보다 이만큼 왼쪽이면 역행(flow-layout isBackEdge와 같은 문턱)
-const BACK_EDGE_CLEARANCE = 24; // 역행 경로가 두 노드 위로 띄우는 높이
+const BACK_EDGE_CLEARANCE = VERTICAL_EDGE_STUB; // 역행 경로가 두 노드 위로 띄우는 높이 — 위·아래 변 최소 높이(lib/edge-stub)와 같은 값
 
 export interface PreviewBox {
   x: number;
@@ -100,7 +101,7 @@ export function previewPadTop(lanes: ReadonlyMap<string, number>): number {
   for (const lane of lanes.values()) {
     maxLane = Math.max(maxLane, lane);
   }
-  return 40 + maxLane * BACK_EDGE_LANE_GAP;
+  return BACK_EDGE_CLEARANCE + 16 + maxLane * BACK_EDGE_LANE_GAP; // 통로 위 16px — 선·라운드가 잘리지 않는 여백
 }
 
 /** 프리뷰 엣지 경로 — 앞으로 가는 엣지는 직선(타겟 테두리에서 끝), 역행 엣지는 소스 위→두 노드 위 통로→타겟 위로 도는 직각 경로.
@@ -223,7 +224,7 @@ export function ScopePreview({
   // 같은 노드 위로 도는 역행 엣지 레인(무지개 중첩) — 에디터 팬아웃과 같은 규칙의 SVG 판
   const backLanes = assignPreviewBackLanes(edges, centerById);
 
-  const pad = 40;  // 역행 경로 통로(BACK_EDGE_CLEARANCE)보다 넉넉해 위로 도는 선이 잘리지 않는다
+  const pad = 40;  // 좌·우·아래 여백 — 위쪽은 역행 통로까지 담는 previewPadTop
   const minX = Math.min(...boxes.map((box) => box.x)) - pad;
   const minY = Math.min(...boxes.map((box) => box.y)) - previewPadTop(backLanes); // 바깥 레인만큼 위 여백 추가
   const maxX = Math.max(...boxes.map((box) => box.x + box.w)) + pad;
