@@ -33,6 +33,7 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Link2,
   Loader2,
   Lock,
   type LucideIcon,
@@ -242,6 +243,8 @@ function renderCompareEdge(
 ) {
   // 흐름 펄스 정지 장면(병렬 도달점·분기 멈춤 지점) — 비교는 읽기 전용이라 움직임 없이 한 장면만(appEdges가 still로 주입)
   const pulse = isEdgePulse(data?.pulse) ? data.pulse : null;
+  // 미러 라벨(SP 끝 제목, 렌더 전용) — 에디터와 같은 표기: 점선 테두리 + 링크 아이콘으로 직접 라벨과 구분
+  const mirrored = data?.labelMirrored === true;
   return (
     <>
       <BaseEdge path={path} markerEnd={markerEnd} style={style} data-label-x={labelX} data-label-y={labelY} />
@@ -252,7 +255,8 @@ function renderCompareEdge(
         <EdgeLabelRenderer>
           {/* 최대폭 + 자동 줄바꿈 — 수평 연결에서 긴 라벨이 이웃 노드를 덮거나 잘리지 않게 */}
           <div
-            className="pointer-events-none absolute whitespace-pre-wrap rounded-xs px-1 text-center text-fine leading-tight text-ink-secondary"
+            className={`pointer-events-none absolute whitespace-pre-wrap rounded-xs px-1 text-center text-fine leading-tight text-ink-secondary ${mirrored ? "border border-dashed border-border-strong" : ""}`}
+            data-mirrored={mirrored ? "true" : undefined}
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               maxWidth: COMPARE_EDGE_LABEL_MAX_WIDTH,
@@ -262,7 +266,14 @@ function renderCompareEdge(
               WebkitBackdropFilter: "blur(3px)",
             }}
           >
-            {label}
+            {mirrored ? (
+              <span className="inline-flex items-center gap-1">
+                <Link2 size={11} strokeWidth={1.5} className="shrink-0" aria-hidden />
+                <span>{label}</span>
+              </span>
+            ) : (
+              label
+            )}
           </div>
         </EdgeLabelRenderer>
       )}
