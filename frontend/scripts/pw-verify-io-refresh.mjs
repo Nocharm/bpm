@@ -65,6 +65,7 @@ await api("PUT", `/api/versions/${draft.id}/graph`, {
     node("k", "임포트 병렬", "process", 1000, 700),
     node("l1", "갈래 L1", "process", 1350, 620),
     node("l2", "갈래 L2", "process", 1350, 820),
+    node("p", "병렬 미연결", "process", 1650, 420, { parallel_outputs: ["__primary__"] }),
     node("end", "", "end", 1650, 120, { is_primary_end: true }),
   ],
   edges: [
@@ -150,10 +151,12 @@ async function clipOf(ids, pad = 40) {
 
 await openEditor(map.id, draft.id);
 
-// ── (10) 병렬 노드 안쪽 링 — 속성 병렬 A·레거시 gateway 병렬 K·시작 팬아웃엔 링, 분기 D엔 없음
+// ── (10) 병렬 노드 안쪽 링 — 속성 병렬 A·미연결 속성 병렬 P·레거시 gateway 병렬 K·시작 팬아웃엔 링, 분기 D·일반 B엔 없음
 const ringOf = (id) => page.locator(`.react-flow__node[data-id="${id}"] [data-id="node-parallel-ring"]`).count();
 check("a flagged parallel node draws the inner ring", (await ringOf(nid("a"))) === 1);
 check("a legacy gateway-parallel node draws the inner ring", (await ringOf(nid("k"))) === 1);
+check("a flagged parallel node draws the ring before any connection", (await ringOf(nid("p"))) === 1);
+check("a plain node has no inner ring", (await ringOf(nid("b"))) === 0);
 check("a decision node has no inner ring", (await ringOf(nid("d"))) === 0);
 await page.screenshot({ path: `${OUT}/parallel-ring.png`, clip: await clipOf([nid("a"), nid("b"), nid("c")], 30) });
 

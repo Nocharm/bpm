@@ -1193,10 +1193,20 @@ function ParallelHoverBadge({
 }
 
 // 병렬 노드 안쪽 링 — 기존 1.5px 테두리 안쪽에 노드색(--nc) 옅은 1px 선을 한 겹 더해 병렬임을 약하게 드러낸다
-// (사용자 요청 2026-10-02). 판정은 호버 배지와 같은 출구 그룹(병렬 ∧ 엣지 ≥2), 분기 노드엔 쓰지 않는다.
+// (사용자 요청 2026-10-02). 병렬 속성을 켰으면 연결 전에도 링(사용자 요청 2026-10-06), 그 외엔 호버 배지와 같은
+// 출구 그룹 판정(병렬 ∧ 엣지 ≥2 — 레거시 gateway 도출·시작 팬아웃). 분기 노드엔 쓰지 않는다.
 // radius = 바깥 곡률 - 3px(테두리 1.5 + 간격 1.5)이라 호출부가 노드 모양별로 넘긴다.
-function ParallelInnerRing({ outputGroups, radius }: { outputGroups: OutputGroup[]; radius: number }) {
-  const isParallel = outputGroups.some((group) => group.parallel && group.count >= 2);
+function ParallelInnerRing({
+  outputGroups,
+  parallelOutputs,
+  radius,
+}: {
+  outputGroups: OutputGroup[];
+  parallelOutputs?: string[];
+  radius: number;
+}) {
+  const isParallel =
+    (parallelOutputs?.length ?? 0) > 0 || outputGroups.some((group) => group.parallel && group.count >= 2);
   if (!isParallel) return null;
   return (
     <span
@@ -1440,7 +1450,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           <>
             <ParallelHoverBadge outputGroups={outputGroups} ends={data.subEnds} visible={hovered} />
             {/* rounded-sm(8px) 안쪽 */}
-            <ParallelInnerRing outputGroups={outputGroups} radius={5} />
+            <ParallelInnerRing outputGroups={outputGroups} parallelOutputs={data.parallelOutputs} radius={5} />
           </>
         )}
         <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
@@ -1724,7 +1734,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         <>
           <ParallelHoverBadge outputGroups={outputGroups} visible={hovered} />
           {/* 터미널 19px·일반 rounded-sm 8px 곡률 안쪽 */}
-          <ParallelInnerRing outputGroups={outputGroups} radius={isTerminal ? 16 : 5} />
+          <ParallelInnerRing outputGroups={outputGroups} parallelOutputs={data.parallelOutputs} radius={isTerminal ? 16 : 5} />
         </>
       )}
       <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
