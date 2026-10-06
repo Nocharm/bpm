@@ -142,7 +142,7 @@ DECK = {
                     ("Turn on", "Right-click a node, <b>Parallel exit</b>. Subprocesses pick per end."),
                     ("Rule", "A parallel exit needs two or more connections. No insert prompt."),
                     ("Hover badge", "<b>N in parallel</b> above the node. A faint inner line once on, even before connecting."),
-                    ("Flow pulse", "Parallel dots run in step to three quarters. Decision dots stop, blink, then one branch moves on."),
+                    ("Flow pulse", "Parallel dots set off together and reach three quarters at once. Decision dots stop, blink in turn, then one branch moves on."),
                     ("Reduced motion", "Hidden when the OS reduce-motion setting is on."),
                 ]},
                 {"title": "Tidying · layout, groups, bulk edit", "pts": [

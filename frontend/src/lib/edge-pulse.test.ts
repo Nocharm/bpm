@@ -6,12 +6,16 @@ import {
   buildDecisionWinners,
   buildPulseTimeline,
   DECISION_CYCLES,
+  DECISION_MOVE_S,
+  DECISION_RADIUS,
   DECISION_SPEED_PX_S,
   DECISION_WINNER_REACH,
   FOCUS_SPEED,
   getDecisionCycle,
   getDecisionTravel,
+  getPathSpan,
   getPulseStillAt,
+  PARALLEL_COMMON_PX,
   PARALLEL_CYCLE_S,
   PARALLEL_REACH,
   type DecisionPulse,
@@ -107,26 +111,65 @@ describe("buildDecisionWinners", () => {
 });
 
 describe("buildPulseTimeline (parallel)", () => {
-  it("travels to 75% at the old speed and keeps the 4.2s re-emission cycle", () => {
-    const timeline = buildPulseTimeline({ kind: "parallel", group: "g" }, 0);
+  const parallel = { kind: "parallel" as const, group: "g" };
+  // keySplines 한 구간 "x1 y1 x2 y2"
+  const splineOf = (splines: string, index: number): number[] => splines.split(";")[index].split(" ").map(Number);
+
+  it("keeps the 4.2s re-emission cycle and reaches 75% at the old travel end, then fades", () => {
+    const timeline = buildPulseTimeline(parallel, 0, 400);
     expect(timeline.dur).toBe(PARALLEL_CYCLE_S);
-    expect(timeline.motionKeyPoints).toBe(`0;${PARALLEL_REACH};${PARALLEL_REACH}`);
-    // 예전 끝까지(1.0)를 0.7에 — 같은 속도면 0.75는 0.525에 도달
-    expect(timeline.motionKeyTimes).toBe("0;0.525;1");
+    expect(nums(timeline.motionKeyPoints).slice(-2)).toEqual([PARALLEL_REACH, PARALLEL_REACH]);
+    // 예전 끝까지(1.0)를 0.7에 — 0.75는 0.525에 도달, 그 앞 0.21까지가 공통 구간
+    expect(timeline.motionKeyTimes).toBe("0;0.21;0.525;1");
     const opacity = nums(timeline.opacityValues);
     expect(opacity[nums(timeline.opacityKeyTimes).indexOf(0.525)]).toBe(0);
   });
 
+  it("moves every sibling the same pixels at the same pace first, whatever its length", () => {
+    const [short, long] = [200, 600].map((length) => buildPulseTimeline(parallel, 0, length));
+    expect(nums(short.motionKeyPoints)[1] * 200).toBeCloseTo(PARALLEL_COMMON_PX);
+    expect(nums(long.motionKeyPoints)[1] * 600).toBeCloseTo(PARALLEL_COMMON_PX);
+    expect(nums(short.motionKeyTimes)[1]).toBe(nums(long.motionKeyTimes)[1]);
+    expect(short.motionKeySplines.split(";")[0]).toBe(long.motionKeySplines.split(";")[0]);
+  });
+
+  it("eases in from rest, hands its speed to the spread and slows to a stop at the end", () => {
+    const timeline = buildPulseTimeline(parallel, 0, 600);
+    const [cx1, cy1, cx2, cy2] = splineOf(timeline.motionKeySplines, 0);
+    expect(cy1 / cx1).toBe(0); // 정지에서 출발
+    const handoff = ((1 - cy2) / (1 - cx2)) * (nums(timeline.motionKeyPoints)[1] / 0.21); // 공통 구간 끝 속도
+    const [sx1, sy1, sx2, sy2] = splineOf(timeline.motionKeySplines, 1);
+    const spreadAverage = (PARALLEL_REACH - nums(timeline.motionKeyPoints)[1]) / (0.525 - 0.21);
+    expect((sy1 / sx1) * spreadAverage).toBeCloseTo(handoff, 3); // 이어 받는 속도
+    expect(sy1 / sx1).toBeLessThan(1); // 긴 갈래는 가운데에서 더 빨라진다
+    expect((1 - sy2) / (1 - sx2)).toBe(0); // 끝은 멈추듯 느려진다
+  });
+
+  it("shrinks the shared run to half the reach on a very short branch and keeps splines in range", () => {
+    const timeline = buildPulseTimeline(parallel, 0, 40);
+    expect(nums(timeline.motionKeyPoints)[1]).toBe(PARALLEL_REACH / 2);
+    const values = timeline.motionKeySplines.split(";").flatMap((spline) => spline.split(" ").map(Number));
+    expect(values.every((v) => v >= 0 && v <= 1)).toBe(true);
+  });
+
   it("speeds up 1.25x and turns fully opaque when focused", () => {
-    const timeline = buildPulseTimeline({ kind: "parallel", group: "g", focused: true }, 0);
+    const timeline = buildPulseTimeline({ ...parallel, focused: true }, 0, 400);
     expect(timeline.dur).toBeCloseTo(PARALLEL_CYCLE_S / FOCUS_SPEED);
     expect(Math.max(...nums(timeline.opacityValues))).toBe(1);
   });
 
   it("raises the base opacity on the dark L5 sky", () => {
-    const light = Math.max(...nums(buildPulseTimeline({ kind: "parallel", group: "g" }, 0).opacityValues));
-    const dark = Math.max(...nums(buildPulseTimeline({ kind: "parallel", group: "g", onDark: true }, 0).opacityValues));
+    const light = Math.max(...nums(buildPulseTimeline(parallel, 0, 400).opacityValues));
+    const dark = Math.max(...nums(buildPulseTimeline({ ...parallel, onDark: true }, 0, 400).opacityValues));
     expect(dark).toBeGreaterThan(light);
+  });
+});
+
+describe("getPathSpan", () => {
+  it("measures the Manhattan span between the first and last coordinates of a path", () => {
+    expect(getPathSpan("M375 115.5L375 114.5L 375,80.5Q 375,75.5 370,75.5L 80,75.5Q 75,75.5 75,80.5L75 115.5")).toBe(300);
+    expect(getPathSpan("M 385,200 L 385,171 A 34 34 0 0 0 85,200")).toBe(300);
+    expect(getPathSpan("")).toBe(0);
   });
 });
 
@@ -177,6 +220,28 @@ describe("buildDecisionTimeline", () => {
     expect(nums(a.motionKeyTimes)[1]).toBe(nums(b.motionKeyTimes)[1]);
   });
 
+  it("blinks one branch at a time with no shared blink, the others vanishing during that turn", () => {
+    const [a, b] = [0, 1].map((index) => buildDecisionTimeline(decision(index, [0]), stop));
+    for (const timeline of [a, b]) {
+      expect(Math.max(...nums(timeline.radiusValues))).toBeCloseTo(DECISION_RADIUS * 1.2);
+    }
+    // 갈래 0 차례(멈춘 직후 0.55s)의 한가운데 — 갈래 1은 완전히 사라져 있고, 갈래 1 차례엔 갈래 0이 사라진다
+    const cycle = getDecisionCycle(2);
+    // 키프레임 선형 보간(SMIL calcMode linear)
+    const opacityAt = (timeline: typeof a, seconds: number): number => {
+      const times = nums(timeline.opacityKeyTimes);
+      const values = nums(timeline.opacityValues);
+      const t = seconds / cycle;
+      const i = times.findIndex((time) => time >= t);
+      if (i <= 0) return values[Math.max(0, i)];
+      const ratio = (t - times[i - 1]) / (times[i] - times[i - 1]);
+      return values[i - 1] + (values[i] - values[i - 1]) * ratio;
+    };
+    expect(opacityAt(b, DECISION_MOVE_S + 0.55 * 0.5)).toBeCloseTo(0, 6);
+    expect(opacityAt(a, DECISION_MOVE_S + 0.55 * 1.5)).toBeCloseTo(0, 6);
+    expect(opacityAt(a, DECISION_MOVE_S + 0.55 * 0.5)).toBeGreaterThan(0.75);
+  });
+
   it("speeds focused siblings up by the same factor", () => {
     const normal = buildDecisionTimeline(decision(0, winners), stop);
     const focused = buildDecisionTimeline(decision(0, winners, { focused: true }), stop);
@@ -197,7 +262,7 @@ describe("getDecisionTravel", () => {
   it("dims a focused decision dot slightly so its blinks still lift", () => {
     const focused = buildDecisionTimeline(decision(0, [0, 1], { focused: true }), 0.15);
     const values = nums(focused.opacityValues);
-    expect(Math.max(...values)).toBe(1);
+    expect(Math.max(...values)).toBeGreaterThan(0.9);
     expect(values).toContain(0.9);
   });
 });

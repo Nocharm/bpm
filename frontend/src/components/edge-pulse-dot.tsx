@@ -1,6 +1,6 @@
 "use client";
 
-// 엣지 흐름 펄스 점 — 병렬 출구(동시 75% 건너기)·분기(동시 출발→반짝임→한 갈래) 렌더. 에디터 엣지(multiline-edge)·비교 화면 엣지가 공유.
+// 엣지 흐름 펄스 점 — 병렬 출구(공통 구간 후 길이별 속도로 75% 동시 도달)·분기(동시 출발→차례 반짝임→한 갈래) 렌더. 에디터 엣지(multiline-edge)·비교 화면 엣지가 공유.
 // SMIL animateMotion/animate라 JS 타이머가 없다. RF는 엣지마다 <svg>를 따로 그려 SMIL 시계도 엣지별이므로,
 // 마운트 때 그 svg 시계를 페이지 시계(performance.now)에 맞춰 나중에 생긴 갈래도 형제와 박자가 맞게 한다.
 // 판정·타임라인은 lib/edge-pulse.
@@ -15,6 +15,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   buildPulseTimeline,
   DECISION_RADIUS,
+  getPathSpan,
   getPulseStillAt,
   PARALLEL_RADIUS,
   PULSE_MIN_ZOOM,
@@ -92,7 +93,7 @@ function PulseStillDot({ path, pulse, at, hidden }: PulseStillDotProps) {
 }
 
 function PulseMotionDot({ path, pulse, travel }: EdgePulseDotProps) {
-  const timeline = buildPulseTimeline(pulse, travel);
+  const timeline = buildPulseTimeline(pulse, travel, getPathSpan(path));
   const dotRef = useRef<SVGCircleElement>(null);
   const paused = pulse.paused === true;
   const { dur, cycle } = timeline;

@@ -85,7 +85,8 @@ check("seeded the scratch map", true, `map ${map.id} v${draft.id}`);
 
 mkdirSync(OUT, { recursive: true });
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
-const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 2 });
+// 넓은 뷰포트 — 화면 맞춤 줌이 PULSE_MIN_ZOOM(0.5) 이상이어야 움직이는 펄스 점이 그려진다
+const ctx = await browser.newContext({ viewport: { width: 2400, height: 1400 }, deviceScaleFactor: 2 });
 await ctx.addInitScript(() => {
   if (window.location.protocol === "about:") return; // about:blank·setContent엔 localStorage가 없다
   window.localStorage.setItem("bpm.devUser", "admin.sys");
@@ -121,12 +122,15 @@ const dotInfo = (edgeId) =>
       dur: motion?.getAttribute("dur"),
       begin: motion?.getAttribute("begin"),
       keyPoints: motion?.getAttribute("keyPoints"),
+      path: motion?.getAttribute("path"),
       fill: dot.getAttribute("fill"),
       stroke: dot.getAttribute("stroke"),
       filter: dot.style.filter,
       opacity: getComputedStyle(dot).opacity,
     };
   }, dotSel(edgeId));
+const sampleOpacityOf = (edgeId) =>
+  page.evaluate((sel) => Number(getComputedStyle(document.querySelector(sel)).opacity), dotSel(edgeId));
 /** 모든 펄스 svg 시계를 같은 시각으로 멈춘다(프레임 캡처) */
 const freezeAt = (t) =>
   page.evaluate((time) => {
@@ -160,10 +164,19 @@ check("a plain node has no inner ring", (await ringOf(nid("b"))) === 0);
 check("a decision node has no inner ring", (await ringOf(nid("d"))) === 0);
 await page.screenshot({ path: `${OUT}/parallel-ring.png`, clip: await clipOf([nid("a"), nid("b"), nid("c")], 30) });
 
-// ── (3) 병렬 점은 경로 75%까지 — 재방출 주기 4.2s 유지
+// ── (3) 병렬 점: 공통 구간을 형제가 같은 px만큼 함께 간 뒤 각자 75%까지 — 재방출 주기 4.2s 유지
 const par = await dotInfo(nid("a-b"));
-check("parallel dot stops at 75% of the path", par?.keyPoints === "0;0.75;0.75", JSON.stringify(par));
+const par2 = await dotInfo(nid("a-c"));
+const keyPointsOf = (d) => String(d?.keyPoints ?? "").split(";").map(Number);
+// 경로 길이 근사 = 첫 좌표와 마지막 좌표의 맨해튼 거리(lib/edge-pulse getPathSpan)
+const spanOf = (d) => {
+  const n = String(d?.path ?? "").match(/-?\d*\.?\d+/g)?.map(Number) ?? [];
+  return Math.abs(n[n.length - 2] - n[0]) + Math.abs(n[n.length - 1] - n[1]);
+};
+check("parallel dot stops at 75% of the path", /;0\.75;0\.75$/.test(par?.keyPoints ?? "") && keyPointsOf(par).length === 4, par?.keyPoints);
 check("parallel cycle stays 4.2s", par?.dur === "4.2s", String(par?.dur));
+const commonPx = [par, par2].map((d) => keyPointsOf(d)[1] * spanOf(d));
+check("parallel siblings share the first run in pixels", Math.abs(commonPx[0] - commonPx[1]) < 1, commonPx.map((v) => v.toFixed(1)).join(" / "));
 for (const [label, t] of [["move", 1.0], ["near-75", 1.65]]) {
   await freezeAt(t);
   await page.screenshot({ path: `${OUT}/pulse-parallel-${label}.png`, clip: await clipOf([nid("a"), nid("b"), nid("c")], 30) });
@@ -176,7 +189,11 @@ const dec = await Promise.all(decisionEdges.map((id) => dotInfo(id)));
 check("decision branches start together (same dur, begin 0)", dec.every((d) => d && d.dur === dec[0].dur && d.begin === "0s"), dec.map((d) => d?.dur).join(","));
 const maxPoint = (d) => Math.max(...String(d?.keyPoints ?? "0").split(";").map(Number));
 check("some branch reaches 50% in its winning rounds", dec.some((d) => maxPoint(d) === 0.5), dec.map((d) => maxPoint(d)).join(","));
-const decFrames = [["1-moving", 0.6], ["2-stopped-blink", 1.22], ["3-sequential", 2.0], ["4-sequential", 2.55], ["5-winner", 3.9], ["6-winner-far", 4.45]];
+// 3갈래 회차: 이동 1.0s → 차례 반짝임 0.55s×3(차례 아닌 갈래는 사라짐) → 승자 1.3s → 쉼
+await freezeAt(1.0 + 0.55 * 0.5);
+const turnOpacity = await Promise.all(decisionEdges.map((id) => sampleOpacityOf(id)));
+check("during branch 1's turn only branch 1 shows (no shared blink)", turnOpacity[0] > 0.5 && turnOpacity[1] === 0 && turnOpacity[2] === 0, turnOpacity.join(","));
+const decFrames = [["1-moving", 0.6], ["2-turn-1", 1.27], ["3-turn-2", 1.82], ["4-turn-3", 2.37], ["5-winner", 3.2], ["6-winner-far", 3.8]];
 for (const [label, t] of decFrames) {
   await freezeAt(t);
   await page.screenshot({ path: `${OUT}/pulse-decision-${label}.png`, clip: await clipOf([nid("d"), nid("e1"), nid("e2"), nid("e3")], 30) });

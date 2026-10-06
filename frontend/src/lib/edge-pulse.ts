@@ -1,9 +1,11 @@
-// 엣지 흐름 펄스 — 병렬 출구는 형제 갈래에 점이 같은 박자로 경로의 75%까지 건너고(동시), 분기(decision)는
-// 갈래 전부에서 점이 동시에 나와 잠깐 나아가다 함께 멈추고, 함께 한 번·갈래 순서대로 한 번씩 반짝인 뒤
-// 무작위 한 갈래만 더 나아가고 나머지는 제자리에서 사라진다(택일).
+// 엣지 흐름 펄스 — 병렬 출구는 형제 갈래 점이 처음 공통 구간을 같은 속도로 함께 간 뒤 각자 길이에 맞춘 속도로
+// 경로의 75%에 동시에 닿고(가운데에서만 빠르게), 분기(decision)는 갈래 전부에서 점이 동시에 나와 잠깐 나아가다
+// 멈추고, 갈래 순서대로 한 번씩 반짝인 뒤(차례가 아닌 갈래는 그동안 사라졌다 돌아온다) 무작위 한 갈래만 더
+// 나아가고 나머지는 제자리에서 사라진다(택일).
 // 렌더 전용 파생(저장·서명 무관) — 에디터 styledEdges·비교 appEdges(still)가 edge.data.pulse로 주입, components/edge-pulse-dot.tsx가 SMIL로 그린다.
 // SMIL은 문서 타임라인 하나를 공유해 begin/dur이 같으면 엣지끼리 박자가 맞는다.
-// (사용자 결정 2026-10-01, 2026-10-02: 병렬 75%·분기 동시 출발→반짝임→랜덤 1갈래·포커스 강조·형제 선택 시 정지·L5 어두운 배경 대비)
+// (사용자 결정 2026-10-01, 2026-10-02: 병렬 75%·분기 동시 출발→반짝임→랜덤 1갈래·포커스 강조·형제 선택 시 정지·L5 어두운 배경 대비,
+//  2026-10-06: 분기 함께 반짝임 삭제·차례 아닌 갈래 사라짐, 병렬 공통 구간 후 길이별 속도·완만한 가속)
 
 import { getOutputGroups, getOutputKey, type OutputRuleEdge, type OutputRuleNode } from "@/lib/output-rules";
 
@@ -51,20 +53,33 @@ export interface PulseTimeline {
 
 // 병렬 한 주기(s) — 이동 + 쉼(재방출 간격). 너무 빠르면 시선을 뺏는다(사용자 요청: 느리게·반투명)
 export const PARALLEL_CYCLE_S = 4.2;
-// 예전 "끝까지 건너기"가 주기의 70%였다 — 같은 속도로 75%까지만 가므로 이동은 0.7×0.75 지점에서 끝난다
+// 예전 "끝까지 건너기"가 주기의 70%였다 — 75%까지만 가므로 이동은 0.7×0.75 지점에서 끝난다
 const PARALLEL_FULL_TRAVEL_SHARE = 0.7;
 export const PARALLEL_REACH = 0.75;
+// 공통 구간(px) — 형제 갈래 점이 같은 속도로 같은 거리를 함께 간 뒤 각자 길이에 맞춘 속도로 퍼진다.
+// 짧은 갈래는 도달점의 절반까지로 줄인다(그때는 형제와 거리가 조금 어긋난다)
+export const PARALLEL_COMMON_PX = 36;
+// 공통 구간이 이동 시간에서 차지하는 비율
+const PARALLEL_COMMON_SHARE = 0.4;
+// 공통 구간 스플라인 — 정지에서 천천히 가속(시작 기울기 0)해 끝에서 평균의 2배 속도로 넘겨준다
+const PARALLEL_COMMON_SPLINE = "0.6 0 0.8 0.6";
+const PARALLEL_COMMON_END_SLOPE = 2;
+// 퍼지는 구간 스플라인 — 시작 기울기를 공통 구간 끝 속도에 맞추고(x1 고정, y1 산출) 끝은 감속해 멈춘다(가운데만 빠르게)
+const PARALLEL_SPREAD_X1 = 0.25;
+const PARALLEL_SPREAD_TAIL = "0.55 1";
 export const PARALLEL_RADIUS = 3.2;
 const PARALLEL_OPACITY = 0.5;
 const PARALLEL_OPACITY_DARK = 0.85;
 
 // 분기 이동 속도(px/s) — 직전 설정(56px를 3.4s 회차의 45% 동안 ≈ 36.6px/s) 그대로
 export const DECISION_SPEED_PX_S = 56 / (0.45 * 3.4);
-// 분기 회차 구간(s): 동시 이동 → 함께 반짝 → 갈래별 반짝(갈래 수만큼) → 승자 진행/패자 페이드 → 쉼
+// 분기 회차 구간(s): 동시 이동 → 갈래별 반짝(갈래 수만큼) → 승자 진행/패자 페이드 → 쉼
 export const DECISION_MOVE_S = 1.0;
 const DECISION_FADE_IN_S = 0.25;
-const DECISION_TOGETHER_BLINK_S = 0.45;
 const DECISION_SEQ_BLINK_S = 0.55;
+// 차례 아닌 갈래가 완전히 사라져 있는 구간(차례 길이 대비) — 앞뒤는 페이드
+const DECISION_HIDE_FROM = 0.3;
+const DECISION_HIDE_TO = 0.7;
 const DECISION_WIN_MOVE_S = 1.3;
 // 승자는 이동 마지막 이 시간 동안 사라진다
 const DECISION_WIN_FADE_S = 0.4;
@@ -80,8 +95,7 @@ export const DECISION_CYCLES = 8;
 export const DECISION_RADIUS = 3.8;
 const DECISION_OPACITY = 0.75;
 const DECISION_OPACITY_DARK = 0.9;
-// 반짝임 반경 배율 — 함께(강) / 갈래별(약)
-const TOGETHER_BLINK_SCALE = 1.4;
+// 갈래별 반짝임 반경 배율
 const SEQ_BLINK_SCALE = 1.2;
 // 갈래별 반짝임 불투명도 상승분(기본→1 사이 비율) — "부드럽게"
 const SEQ_BLINK_LIFT = 0.6;
@@ -98,6 +112,16 @@ export const FOCUS_SPEED = 1.25;
 const EASE = "0.42 0 0.58 1";
 const EASE_OUT = "0 0 0.58 1";
 const LINEAR = "0 0 1 1";
+
+/**
+ * 엣지 경로 길이 근사(px) — 끝점 맨해튼 거리(꺾은선 기본형과 같음). 경로 문자열의 첫 좌표(M)와 마지막 좌표를 쓴다.
+ * 병렬 공통 구간을 경로 비율로 바꾸는 데 쓴다(분기 멈춤 지점과 같은 근사).
+ */
+export function getPathSpan(path: string): number {
+  const nums = path.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi)?.map(Number) ?? [];
+  if (nums.length < 4) return 0;
+  return Math.abs(nums[nums.length - 2] - nums[0]) + Math.abs(nums[nums.length - 1] - nums[1]);
+}
 
 /**
  * 분기 점 멈춤 지점(경로 비율) — 이동 시간 × 분기 속도를 경로 길이로 나눈다.
@@ -145,7 +169,6 @@ const getSpeed = (pulse: EdgePulse): number => (pulse.focused ? FOCUS_SPEED : 1)
 export function getDecisionCycle(count: number): number {
   return (
     DECISION_MOVE_S +
-    DECISION_TOGETHER_BLINK_S +
     Math.max(1, count) * DECISION_SEQ_BLINK_S +
     DECISION_WIN_MOVE_S +
     DECISION_REST_S
@@ -160,17 +183,28 @@ export function getPulseStillAt(pulse: EdgePulse, travel: number): number {
   return pulse.kind === "parallel" ? PARALLEL_REACH : travel;
 }
 
-/** 병렬 SMIL 타임라인 — 같은 속도로 경로의 PARALLEL_REACH까지 가며 사라지고, 재방출 간격은 그대로. */
-function buildParallelTimeline(pulse: ParallelPulse): PulseTimeline {
+/**
+ * 병렬 SMIL 타임라인 — 공통 구간(PARALLEL_COMMON_PX)을 형제가 같은 속도로 함께 천천히 가속해 가고, 그 뒤 각자
+ * 길이에 맞춘 속도로 PARALLEL_REACH에 동시에 닿는다. 퍼지는 구간은 공통 구간 끝 속도에서 이어 받아 가운데에서
+ * 빨라졌다 끝에서 멈추듯 느려진다. lengthPx는 경로 길이 근사(getPathSpan), 0이면 공통 구간을 도달점의 절반으로.
+ */
+function buildParallelTimeline(pulse: ParallelPulse, lengthPx: number): PulseTimeline {
   const base = getBaseOpacity(pulse);
   const moveEnd = PARALLEL_FULL_TRAVEL_SHARE * PARALLEL_REACH;
+  const commonEnd = moveEnd * PARALLEL_COMMON_SHARE;
+  const commonAt = Math.min(lengthPx > 0 ? PARALLEL_COMMON_PX / lengthPx : Infinity, PARALLEL_REACH / 2);
+  // 퍼지는 구간 시작 기울기 = 공통 구간 끝 속도 ÷ 이 구간 평균 속도 — keySplines는 0..1이라 y1을 1로 자른다
+  const handoffSpeed = (PARALLEL_COMMON_END_SLOPE * commonAt) / commonEnd;
+  const spreadAverage = (PARALLEL_REACH - commonAt) / (moveEnd - commonEnd);
+  const spreadY1 = Math.min(1, PARALLEL_SPREAD_X1 * (handoffSpeed / spreadAverage));
+  const spreadSpline = `${PARALLEL_SPREAD_X1} ${Number(spreadY1.toFixed(4))} ${PARALLEL_SPREAD_TAIL}`;
   const dur = PARALLEL_CYCLE_S / getSpeed(pulse);
   return {
     dur,
     cycle: dur,
-    motionKeyTimes: fmt([0, moveEnd, 1]),
-    motionKeyPoints: fmt([0, PARALLEL_REACH, PARALLEL_REACH]),
-    motionKeySplines: [EASE, LINEAR].join(";"),
+    motionKeyTimes: fmt([0, commonEnd, moveEnd, 1]),
+    motionKeyPoints: fmt([0, commonAt, PARALLEL_REACH, PARALLEL_REACH]),
+    motionKeySplines: [PARALLEL_COMMON_SPLINE, spreadSpline, LINEAR].join(";"),
     opacityKeyTimes: fmt([0, 0.12, moveEnd - 0.12, moveEnd, 1]),
     opacityValues: fmt([0, base, base, 0, 0]),
     radiusKeyTimes: null,
@@ -192,7 +226,7 @@ export function buildDecisionTimeline(pulse: DecisionPulse, stop: number): Pulse
   const motion = createTrack();
   const opacity = createTrack();
   const radius = createTrack();
-  const blinkStart = DECISION_MOVE_S + DECISION_TOGETHER_BLINK_S;
+  const blinkStart = DECISION_MOVE_S;
   const decideAt = blinkStart + count * DECISION_SEQ_BLINK_S;
   winners.forEach((winner, round) => {
     const o = round * cycle;
@@ -206,21 +240,23 @@ export function buildDecisionTimeline(pulse: DecisionPulse, stop: number): Pulse
 
     addKey(opacity, o, 0);
     addKey(opacity, o + DECISION_FADE_IN_S, base);
-    addKey(opacity, o + DECISION_MOVE_S, base);
-    addKey(opacity, o + DECISION_MOVE_S + DECISION_TOGETHER_BLINK_S / 2, 1);
     addKey(opacity, o + blinkStart, base);
     addKey(radius, o, DECISION_RADIUS);
-    addKey(radius, o + DECISION_MOVE_S, DECISION_RADIUS);
-    addKey(radius, o + DECISION_MOVE_S + DECISION_TOGETHER_BLINK_S / 2, DECISION_RADIUS * TOGETHER_BLINK_SCALE);
-    addKey(radius, o + blinkStart, DECISION_RADIUS);
-    // 갈래 순서대로 한 번씩 — 이 갈래 차례에만 키를 둔다(나머지 구간은 기본값 유지)
-    const ownBlink = o + blinkStart + pulse.index * DECISION_SEQ_BLINK_S;
-    addKey(opacity, ownBlink, base);
-    addKey(opacity, ownBlink + DECISION_SEQ_BLINK_S / 2, seqPeak);
-    addKey(opacity, ownBlink + DECISION_SEQ_BLINK_S, base);
-    addKey(radius, ownBlink, DECISION_RADIUS);
-    addKey(radius, ownBlink + DECISION_SEQ_BLINK_S / 2, DECISION_RADIUS * SEQ_BLINK_SCALE);
-    addKey(radius, ownBlink + DECISION_SEQ_BLINK_S, DECISION_RADIUS);
+    // 갈래 순서대로 한 번씩 — 자기 차례엔 커지며 반짝이고, 다른 갈래 차례엔 완전히 사라졌다 돌아온다
+    for (let slot = 0; slot < count; slot += 1) {
+      const at = o + blinkStart + slot * DECISION_SEQ_BLINK_S;
+      addKey(opacity, at, base);
+      if (slot === pulse.index) {
+        addKey(opacity, at + DECISION_SEQ_BLINK_S / 2, seqPeak);
+        addKey(radius, at, DECISION_RADIUS);
+        addKey(radius, at + DECISION_SEQ_BLINK_S / 2, DECISION_RADIUS * SEQ_BLINK_SCALE);
+        addKey(radius, at + DECISION_SEQ_BLINK_S, DECISION_RADIUS);
+      } else {
+        addKey(opacity, at + DECISION_SEQ_BLINK_S * DECISION_HIDE_FROM, 0);
+        addKey(opacity, at + DECISION_SEQ_BLINK_S * DECISION_HIDE_TO, 0);
+      }
+      addKey(opacity, at + DECISION_SEQ_BLINK_S, base);
+    }
     addKey(opacity, o + decideAt, base);
     if (isWinner) {
       addKey(opacity, o + decideAt + DECISION_WIN_MOVE_S - DECISION_WIN_FADE_S, base);
@@ -247,9 +283,12 @@ export function buildDecisionTimeline(pulse: DecisionPulse, stop: number): Pulse
   };
 }
 
-/** SMIL 타임라인(animateMotion keyPoints + opacity·반경 키프레임). travel은 분기 멈춤 지점 비율(0..1). */
-export function buildPulseTimeline(pulse: EdgePulse, travel: number): PulseTimeline {
-  return pulse.kind === "parallel" ? buildParallelTimeline(pulse) : buildDecisionTimeline(pulse, travel);
+/**
+ * SMIL 타임라인(animateMotion keyPoints + opacity·반경 키프레임). travel은 분기 멈춤 지점 비율(0..1),
+ * lengthPx는 병렬 공통 구간 환산용 경로 길이 근사(getPathSpan).
+ */
+export function buildPulseTimeline(pulse: EdgePulse, travel: number, lengthPx: number): PulseTimeline {
+  return pulse.kind === "parallel" ? buildParallelTimeline(pulse, lengthPx) : buildDecisionTimeline(pulse, travel);
 }
 
 /**
