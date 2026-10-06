@@ -158,11 +158,41 @@ export function checkReconnect(
   return null;
 }
 
-/** 재연결 적용 — 같은 id·라벨·선 모양·data(gateway)를 유지하고 끝점·핸들만 바꾼 뒤 하위프로세스 핸들 정규화. */
+/**
+ * 재연결이 출구를 새로 고르는지 — 출발 노드가 바뀌었거나 같은 노드의 다른 출구 핸들(도착 끝만 옮기면 RF가
+ * 출발 핸들을 그대로 넘긴다). SP 출구는 우측 한 점이라 보조 끝 엣지를 같은 SP에 다시 놓아도 RF는 대표 끝을 잡으므로,
+ * 끝 ≥ 2인 SP면 이 판정으로 출구 선택 목록을 띄운다.
+ */
+export function isSourceExitChange(
+  edge: Pick<Edge, "source" | "sourceHandle">,
+  next: Pick<ReconnectTarget, "source" | "sourceHandle">,
+): boolean {
+  return next.source !== edge.source || (next.sourceHandle ?? null) !== (edge.sourceHandle ?? null);
+}
+
+export type ReconnectLabelAction = "keep" | "ask" | "clear";
+
+/**
+ * 재연결 뒤 엣지 라벨 처리 — 출발을 판단 노드로 옮기면 새 연결처럼 분기 라벨을 묻고(ask), 판단 노드에서 일반 노드로
+ * 옮기면 분기 라벨은 판단 출구의 것이라 지운다(clear). 도착만 옮기거나 출발 노드가 그대로면 유지(keep).
+ */
+export function decideReconnectLabel(
+  edge: Pick<Edge, "source">,
+  next: Pick<ReconnectTarget, "source">,
+  typeOf: (nodeId: string) => string | undefined,
+): ReconnectLabelAction {
+  if (next.source === edge.source) return "keep";
+  if (typeOf(next.source) === "decision") return "ask";
+  return typeOf(edge.source) === "decision" ? "clear" : "keep";
+}
+
+/** 재연결 적용 — 같은 id·라벨·선 모양·data(gateway)를 유지하고 끝점·핸들만 바꾼 뒤 하위프로세스 핸들 정규화.
+ *  label을 주면 그 값으로(빈 문자열 = 라벨 없음), 생략하면 기존 라벨 유지. */
 export function applyReconnect(
   edge: Edge,
   next: ReconnectTarget,
   isSubprocess: (nodeId: string) => boolean,
+  label?: string,
 ): Edge {
   return withSubprocessHandles(
     {
@@ -171,6 +201,7 @@ export function applyReconnect(
       target: next.target,
       sourceHandle: next.sourceHandle,
       targetHandle: next.targetHandle,
+      ...(label === undefined ? {} : { label: label || undefined }),
     },
     isSubprocess,
   );

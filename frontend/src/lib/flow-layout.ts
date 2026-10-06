@@ -282,20 +282,9 @@ function reassignHandles(
     const sourceNode = byId.get(edge.source);
     const targetNode = byId.get(edge.target);
     if (!sourceNode || !targetNode) return edge;
-    const s = centerOf(edge.source);
-    const t = centerOf(edge.target);
-    const back = !!s && !!t && isBackEdge(dir, s, t);
-    // 척추 위 두 노드를 건너뛰는 지름길(반려 → 끝 등)은 흐름측으로 그리면 사이 노드를 관통한다 — 양끝을 아래(LR)·오른쪽(TB)으로
-    const bypass =
-      !back && !!s && !!t && spine.has(edge.source) && spine.has(edge.target) &&
-      isStraightRunBlocked(nodes, dir, edge.source, edge.target, s, t, renderW, renderH);
-    const bypassSide: HandleSide = dir === "LR" ? "bottom" : "right";
-    const sourceSide = bypass
-      ? bypassSide
-      : pickHandleSide(dir, s, t, spine.has(edge.source), spine.has(edge.target), back);
-    const targetSide = bypass
-      ? bypassSide
-      : pickHandleSide(dir, t, s, spine.has(edge.target), spine.has(edge.source), back);
+    const { sourceSide, targetSide } = pickEdgeHandleSides(
+      nodes, dir, spine, edge, centerOf(edge.source), centerOf(edge.target), renderW, renderH,
+    );
     return {
       ...edge,
       sourceHandle:
@@ -308,9 +297,36 @@ function reassignHandles(
   });
 }
 
+/** 한 엣지의 양끝 변 — 역행·척추·곁가지 규칙(pickHandleSide)에 척추 지름길 우회를 더한 단일 판정.
+ *  자동정렬 핸들 재지정과 4변 핸들 표면(deriveFlowSideHandles)이 공유해 두 결과가 같다(파이썬 resolve_handles 동치). */
+export function pickEdgeHandleSides(
+  nodes: readonly AppNode[],
+  dir: FlowDir,
+  spine: ReadonlySet<string>,
+  edge: EdgeLink,
+  s: Center | undefined,
+  t: Center | undefined,
+  renderW: (node: AppNode) => number,
+  renderH: (node: AppNode) => number,
+): { sourceSide: HandleSide; targetSide: HandleSide } {
+  const back = !!s && !!t && isBackEdge(dir, s, t);
+  // 척추 위 두 노드를 건너뛰는 지름길(반려 → 끝 등)은 흐름측으로 그리면 사이 노드를 관통한다 — 양끝을 아래(LR)·오른쪽(TB)으로
+  const bypass =
+    !back && !!s && !!t && spine.has(edge.source) && spine.has(edge.target) &&
+    isStraightRunBlocked(nodes, dir, edge.source, edge.target, s, t, renderW, renderH);
+  if (bypass) {
+    const bypassSide: HandleSide = dir === "LR" ? "bottom" : "right";
+    return { sourceSide: bypassSide, targetSide: bypassSide };
+  }
+  return {
+    sourceSide: pickHandleSide(dir, s, t, spine.has(edge.source), spine.has(edge.target), back),
+    targetSide: pickHandleSide(dir, t, s, spine.has(edge.target), spine.has(edge.source), back),
+  };
+}
+
 /** 두 중심을 잇는 흐름축 직선이 다른 노드를 지나가는지 — 척추 지름길 판정용. */
 function isStraightRunBlocked(
-  nodes: AppNode[],
+  nodes: readonly AppNode[],
   dir: FlowDir,
   sourceId: string,
   targetId: string,
@@ -332,8 +348,8 @@ function isStraightRunBlocked(
   });
 }
 
-const renderWOf = (node: AppNode) => node.measured?.width ?? nodeSizeOf(node.data.nodeType).w;
-const renderHOf = (node: AppNode) => node.measured?.height ?? nodeSizeOf(node.data.nodeType).h;
+export const renderWOf = (node: AppNode) => node.measured?.width ?? nodeSizeOf(node.data.nodeType).w;
+export const renderHOf = (node: AppNode) => node.measured?.height ?? nodeSizeOf(node.data.nodeType).h;
 
 /** 에디터 자동정렬 — dagre(dir) → 척추(시작→대표 끝 최장 경로) 직선화 → 곁가지 사슬 직선화 → 방향에 맞춰 엣지 핸들 재지정.
  *  노드와 엣지를 함께 반환 — 호출측이 한 undo 스냅샷으로 반영. */

@@ -155,7 +155,9 @@ def compute_ranks(codes: list[str], pairs: list[tuple[str, str]]) -> dict[str, i
 
 
 def find_back_edges(
-    codes: list[str], pairs: list[tuple[str, str]]
+    codes: list[str],
+    pairs: list[tuple[str, str]],
+    labels: dict[tuple[str, str], str] | None = None,
 ) -> set[tuple[str, str]]:
     """DFS로 되돌아가는 엣지(back edge)를 찾는다 — 이걸 빼면 남는 그래프는 DAG.
 
@@ -164,12 +166,16 @@ def find_back_edges(
     입력 순서로 매겨진다** — 같은 그래프인데 노드 나열 순서만 바뀌어도 배치가 뒤집힌다
     (2026-09-01 L5 연계 캔버스에서 확인).
 
-    탐색 순서는 codes·pairs 순서에 고정 — 같은 입력이면 항상 같은 결과여야 재임포트가 흔들리지 않는다.
+    탐색 순서는 codes 순서 + 형제 엣지 정규 순서(`_edge_order_key`, TS `sortLayoutEdges` 동치)에 고정 —
+    pairs 나열 순서가 바뀌어도, TS `findBackEdges`와도 같은 back을 골라야 재임포트·에디터 정렬이 흔들리지 않는다.
     """
+    index = {c: i for i, c in enumerate(codes)}
     out: dict[str, list[str]] = {c: [] for c in codes}
     for src, dst in pairs:
         if src in out and dst in out:
             out[src].append(dst)
+    for src, targets in out.items():
+        targets.sort(key=lambda dst, src=src: _edge_order_key((labels or {}).get((src, dst), ""), index[dst]))
     # 진입 노드(선행 없음)부터 훑는다 — 사슬에 사이클이 매달린 흔한 모양에서 "진짜 되돌아가는 엣지"를
     # 고르게 된다. 전원이 사이클에 묶여 진입점이 없으면 순서가 시작점에 좌우되므로, 그런 그래프는
     # 전달물의 kind="loop" 표시(declared_back)로 확정해야 한다.
@@ -206,6 +212,7 @@ def split_forward_edges(
     codes: list[str],
     pairs: list[tuple[str, str]],
     declared_back: set[tuple[str, str]] | None = None,
+    labels: dict[tuple[str, str], str] | None = None,
 ) -> tuple[list[tuple[str, str]], set[tuple[str, str]]]:
     """(선행 엣지, 되돌아가는 엣지) — 전달물이 표시한 loop + DFS가 찾은 잔여 사이클.
 
@@ -213,7 +220,7 @@ def split_forward_edges(
     """
     declared = {p for p in (declared_back or set()) if p in set(pairs)}
     forward = [p for p in pairs if p not in declared]
-    extra = find_back_edges(codes, forward)
+    extra = find_back_edges(codes, forward, labels)
     return [p for p in forward if p not in extra], declared | extra
 
 
@@ -424,13 +431,13 @@ def layout_flow(
     ids = [n.id for n in nodes]
     present = set(ids)
     scoped = [(s, d) for s, d in pairs if s in present and d in present]
-    forward, _ = split_forward_edges(ids, scoped, back_pairs)
+    labels = {(s, d): text for s, d, text in (labeled or [])}
+    forward, _ = split_forward_edges(ids, scoped, back_pairs, labels)
     ranks = compute_ranks(ids, forward)
 
     layers: dict[int, list[str]] = {}
     for nid in ids:
         layers.setdefault(ranks[nid], []).append(nid)
-    labels = {(s, d): text for s, d, text in (labeled or [])}
     layers = _order_by_barycenter(layers, forward, labels)
 
     # 구간별 간격 — 라벨이 놓이는 구간만 그 라벨 폭만큼 넓힌다

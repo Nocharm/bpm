@@ -251,6 +251,20 @@ def test_back_edge_search_starts_from_entry_nodes() -> None:
     assert compute_ranks(ids, forward) == {"s": 0, "a": 1, "b": 2, "c": 3}
 
 
+def test_back_edge_search_follows_the_canonical_edge_order() -> None:
+    """DFS는 TS `sortLayoutEdges` 순서(예 라벨 먼저)로 형제를 훑는다 — 입력 나열 순서와 무관하게 같은 back.
+
+    D ─아니오→ X, D ─예→ Y, X ↔ Y: 예(Y)를 먼저 밟으므로 X→Y가 되돌아가는 엣지.
+    layout-graph.test.ts의 같은 이름 케이스와 짝.
+    """
+    ids = ["s", "D", "X", "Y", "e"]
+    labels = {("D", "X"): "No", ("D", "Y"): "Yes"}
+    pairs = [("s", "D"), ("D", "X"), ("D", "Y"), ("X", "Y"), ("Y", "X"), ("X", "e"), ("Y", "e")]
+    for ordered in (pairs, list(reversed(pairs))):
+        _, back = split_forward_edges(ids, ordered, labels=labels)
+        assert back == {("X", "Y")}
+
+
 def test_linkage_canvas_cycle_lays_out_in_flow_order() -> None:
     """SP 노드끼리 loop이 걸려도 선행 순서가 좌→우로 잡힌다 (사용자 지적 2026-09-01)."""
     nodes = [LayoutNode(id=n, node_type="subprocess") for n in ("준비", "수행", "보고")]
