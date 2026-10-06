@@ -1,4 +1,4 @@
-// 흐름 자동정렬 파이프라인 — dagre 방향 배치 + 척추(주 흐름) 직선화 + 방향별 엣지 핸들 재지정.
+// 흐름 자동정렬 파이프라인 — dagre 방향 배치 + 척추(주 흐름) 직선화 + 곁가지 사슬 직선화 + 방향별 엣지 핸들 재지정.
 // 비교 화면(compare)의 배치 로직을 일반화한 공용판: 비교는 seed=유지 노드·실측 상수 크기,
 // 에디터는 seed=시작→대표 끝 경로·measured 실측 크기를 주입해 같은 구현을 공유한다.
 
@@ -7,11 +7,14 @@ import type { Edge } from "@xyflow/react";
 import {
   type AppNode,
   type HandleSide,
+  layoutSubsetWithDagre,
   layoutWithDagre,
   nodeSizeOf,
+  pushApartFromBlock,
   sourceHandleId,
   targetHandleId,
 } from "@/lib/canvas";
+import { findLongestPath, type LayoutEdgeLink, sortLayoutEdges, splitForwardEdges } from "@/lib/layout-graph";
 import { subprocessInHandle } from "@/lib/subprocess-embed";
 
 export type FlowDir = "LR" | "TB";
@@ -151,74 +154,148 @@ export function pickHandleSide(
   return thisOnSpine && !otherOnSpine ? crossSide : flowSide;
 }
 
-/** 시작→대표 끝 BFS 최단 경로 — 에디터 척추 시드. 시작/끝이 없거나 미연결이면 빈 집합(직선화 생략). */
-export function findMainPath(nodes: AppNode[], edges: EdgeLink[]): Set<string> {
+
+/** 시작→대표 끝 주 경로(척추 시드) — 되돌아가는 엣지를 뺀 그래프의 최장 경로, 동점은 예 라벨 우선(lib/layout-graph).
+ *  시작/끝이 없거나 미연결이면 빈 집합(직선화 생략). */
+export function findMainPath(nodes: AppNode[], edges: LayoutEdgeLink[]): Set<string> {
   const start = nodes.find((node) => node.data.nodeType === "start");
   const end =
     nodes.find((node) => node.data.nodeType === "end" && node.data.isPrimaryEnd) ??
     nodes.find((node) => node.data.nodeType === "end");
   if (!start || !end) return new Set();
-  const adjacency = new Map<string, string[]>();
-  for (const edge of edges) {
-    const list = adjacency.get(edge.source);
-    if (list) list.push(edge.target);
-    else adjacency.set(edge.source, [edge.target]);
-  }
-  const prev = new Map<string, string>();
-  const seen = new Set([start.id]);
-  const queue = [start.id];
-  while (queue.length > 0) {
-    const current = queue.shift() as string;
-    if (current === end.id) break;
-    for (const next of adjacency.get(current) ?? []) {
-      if (seen.has(next)) continue;
-      seen.add(next);
-      prev.set(next, current);
-      queue.push(next);
-    }
-  }
-  if (!seen.has(end.id)) return new Set();
-  const path = new Set<string>();
-  let cursor: string | undefined = end.id;
-  while (cursor !== undefined) {
-    path.add(cursor);
-    cursor = prev.get(cursor);
-  }
-  return path;
+  const nodeIds = nodes.map((node) => node.id);
+  const { forward } = splitForwardEdges(nodeIds, sortLayoutEdges(nodeIds, edges));
+  return findLongestPath(nodeIds, forward, start.id, end.id);
 }
 
-/** 에디터 자동정렬 — dagre(dir) → 척추(시작→대표 끝) 직선화 → 방향에 맞춰 엣지 핸들 재지정.
- *  노드와 엣지를 함께 반환 — 호출측이 한 undo 스냅샷으로 반영. */
-export function autoLayoutFlow(
+// 곁가지 직선화 때 이웃과 띄울 최소 간격(px)
+const CHAIN_GAP = 16;
+
+/** 곁가지 사슬 직선화 — 척추 밖에서 1입력·1출력으로 이어지는 사슬(r1→r2→…)을 머리 노드의 수직축 위치에 맞춘다.
+ *  열마다 다른 dagre 위치·최근접 척추 열 shift 차용 때문에 생기던 계단을 편다. 옮기면 겹치는 노드에서 사슬을 멈춘다.
+ *  consultant_layout.py straighten_side_chains와 동치. */
+export function straightenSideChains(
+  nodes: AppNode[],
+  dir: FlowDir,
+  spine: Set<string>,
+  edges: EdgeLink[],
+  forward: EdgeLink[],
+  renderW: (node: AppNode) => number,
+  renderH: (node: AppNode) => number,
+): AppNode[] {
+  const present = new Set(nodes.map((node) => node.id));
+  const outDeg = new Map<string, number>();
+  const inDeg = new Map<string, number>();
+  for (const edge of edges) {
+    if (!present.has(edge.source) || !present.has(edge.target)) continue;
+    outDeg.set(edge.source, (outDeg.get(edge.source) ?? 0) + 1);
+    inDeg.set(edge.target, (inDeg.get(edge.target) ?? 0) + 1);
+  }
+  const next = new Map<string, string>();
+  const linkedIn = new Set<string>();
+  for (const edge of forward) {
+    if (spine.has(edge.source) || spine.has(edge.target)) continue;
+    if (outDeg.get(edge.source) !== 1 || inDeg.get(edge.target) !== 1) continue;
+    next.set(edge.source, edge.target);
+    linkedIn.add(edge.target);
+  }
+  if (next.size === 0) return nodes;
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const cross = (node: AppNode) =>
+    dir === "LR" ? node.position.y + renderH(node) / 2 : node.position.x + renderW(node) / 2;
+  const withCross = (node: AppNode, value: number): AppNode =>
+    dir === "LR"
+      ? { ...node, position: { x: node.position.x, y: value - renderH(node) / 2 } }
+      : { ...node, position: { x: value - renderW(node) / 2, y: node.position.y } };
+  const collides = (moved: AppNode) => {
+    const ax2 = moved.position.x + renderW(moved);
+    const ay2 = moved.position.y + renderH(moved);
+    for (const other of byId.values()) {
+      if (other.id === moved.id) continue;
+      if (
+        moved.position.x < other.position.x + renderW(other) + CHAIN_GAP &&
+        ax2 + CHAIN_GAP > other.position.x &&
+        moved.position.y < other.position.y + renderH(other) + CHAIN_GAP &&
+        ay2 + CHAIN_GAP > other.position.y
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const node of nodes) {
+    if (!next.has(node.id) || linkedIn.has(node.id)) continue; // 사슬 머리만
+    const line = cross(byId.get(node.id) as AppNode);
+    const seen = new Set([node.id]);
+    let cursor = next.get(node.id);
+    while (cursor !== undefined && !seen.has(cursor)) {
+      seen.add(cursor);
+      const moved = withCross(byId.get(cursor) as AppNode, line);
+      if (collides(moved)) break;
+      byId.set(cursor, moved);
+      cursor = next.get(cursor);
+    }
+  }
+  return nodes.map((node) => byId.get(node.id) ?? node);
+}
+
+/** 맵의 현재 흐름 방향 추정 — 엣지 핸들이 위→아래(TB)인지 좌→우(LR)인지 다수결, 동률·없음은 LR.
+ *  방향 지정이 없는 "자동 정렬"(인스펙터 버튼)이 직전 정렬 방향을 이어 가게 한다. */
+export function inferFlowDir(edges: Edge[]): FlowDir {
+  let lr = 0;
+  let tb = 0;
+  for (const edge of edges) {
+    for (const handle of [edge.sourceHandle, edge.targetHandle]) {
+      if (handle === "s-bottom" || handle === "t-top" || handle === "in:top") tb += 1;
+      else if (handle === "s-right" || handle === "t-left" || handle === "in") lr += 1;
+    }
+  }
+  return tb > lr ? "TB" : "LR";
+}
+
+export interface AutoLayoutOptions {
+  // 영역(그룹) — 멤버를 dagre 클러스터로 묶어 붙여 둔다(멤버십은 node.data.groupIds)
+  groups?: ReadonlyArray<{ id: string }>;
+  // 엣지 핸들 유지 — L5 캔버스는 임포트가 벌려 둔 분기 출구(위/아래/옆)를 지켜야 한다
+  preserveHandles?: boolean;
+}
+
+/** 배치가 끝난 좌표로 엣지 핸들 재지정 — scope가 오면 양끝이 그 안인 엣지만.
+ *  서브프로세스 소스는 끝 핸들(끝 키)이라 기존 핸들 유지, 타깃은 고른 변의 들어오는 문 변형(in / in:<side>). */
+function reassignHandles(
   nodes: AppNode[],
   edges: Edge[],
   dir: FlowDir,
-): { nodes: AppNode[]; edges: Edge[] } {
-  if (nodes.length === 0) return { nodes, edges };
-  const laid = layoutWithDagre(nodes, edges, dir);
-  const renderW = (node: AppNode) => node.measured?.width ?? nodeSizeOf(node.data.nodeType).w;
-  const renderH = (node: AppNode) => node.measured?.height ?? nodeSizeOf(node.data.nodeType).h;
-  const present = new Set(laid.map((node) => node.id));
-  const seed = findMainPath(laid, edges);
-  const spine = seed.size > 0 ? computeSpine(present, seed, edges) : new Set<string>();
-  const aligned = seed.size > 0 ? alignBackbone(laid, seed, dir, spine, renderW, renderH) : laid;
-
-  const byId = new Map(aligned.map((node) => [node.id, node]));
+  spine: Set<string>,
+  renderW: (node: AppNode) => number,
+  renderH: (node: AppNode) => number,
+  scope?: ReadonlySet<string>,
+): Edge[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
   const centerOf = (id: string): Center | undefined => {
     const node = byId.get(id);
     if (!node) return undefined;
     return { cx: node.position.x + renderW(node) / 2, cy: node.position.y + renderH(node) / 2 };
   };
-  const nextEdges = edges.map((edge) => {
+  return edges.map((edge) => {
+    if (scope && (!scope.has(edge.source) || !scope.has(edge.target))) return edge;
     const sourceNode = byId.get(edge.source);
     const targetNode = byId.get(edge.target);
     if (!sourceNode || !targetNode) return edge;
     const s = centerOf(edge.source);
     const t = centerOf(edge.target);
     const back = !!s && !!t && isBackEdge(dir, s, t);
-    const sourceSide = pickHandleSide(dir, s, t, spine.has(edge.source), spine.has(edge.target), back);
-    const targetSide = pickHandleSide(dir, t, s, spine.has(edge.target), spine.has(edge.source), back);
-    // 서브프로세스 소스는 끝 핸들(끝 키)이라 기존 핸들 유지, 타깃은 고른 변의 들어오는 문 변형(in / in:<side>).
+    // 척추 위 두 노드를 건너뛰는 지름길(반려 → 끝 등)은 흐름측으로 그리면 사이 노드를 관통한다 — 양끝을 아래(LR)·오른쪽(TB)으로
+    const bypass =
+      !back && !!s && !!t && spine.has(edge.source) && spine.has(edge.target) &&
+      isStraightRunBlocked(nodes, dir, edge.source, edge.target, s, t, renderW, renderH);
+    const bypassSide: HandleSide = dir === "LR" ? "bottom" : "right";
+    const sourceSide = bypass
+      ? bypassSide
+      : pickHandleSide(dir, s, t, spine.has(edge.source), spine.has(edge.target), back);
+    const targetSide = bypass
+      ? bypassSide
+      : pickHandleSide(dir, t, s, spine.has(edge.target), spine.has(edge.source), back);
     return {
       ...edge,
       sourceHandle:
@@ -229,5 +306,70 @@ export function autoLayoutFlow(
           : targetHandleId(targetSide),
     };
   });
-  return { nodes: aligned, edges: nextEdges };
+}
+
+/** 두 중심을 잇는 흐름축 직선이 다른 노드를 지나가는지 — 척추 지름길 판정용. */
+function isStraightRunBlocked(
+  nodes: AppNode[],
+  dir: FlowDir,
+  sourceId: string,
+  targetId: string,
+  s: Center,
+  t: Center,
+  renderW: (node: AppNode) => number,
+  renderH: (node: AppNode) => number,
+): boolean {
+  const line = dir === "LR" ? s.cy : s.cx;
+  const from = Math.min(dir === "LR" ? s.cx : s.cy, dir === "LR" ? t.cx : t.cy);
+  const to = Math.max(dir === "LR" ? s.cx : s.cy, dir === "LR" ? t.cx : t.cy);
+  return nodes.some((node) => {
+    if (node.id === sourceId || node.id === targetId) return false;
+    const [flowStart, flowEnd, crossStart, crossEnd] =
+      dir === "LR"
+        ? [node.position.x, node.position.x + renderW(node), node.position.y, node.position.y + renderH(node)]
+        : [node.position.y, node.position.y + renderH(node), node.position.x, node.position.x + renderW(node)];
+    return flowEnd > from && flowStart < to && crossStart < line && crossEnd > line;
+  });
+}
+
+const renderWOf = (node: AppNode) => node.measured?.width ?? nodeSizeOf(node.data.nodeType).w;
+const renderHOf = (node: AppNode) => node.measured?.height ?? nodeSizeOf(node.data.nodeType).h;
+
+/** 에디터 자동정렬 — dagre(dir) → 척추(시작→대표 끝 최장 경로) 직선화 → 곁가지 사슬 직선화 → 방향에 맞춰 엣지 핸들 재지정.
+ *  노드와 엣지를 함께 반환 — 호출측이 한 undo 스냅샷으로 반영. */
+export function autoLayoutFlow(
+  nodes: AppNode[],
+  edges: Edge[],
+  dir: FlowDir,
+  options?: AutoLayoutOptions,
+): { nodes: AppNode[]; edges: Edge[] } {
+  if (nodes.length === 0) return { nodes, edges };
+  const laid = layoutWithDagre(nodes, edges, dir, undefined, options?.groups);
+  const present = new Set(laid.map((node) => node.id));
+  const seed = findMainPath(laid, edges);
+  const spine = seed.size > 0 ? computeSpine(present, seed, edges) : new Set<string>();
+  const aligned = seed.size > 0 ? alignBackbone(laid, seed, dir, spine, renderWOf, renderHOf) : laid;
+  const nodeIds = laid.map((node) => node.id);
+  const { forward } = splitForwardEdges(nodeIds, sortLayoutEdges(nodeIds, edges));
+  const straightened = straightenSideChains(aligned, dir, spine, edges, forward, renderWOf, renderHOf);
+  if (options?.preserveHandles) return { nodes: straightened, edges };
+  return {
+    nodes: straightened,
+    edges: reassignHandles(straightened, edges, dir, spine, renderWOf, renderHOf),
+  };
+}
+
+/** 부분 자동정렬 — 선택(ids, 2개 이상)만 방향 dagre로 제자리 배치 → 겹친 비선택 노드를 흐름 방향으로 비켜 줌
+ *  → 양끝이 선택 안인 엣지의 핸들만 재지정(척추 없음 = 흐름측 변). 2개 미만이면 그대로. */
+export function autoLayoutSubsetFlow(
+  nodes: AppNode[],
+  edges: Edge[],
+  ids: ReadonlySet<string>,
+  dir: FlowDir,
+  options?: Pick<AutoLayoutOptions, "preserveHandles">,
+): { nodes: AppNode[]; edges: Edge[] } {
+  if (nodes.filter((node) => ids.has(node.id)).length < 2) return { nodes, edges };
+  const laid = pushApartFromBlock(layoutSubsetWithDagre(nodes, edges, ids, dir), ids, dir);
+  if (options?.preserveHandles) return { nodes: laid, edges };
+  return { nodes: laid, edges: reassignHandles(laid, edges, dir, new Set(), renderWOf, renderHOf, ids) };
 }
