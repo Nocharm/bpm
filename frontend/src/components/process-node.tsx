@@ -1192,30 +1192,17 @@ function ParallelHoverBadge({
   );
 }
 
-// 병렬 노드 안쪽 링 — 기존 1.5px 테두리 안쪽에 노드색(--nc) 옅은 1px 선을 한 겹 더해 병렬임을 약하게 드러낸다
+// 병렬 노드 안쪽 링 — 기존 테두리 안쪽에 노드색(--nc) 옅은 1px 선을 한 겹 더해 병렬임을 약하게 드러낸다
 // (사용자 요청 2026-10-02). 병렬 속성을 켰으면 연결 전에도 링(사용자 요청 2026-10-06), 그 외엔 호버 배지와 같은
 // 출구 그룹 판정(병렬 ∧ 엣지 ≥2 — 레거시 gateway 도출·시작 팬아웃). 분기 노드엔 쓰지 않는다.
-// radius = 바깥 곡률 - 3px(테두리 1.5 + 간격 1.5)이라 호출부가 노드 모양별로 넘긴다.
-function ParallelInnerRing({
-  outputGroups,
-  parallelOutputs,
-  radius,
-}: {
-  outputGroups: OutputGroup[];
-  parallelOutputs?: string[];
-  radius: number;
-}) {
+// 노드 박스 자신의 outline(음수 offset)으로 그린다 — 별도 요소는 캔버스 줌 배율에서 테두리와 따로 픽셀 스냅돼
+// 변마다 간격이 1px씩 엇갈렸다(사용자 리포트 2026-10-06). outline은 border-radius를 따라 휘어 모양별 곡률 계산이 필요 없다.
+function getParallelRingStyle(outputGroups: OutputGroup[], parallelOutputs?: string[]): CSSProperties | null {
   const isParallel =
     (parallelOutputs?.length ?? 0) > 0 || outputGroups.some((group) => group.parallel && group.count >= 2);
   if (!isParallel) return null;
-  return (
-    <span
-      data-id="node-parallel-ring"
-      aria-hidden
-      className="pointer-events-none absolute inset-[1.5px]"
-      style={{ borderRadius: radius, border: "1px solid color-mix(in srgb, var(--nc) 40%, transparent)" }}
-    />
-  );
+  // offset -3.5 = 테두리 바깥 끝에서 안쪽으로 2.5~3.5px 띠(테두리 1~1.5px + 간격)
+  return { outline: "1px solid color-mix(in srgb, var(--nc) 40%, transparent)", outlineOffset: "-3.5px" };
 }
 
 // SP 끝 개수 배지 — 제목 끝에 인라인으로 붙는 알약 하나(제목 폭을 따로 먹지 않게). 끝 ≥2면 `출구 사용량/끝 수`(병렬 출구는 1로 셈),
@@ -1387,13 +1374,17 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         ? externalSpNodeStyle(color)
         : nodeStyle(color, fill);
   const diffFields = data.diffFields ?? [];
+  // 병렬 링 — 비교 화면(diff)엔 없고, SP는 끝 핸들 없이 변 핸들로 그리는 비교 화면(sideHandles)에서도 뺀다
+  const ringStyle = diff ? null : getParallelRingStyle(outputGroups, data.parallelOutputs);
+  const spRingStyle = data.sideHandles === true ? null : ringStyle;
 
   if (data.nodeType === "subprocess") {
     return (
       // justify-start — 라벨을 상단 고정해 좌/우 핸들 라벨 라인 앵커(18px)와 정합 (사용자 요청 2026-08-25)
       <div
         className="group bpm-node-emph relative flex min-h-[64px] w-[180px] flex-col justify-start rounded-sm px-3 py-2 text-sm transition-all duration-150"
-        style={spWidth !== null ? ({ ...style, width: spWidth } as CSSProperties) : style}
+        style={{ ...style, ...(spWidth !== null ? { width: spWidth } : null), ...spRingStyle }}
+        data-parallel-ring={spRingStyle ? "" : undefined}
         title={data.diffNote}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -1449,8 +1440,6 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         {!diff && data.sideHandles !== true && (
           <>
             <ParallelHoverBadge outputGroups={outputGroups} ends={data.subEnds} visible={hovered} />
-            {/* rounded-sm(8px) 안쪽 */}
-            <ParallelInnerRing outputGroups={outputGroups} parallelOutputs={data.parallelOutputs} radius={5} />
           </>
         )}
         <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
@@ -1722,7 +1711,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           ? `min-w-[90px] max-w-[240px] rounded-[19px] ${customTerminal ? "text-left" : "text-center"}`
           : "min-w-[150px] max-w-[240px] rounded-sm"
       }`}
-      style={style}
+      style={ringStyle ? { ...style, ...ringStyle } : style}
+      data-parallel-ring={ringStyle ? "" : undefined}
       title={data.diffNote}
       data-diff-status={diff}
       onMouseEnter={() => setHovered(true)}
@@ -1733,8 +1723,6 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       {!diff && (
         <>
           <ParallelHoverBadge outputGroups={outputGroups} visible={hovered} />
-          {/* 터미널 19px·일반 rounded-sm 8px 곡률 안쪽 */}
-          <ParallelInnerRing outputGroups={outputGroups} parallelOutputs={data.parallelOutputs} radius={isTerminal ? 16 : 5} />
         </>
       )}
       <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>

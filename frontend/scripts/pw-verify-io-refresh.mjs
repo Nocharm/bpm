@@ -152,7 +152,7 @@ async function clipOf(ids, pad = 40) {
 await openEditor(map.id, draft.id);
 
 // ── (10) 병렬 노드 안쪽 링 — 속성 병렬 A·미연결 속성 병렬 P·레거시 gateway 병렬 K·시작 팬아웃엔 링, 분기 D·일반 B엔 없음
-const ringOf = (id) => page.locator(`.react-flow__node[data-id="${id}"] [data-id="node-parallel-ring"]`).count();
+const ringOf = (id) => page.locator(`.react-flow__node[data-id="${id}"] [data-parallel-ring]`).count();
 check("a flagged parallel node draws the inner ring", (await ringOf(nid("a"))) === 1);
 check("a legacy gateway-parallel node draws the inner ring", (await ringOf(nid("k"))) === 1);
 check("a flagged parallel node draws the ring before any connection", (await ringOf(nid("p"))) === 1);
