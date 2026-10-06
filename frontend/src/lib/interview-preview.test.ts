@@ -224,6 +224,26 @@ describe("layoutPreviewGraph", () => {
     expect(x("a02")).toBeLessThan(x("a03"));
     expect(x("a03")).toBeLessThan(x("__end__"));
   });
+
+  it("carries the auto-layout handle sides onto the edges so a loop-back uses the top side", () => {
+    const graph = layoutPreviewGraph(
+      buildPreviewGraph({
+        actions: [action(1, "A"), action(2, "B"), action(3, "C")],
+        relations: {
+          edges: [
+            { src: 1, dst: 2, kind: "seq" },
+            { src: 2, dst: 3, kind: "seq" },
+            { src: 3, dst: 1, kind: "seq", condition: "미비 시 처음부터" },
+          ],
+        },
+      })!,
+    );
+    const loop = graph.edges.find((e) => e.source_node_id === "a03" && e.target_node_id === "a01");
+
+    expect(loop?.source_side).toBe("top");
+    expect(loop?.target_side).toBe("top");
+    expect(loop?.source_handle).toBe("s-top");
+  });
 });
 
 describe("buildL5PreviewGraph", () => {
