@@ -99,6 +99,73 @@ describe("buildDetourPoints - 수직쌍(V·H·V)", () => {
   });
 });
 
+describe("buildDetourPoints - 마주 보는 쌍만 우회", () => {
+  it("역방향(우측 핸들이 타깃보다 오른쪽) → null: 자기 몸통을 지나 왼쪽으로 출발하던 경로를 내지 않는다", () => {
+    // 감사 프로브: 소스 우측 핸들 x=560 → 타깃 좌측 핸들 x=0, 사이 장애물. 종전엔 (560,20)→(353,20)→(353,220)→(0,220)로
+    // 우측 핸들에서 왼쪽으로(자기 몸통 관통) 출발해 타깃에도 몸통 쪽으로 들어갔다
+    const points = buildDetourPoints({
+      sourceX: 560,
+      sourceY: 20,
+      targetX: 0,
+      targetY: 220,
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+      obstacles: inflateAll([{ x: 200, y: 60, w: 140, h: 120 }]),
+    });
+    expect(points).toBeNull();
+  });
+
+  it("같은 변 쌍(위→위) → null: RF 루프백 + 최소 높이 40 경로에 맡긴다", () => {
+    // 종전엔 V·H·V 회랑이 위쪽 핸들 위 23px에서 꺾였다(최소 높이 40 위반)
+    const points = buildDetourPoints({
+      sourceX: 100,
+      sourceY: 200,
+      targetX: 500,
+      targetY: 210,
+      sourcePosition: Position.Top,
+      targetPosition: Position.Top,
+      obstacles: inflateAll([{ x: 250, y: 150, w: 100, h: 100 }]),
+    });
+    expect(points).toBeNull();
+  });
+
+  it("마주 보지만 간격이 스텁 2배보다 좁으면 null(RF가 3구간이 아닌 S자를 그린다)", () => {
+    // 좌·우 간격 30 < 40
+    expect(
+      buildDetourPoints({
+        sourceX: 100,
+        sourceY: 0,
+        targetX: 130,
+        targetY: 300,
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        obstacles: inflateAll([{ x: 110, y: 100, w: 10, h: 100 }]),
+      }),
+    ).toBeNull();
+  });
+
+  it("수직 우회 회랑은 위·아래 핸들에서 최소 높이 40 이상 — 40 안쪽 회랑만 남으면 null", () => {
+    // S(100,100 아래)→T(500,500 위), 기본 회랑 y=300. 장애물(450..550, 300..470)이 타깃 하강 구간을 막는다.
+    // 무교차 회랑은 장애물 아래 483뿐인데 타깃 위쪽 핸들에서 17px — 종전엔 채택, 이제 기각 → null
+    const points = buildDetourPoints({
+      sourceX: 100,
+      sourceY: 100,
+      targetX: 500,
+      targetY: 500,
+      sourcePosition: Position.Bottom,
+      targetPosition: Position.Top,
+      obstacles: inflateAll([{ x: 450, y: 300, w: 100, h: 170 }]),
+    });
+    expect(points).toBeNull();
+  });
+
+  it("수평 우회 회랑은 좌·우 핸들 정면 20px 안쪽에 두지 않는다", () => {
+    // 장애물(215..575, 100..400)의 바깥 후보 202·588은 소스(200)에서 2px·타깃(600)에서 12px — 종전엔 588 채택
+    // (타깃 핸들 코앞에서 꺾음), 이제 둘 다 스텁 20 안쪽이라 기각 → null
+    expect(buildDetourPoints(makeArgsH([{ x: 215, y: 100, w: 360, h: 300 }]))).toBeNull();
+  });
+});
+
 describe("buildRoundedOrthPath", () => {
   it("모서리마다 L+Q, 끝은 L - 라벨은 최장 구간 중앙", () => {
     const [path, labelX, labelY] = buildRoundedOrthPath([

@@ -2,7 +2,11 @@
 // bbox를 관통하면 중간 회랑을 빈 통로로 옮긴 직각 웨이포인트를 산출한다(사용자 요청 2026-08-24).
 // 표시 좌표 기준(핸들 좌표·노드 rect 모두 렌더 공간) — height-shift 트윈 중에도 프레임마다 따라간다.
 // 직선·곡선 모양과 대각(혼합) 핸들 방향은 대상 아님 — null 반환 = 기존 기본 경로 사용.
+// 두 핸들이 서로 마주 볼 때만 우회한다(2026-10-06): 역방향·같은 변 쌍은 3구간이 자기 노드 몸통을 관통하고
+// RF가 그리는 U자와도 달라 판정이 어긋난다 → 그 쌍은 RF/최소 높이 경로(lib/edge-stub)에 맡긴다.
 import { Position } from "@xyflow/react";
+
+import { getFrontDistance, VERTICAL_EDGE_STUB } from "@/lib/edge-stub";
 
 export interface ObstacleRect {
   x: number;
@@ -28,6 +32,9 @@ interface DetourArgs {
 const MARGIN = 12;
 // 모서리 라운드 반경 — RF smoothstep 기본 5와 통일 (px)
 const CORNER_RADIUS = 5;
+// 좌·우 끝이 회랑까지 확보하는 최소 직진 거리 — RF smoothstep 기본 offset과 같다 (px).
+// 위·아래 끝은 VERTICAL_EDGE_STUB(40). 두 끝 사이가 2배보다 좁으면 RF가 3구간이 아닌 S자를 그려 우회 대상 외
+const SIDE_EDGE_STUB = 20;
 
 // 사전 인플레이트 장애물 — 프레임마다 엣지×노드 규모의 inflate 재할당을 없애기 위해
 // 호출자가 노드 배열당 1회 산출해 모든 엣지가 공유한다. left/right/top/bottom = MARGIN 경계.
@@ -112,9 +119,11 @@ function isBlockedV(mid: number, a: DetourArgs, rects: readonly EdgeObstacle[]):
 }
 
 /**
- * 우회 웨이포인트 산출. null = 기본 경로 그대로(교차 없음·대상 외 방향·빈 회랑 없음).
- * 후보 회랑 = 기본 중앙 + 각 장애물의 양쪽 바깥 — 전 구간 무교차인 것 중 기본에서 최소 이탈을 고른다
+ * 우회 웨이포인트 산출. null = 기본 경로 그대로(교차 없음·대상 외 방향·마주 보지 않는 쌍·빈 회랑 없음).
+ * 후보 회랑 = 기본 중앙 + 각 장애물의 양쪽 바깥 — 두 핸들 정면의 스텁(좌·우 20, 위·아래 40) 안쪽에 있고
+ * 전 구간 무교차인 것 중 기본에서 최소 이탈을 고른다
  * (동률이면 오른쪽/아래 우선 — 트윈 중 프레임 간 좌우 플립 방지용 결정적 타이브레이크).
+ * 회랑이 두 핸들 정면 사이에만 놓이므로 양끝 노드는 경로가 지날 수 없어 장애물에서 빼도 안전하다.
  */
 export function buildDetourPoints(a: DetourArgs): { x: number; y: number }[] | null {
   const horizontal =
@@ -124,6 +133,14 @@ export function buildDetourPoints(a: DetourArgs): { x: number; y: number }[] | n
     (a.sourcePosition === Position.Top || a.sourcePosition === Position.Bottom) &&
     (a.targetPosition === Position.Top || a.targetPosition === Position.Bottom);
   if (!horizontal && !vertical) return null;
+  // 마주 보는 쌍만 — 두 끝의 정면 거리가 모두 스텁 2배 이상이어야 RF 기본 경로도 같은 3구간(중앙 회랑)이다
+  const stub = horizontal ? SIDE_EDGE_STUB : VERTICAL_EDGE_STUB;
+  const sourceFront = getFrontDistance(a.sourceX, a.sourceY, a.sourcePosition, a.targetX, a.targetY);
+  const targetFront = getFrontDistance(a.targetX, a.targetY, a.targetPosition, a.sourceX, a.sourceY);
+  if (sourceFront < 2 * stub || targetFront < 2 * stub) return null;
+  // 회랑 허용 범위 — 소스·타깃 정면 스텁 사이(밖이면 핸들이 자기 몸통 쪽으로 출발하거나 최소 높이를 못 채운다)
+  const corridorLo = (horizontal ? Math.min(a.sourceX, a.targetX) : Math.min(a.sourceY, a.targetY)) + stub;
+  const corridorHi = (horizontal ? Math.max(a.sourceX, a.targetX) : Math.max(a.sourceY, a.targetY)) - stub;
 
   // 관련 장애물 프루닝 — 세 구간(H·V·H / V·H·V) 모두 소스↔타깃이 스팬하는 직교 밴드와
   // 겹치는 rect하고만 교차 가능하므로, 밴드 밖 장애물은 판정·후보에서 제외한다(교차 판정은 동치,
@@ -145,10 +162,8 @@ export function buildDetourPoints(a: DetourArgs): { x: number; y: number }[] | n
 
   const candidates: number[] = [];
   for (const r of rects) {
-    if (horizontal) {
-      candidates.push(r.left - 1, r.right + 1);
-    } else {
-      candidates.push(r.top - 1, r.bottom + 1);
+    for (const cand of horizontal ? [r.left - 1, r.right + 1] : [r.top - 1, r.bottom + 1]) {
+      if (cand >= corridorLo && cand <= corridorHi) candidates.push(cand);
     }
   }
   // 기본 이탈 최소 우선(동률은 오른쪽/아래) 정렬 후 첫 무교차 후보에서 종료 — 전 후보×전 rect
@@ -187,9 +202,19 @@ export function buildDetourPoints(a: DetourArgs): { x: number; y: number }[] | n
 const LABEL_HALF_W = 80;
 const LABEL_HALF_H = 12;
 
-function isLabelClear(x: number, y: number, obstacles: ObstacleRect[]): boolean {
+/** 라벨 가림 판정 장애물 — id가 있으면 skip 대상(양끝 노드) 판정에 쓴다 */
+type LabelObstacle = ObstacleRect & { id?: string };
+
+function isLabelClear(
+  x: number,
+  y: number,
+  obstacles: readonly LabelObstacle[],
+  skipA: string | undefined,
+  skipB: string | undefined,
+): boolean {
   return !obstacles.some(
     (r) =>
+      (r.id === undefined || (r.id !== skipA && r.id !== skipB)) &&
       x > r.x - LABEL_HALF_W &&
       x < r.x + r.w + LABEL_HALF_W &&
       y > r.y - LABEL_HALF_H &&
@@ -201,10 +226,13 @@ function isLabelClear(x: number, y: number, obstacles: ObstacleRect[]): boolean 
  * 직각 웨이포인트 → 모서리 라운드 SVG 경로 + 라벨 앵커.
  * 라벨은 "중앙이 장애물에 가려지지 않는" 구간 중 최장 구간의 중앙 — 전부 가려지면 최장 구간 폴백.
  * 반경은 인접 구간 절반으로 클램프 — 짧은 구간에서 경로가 뒤집히지 않게.
+ * skipA/skipB = 가림 판정에서 뺄 장애물 id(양끝 노드) — 엣지마다 장애물 배열을 다시 걸러 만들지 않게.
  */
 export function buildRoundedOrthPath(
   points: { x: number; y: number }[],
-  obstacles: ObstacleRect[] = [],
+  obstacles: readonly LabelObstacle[] = [],
+  skipA?: string,
+  skipB?: string,
 ): [string, number, number] {
   const parts = [`M ${points[0].x},${points[0].y}`];
   for (let i = 1; i < points.length - 1; i += 1) {
@@ -238,7 +266,7 @@ export function buildRoundedOrthPath(
       labelX = midX;
       labelY = midY;
     }
-    if (len > bestClearLen && isLabelClear(midX, midY, obstacles)) {
+    if (len > bestClearLen && isLabelClear(midX, midY, obstacles, skipA, skipB)) {
       bestClearLen = len;
       clearX = midX;
       clearY = midY;

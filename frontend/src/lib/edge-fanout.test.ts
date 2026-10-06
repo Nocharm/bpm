@@ -303,7 +303,8 @@ describe("buildFanStepPath - 꺾은선 게이트 포인트 + 원호", () => {
     expect([inner!.labelX, inner!.labelY]).toEqual([285, 118]);
   });
 
-  it("루프백(top→top, 동측 가족): 레인은 스텁 20 뒤에서 시작(반경 34+10k), 무지개로 위쪽 핸들에 진입", () => {
+  // 위쪽 변 레인 반경은 배정(assignGroup)에서 최소 높이 40부터 — 종전 기대값(34·44)은 raw 위쪽 끝이 34px만 뜨던 버그를 담았다
+  it("루프백(top→top, 동측 가족): 위쪽 변 레인은 최소 높이 40부터(반경 40+10k), 무지개로 위쪽 핸들에 진입", () => {
     const back: FanPathArgs = {
       sourceX: 385,
       sourceY: 200,
@@ -312,10 +313,35 @@ describe("buildFanStepPath - 꺾은선 게이트 포인트 + 원호", () => {
       sourcePosition: Position.Top,
       targetPosition: Position.Top,
     };
-    const inner = buildFanStepPath(back, { t: laneR(0, 34) });
-    expect(inner!.d).toBe("M 385,200 L 385,171 Q 385,166 380,166 L 119,166 A 34 34 0 0 0 85,200");
-    const outer = buildFanStepPath(back, { t: laneR(1, 44) });
-    expect(outer!.d).toContain("L 129,156 A 44 44 0 0 0 85,200");
+    const inner = buildFanStepPath(back, { t: laneR(0, 40) });
+    expect(inner!.d).toBe("M 385,200 L 385,165 Q 385,160 380,160 L 125,160 A 40 40 0 0 0 85,200");
+    const outer = buildFanStepPath(back, { t: laneR(1, 50) });
+    expect(outer!.d).toContain("L 135,150 A 50 50 0 0 0 85,200");
+  });
+
+  it("raw 위·아래 끝도 최소 높이 40 — 레인까지 40px 못 뜨면 null(현행 경로가 40px 스텁으로 그린다)", () => {
+    const back: FanPathArgs = {
+      sourceX: 385,
+      sourceY: 200,
+      targetX: 85,
+      targetY: 200,
+      sourcePosition: Position.Top,
+      targetPosition: Position.Top,
+    };
+    // 반경 34 레인 = raw 위쪽 소스가 34px만 뜬다(종전엔 20px 스텁만 요구해 통과)
+    expect(buildFanStepPath(back, { t: laneR(0, 34) })).toBeNull();
+    // 아래 핸들 → 좌측 레인(같은 방향 2코너): 수직 여유 34px(< 40+1)면 null — 종전엔 20px만 뜨고 꺾었다
+    const branch: FanPathArgs = {
+      sourceX: 58,
+      sourceY: 170,
+      targetX: 400,
+      targetY: 218,
+      sourcePosition: Position.Bottom,
+      targetPosition: Position.Left,
+    };
+    expect(buildFanStepPath(branch, { t: lane(0) })).toBeNull();
+    // 좌·우 raw 끝은 그대로 20px 스텁(LR 기본 케이스 회귀 없음)
+    expect(buildFanStepPath(LR, { t: lane(0) })).not.toBeNull();
   });
 
   it("분기 아래 핸들 → 노드 좌측 핸들(출발·도착 방향 같음): 중간 높이에서 한 번 꺾어 레인으로", () => {

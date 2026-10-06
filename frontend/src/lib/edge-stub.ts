@@ -41,7 +41,7 @@ function outOf(position: Position): { x: number; y: number } {
 }
 
 /** 상대 끝이 이 끝의 정면으로 떨어진 거리(+ = 정면, 0·- = 같은 줄·등 뒤) */
-function getFrontDistance(x: number, y: number, position: Position, otherX: number, otherY: number): number {
+export function getFrontDistance(x: number, y: number, position: Position, otherX: number, otherY: number): number {
   const out = outOf(position);
   return (otherX - x) * out.x + (otherY - y) * out.y;
 }

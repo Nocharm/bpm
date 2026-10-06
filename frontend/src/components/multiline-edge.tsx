@@ -4,36 +4,15 @@
 // React Flow 기본 라벨은 SVG <text>라 줄바꿈(\n)을 렌더하지 못한다 → Alt/Shift+Enter 다중행 라벨을 위해
 // HTML 라벨로 대체. 빌트인 타입 키(default/smoothstep/straight)를 그대로 덮어 기존 edge.type을 재사용한다.
 
-import {
-  BaseEdge,
-  EdgeLabelRenderer,
-  getStraightPath,
-  useNodes,
-  type EdgeProps,
-  type EdgeTypes,
-} from "@xyflow/react";
+import { BaseEdge, EdgeLabelRenderer, useNodes, type EdgeProps, type EdgeTypes } from "@xyflow/react";
 import { Link2 } from "lucide-react";
 
 import { EdgePulseDot } from "@/components/edge-pulse-dot";
 import { type AppNode, EDGE_LABEL_MAX_WIDTH } from "@/lib/canvas";
-import {
-  buildDetourPoints,
-  buildRoundedOrthPath,
-  isPolylineBlocked,
-  toEdgeObstacle,
-  type EdgeObstacle,
-} from "@/lib/edge-detour";
-import {
-  buildFanBezierPath,
-  buildFanStepPath,
-  isEdgeFan,
-  spreadStraightEndpoints,
-  type EdgeFan,
-} from "@/lib/edge-fanout";
+import { type EdgeObstacle } from "@/lib/edge-detour";
+import { isEdgeFan, type EdgeFan } from "@/lib/edge-fanout";
+import { getEdgeObstacles, resolveEdgePath, type EdgeLineVariant, type EdgePathResult } from "@/lib/edge-path";
 import { getDecisionTravel, isEdgePulse } from "@/lib/edge-pulse";
-import { getBezierPathWithStub, getSmoothStepPathWithStub } from "@/lib/edge-stub";
-
-type LineVariant = "default" | "smoothstep" | "straight";
 
 /** 같은 핸들 형제 팬 레인 — 표면(styledEdges·비교 appEdges)이 edge.data.fan으로 넘긴다. 없으면 undefined */
 function fanOf(props: Pick<EdgeProps, "data">): EdgeFan | undefined {
@@ -41,123 +20,49 @@ function fanOf(props: Pick<EdgeProps, "data">): EdgeFan | undefined {
   return isEdgeFan(fan) ? fan : undefined;
 }
 
-/** 선 모양별 경로 + 라벨 앵커 좌표. 팬 레인이 있으면 곡선은 제어점 중첩, 직선은 끝점 분산(lib/edge-fanout).
- *  꺾은선·곡선은 위·아래 끝 최소 높이(lib/edge-stub)를 따른다. */
-function buildPath(variant: LineVariant, props: EdgeProps): [string, number, number] {
-  const { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition } = props;
-  const params = { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition };
-  const fan = fanOf(props);
-  if (variant === "straight") {
-    const spread = fan ? spreadStraightEndpoints(params, fan) : params;
-    const [path, labelX, labelY] = getStraightPath(spread);
-    return [path, labelX, labelY];
-  }
-  if (variant === "default") {
-    const fanned = fan ? buildFanBezierPath(params, fan) : null;
-    if (fanned) {
-      return fanned;
-    }
-  }
-  return variant === "default" ? getBezierPathWithStub(params) : getSmoothStepPathWithStub(params);
-}
-
-// 장애물 목록 캐시 — RF 스토어 nodes 배열 identity당 1회 산출해 모든 꺾은선 엣지가 공유한다.
-// 종전엔 엣지마다 filter+map+inflate로 노드 수만큼 새 객체를 만들어(엣지×노드/프레임) 드래그 중
-// GC·crossesV가 프레임 예산을 다 먹었다(352노드×351엣지 실측 avg 120ms/frame). 렌더 중 모듈
-// 상태지만 입력 identity 기반 멱등 메모라 호출 순서와 무관하게 결과가 같다(RF 단일 인스턴스 전제 —
-// 에디터와 비교 화면은 다른 라우트라 동시에 마운트되지 않는다. 미리보기처럼 N개 인스턴스인 표면엔 쓰지 말 것).
-let obstacleSrc: unknown = null;
-let obstacleList: EdgeObstacle[] = [];
+/** 하위 호환 — 노드 배열 → 우회 장애물(lib/edge-path getEdgeObstacles, 배열 identity별 WeakMap 캐시) */
 export function getObstacles(nodes: AppNode[]): EdgeObstacle[] {
-  if (nodes !== obstacleSrc) {
-    const list: EdgeObstacle[] = [];
-    for (const node of nodes) {
-      const w = node.measured?.width ?? 0;
-      const h = node.measured?.height ?? 0;
-      if (node.hidden || w <= 0 || h <= 0) continue;
-      list.push(toEdgeObstacle(node.id, { x: node.position.x, y: node.position.y, w, h }));
-    }
-    obstacleSrc = nodes;
-    obstacleList = list;
-  }
-  return obstacleList;
+  return getEdgeObstacles(nodes);
 }
 
-// 꺾은선 전용 장애물 회피 — 렌더된 노드(표시 좌표·실측 크기)를 장애물로 보고, 기본 3구간 경로가
-// 관통하면 빈 회랑으로 우회(lib/edge-detour). 직선·곡선은 사용자가 고른 모양 유지라 대상 외.
-// 같은 핸들 형제(data.fan)가 있으면 먼저 팬 경로(게이트 포인트+원호)를 시도하고, 그 경로가 다른 노드를
-// 관통하면 이 엣지만 현행(우회/RF) 경로로 돌아간다 — 겹침 최소화는 장애물 회피보다 우선순위가 낮다.
-// useNodes 훅 때문에 별도 컴포넌트 — variant 분기 안에서 훅을 조건 호출할 수 없다(Rules of Hooks).
-function DetourSmoothstepEdge(props: EdgeProps) {
-  const { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, data } =
-    props;
-  const nodes = useNodes<AppNode>();
-  const obstacles = getObstacles(nodes);
-  const fan = fanOf(props);
-  if (fan) {
-    const others = obstacles.filter((o) => o.id !== props.source && o.id !== props.target);
-    const fanned = buildFanStepPath(
-      {
-        sourceX: props.sourceX,
-        sourceY: props.sourceY,
-        targetX: props.targetX,
-        targetY: props.targetY,
-        sourcePosition: props.sourcePosition,
-        targetPosition: props.targetPosition,
-      },
-      fan,
-      others,
-    );
-    if (fanned && !isPolylineBlocked(fanned.points, obstacles, props.source, props.target)) {
-      return renderEdge(
-        { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, data },
-        fanned.d,
-        fanned.labelX,
-        fanned.labelY,
-        getDecisionTravel(props.sourceX, props.sourceY, props.targetX, props.targetY),
-      );
-    }
-  }
-  const detour = buildDetourPoints({
+/**
+ * 현재 RF 인스턴스의 렌더 노드 → 우회 장애물. 꺾은선 엣지만 구독해야 한다 — 직선·곡선까지 useNodes를 걸면
+ * 노드가 움직일 때마다 전 엣지가 다시 그려진다. 여러 RF 인스턴스가 동시에 떠도 캐시가 인스턴스별로 갈린다.
+ */
+export function useEdgeObstacles(): EdgeObstacle[] {
+  return getEdgeObstacles(useNodes());
+}
+
+/** EdgeProps → 경로 해석(lib/edge-path). obstacles는 꺾은선에서만 넘긴다 */
+function resolvePropsPath(variant: EdgeLineVariant, props: EdgeProps, obstacles?: readonly EdgeObstacle[]): EdgePathResult {
+  return resolveEdgePath({
+    variant,
     sourceX: props.sourceX,
     sourceY: props.sourceY,
+    sourcePosition: props.sourcePosition,
     targetX: props.targetX,
     targetY: props.targetY,
-    sourcePosition: props.sourcePosition,
     targetPosition: props.targetPosition,
+    fan: fanOf(props),
     obstacles,
-    skipA: props.source,
-    skipB: props.target,
+    sourceId: props.source,
+    targetId: props.target,
   });
-  const [path, labelX, labelY] = detour
-    ? buildRoundedOrthPath(
-        detour,
-        // 라벨 가림 판정도 양끝 노드 제외 — 우회가 실제로 잡힌 엣지에서만 재구성(희귀 경로)
-        obstacles.filter((o) => o.id !== props.source && o.id !== props.target),
-      )
-    : buildPath("smoothstep", props);
-  return renderEdge(
-    { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, data },
-    path,
-    labelX,
-    labelY,
-    getDecisionTravel(props.sourceX, props.sourceY, props.targetX, props.targetY),
-  );
+}
+
+// 꺾은선 — 렌더된 노드(표시 좌표·실측 크기)를 장애물로 팬 → 우회 → RF 경로(lib/edge-path).
+// useNodes 구독 때문에 별도 컴포넌트 — 직선·곡선(LineEdge)은 노드를 구독하지 않는다.
+function DetourSmoothstepEdge(props: EdgeProps) {
+  const obstacles = useEdgeObstacles();
+  return renderEdge(props, resolvePropsPath("smoothstep", props, obstacles));
 }
 
 // 경로 + HTML 라벨 공통 렌더 — LineEdge와 DetourSmoothstepEdge가 공유
-function renderEdge(
-  props: Pick<
-    EdgeProps,
-    "label" | "markerEnd" | "style" | "labelStyle" | "labelBgStyle" | "labelBgPadding" | "labelBgBorderRadius" | "data"
-  >,
-  path: string,
-  labelX: number,
-  labelY: number,
-  pulseTravel: number,
-) {
+function renderEdge(props: EdgeProps, resolved: EdgePathResult) {
   const { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, data } =
     props;
+  const { path, labelX, labelY } = resolved;
+  const pulseTravel = getDecisionTravel(props.sourceX, props.sourceY, props.targetX, props.targetY);
   // 흐름 펄스(병렬 동시·분기 택일) — 표면이 edge.data.pulse로 넘긴다(lib/edge-pulse, 렌더 전용)
   const pulse = isEdgePulse(data?.pulse) ? data.pulse : null;
   const [padX, padY] = labelBgPadding ?? [6, 3];
@@ -166,7 +71,8 @@ function renderEdge(
   const borderStyle = labelBgStyle?.strokeDasharray ? "dashed" : "solid";
   return (
     <>
-      <BaseEdge path={path} markerEnd={markerEnd} style={style} />
+      {/* data-label-x/y — 해석기 라벨 앵커(플로우 좌표). 라벨이 없어도 실려 인라인 라벨 편집기가 같은 점에 붙는다 */}
+      <BaseEdge path={path} markerEnd={markerEnd} style={style} data-label-x={labelX} data-label-y={labelY} />
       {pulse ? <EdgePulseDot path={path} pulse={pulse} travel={pulseTravel} /> : null}
       {label ? (
         <EdgeLabelRenderer>
@@ -208,18 +114,9 @@ function renderEdge(
   );
 }
 
-function createLineEdge(variant: LineVariant) {
+function createLineEdge(variant: EdgeLineVariant) {
   function LineEdge(props: EdgeProps) {
-    const { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, data } =
-      props;
-    const [path, labelX, labelY] = buildPath(variant, props);
-    return renderEdge(
-      { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, data },
-      path,
-      labelX,
-      labelY,
-      getDecisionTravel(props.sourceX, props.sourceY, props.targetX, props.targetY),
-    );
+    return renderEdge(props, resolvePropsPath(variant, props));
   }
   LineEdge.displayName = `LineEdge(${variant})`;
   return LineEdge;

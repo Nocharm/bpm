@@ -370,15 +370,21 @@ function resolveFanEnd(p: Vec, position: Position, other: Vec, lane: FanLane | u
   return { p, out, lat, side, r, vertex, gate: add(vertex, lat, side * r) };
 }
 
+/** raw 끝이 꺾기 전 확보할 직진 거리 — 진행 방향이 세로(위·아래 변)면 최소 높이 40, 가로면 RF 스텁 20 */
+function rawStubOf(dir: Vec): number {
+  return dir.x === 0 ? Math.max(FAN_STUB, VERTICAL_EDGE_STUB) : FAN_STUB;
+}
+
 /**
- * 소형 직각 라우터 — P에서 d1 방향으로 출발해 Q에 d2 방향으로 도착하는 직각 폴리라인.
+ * 소형 직각 라우터 —P에서 d1 방향으로 출발해 Q에 d2 방향으로 도착하는 직각 폴리라인.
  * 직교면 코너 1개, 같은 방향이면 중간(절반 + bias)에서 코너 2개, 반대 방향·역행이면 null.
- * raw 끝(팬 없는 실제 핸들)은 RF와 같은 20px 스텁을 확보해야 한다. bias는 소스 레인만큼 중간 구간을
- * 비켜 세우는 값 — 같은 두 노드를 반대로 잇는 양끝 팬 엣지 쌍의 중간 구간이 정확히 포개지지 않게 한다.
+ * raw 끝(팬 없는 실제 핸들)은 RF와 같은 20px 스텁, 위·아래 변이면 최소 높이(VERTICAL_EDGE_STUB)를 확보해야 한다.
+ * bias는 소스 레인만큼 중간 구간을 비켜 세우는 값 — 같은 두 노드를 반대로 잇는 양끝 팬 엣지 쌍의 중간 구간이
+ * 정확히 포개지지 않게 한다.
  */
 function routeOrth(P: Vec, d1: Vec, Q: Vec, d2: Vec, pIsRaw: boolean, qIsRaw: boolean, bias = 0): Vec[] | null {
-  const pMin = pIsRaw ? FAN_STUB : 0;
-  const qMin = qIsRaw ? FAN_STUB : 0;
+  const pMin = pIsRaw ? rawStubOf(d1) : 0;
+  const qMin = qIsRaw ? rawStubOf(d2) : 0;
   const rel = { x: Q.x - P.x, y: Q.y - P.y };
   const align = dot(d1, d2);
   if (Math.abs(align) < 0.5) {
@@ -411,12 +417,15 @@ function routeOrth(P: Vec, d1: Vec, Q: Vec, d2: Vec, pIsRaw: boolean, qIsRaw: bo
 /**
  * 꺾은선 팬 경로 — 팬 끝은 "게이트 포인트 + 원호"(핸들 앞 r 지점의 레인에서 반경 r 원호로 접선 진입/이탈),
  * 그 사이는 직각 라우터 + 5px 라운드. null = 팬 없음(호출자가 현행 우회/RF 경로 사용).
- * labelObstacles를 주면 라벨 앵커가 가려지지 않는 구간을 고른다(edge-detour 규칙).
+ * labelObstacles를 주면 라벨 앵커가 가려지지 않는 구간을 고른다(edge-detour 규칙). skipA/skipB = 가림 판정에서
+ * 뺄 장애물 id(양끝 노드) — 호출자가 엣지마다 장애물 배열을 걸러 새로 만들지 않게.
  */
 export function buildFanStepPath(
   args: FanPathArgs,
   fan: EdgeFan,
-  labelObstacles: ObstacleRect[] = [],
+  labelObstacles: readonly (ObstacleRect & { id?: string })[] = [],
+  skipA?: string,
+  skipB?: string,
 ): FanStepResult | null {
   const S = { x: args.sourceX, y: args.sourceY };
   const E = { x: args.targetX, y: args.targetY };
@@ -440,7 +449,7 @@ export function buildFanStepPath(
   if (route.length < 2) {
     return null;
   }
-  const [inner, labelMidX, labelMidY] = buildRoundedOrthPath(route, labelObstacles);
+  const [inner, labelMidX, labelMidY] = buildRoundedOrthPath(route, labelObstacles, skipA, skipB);
   let labelX = labelMidX;
   let labelY = labelMidY;
   // 양끝 팬 4점 경로(같은 쌍의 왕복 엣지가 나란히 달리는 경우)는 중간 구간이 최장이라 라벨도 같은 자리에

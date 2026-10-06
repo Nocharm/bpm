@@ -10,7 +10,6 @@ import {
   type EdgeTypes,
   EdgeLabelRenderer,
   applyNodeChanges,
-  getStraightPath,
   MarkerType,
   type NodeChange,
   type NodeTypes,
@@ -19,7 +18,6 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
-  useNodes,
   useReactFlow,
   useStore,
   ViewportPortal,
@@ -103,7 +101,6 @@ import {
 import { type ChangedField, FIELD_MSG, getLineageKey } from "@/lib/diff";
 import { formatGmp, getGmpBadgeStyle, GMP_OPTIONS } from "@/lib/gmp";
 import { formatDurationHm, formatThousands } from "@/lib/duration";
-import { getBezierPathWithStub, getSmoothStepPathWithStub } from "@/lib/edge-stub";
 import {
   getInheritedParams,
   isSpParamField,
@@ -117,18 +114,15 @@ import { findPublishedAt } from "@/components/version/requester-comment-banner";
 import { formatKst, formatKstShort } from "@/lib/datetime";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
 import { exportFramedPng } from "@/lib/export";
-import { getObstacles } from "@/components/multiline-edge";
-import { isPolylineBlocked } from "@/lib/edge-detour";
+import { useEdgeObstacles } from "@/components/multiline-edge";
+import { type EdgeObstacle } from "@/lib/edge-detour";
+import { resolveEdgePath, type EdgeLineVariant, type EdgePathResult } from "@/lib/edge-path";
 import { assignEdgePulses, getDecisionTravel, isEdgePulse } from "@/lib/edge-pulse";
 import {
   FAN_GAP,
-  buildFanBezierPath,
-  buildFanStepPath,
   injectFanLanes,
   isEdgeFan,
-  spreadStraightEndpoints,
   type FanNodeGeom,
-  type FanStepResult,
 } from "@/lib/edge-fanout";
 import { alignBackbone, computeSpine, isBackEdge, pickHandleSide } from "@/lib/flow-layout";
 import { useI18n } from "@/lib/i18n";
@@ -194,55 +188,51 @@ function RemovedArcEdge({
 }
 
 // 라벨 있는 일반 엣지 — 저장된 line_style(곡선/꺾은선/직선)대로 경로를 그린다(""=레거시는 꺾은선).
-// 같은 핸들 형제(data.fan)가 있으면 에디터와 같은 팬 규칙(lib/edge-fanout). 팬 꺾은선이 다른 노드를 관통하면
-// 그 엣지만 RF 기본 경로로 되돌리고, 라벨은 가려지지 않는 구간에 둔다(에디터 DetourSmoothstepEdge와 동일 정책 —
-// 장애물 캐시는 multiline-edge의 것을 공유: 비교와 에디터는 다른 라우트라 RF 인스턴스가 겹치지 않는다).
+// 경로·라벨 앵커는 에디터와 같은 해석기(lib/edge-path: 팬 → 장애물 우회 → RF+최소 높이)를 쓰고, 라벨 모양만 비교 전용.
 // HTML 라벨(EdgeLabelRenderer)은 반투명+블러 배경으로 선이 라벨에서 "끊긴" 느낌을 줄이며 가독성 확보.
-function LabeledSmoothEdge({
-  source,
-  target,
-  sourceX,
-  sourceY,
-  sourcePosition,
-  targetX,
-  targetY,
-  targetPosition,
-  label,
-  markerEnd,
-  style,
-  data,
-}: EdgeProps) {
+function getCompareLineVariant(data: EdgeProps["data"]): EdgeLineVariant {
   const lineStyle = data && "lineStyle" in data ? data.lineStyle : undefined;
-  const fan = isEdgeFan(data?.fan) ? data.fan : undefined;
-  const nodes = useNodes<AppNode>();
-  const pathArgs = {
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  };
-  let fannedStep: FanStepResult | null = null;
-  if (lineStyle !== "straight" && lineStyle !== "default" && fan) {
-    const obstacles = getObstacles(nodes);
-    const others = obstacles.filter((o) => o.id !== source && o.id !== target);
-    const candidate = buildFanStepPath(pathArgs, fan, others);
-    fannedStep = candidate && !isPolylineBlocked(candidate.points, obstacles, source, target) ? candidate : null;
+  return lineStyle === "straight" || lineStyle === "default" ? lineStyle : "smoothstep";
+}
+
+function resolveCompareEdgePath(props: EdgeProps, obstacles?: readonly EdgeObstacle[]): EdgePathResult {
+  return resolveEdgePath({
+    variant: getCompareLineVariant(props.data),
+    sourceX: props.sourceX,
+    sourceY: props.sourceY,
+    sourcePosition: props.sourcePosition,
+    targetX: props.targetX,
+    targetY: props.targetY,
+    targetPosition: props.targetPosition,
+    fan: isEdgeFan(props.data?.fan) ? props.data.fan : undefined,
+    obstacles,
+    sourceId: props.source,
+    targetId: props.target,
+  });
+}
+
+function LabeledSmoothEdge(props: EdgeProps) {
+  // 꺾은선만 노드 장애물을 구독한다(LabeledStepEdge) — 직선·곡선까지 useNodes를 걸면 전 엣지가 노드 변경마다 다시 그려진다
+  if (getCompareLineVariant(props.data) === "smoothstep") {
+    return <LabeledStepEdge {...props} />;
   }
-  const [path, labelX, labelY] =
-    lineStyle === "straight"
-      ? getStraightPath(fan ? spreadStraightEndpoints(pathArgs, fan) : pathArgs)
-      : lineStyle === "default"
-        ? ((fan && buildFanBezierPath(pathArgs, fan)) ?? getBezierPathWithStub(pathArgs))
-        : fannedStep
-          ? [fannedStep.d, fannedStep.labelX, fannedStep.labelY]
-          : getSmoothStepPathWithStub(pathArgs);
+  return renderCompareEdge(props, resolveCompareEdgePath(props));
+}
+
+function LabeledStepEdge(props: EdgeProps) {
+  const obstacles = useEdgeObstacles();
+  return renderCompareEdge(props, resolveCompareEdgePath(props, obstacles));
+}
+
+function renderCompareEdge(
+  { sourceX, sourceY, targetX, targetY, label, markerEnd, style, data }: EdgeProps,
+  { path, labelX, labelY }: EdgePathResult,
+) {
   // 흐름 펄스 정지 장면(병렬 도달점·분기 멈춤 지점) — 비교는 읽기 전용이라 움직임 없이 한 장면만(appEdges가 still로 주입)
   const pulse = isEdgePulse(data?.pulse) ? data.pulse : null;
   return (
     <>
-      <BaseEdge path={path} markerEnd={markerEnd} style={style} />
+      <BaseEdge path={path} markerEnd={markerEnd} style={style} data-label-x={labelX} data-label-y={labelY} />
       {pulse ? (
         <EdgePulseDot path={path} pulse={pulse} travel={getDecisionTravel(sourceX, sourceY, targetX, targetY)} />
       ) : null}
