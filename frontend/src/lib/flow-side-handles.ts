@@ -1,11 +1,11 @@
 // 4변 핸들(data.sideHandles) 노드만 쓰는 RF 표면(캠페인 연결 캔버스·인터뷰 프리뷰·선택지 카드)의 엣지 핸들.
-// 자동정렬(autoLayoutFlow)이 고르는 변(역행=위, 척추→곁가지=위·아래, 그 외 흐름측)을 그대로 쓰되,
+// 자동정렬(autoLayoutFlow)이 고르는 변(역행=위, 척추→곁가지=위·아래, 척추 지름길=아래, 그 외 흐름측)을 그대로 쓰되,
 // 그 노드들엔 SP 들어오는 문(in:*)·끝 키 핸들이 없으므로 s-변/t-변 id로 바꾼다 — 없는 핸들 id면 RF가 엣지를 조용히 버린다.
 
 import type { Edge } from "@xyflow/react";
 
-import { type AppNode, nodeSizeOf, sideFromHandleId, sourceHandleId, targetHandleId } from "@/lib/canvas";
-import { computeSpine, findMainPath, isBackEdge, pickHandleSide } from "@/lib/flow-layout";
+import { type AppNode, sideFromHandleId, sourceHandleId, targetHandleId } from "@/lib/canvas";
+import { computeSpine, findMainPath, pickEdgeHandleSides, renderHOf, renderWOf } from "@/lib/flow-layout";
 
 /** 자동정렬 핸들(in:변·끝 키 포함) → 4변 핸들 id. 변을 모르는 끝은 우→좌 기본 */
 export function toSideHandleEdges(edges: readonly Edge[]): Edge[] {
@@ -27,20 +27,16 @@ export function deriveFlowSideHandles(nodes: readonly AppNode[], edges: readonly
   const spine = seed.size > 0 ? computeSpine(present, seed, [...edges]) : new Set<string>();
   const typeById = new Map(list.map((node) => [node.id, node.data.nodeType]));
   const centers = new Map(
-    list.map((node) => {
-      const size = nodeSizeOf(node.data.nodeType);
-      const w = node.measured?.width ?? size.w;
-      const h = node.measured?.height ?? size.h;
-      return [node.id, { cx: node.position.x + w / 2, cy: node.position.y + h / 2 }];
-    }),
+    list.map((node) => [
+      node.id,
+      { cx: node.position.x + renderWOf(node) / 2, cy: node.position.y + renderHOf(node) / 2 },
+    ]),
   );
   return edges.map((edge) => {
     const s = centers.get(edge.source);
     const t = centers.get(edge.target);
     if (!s || !t) return edge;
-    const back = isBackEdge("LR", s, t);
-    const sourceSide = pickHandleSide("LR", s, t, spine.has(edge.source), spine.has(edge.target), back);
-    const targetSide = pickHandleSide("LR", t, s, spine.has(edge.target), spine.has(edge.source), back);
+    const { sourceSide, targetSide } = pickEdgeHandleSides(list, "LR", spine, edge, s, t, renderWOf, renderHOf);
     // SP 출구는 우측 한 점(핸들 계약) — 자동정렬도 SP 소스 핸들은 바꾸지 않는다
     const sourceHandle = typeById.get(edge.source) === "subprocess" ? sourceHandleId("right") : sourceHandleId(sourceSide);
     return { ...edge, sourceHandle, targetHandle: targetHandleId(targetSide) };

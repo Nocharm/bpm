@@ -40,6 +40,29 @@ describe("deriveFlowSideHandles", () => {
     );
   });
 
+  it("routes a spine shortcut (reject → end) under the row exactly like autoLayoutFlow", () => {
+    // 시작 → a → D ─예→ b → c → d → 끝, D ─아니오→ 끝: 지름길이 사이 척추 노드를 관통하지 않게 아래 변
+    const nodes = ["start", "a", "D", "b", "c", "d", "end"].map((id) =>
+      node(id, id === "start" ? "start" : id === "end" ? "end" : id === "D" ? "decision" : "process", 0, 0),
+    );
+    nodes[6] = { ...nodes[6], data: { ...nodes[6].data, isPrimaryEnd: true } };
+    const edges = [
+      edge("1", "start", "a"),
+      edge("2", "a", "D"),
+      { ...edge("3", "D", "b"), label: "Yes" },
+      edge("4", "b", "c"),
+      edge("5", "c", "d"),
+      edge("6", "d", "end"),
+      { ...edge("7", "D", "end"), label: "No" },
+    ];
+    const laid = autoLayoutFlow(nodes, edges, "LR");
+    const derived = deriveFlowSideHandles(laid.nodes, edges);
+    expect(derived.map((e) => [e.sourceHandle, e.targetHandle])).toEqual(
+      toSideHandleEdges(laid.edges).map((e) => [e.sourceHandle, e.targetHandle]),
+    );
+    expect(derived.find((e) => e.id === "7")).toMatchObject({ sourceHandle: "s-bottom", targetHandle: "t-bottom" });
+  });
+
   it("keeps a subprocess exit on the right even for a loop-back (one exit point contract)", () => {
     const nodes = [node("s", "start", 0, 0), node("a", "subprocess", 200, 0), node("b", "subprocess", 500, 0), node("e", "end", 800, 0)];
     const edges = [edge("1", "s", "a"), edge("2", "a", "b"), edge("3", "b", "a"), edge("4", "b", "e")];
