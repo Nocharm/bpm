@@ -3,7 +3,7 @@
 // 시작(start)은 기본 병렬이고 연결 수(1개 이상)를 따지지 않는다 — 여러 활동을 동시에 시작하는 것이 정상이고
 // (BPMN 시작 이벤트의 다중 흐름 = 동시 진행), CSV의 루트 여러 개도 Start 팬아웃으로 들어온다(사용자 결정 2026-10-02).
 // 백엔드 확정 게이트 6(`backend/app/subprocess.py` plain_fanout)과 동치 — 한쪽을 고치면 양쪽+테스트를 같이 옮긴다.
-// 계획: docs/superpowers/plans/2026-10-01-output-rules.md
+// 계획: 2026-10-01-output-rules.md(main 머지 후 삭제, 계약은 CLAUDE.md "출력 규칙")
 
 import { endKeyOfEdge, PRIMARY_END_HANDLE } from "@/lib/subprocess-embed";
 
