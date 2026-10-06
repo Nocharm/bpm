@@ -189,10 +189,10 @@ function getCenter(node: AppNode): Center {
 }
 
 /**
- * 맵 흐름 방향 추정 — 에디터는 마지막 자동정렬 방향을 기억하지 않으므로 엣지 끝점 중심 거리의 축별 합으로
+ * 맵 흐름 방향 추정(위치 기준) — 핸들 기준 flow-layout inferFlowDir과 달리 낡은 변을 고치는 명령이라 위치를 본다. 에디터는 마지막 자동정렬 방향을 기억하지 않으므로 엣지 끝점 중심 거리의 축별 합으로
  * 정한다(세로 합이 더 크면 TB, 같거나 작으면 LR — 기본 LR).
  */
-export function inferFlowDir(nodes: readonly AppNode[], edges: readonly Edge[]): FlowDir {
+export function inferFlowDirFromPositions(nodes: readonly AppNode[], edges: readonly Edge[]): FlowDir {
   const centers = new Map(nodes.map((node) => [node.id, getCenter(node)]));
   let sumX = 0;
   let sumY = 0;

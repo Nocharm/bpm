@@ -9,7 +9,7 @@ import {
   decideExitConnection,
   type ExitConnectEdge,
   findRewireProblem,
-  inferFlowDir,
+  inferFlowDirFromPositions,
   repickEdgeSides,
 } from "@/lib/edge-rewire";
 import { PRIMARY_END_HANDLE } from "@/lib/subprocess-embed";
@@ -173,12 +173,12 @@ describe("checkReconnect / applyReconnect (끝점 재연결)", () => {
   });
 });
 
-describe("inferFlowDir / repickEdgeSides (연결 변 다시 고르기)", () => {
+describe("inferFlowDirFromPositions / repickEdgeSides (연결 변 다시 고르기)", () => {
   it("엣지 거리 합이 가로가 크면 LR, 세로가 크면 TB", () => {
     const nodes = [makeNode("A", "process", 0, 0), makeNode("B", "process", 400, 0), makeNode("C", "process", 0, 300)];
-    expect(inferFlowDir(nodes, [edge("ab", "A", "B")])).toBe("LR");
-    expect(inferFlowDir(nodes, [edge("ac", "A", "C")])).toBe("TB");
-    expect(inferFlowDir(nodes, [])).toBe("LR");
+    expect(inferFlowDirFromPositions(nodes, [edge("ab", "A", "B")])).toBe("LR");
+    expect(inferFlowDirFromPositions(nodes, [edge("ac", "A", "C")])).toBe("TB");
+    expect(inferFlowDirFromPositions(nodes, [])).toBe("LR");
   });
 
   it("LR 정방향은 오른쪽→왼쪽, 아래쪽 노드로 가는 연결은 아래→위", () => {

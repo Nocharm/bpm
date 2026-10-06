@@ -213,7 +213,7 @@ import {
   checkReconnect,
   decideExitConnection,
   findRewireProblem,
-  inferFlowDir,
+  inferFlowDirFromPositions,
   repickEdgeSides,
   type EdgePair,
   type ExitConnectEdge,
@@ -6233,7 +6233,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         return shown ? { ...node, position: shown.position, measured: shown.measured ?? node.measured } : node;
       });
       const current = edgesRef.current;
-      const next = repickEdgeSides(display, current, edgeIds, inferFlowDir(display, current));
+      const next = repickEdgeSides(display, current, edgeIds, inferFlowDirFromPositions(display, current));
       if (next.every((edge, index) => edge === current[index])) {
         return;
       }
