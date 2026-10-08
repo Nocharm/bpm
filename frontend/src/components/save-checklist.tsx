@@ -43,7 +43,7 @@ export function getSaveCheckStates(
 }
 
 const CHIP_BASE =
-  "absolute top-2 z-10 rounded-sm border border-hairline bg-surface/40 shadow-sm backdrop-blur-sm";
+  "absolute top-2 z-10 rounded-sm border glass";
 
 export function MapTitleChecklist({
   mapTitle,

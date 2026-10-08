@@ -150,7 +150,7 @@ export function FeedbackDetailModal({
         role="dialog"
         aria-label={t("feedback.detail.title")}
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-md border border-hairline bg-surface shadow-lg"
+        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-md border glass glass-dense"
       >
         <header className="flex items-center justify-between gap-2 border-b border-hairline px-4 py-3">
           <div className="flex items-center gap-1.5">

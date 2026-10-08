@@ -53,7 +53,7 @@ export function ExpandInvariantModal({
       onClose={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-md border border-hairline bg-surface p-4"
+        className="w-full max-w-sm rounded-md border p-4 glass glass-dense"
         style={{ boxShadow: "var(--shadow-lg)" }}
         onClick={(event) => event.stopPropagation()}
       >

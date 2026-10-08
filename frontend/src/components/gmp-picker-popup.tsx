@@ -57,7 +57,7 @@ export function GmpPickerPopup({ x, y, onPick, onClose }: GmpPickerPopupProps) {
       <div className="fixed inset-0 z-[1340]" onMouseDown={onClose} />
       <div
         data-id="node-gmp-picker"
-        className="fixed z-[1350] w-[190px] rounded-md border border-hairline bg-surface p-1.5 shadow-lg"
+        className="fixed z-[1350] w-[190px] rounded-md border p-1.5 glass glass-dense"
         style={{
           left: Math.min(x, window.innerWidth - 198),
           top: Math.min(y + 6, window.innerHeight - 150),

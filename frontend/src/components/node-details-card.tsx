@@ -243,7 +243,7 @@ export function NodeDetailsCard({
           >
             <div
               data-id="io-unlink-popover"
-              className="fixed w-64 rounded-md border border-hairline bg-surface p-2 shadow-lg"
+              className="fixed w-64 rounded-md border p-2 glass glass-dense"
               style={clampToViewport(
                 unlinkAsk.at.x,
                 unlinkAsk.at.y,

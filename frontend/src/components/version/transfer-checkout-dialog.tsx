@@ -52,7 +52,7 @@ export function TransferCheckoutDialog({
     >
       <div
         data-id="transfer-checkout-dialog"
-        className="flex w-full max-w-sm flex-col items-center gap-4 rounded-md bg-surface p-6 shadow-lg"
+        className="flex w-full max-w-sm flex-col items-center gap-4 rounded-md p-6 border glass glass-dense"
       >
         {/* Accent icon circle — matches ConfirmDialog rich layout */}
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-tint text-accent">

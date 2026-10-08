@@ -144,7 +144,7 @@ body {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--color-canvas) 28%, transparent) transparent;
 }
-/* 유리 레이어 — 떠 있는 작은 면적 전용(캔버스 크롬·컨텍스트 메뉴·호버 카드, 규칙: rules/frontend/design.md §2). 정적 패널엔 쓰지 않는다:
+/* 유리 레이어 — 떠 있는 오버레이의 기본 표면(크롬·칩·메뉴·피커·팝오버·다이얼로그, 규칙: rules/frontend/design.md §2). 정적 패널엔 쓰지 않는다:
    뒤 내용이 바뀔 때마다 블러를 다시 그리므로 팬·드래그 중 상시 노출되는 작은 면적에만 둔다.
    bg-surface·shadow-* 와 같이 쓰지 말 것(배경·그림자를 이 유틸리티가 소유).
    채움은 --glass-fill 변수 — background 단축 속성을 쓰는 서드파티(RF MiniMap bgColor)에도 같은 값을 넘기기 위해. */
@@ -175,6 +175,14 @@ body {
   @media (prefers-reduced-transparency: reduce) {
     background-color: var(--color-surface);
   }
+}
+/* 글자 많은 유리(피커·다이얼로그·긴 팝오버) — 기본 채움이면 뒤 노드 색이 목록 위로 번져 가독성이 떨어진다. `glass`와 함께 쓴다 */
+@utility glass-dense {
+  --glass-fill: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface) 90%, transparent),
+    color-mix(in srgb, var(--color-surface) 82%, transparent)
+  );
 }
 .bpm-sky-scroll::-webkit-scrollbar {
   width: 6px;

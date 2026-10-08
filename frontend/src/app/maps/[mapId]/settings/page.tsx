@@ -307,7 +307,7 @@ export default function SettingsPage() {
           onClick={() => setShowDevSwitcher(false)}
         >
           <div
-            className="absolute bottom-14 left-3 w-72 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+            className="absolute bottom-14 left-3 w-72 rounded-md border p-3 glass glass-dense"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="mb-2 text-caption-strong text-ink">{t("perm.devSwitcher")}</p>

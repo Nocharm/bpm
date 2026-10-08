@@ -142,7 +142,7 @@ export function FeedbackNotesFlyout({
     <div
       ref={panelRef}
       data-id="feedback-notes-flyout"
-      className="fixed z-[1250] flex max-h-[65vh] flex-col overflow-hidden rounded-md border border-hairline bg-surface shadow-lg"
+      className="fixed z-[1250] flex max-h-[65vh] flex-col overflow-hidden rounded-md border glass glass-dense"
       style={{ left: Math.max(VIEWPORT_MARGIN, left), top: anchor.bottom + 6, width: PANEL_WIDTH }}
     >
       <header className="flex items-center justify-between gap-2 border-b border-hairline px-3 py-2">

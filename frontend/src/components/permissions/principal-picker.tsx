@@ -281,7 +281,7 @@ export function PrincipalPicker({
             width: placement.width,
             maxHeight: placement.maxHeight,
           }}
-          className="fixed z-[1250] flex flex-col overflow-y-auto rounded-sm border border-hairline bg-surface shadow-lg"
+          className="fixed z-[1250] flex flex-col overflow-y-auto rounded-sm border glass glass-dense"
         >
           {visible.map(({ item: opt, matches }, idx) => {
             const nameRanges: MatchRange[] = matches.find((m) => m.field === "name")?.ranges ?? [];

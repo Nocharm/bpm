@@ -132,7 +132,7 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
     >
       <div
         data-id="excel-export-modal"
-        className="relative flex max-h-[80%] w-[560px] flex-col overflow-hidden rounded-sm border border-hairline bg-surface shadow-lg"
+        className="relative flex max-h-[80%] w-[560px] flex-col overflow-hidden rounded-sm border glass glass-dense"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">

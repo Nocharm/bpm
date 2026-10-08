@@ -70,7 +70,7 @@ export function GmpNoticePopover({
       <div className="fixed inset-0 z-[1355]" onMouseDown={onClose} />
       <div
         data-id="node-gmp-notice"
-        className="fixed z-[1360] w-[440px] rounded-md border border-hairline bg-surface px-5 py-3 shadow-lg"
+        className="fixed z-[1360] w-[440px] rounded-md border px-5 py-3 glass glass-dense"
         style={{
           left: Math.max(8, Math.min(x - 440 + 24, window.innerWidth - 448)),
           top: Math.max(8, y - 24),

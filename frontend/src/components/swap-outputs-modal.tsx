@@ -313,7 +313,7 @@ export function SwapOutputsModal({
     <ModalBackdrop className="fixed inset-0 z-[1200]" style={{ background: "transparent" }} onClose={closeAndClear}>
       <div
         data-id="swap-outputs-modal"
-        className="fixed rounded-md border border-hairline bg-surface p-3 shadow-lg"
+        className="fixed rounded-md border p-3 glass glass-dense"
         style={{ left: modalLeft, top: modalTop, width: MODAL_W }}
         onClick={(event) => event.stopPropagation()}
       >

@@ -57,7 +57,7 @@ export function HoverTip({ tip, className, children }: HoverTipProps) {
         createPortal(
           <div
             data-id="hover-tip"
-            className="animate-item-in pointer-events-none fixed z-[1400] w-max max-w-60 rounded-md border border-hairline bg-surface p-2 shadow-lg"
+            className="animate-item-in pointer-events-none fixed z-[1400] w-max max-w-60 rounded-md border p-2 glass"
             style={{ left: pos.left, top: pos.top }}
           >
             {tip}

@@ -265,7 +265,7 @@ export function LibraryDeptFlyout({
     <div
       ref={containerRef}
       data-id="library-dept-flyout"
-      className="fixed z-[1350] flex w-max min-w-72 flex-col rounded-md border border-hairline bg-surface p-2 shadow-lg"
+      className="fixed z-[1350] flex w-max min-w-72 flex-col rounded-md border p-2 glass glass-dense"
       style={{ ...placement, top, maxHeight, maxWidth }}
     >
       <div className="flex items-center gap-1">

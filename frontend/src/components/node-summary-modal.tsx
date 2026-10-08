@@ -1268,7 +1268,7 @@ export function NodeSummaryModal({
         key={nodeId}
         ref={cardRef}
         data-id="node-summary-card"
-        className={`relative flex max-h-[80%] w-full max-w-lg flex-col overflow-hidden rounded-sm border border-hairline bg-surface shadow-lg ${
+        className={`relative flex max-h-[80%] w-full max-w-lg flex-col overflow-hidden rounded-sm border glass glass-dense ${
           swap ? "summary-swap-out" : "summary-card-in"
         }`}
         style={swap ? swap.cardVars : undefined}

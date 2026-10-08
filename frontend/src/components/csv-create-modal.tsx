@@ -95,7 +95,7 @@ export function CsvCreateModal({ onClose, onContinue }: Props) {
       onClose={onClose}
       className="fixed inset-0 z-[1200] flex items-start justify-center bg-ink/20 pt-4 backdrop-blur-sm"
     >
-      <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-4 rounded-md bg-surface p-6 shadow-lg">
+      <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-4 rounded-md p-6 border glass glass-dense">
         <div className="flex items-center justify-between">
           <h2 className="text-body-strong text-ink">{t("csvImport.createModalTitle")}</h2>
           <button type="button" onClick={onClose} className="rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt" aria-label={t("common.cancel")}>

@@ -628,7 +628,7 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
         ref={panelRef}
         data-id="framework-explorer-modal"
         data-mode={mode}
-        className="pointer-events-auto absolute flex max-w-[95vw] flex-col overflow-hidden rounded-md border border-hairline bg-surface shadow-lg"
+        className="pointer-events-auto absolute flex max-w-[95vw] flex-col overflow-hidden rounded-md border glass glass-dense"
         style={{
           width: PANEL_SIZE[mode].width,
           height: PANEL_SIZE[mode].height,
@@ -974,7 +974,7 @@ function InfoCard({
   }, [node.id]);
   return (
     <ModalBackdrop onClose={onClose} className="absolute inset-0 z-20 flex items-center justify-center bg-ink/20">
-      <div data-id="framework-explorer-info" className="flex w-[380px] flex-col gap-3 rounded-md border border-hairline bg-surface p-4 shadow-lg">
+      <div data-id="framework-explorer-info" className="flex w-[380px] flex-col gap-3 rounded-md border p-4 glass glass-dense">
         <span className="truncate text-fine text-ink-tertiary" title={path}>
           {path}
         </span>

@@ -25,7 +25,7 @@ export function ExternalL6Modal({ tileName, linkageCategoryId, linkedMapIds, onP
   return (
     // 좌측 정렬 — 행을 고르면 뜨는 미리보기 피크가 오른쪽으로 펼쳐지므로 가운데 두면 모달과 겹친다(사용자 요청 2026-09-29, 연결 다이얼로그와 같은 배치)
     <ModalBackdrop onClose={onClose} className="fixed inset-0 z-[1200] flex items-start justify-start bg-ink/20 p-6 backdrop-blur-sm">
-      <div data-id="fw-consult-external-modal" className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-md border border-hairline bg-surface shadow-lg">
+      <div data-id="fw-consult-external-modal" className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-md border glass glass-dense">
         <div className="flex items-center gap-2.5 border-b border-hairline px-4 py-3">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
             <ExternalLink size={15} strokeWidth={1.5} />

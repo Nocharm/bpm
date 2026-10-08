@@ -352,7 +352,7 @@ export function EditorLeftSidebar({
                     {/* 바깥 클릭 닫기 — 투명 백드롭 */}
                     <div className="fixed inset-0 z-[1050]" onClick={() => setMoreOpen(false)} />
                     <div
-                      className="fixed z-[1051] w-64 rounded-md border border-hairline bg-surface/85 p-3 text-caption shadow-lg backdrop-blur"
+                      className="fixed z-[1051] w-64 rounded-md border p-3 text-caption glass glass-dense"
                       style={morePos ? { left: morePos.left, top: morePos.top } : undefined}
                     >
                       <div className="mb-2 flex items-center justify-between">

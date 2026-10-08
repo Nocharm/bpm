@@ -121,7 +121,7 @@ export function VersionPill({ versions, versionId, isEditing, onSwitch, compact 
       {open && (
         <>
           <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 z-[1001] mt-1 w-60 rounded-md border border-hairline bg-surface py-1 shadow-lg">
+          <div className="absolute left-0 z-[1001] mt-1 w-60 rounded-md border py-1 glass glass-dense">
             {versions.map((version) => (
               <button
                 key={version.id}

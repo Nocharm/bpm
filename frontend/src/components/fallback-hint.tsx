@@ -136,7 +136,7 @@ export function FallbackHint({
             <div className="fixed inset-0 z-[1340]" onMouseDown={handleOutside} />
             <div
               data-id={`${dataId}-popover`}
-              className="fixed z-[1350] flex flex-col gap-2 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+              className="fixed z-[1350] flex flex-col gap-2 rounded-md border p-3 glass glass-dense"
               style={{ top: pos.top, left: pos.left, width: POPOVER_WIDTH }}
               onKeyDown={(e) => {
                 if (e.key === "Escape") {

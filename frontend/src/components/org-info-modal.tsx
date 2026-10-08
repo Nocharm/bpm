@@ -262,7 +262,7 @@ export function OrgInfoModal({
       <div
         data-id="org-info-hover-card"
         ref={cardRef}
-        className={`${closing ? "animate-item-out" : "animate-item-in"} fixed ${elevated ? "z-[1400]" : "z-[1300]"} flex w-96 flex-col gap-3 rounded-md border border-hairline bg-surface p-4 shadow-lg`}
+        className={`${closing ? "animate-item-out" : "animate-item-in"} fixed ${elevated ? "z-[1400]" : "z-[1300]"} flex w-96 flex-col gap-3 rounded-md border p-4 glass glass-dense`}
         style={{ left: anchorPos.left, top: anchorPos.top }}
         onMouseEnter={onHoverStart}
         onMouseLeave={onHoverEnd}
@@ -283,7 +283,7 @@ export function OrgInfoModal({
     >
       <div
         data-id="org-info-modal"
-        className="comment-modal-in flex w-full max-w-md flex-col gap-3 rounded-md bg-surface p-5 shadow-lg"
+        className="comment-modal-in flex w-full max-w-md flex-col gap-3 rounded-md p-5 border glass glass-dense"
         style={originVars}
         onMouseEnter={onHoverStart}
         onMouseLeave={onHoverEnd}

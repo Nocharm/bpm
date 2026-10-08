@@ -18,7 +18,7 @@ import {
 import { useI18n } from "@/lib/i18n";
 
 // 위치(상단 코너 고정)와 스킨(반투명 카드)을 분리 — 노드 피크 팝오버가 같은 스킨을 재사용한다 (2026-08-30)
-const CHIP_SKIN = "rounded-sm border border-hairline bg-surface/40 shadow-sm backdrop-blur-sm";
+const CHIP_SKIN = "rounded-sm border glass";
 
 export function FrameworkChip({
   mapId,
@@ -245,6 +245,7 @@ export function FrameworkChip({
         <div
           data-id="editor-framework-flyout"
           style={{ top: flyout.top }}
+          // 불투명 유지 — 칩(glass)이 backdrop root라 안에 중첩된 플라이아웃은 칩 밖 캔버스를 블러하지 못한다
           className={`absolute z-20 w-56 rounded-md border border-hairline bg-surface p-1 shadow-lg ${
             side === "left" ? "left-full ml-1.5" : "right-full mr-1.5"
           }`}

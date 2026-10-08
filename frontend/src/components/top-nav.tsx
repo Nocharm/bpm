@@ -339,7 +339,7 @@ export function TopNav() {
               )}
             </button>
             {open && (
-              <div className="absolute right-0 z-[1001] mt-1 w-40 rounded-md border border-hairline bg-surface py-1 shadow-lg">
+              <div className="absolute right-0 z-[1001] mt-1 w-40 rounded-md border py-1 glass glass-dense">
                 {/* 설정 콘솔 — 누구나 접근(왼쪽 탭이 권한별로 다름). 그룹·어드민·권한 surface를 흡수 / Settings console (everyone) */}
                 <button
                   type="button"

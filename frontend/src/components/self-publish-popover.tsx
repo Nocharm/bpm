@@ -52,7 +52,7 @@ export function SelfPublishPopover({
     >
       <div
         data-id="self-publish-popover"
-        className="w-64 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+        className="w-64 rounded-md border p-3 glass glass-dense"
         style={{ position: "fixed", left, top }}
         onClick={(event) => event.stopPropagation()}
       >

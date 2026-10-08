@@ -1414,7 +1414,7 @@ function MoveCategoryModal({ node, hideRootOption, onClose, onMoved }: MoveCateg
     >
       <div
         data-id="framework-move-modal"
-        className="flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg"
+        className="flex w-full max-w-sm flex-col gap-4 rounded-md p-6 border glass glass-dense"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-2">
@@ -1612,7 +1612,7 @@ function CategoryPermsModal({
     >
       <div
         data-id="framework-perms-modal"
-        className="flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg"
+        className="flex w-full max-w-sm flex-col gap-4 rounded-md p-6 border glass glass-dense"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-2">

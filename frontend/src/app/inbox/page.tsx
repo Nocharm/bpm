@@ -991,7 +991,7 @@ function VersionChipWithCard({
       {pos !== null &&
         createPortal(
           <span
-            className="fixed z-[1400] block w-64 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+            className="fixed z-[1400] block w-64 rounded-md border p-3 glass"
             style={{ left: pos.left, top: pos.top }}
             onMouseEnter={cancelClose}
             onMouseLeave={scheduleClose}

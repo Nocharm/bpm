@@ -29,7 +29,7 @@ export function MapCardWarningsModal({ mapId, mapName, warnings, onClose }: MapC
         data-id="map-card-warnings-modal"
         role="dialog"
         aria-modal="true"
-        className="flex w-full max-w-md flex-col gap-3 rounded-md bg-surface p-5 shadow-lg"
+        className="flex w-full max-w-md flex-col gap-3 rounded-md p-5 border glass glass-dense"
         // 카드 선택 클릭으로 버블링 방지(포털이어도 React 트리로는 카드가 조상)
         onClick={(event) => event.stopPropagation()}
         onMouseDown={(event) => event.stopPropagation()}

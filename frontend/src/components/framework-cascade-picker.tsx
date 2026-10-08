@@ -308,7 +308,7 @@ export function FrameworkCascadePicker({
             <div className="fixed inset-0 z-[1340]" onClick={() => setOpen(false)} />
             <div
               data-id={`${dataIdPrefix}-panel`}
-              className="fixed z-[1350] flex flex-col overflow-hidden rounded-md border border-hairline bg-surface pt-2 shadow-lg"
+              className="fixed z-[1350] flex flex-col overflow-hidden rounded-md border pt-2 glass glass-dense"
               style={{ left: panelPos.left, top: panelPos.top, width: panelPos.width, height: panelPos.height }}
             >
               {body}

@@ -79,7 +79,7 @@ export function Tooltip({
             ref={tipRef}
             role="tooltip"
             // content(리치 카드)는 라벨보다 크게 — 본문 caption·넓은 폭·여유 패딩으로 가독 확보 (사용자 결정 2026-08-20)
-            className={`pointer-events-none fixed z-[1400] rounded-sm border border-hairline bg-surface shadow-lg ${
+            className={`pointer-events-none fixed z-[1400] rounded-sm border glass ${
               // w-max — fixed 박스는 앵커 오른쪽 남은 폭에 맞춰 쪼그라든다(인스펙터 우측 앵커에서 150px까지).
               // 내용 폭으로 잡고 max-w로만 접은 뒤 클램프가 화면 안으로 민다 (사용자 피드백 2026-09-03)
               content

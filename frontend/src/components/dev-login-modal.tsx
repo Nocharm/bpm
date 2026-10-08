@@ -64,7 +64,7 @@ export function DevLoginModal({
     >
       <div
         data-id="dev-login-modal"
-        className="flex max-h-[80vh] w-96 flex-col rounded-md bg-surface p-4 shadow-lg"
+        className="flex max-h-[80vh] w-96 flex-col rounded-md p-4 border glass glass-dense"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">

@@ -617,7 +617,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
     >
       {/* 상단 정렬(pt-4) — 폼이 길어 세로를 최대한 쓴다. max-h는 위아래 1rem씩만 비운다.
           내용이 다 들어가면 스크롤은 생기지 않는다(빈 패딩으로 스크롤을 만들지 않음). */}
-      <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-5 rounded-md bg-surface p-6 shadow-lg">
+      <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col gap-5 rounded-md p-6 border glass glass-dense">
         {/* 헤더 / header */}
         <div className="flex items-center justify-between">
           <h2 className="text-body-strong text-ink">

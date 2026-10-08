@@ -135,7 +135,7 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
       data-id="iv-params-dialog"
     >
       <div
-        className="iv-pop flex max-h-[80vh] w-[48rem] max-w-full flex-col overflow-hidden rounded-md border border-hairline bg-surface shadow-lg"
+        className="iv-pop flex max-h-[80vh] w-[48rem] max-w-full flex-col overflow-hidden rounded-md border glass glass-dense"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="flex items-center gap-2 border-b border-hairline px-4 py-3">

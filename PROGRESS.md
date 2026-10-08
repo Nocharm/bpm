@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-08 — 유리 레이어 2단계: 모든 떠 있는 오버레이로 확장 (feat/liquid-glass)
+
+- 사용자 지시로 피커·드롭다운·팝오버·툴팁·다이얼로그 ~100곳을 `glass`로, 글자 많은 면은 `glass-dense`(90/82%)로 — 기본 채움은 뒤 노드 색이 목록에 번졌다. 비슷한 톤 검토: 임시 반투명(`bg-surface/NN`+blur) 캔버스 칩·범례·L5 태그 11곳을 같은 유틸리티로 통일(하늘 프레임 밖 L5 태그는 차콜 시 dense). 유리 칩 안 DOM 중첩 플라이아웃(프레임워크 칩)은 불투명 유지, 스티키 헤더·대시보드 다크 카드는 비대상. 검증: vitest 1362·tsc·lint·카탈로그, 에디터 드롭다운·버전 피커·홈 필터·새 맵 다이얼로그·L5·비교 캡처.
+
 ## 2026-10-08 — 유리(Liquid Glass) 레이어 1단계: 캔버스 플로팅 크롬·컨텍스트 메뉴·호버 카드 (feat/liquid-glass)
 
 - 목업 검토 후 추천안대로 단계 적용(사용자 결정): `glass` 유틸리티+`--glass-fill`(RF MiniMap은 `background` 단축 속성을 비레이어로 덮어 유틸리티가 지워짐 → bgColor로 같은 변수 전달)+`--shadow-glass`. 새벽 하늘 위에선 채움 92/84%로 라이트 크롬 유지. 피커·모달·정적 패널은 비적용, 중첩 서브메뉴는 backdrop root 한계로 불투명 유지 — 규칙은 design.md §2. 검증: CPU 4x A/B 팬·드래그 p95 16.8↔16.8ms·33ms 초과 1~2 동일, vitest 1362·tsc·lint·카탈로그, 일반/L5 캡처.

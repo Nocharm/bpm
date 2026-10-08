@@ -355,7 +355,7 @@ export function MapNotesSection({
       >
         <div
           data-id="map-note-modal"
-          className="flex w-full max-w-md flex-col gap-2 rounded-md bg-surface p-5 shadow-lg"
+          className="flex w-full max-w-md flex-col gap-2 rounded-md p-5 border glass glass-dense"
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();

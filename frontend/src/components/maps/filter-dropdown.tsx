@@ -86,7 +86,7 @@ export function FilterDropdown({
         />
       </button>
       {open && (
-        <div className="absolute left-0 z-[1001] mt-1 min-w-[10rem] rounded-md border border-hairline bg-surface py-1 shadow-lg">
+        <div className="absolute left-0 z-[1001] mt-1 min-w-[10rem] rounded-md border py-1 glass glass-dense">
           {options.map((o) => {
             const on = selected.has(o.value);
             return (

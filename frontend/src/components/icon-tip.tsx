@@ -15,7 +15,7 @@ export function IconTip({ label, align = "right", children }: IconTipProps) {
       {children}
       <div
         data-id="icon-tip"
-        className={`pointer-events-none absolute top-full z-30 mt-1.5 hidden whitespace-nowrap rounded-sm border border-hairline bg-surface px-2 py-1 text-fine text-ink shadow-lg group-hover:block ${
+        className={`pointer-events-none absolute top-full z-30 mt-1.5 hidden whitespace-nowrap rounded-sm border px-2 py-1 text-fine text-ink group-hover:block glass ${
           align === "right" ? "right-0" : "left-0"
         }`}
       >

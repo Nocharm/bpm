@@ -905,7 +905,7 @@ export function InterviewPanel({
             >
               <div
                 data-id="iv-attach-info"
-                className="flex w-full max-w-sm flex-col items-center gap-4 rounded-md bg-surface p-6 text-center shadow-lg"
+                className="flex w-full max-w-sm flex-col items-center gap-4 rounded-md p-6 text-center border glass glass-dense"
               >
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-tint text-accent">
                   <Paperclip size={22} strokeWidth={1.5} />

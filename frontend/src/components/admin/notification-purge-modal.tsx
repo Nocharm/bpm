@@ -99,7 +99,7 @@ export function NotificationPurgeModal({
       }}
     >
       <div
-        className="flex max-h-[80vh] w-[36rem] flex-col gap-3 rounded-md bg-surface p-5 shadow-lg"
+        className="flex max-h-[80vh] w-[36rem] flex-col gap-3 rounded-md p-5 border glass glass-dense"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-body-strong text-ink">{t("db.purgeTitle")}</p>
