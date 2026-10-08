@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 294개 · 2026-10-06 기준
+총 294개 · 2026-10-08 기준
 
 ## components/
 
@@ -41,7 +41,7 @@
 | `csv-import-tab.tsx` | `CsvImportTab` | 인스펙터 Import 탭 | `app/maps/[mapId]/page.tsx` |
 | `csv-template-actions.tsx` | `CsvTemplateActions` | CSV 준비 액션 | `components/csv-create-modal.tsx`, `components/csv-import-section.tsx` |
 | `data-form-picker.tsx` | `DataFormPicker` | IO 항목별 데이터 폼 피커 | `components/multi-value-input.tsx` |
-| `dept-pill.tsx` | `DeptPill` | 부서 말단 필 | `components/admin/category-dept-modal.tsx`, `components/attribute-read-rows.tsx`, `components/maps/category-summary-card.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/framework-access-panel.tsx`, `components/permissions/subprocess-designation-panel.tsx` |
+| `dept-pill.tsx` | `DeptPill` | 부서 말단 필 | `components/admin/category-dept-modal.tsx`, `components/attribute-read-rows.tsx`, `components/maps/category-summary-card.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/framework-access-panel.tsx`, `components/permissions/pending-approvals-panel.tsx`, `components/permissions/subprocess-designation-panel.tsx` |
 | `dev-login-modal.tsx` | `DevLoginModal` | 로컬(인증 OFF) 임시 로그인 피커 | `app/login/page.tsx` |
 | `edge-action-modal.tsx` | `EdgeActionModal` | 출력 1개 충돌 시 선택 모달 | `app/maps/[mapId]/page.tsx` |
 | `edge-branch-modal.tsx` | `EdgeBranchModal` | 판단(decision) 노드에서 엣지를 연결할 때 뜨는 분기 선택 | `app/maps/[mapId]/page.tsx` |
@@ -146,11 +146,11 @@
 | `system-suggest-input.tsx` | `SystemSuggestInput` | 시스템 입력 | `app/maps/[mapId]/page.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/permissions/subprocess-designation-panel.tsx` |
 | `time-pills.tsx` | `TimePills` | 카드 시각 표시 | `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/notices/page.tsx`, `components/feedback-detail-modal.tsx`, `components/feedback-notes-flyout.tsx` |
 | `toast-stack.tsx` | `ToastStack` | 우상단(Nav 아래) 토스트 스택 | `app/feedback/page.tsx`, `app/groups/[groupId]/page.tsx`, `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/maps/[mapId]/page.tsx`, `app/maps/[mapId]/settings/page.tsx`, `app/notices/page.tsx`, `app/page.tsx`, `app/settings/page.tsx`, `components/admin/approval-queue.tsx`, `components/feedback-side-panel.tsx`, `components/groups/groups-panel.tsx`, `components/map-settings/checkout-requests-panel.tsx`, `components/permissions/pending-approvals-panel.tsx` |
-| `tooltip.tsx` | `Tooltip` | 호버 툴팁 | `app/manual/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/admin/framework-panel.tsx`, `components/admin/import-report/file-card.tsx`, `components/admin/import-report/report-bits.tsx`, `components/csv-import-tab.tsx`, `components/editor-toolbar.tsx`, `components/info-tip.tsx`, `components/inspector-panel.tsx`, `components/maps/dashboard-map-row.tsx`, `components/maps/dashboard-profile.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/recent-events-card.tsx`, `components/node-metrics-card.tsx`, `components/notices/notices-manage-panel.tsx`, `components/subprocess-inspector-card.tsx`, `components/subprocess-usage-tab.tsx`, `components/top-nav.tsx` |
+| `tooltip.tsx` | `Tooltip` | 호버 툴팁 | `app/manual/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/admin/framework-panel.tsx`, `components/admin/import-report/file-card.tsx`, `components/admin/import-report/report-bits.tsx`, `components/csv-import-tab.tsx`, `components/editor-toolbar.tsx`, `components/info-tip.tsx`, `components/inspector-panel.tsx`, `components/maps/dashboard-map-row.tsx`, `components/maps/dashboard-profile.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/recent-events-card.tsx`, `components/node-metrics-card.tsx`, `components/notices/notices-manage-panel.tsx`, `components/permissions/pending-approvals-panel.tsx`, `components/subprocess-inspector-card.tsx`, `components/subprocess-usage-tab.tsx`, `components/top-nav.tsx` |
 | `top-nav.tsx` | `TopNav` | 전역 네비게이션 바 | `app/layout.tsx` |
 | `url-label-field.tsx` | `UrlLabelField` | URL+라벨 공용 편집 필드 | `app/maps/[mapId]/page.tsx` |
 | `user-hover-card.tsx` | `UserHoverCard` | 유저 호버 카드 | `components/admin/import-report/person-pill.tsx`, `components/map-ownership-section.tsx`, `components/user-pill.tsx` |
-| `user-pill.tsx` | `UserPill` | 사용자 필 | `app/feedback/page.tsx`, `app/inbox/page.tsx`, `app/notices/page.tsx`, `components/feedback-detail-modal.tsx`, `components/feedback-notes-flyout.tsx`, `components/maps/framework-assign-modal.tsx`, `components/maps/slot-change-dialog.tsx`, `components/subprocess-usage-tab.tsx` |
+| `user-pill.tsx` | `UserPill` | 사용자 필 | `app/feedback/page.tsx`, `app/inbox/page.tsx`, `app/notices/page.tsx`, `components/feedback-detail-modal.tsx`, `components/feedback-notes-flyout.tsx`, `components/maps/framework-assign-modal.tsx`, `components/maps/slot-change-dialog.tsx`, `components/permissions/pending-approvals-panel.tsx`, `components/subprocess-usage-tab.tsx` |
 | `version-pill.tsx` | `VersionPill` | 상단바 버전 pill | `app/maps/[mapId]/page.tsx` |
 | `visibility-bundle-picker.tsx` | `VisibilityBundlePicker` | 승인요청/셀프게시에 동봉할 가시성 변경 선택 | `app/maps/[mapId]/page.tsx`, `components/permissions/versions-publish-panel.tsx` |
 | `window-dock.tsx` | `WindowDock` | 최소화된 스코프 창들의 좌하단 dock | `app/maps/[mapId]/page.tsx` |
@@ -268,7 +268,7 @@
 | `dashboard-section.tsx` | `DashboardSection`, `DashboardEmpty`, `DashboardFoot` | 홈 대시보드 섹션 셸 | `components/maps/approvals-card.tsx`, `components/maps/dept-maps-card.tsx`, `components/maps/framework-card.tsx`, `components/maps/my-documents-card.tsx`, `components/maps/recent-events-card.tsx`, `components/maps/recent-opened-list.tsx` |
 | `delete-map-dialog.tsx` | `DeleteMapDialog` | 맵 삭제 확인 | `components/maps/map-detail-card.tsx`, `components/permissions/danger-zone.tsx` |
 | `dept-group-box.tsx` | `DeptGroupBox` | 부서 헤더 행 + 그 부서가 직접 가진 맵 카드를 묶는 박스. | `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
-| `dept-level-icon.tsx` | `DeptLevelIcon` | 부서 조직 레벨 아이콘 | `components/admin/category-dept-modal.tsx`, `components/admin/framework-panel.tsx`, `components/admin/ref-group-card.tsx`, `components/bpm-attribute-picker.tsx`, `components/dept-pill.tsx`, `components/maps/category-summary-card.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/collaborators-panel.tsx`, `components/permissions/danger-zone.tsx`, `components/permissions/framework-access-panel.tsx`, `components/permissions/principal-picker.tsx` |
+| `dept-level-icon.tsx` | `DeptLevelIcon` | 부서 조직 레벨 아이콘 | `components/admin/category-dept-modal.tsx`, `components/admin/framework-panel.tsx`, `components/admin/ref-group-card.tsx`, `components/bpm-attribute-picker.tsx`, `components/dept-pill.tsx`, `components/maps/category-summary-card.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/collaborators-panel.tsx`, `components/permissions/danger-zone.tsx`, `components/permissions/framework-access-panel.tsx`, `components/permissions/pending-approvals-panel.tsx`, `components/permissions/principal-picker.tsx` |
 | `dept-maps-card.tsx` | `DeptMapsCard` | 홈 대시보드 | `components/maps/home-dashboard.tsx` |
 | `dept-sub-maps-modal.tsx` | `DeptSubMapsModal` | 홈 대시보드 내 부서 카드 | `components/maps/dept-maps-card.tsx` |
 | `filter-dropdown.tsx` | `FilterDropdown` | 홈 목록 필터용 멀티셀렉트 드롭다운 | `components/maps/home-filter-pills.tsx` |
