@@ -49,6 +49,10 @@
   --shadow-sm: 0 1px 2px rgba(22, 22, 29, 0.06);
   --shadow-md: 0 4px 12px rgba(22, 22, 29, 0.08);
   --shadow-lg: 0 8px 28px rgba(22, 22, 29, 0.12);
+  /* 유리 레이어(`glass` 유틸리티) — 윗변 내부 하이라이트 + md급 쿨톤 그림자. 하이라이트는 글로우가 아니라 유리 두께 표현 */
+  --shadow-glass:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 0 0 0.5px rgba(255, 255, 255, 0.45),
+    0 8px 28px rgba(22, 22, 29, 0.12), 0 1px 2px rgba(22, 22, 29, 0.06);
 
   /* Diff(비교) — 노드 타입 의미색으로도 재사용 */
   --color-added: #16794f;
@@ -139,6 +143,38 @@ body {
 .bpm-sky-scroll {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--color-canvas) 28%, transparent) transparent;
+}
+/* 유리 레이어 — 떠 있는 작은 면적 전용(캔버스 크롬·컨텍스트 메뉴·호버 카드, 규칙: rules/frontend/design.md §2). 정적 패널엔 쓰지 않는다:
+   뒤 내용이 바뀔 때마다 블러를 다시 그리므로 팬·드래그 중 상시 노출되는 작은 면적에만 둔다.
+   bg-surface·shadow-* 와 같이 쓰지 말 것(배경·그림자를 이 유틸리티가 소유).
+   채움은 --glass-fill 변수 — background 단축 속성을 쓰는 서드파티(RF MiniMap bgColor)에도 같은 값을 넘기기 위해. */
+:root {
+  --glass-fill: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface) 74%, transparent),
+    color-mix(in srgb, var(--color-surface) 56%, transparent)
+  );
+}
+/* 새벽 하늘(다크) 위 — 기본 투명도면 남색이 비쳐 회색 크롬이 된다. 크롬은 항상 라이트(design.md §7)라 불투명도를 올린다 */
+.bpm-l5-sky {
+  --glass-fill: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface) 92%, transparent),
+    color-mix(in srgb, var(--color-surface) 84%, transparent)
+  );
+}
+@utility glass {
+  background-image: var(--glass-fill);
+  border-color: color-mix(in srgb, var(--color-surface) 75%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  backdrop-filter: blur(18px) saturate(180%);
+  box-shadow: var(--shadow-glass);
+  @supports not (backdrop-filter: blur(1px)) {
+    background-color: var(--color-surface);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    background-color: var(--color-surface);
+  }
 }
 .bpm-sky-scroll::-webkit-scrollbar {
   width: 6px;

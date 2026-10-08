@@ -9,6 +9,7 @@ BPM 프론트엔드 시각 언어 — Whimsical 파생 토큰 시스템(`fronten
 ## 2. Elevation — soft shadow 허용
 - 토큰 `--shadow-sm`(노드 hover) / `--shadow-md`(카드·패널·툴바) / `--shadow-lg`(플로팅 오버레이: 컨텍스트 메뉴·다이얼로그·토스트). 쿨톤 저확산만 — 글로우·이중 그림자 금지.
 - 노드·엣지·플로팅 크롬에 한해 elevation 사용. 그 외 정적 영역의 깊이는 `border-hairline`/`border-divider` 또는 surface 색단계(`bg-surface` ↔ `bg-surface-alt` ↔ `bg-surface-pearl`)로.
+- **유리 레이어(`glass` 유틸리티, `globals.css`)** — 반투명 채움(`--glass-fill`) + `backdrop-filter` 블러 + `--shadow-glass`(윗변 내부 하이라이트는 유리 두께 표현으로 허용, 위 이중 그림자 금지의 유일한 예외). 적용 대상은 떠 있는 작은 면적만: 캔버스 플로팅 크롬(줌 필·노드 표시 버튼·미니맵)·컨텍스트 메뉴·유저 호버 카드. `bg-surface`/`shadow-*`와 같이 쓰지 않는다(유틸리티가 소유). **비적용**: 정적 패널·사이드바(블러 비용·대비 저하), 글자 많은 피커 드롭다운(뒤 노드 색이 번져 가독성 저하), 모달(백드롭 블러와 중복), 유리 패널 안에 중첩된 플라이아웃(부모가 backdrop root라 블러가 안 걸림 — 불투명 유지). 새벽 하늘(`.bpm-l5-sky`) 위에선 `--glass-fill`이 92/84%로 올라가 크롬이 라이트로 유지된다.
 - 캔버스 배경은 `bg-canvas`(`#F6F6F8`) + dot-grid(`<Background variant="dots">`, `--color-canvas-dot`). 노드는 파스텔 fill + 1.5px 채도 stroke, 둥근 기하(`rounded-sm`/알약/마름모) 일관.
 
 ## 3. 타입

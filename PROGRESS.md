@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-08 — 유리(Liquid Glass) 레이어 1단계: 캔버스 플로팅 크롬·컨텍스트 메뉴·호버 카드 (feat/liquid-glass)
+
+- 목업 검토 후 추천안대로 단계 적용(사용자 결정): `glass` 유틸리티+`--glass-fill`(RF MiniMap은 `background` 단축 속성을 비레이어로 덮어 유틸리티가 지워짐 → bgColor로 같은 변수 전달)+`--shadow-glass`. 새벽 하늘 위에선 채움 92/84%로 라이트 크롬 유지. 피커·모달·정적 패널은 비적용, 중첩 서브메뉴는 backdrop root 한계로 불투명 유지 — 규칙은 design.md §2. 검증: CPU 4x A/B 팬·드래그 p95 16.8↔16.8ms·33ms 초과 1~2 동일, vitest 1362·tsc·lint·카탈로그, 일반/L5 캡처.
+
 ## 2026-10-08 — 결재 대기 카드 세로 배치·이름 표시·요청 시각 (dev)
 
 - 인스펙터 결재 대기가 한 줄 카드(내용 | 버튼)라 기본 폭 360에서 텍스트 칸이 ~100px — 종류 배지가 세로로 깨지고 요약이 `use…`로 잘리며, 넓어도 `user:id`·로그인 ID·`restricted` 원시 값이 그대로 나왔다. 목업 비교 후 A안(사용자 결정): 폭 무관 세로 카드(종류·시각 / 대상·전→후 / 요청자·버튼), 대상은 UserPill·그룹 이름·DeptPill(말단), 역할·공개범위 라벨, 요청 시각은 `useAgo`+KST 툴팁. 맵 설정 결재 대기 탭도 같은 패널. 검증: vitest 1362·tsc·lint, `pw-shot-pending-approvals-width.mjs` 300/360/520·설정 ko/en 캡처.

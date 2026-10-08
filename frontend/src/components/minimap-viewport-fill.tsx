@@ -49,10 +49,10 @@ export function MinimapFade({ nodeColor }: { nodeColor: (node: AppNode) => strin
         position="bottom-left"
         pannable
         zoomable
-        bgColor="var(--color-surface)"
+        bgColor="var(--glass-fill)"
         nodeColor={nodeColor}
         maskColor="transparent"
-        className="rounded-sm border border-hairline shadow-md transition-opacity duration-350 ease-smooth"
+        className="glass rounded-sm border transition-opacity duration-350 ease-smooth"
         style={{ opacity, zIndex: 20, width: MM_W, height: MM_H, pointerEvents: hidden ? "none" : undefined }}
       />
       {/* 뷰포트 영역 채움 — MiniMap과 동일 좌표계 오버레이(같은 z, DOM 뒤라 미니맵 위에 얹힘) */}

@@ -54,10 +54,11 @@ const MENU_WIDTH = 192;
 const WIDE_MENU_WIDTH = 256;
 const ITEM_HEIGHT = 32;
 const EDGE_MARGIN = 10;
-const PANEL_CLASS = "w-48 rounded-md border border-hairline bg-surface py-1.5 text-caption shadow-lg";
-const WIDE_PANEL_CLASS = "w-64 rounded-md border border-hairline bg-surface py-1.5 text-caption shadow-lg";
+const PANEL_CLASS = "w-48 rounded-md border py-1.5 text-caption glass";
+const WIDE_PANEL_CLASS = "w-64 rounded-md border py-1.5 text-caption glass";
 // 하위 플라이아웃 — EN 긴 라벨(예: 'Auto layout — horizontal')이 w-48을 넘쳐 단축키 정렬이 깨짐 → w-60
 const SUBMENU_WIDTH = 240;
+// 불투명 유지 — 부모 패널(glass)이 backdrop root라 안에 중첩된 플라이아웃은 부모 밖 캔버스를 블러하지 못한다
 const SUBMENU_PANEL_CLASS = "w-60 rounded-md border border-hairline bg-surface py-1.5 text-caption shadow-lg";
 // 단축키 힌트 — 숏컷 레전드(shortcut-legend.tsx)의 kbd와 동일한 디자인
 const KBD_CLASS =

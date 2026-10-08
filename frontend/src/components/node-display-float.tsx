@@ -55,7 +55,7 @@ export function NodeDisplayFloat({
   const onCount = displayFields.length;
   const buttonClass = compact
     ? "flex h-7 w-7 items-center justify-center rounded-sm border border-hairline bg-surface/90 shadow-sm backdrop-blur-sm hover:bg-surface-alt"
-    : "flex h-9 w-9 items-center justify-center rounded-full border border-hairline bg-surface shadow-md hover:bg-surface-alt";
+    : "flex h-9 w-9 items-center justify-center rounded-full border glass hover:bg-surface-alt";
 
   return (
     <div ref={rootRef} className="pointer-events-auto relative select-none">

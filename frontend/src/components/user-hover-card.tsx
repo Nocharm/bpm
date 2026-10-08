@@ -120,7 +120,7 @@ export function UserHoverCard({
           <span
             ref={cardRef}
             role="tooltip"
-            className="pointer-events-none fixed z-[1400] flex w-56 flex-col gap-2 rounded-sm border border-hairline bg-surface p-3 shadow-lg"
+            className="pointer-events-none fixed z-[1400] flex w-56 flex-col gap-2 rounded-sm border p-3 glass"
             // 위치는 위 레이아웃 이펙트가 확정 — 측정 전 한 프레임 어긋난 자리에 보이지 않게 숨겨서 붙인다
             style={{ visibility: "hidden" }}
           >
