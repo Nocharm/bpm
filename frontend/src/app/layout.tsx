@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+import { GLASS_INIT_SCRIPT } from "@/lib/glass-pref";
 import { LangProvider } from "@/lib/i18n";
 import { Providers } from "@/components/providers";
 import { TopNav } from "@/components/top-nav";
@@ -19,7 +20,12 @@ export default function RootLayout({
     <html
       lang="en"
       className="h-full antialiased"
+      // 유리 끔 스크립트가 하이드레이션 전에 data-glass를 붙인다
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: GLASS_INIT_SCRIPT }} />
+      </head>
       <body className="h-screen flex flex-col">
         <LangProvider>
           <TopNav />

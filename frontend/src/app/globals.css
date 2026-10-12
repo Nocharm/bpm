@@ -154,6 +154,10 @@ body {
     color-mix(in srgb, var(--color-surface) 74%, transparent),
     color-mix(in srgb, var(--color-surface) 56%, transparent)
   );
+  --glass-bg: transparent;
+  --glass-blur: blur(18px) saturate(180%);
+  --glass-shadow: var(--shadow-glass);
+  --glass-border: color-mix(in srgb, var(--color-surface) 75%, transparent);
 }
 /* 새벽 하늘(다크) 위 — 기본 투명도면 남색이 비쳐 회색 크롬이 된다. 크롬은 항상 라이트(design.md §7)라 불투명도를 올린다 */
 .bpm-l5-sky {
@@ -164,11 +168,12 @@ body {
   );
 }
 @utility glass {
+  background-color: var(--glass-bg);
   background-image: var(--glass-fill);
-  border-color: color-mix(in srgb, var(--color-surface) 75%, transparent);
-  -webkit-backdrop-filter: blur(18px) saturate(180%);
-  backdrop-filter: blur(18px) saturate(180%);
-  box-shadow: var(--shadow-glass);
+  border-color: var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
   @supports not (backdrop-filter: blur(1px)) {
     background-color: var(--color-surface);
   }
@@ -183,6 +188,15 @@ body {
     color-mix(in srgb, var(--color-surface) 90%, transparent),
     color-mix(in srgb, var(--color-surface) 82%, transparent)
   );
+}
+/* 사용자가 끈 유리(lib/glass-pref.ts, html[data-glass=off]) — 종전 불투명 카드로. 속성 대신 변수만 바꿔
+   hover:bg-* 같은 상태 배경이 계속 이긴다(배경색을 직접 덮으면 비레이어 규칙이라 hover가 죽는다) */
+:root[data-glass="off"] .glass {
+  --glass-fill: none;
+  --glass-bg: var(--color-surface);
+  --glass-blur: none;
+  --glass-shadow: var(--shadow-lg);
+  --glass-border: var(--color-hairline);
 }
 .bpm-sky-scroll::-webkit-scrollbar {
   width: 6px;

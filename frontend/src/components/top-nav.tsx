@@ -1,7 +1,7 @@
 // 전역 네비게이션 바 — 브랜드 · 유저칩(드롭다운) · 영/한 토글. 모든 페이지 상단.
 "use client";
 
-import { BookOpen, Bell, Inbox, Map as MapIcon, Megaphone, MessageSquare, User } from "lucide-react";
+import { BookOpen, Bell, Check, Inbox, Map as MapIcon, Megaphone, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -12,6 +12,7 @@ import { saveSsoLogoutHint, setAutoLoginSkip } from "@/lib/auth-return";
 import { getCurrentUser, subscribeCurrentUser, setCurrentUser } from "@/lib/current-user";
 import { storeDevUser } from "@/lib/dev-auth";
 import { pickDisplayStage } from "@/lib/display-stage";
+import { isGlassEnabled, setGlassEnabled } from "@/lib/glass-pref";
 import {
   closeFeedbackPanel,
   getFeedbackPanelOpen,
@@ -129,6 +130,8 @@ export function TopNav() {
     () => null, // 서버 스냅샷 — SSR에서는 유저 없음
   );
   const [open, setOpen] = useState(false);
+  // 메뉴가 열릴 때만 그려지므로 SSR(서버엔 localStorage 없음)과 첫 렌더 불일치가 없다
+  const [isGlassOn, setIsGlassOn] = useState(() => typeof window === "undefined" || isGlassEnabled());
   const [mode, setMode] = useState<AuthMode | null>(null);
   // 로그아웃 시 UserManager 생성에 필요 — NEXT_PUBLIC_* 빌드 상수 대신 런타임 조회 결과를 재사용
   const authInfoRef = useRef<AuthModeInfo | null>(null);
@@ -350,6 +353,20 @@ export function TopNav() {
                   }}
                 >
                   {t("nav.settings")}
+                </button>
+                {/* 개인 설정 — 저사양 PC에서 블러를 끈다(브라우저에만 저장) */}
+                <button
+                  type="button"
+                  data-id="nav-glass-toggle"
+                  aria-pressed={isGlassOn}
+                  className="flex w-full items-center justify-between px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                  onClick={() => {
+                    setGlassEnabled(!isGlassOn);
+                    setIsGlassOn(!isGlassOn);
+                  }}
+                >
+                  {t("nav.glassEffect")}
+                  {isGlassOn && <Check size={14} strokeWidth={1.5} className="text-accent" />}
                 </button>
                 <button
                   type="button"

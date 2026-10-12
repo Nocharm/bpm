@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-13 — 유리 효과 개인 끄기 토글 (feat/liquid-glass)
+
+- 성능 차이는 없었지만 저사양 PC 대비로 사용자 메뉴에 "Glass effect" 토글(사용자 결정: 개인·기본 켜짐). localStorage `bpm.glass`=off → `<head>` 인라인 스크립트가 첫 페인트 전 `html[data-glass=off]`. `glass`를 `--glass-*` 변수로 재구성해 끔 규칙이 변수만 바꾼다 — 배경색을 직접 덮으면 비레이어 규칙이 hover:bg-*까지 죽인다. 검증: vitest 1366(+4)·tsc·lint, 브라우저 끔→새로고침 유지(첫 페인트 전 속성)·불투명+shadow-lg·hover 유지·재켜기.
+
 ## 2026-10-08 — 유리 레이어 2단계: 모든 떠 있는 오버레이로 확장 (feat/liquid-glass)
 
 - 사용자 지시로 피커·드롭다운·팝오버·툴팁·다이얼로그 ~100곳을 `glass`로, 글자 많은 면은 `glass-dense`(90/82%)로 — 기본 채움은 뒤 노드 색이 목록에 번졌다. 비슷한 톤 검토: 임시 반투명(`bg-surface/NN`+blur) 캔버스 칩·범례·L5 태그 11곳을 같은 유틸리티로 통일(하늘 프레임 밖 L5 태그는 차콜 시 dense). 유리 칩 안 DOM 중첩 플라이아웃(프레임워크 칩)은 불투명 유지, 스티키 헤더·대시보드 다크 카드는 비대상. 검증: vitest 1362·tsc·lint·카탈로그, 에디터 드롭다운·버전 피커·홈 필터·새 맵 다이얼로그·L5·비교 캡처.

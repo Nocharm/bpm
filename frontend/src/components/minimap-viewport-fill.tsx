@@ -49,7 +49,7 @@ export function MinimapFade({ nodeColor }: { nodeColor: (node: AppNode) => strin
         position="bottom-left"
         pannable
         zoomable
-        bgColor="var(--glass-fill)"
+        bgColor="var(--glass-fill), var(--glass-bg)"
         nodeColor={nodeColor}
         maskColor="transparent"
         className="glass rounded-sm border transition-opacity duration-350 ease-smooth"
