@@ -1,7 +1,22 @@
 // 전역 네비게이션 바 — 브랜드 · 유저칩(드롭다운) · 영/한 토글. 모든 페이지 상단.
 "use client";
 
-import { BookOpen, Bell, Check, Inbox, Map as MapIcon, Megaphone, MessageSquare, User } from "lucide-react";
+import {
+  BookOpen,
+  Bell,
+  Check,
+  ChevronLeft,
+  Droplet,
+  Inbox,
+  LogOut,
+  Map as MapIcon,
+  Megaphone,
+  MessageSquare,
+  Palette,
+  Settings,
+  Sparkles,
+  User,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -11,6 +26,7 @@ import { type AuthMode, type AuthModeInfo, getCachedAuthMode } from "@/lib/auth-
 import { saveSsoLogoutHint, setAutoLoginSkip } from "@/lib/auth-return";
 import { getCurrentUser, subscribeCurrentUser, setCurrentUser } from "@/lib/current-user";
 import { storeDevUser } from "@/lib/dev-auth";
+import { ACCENT_THEMES, type AccentThemeId, DEFAULT_ACCENT, getAccentThemeId, setAccentTheme } from "@/lib/accent-theme";
 import { pickDisplayStage } from "@/lib/display-stage";
 import { isGlassEnabled, setGlassEnabled } from "@/lib/glass-pref";
 import {
@@ -132,6 +148,10 @@ export function TopNav() {
   const [open, setOpen] = useState(false);
   // 메뉴가 열릴 때만 그려지므로 SSR(서버엔 localStorage 없음)과 첫 렌더 불일치가 없다
   const [isGlassOn, setIsGlassOn] = useState(() => typeof window === "undefined" || isGlassEnabled());
+  const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
+  const [accentId, setAccentId] = useState<AccentThemeId>(() =>
+    typeof window === "undefined" ? DEFAULT_ACCENT : getAccentThemeId(),
+  );
   const [mode, setMode] = useState<AuthMode | null>(null);
   // 로그아웃 시 UserManager 생성에 필요 — NEXT_PUBLIC_* 빌드 상수 대신 런타임 조회 결과를 재사용
   const authInfoRef = useRef<AuthModeInfo | null>(null);
@@ -329,7 +349,10 @@ export function TopNav() {
               type="button"
               aria-label={user.name}
               className="rounded-sm px-2 py-1 text-caption text-ink hover:bg-surface-alt"
-              onClick={() => setOpen((v) => !v)}
+              onClick={() => {
+                setOpen((v) => !v);
+                setIsAppearanceOpen(false);
+              }}
             >
               {stage >= 4 ? (
                 <Tooltip label={user.name}>
@@ -342,37 +365,97 @@ export function TopNav() {
               )}
             </button>
             {open && (
-              <div className="absolute right-0 z-[1001] mt-1 w-40 rounded-md border py-1 glass glass-dense">
+              <div className="absolute right-0 z-[1001] mt-1 w-48 rounded-md border py-1 glass glass-dense">
                 {/* 설정 콘솔 — 누구나 접근(왼쪽 탭이 권한별로 다름). 그룹·어드민·권한 surface를 흡수 / Settings console (everyone) */}
                 <button
                   type="button"
-                  className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                  data-id="nav-settings"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
                   onClick={() => {
                     setOpen(false);
                     router.push("/settings");
                   }}
                 >
+                  <Settings size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                   {t("nav.settings")}
                 </button>
-                {/* 개인 설정 — 저사양 PC에서 블러를 끈다(브라우저에만 저장) */}
-                <button
-                  type="button"
-                  data-id="nav-glass-toggle"
-                  aria-pressed={isGlassOn}
-                  className="flex w-full items-center justify-between px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
-                  onClick={() => {
-                    setGlassEnabled(!isGlassOn);
-                    setIsGlassOn(!isGlassOn);
-                  }}
+                {/* 화면 설정(개인, 브라우저에만 저장) — 유리 효과·강조 색을 왼쪽 플라이아웃으로. 메뉴가 화면 오른쪽 끝이라 왼쪽으로 편다.
+                    호버로 열고 클릭으로도 토글(키보드). 래퍼가 플라이아웃까지 감싸 pr-1 다리로 틈에서 닫히지 않게 한다 */}
+                <div
+                  className="relative"
+                  onMouseEnter={() => setIsAppearanceOpen(true)}
+                  onMouseLeave={() => setIsAppearanceOpen(false)}
                 >
-                  {t("nav.glassEffect")}
-                  {isGlassOn && <Check size={14} strokeWidth={1.5} className="text-accent" />}
-                </button>
+                  <button
+                    type="button"
+                    data-id="nav-appearance"
+                    aria-expanded={isAppearanceOpen}
+                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt ${isAppearanceOpen ? "bg-surface-alt" : ""}`}
+                    onClick={() => setIsAppearanceOpen((v) => !v)}
+                  >
+                    <Palette size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                    <span className="flex-1">{t("nav.appearance")}</span>
+                    <ChevronLeft size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                  </button>
+                  {isAppearanceOpen && (
+                    <div className="absolute right-full top-0 pr-1">
+                      {/* 불투명 유지 — 유리 메뉴(backdrop root) 안에 중첩된 플라이아웃이라 블러가 안 걸린다(design.md §2) */}
+                      <div
+                        data-id="nav-appearance-flyout"
+                        className="w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg"
+                      >
+                        <button
+                          type="button"
+                          data-id="nav-glass-toggle"
+                          aria-pressed={isGlassOn}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                          onClick={() => {
+                            setGlassEnabled(!isGlassOn);
+                            setIsGlassOn(!isGlassOn);
+                          }}
+                        >
+                          <Sparkles size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                          <span className="flex-1">{t("nav.glassEffect")}</span>
+                          {isGlassOn && <Check size={14} strokeWidth={1.5} className="shrink-0 text-accent" />}
+                        </button>
+                        {/* 강조 색 — 대비 검증 프리셋만(lib/accent-theme.ts). 보라 파생 톤 전부가 따라 바뀐다 */}
+                        <div data-id="nav-accent-picker" className="px-3 pb-2 pt-1.5">
+                          <div className="mb-2 flex items-center gap-2 text-caption text-ink">
+                            <Droplet size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                            {t("nav.accent")}
+                          </div>
+                          <div className="flex items-center gap-2 pl-6">
+                            {ACCENT_THEMES.map((theme) => (
+                              <Tooltip key={theme.id} label={t(`nav.accent.${theme.id}`)}>
+                                <button
+                                  type="button"
+                                  data-id={`nav-accent-${theme.id}`}
+                                  aria-label={t(`nav.accent.${theme.id}`)}
+                                  aria-pressed={accentId === theme.id}
+                                  className={`h-5 w-5 rounded-full ring-offset-2 ring-offset-surface ${
+                                    accentId === theme.id ? "ring-2 ring-ink-tertiary" : "hover:ring-2 hover:ring-hairline"
+                                  }`}
+                                  style={{ background: theme.hex }}
+                                  onClick={() => {
+                                    setAccentTheme(theme.id);
+                                    setAccentId(theme.id);
+                                  }}
+                                />
+                              </Tooltip>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button
                   type="button"
-                  className="block w-full px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                  data-id="nav-logout"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
                   onClick={() => void onLogout()}
                 >
+                  <LogOut size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                   {t("nav.logout")}
                 </button>
               </div>

@@ -749,13 +749,14 @@ function NodeTitle({
   );
 }
 
-// 타입별 기본 stroke — data.color 미지정(빈 값) 시 사용. 세련된 무채도 톤(데이터/출력 예외 → raw hex 허용)
+// 타입별 기본 stroke — data.color 미지정(빈 값) 시 사용. 세련된 무채도 톤(데이터/출력 예외 → raw hex 허용).
+// subprocess는 사용자가 못 고르는 고정색이라 악센트 테마를 따른다(globals.css --color-subprocess)
 const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
   process: "#6e84a3", // slate (E3)
   decision: "#c7a062", // amber
   start: "#84a07c", // sage
   end: "#c2849a", // rose
-  subprocess: "#7c6adc", // violet
+  subprocess: "var(--color-subprocess)",
 };
 
 // data.color 우선, 없으면 타입별 기본 stroke — 미니맵 등에서 실제 노드 색 재사용.

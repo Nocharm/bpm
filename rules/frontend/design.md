@@ -5,6 +5,7 @@ BPM 프론트엔드 시각 언어 — Whimsical 파생 토큰 시스템(`fronten
 ## 1. Raw hex 금지 — 토큰만
 - 컴포넌트(JSX/TSX/CSS)에 `#xxxxxx` 직접 사용 금지. 색은 토큰 클래스(`bg-surface`, `text-ink`, `text-accent`, `bg-accent-tint`, `border-hairline`, `text-error`, `ring-added` 등) 또는 inline style의 `var(--color-*)`로만.
 - **예외(데이터/출력)**: 사용자가 노드에 지정하는 `color`와 색 팔레트 `COLOR_PRESETS`(세련된 무채도 8톤 stroke — slate/teal/sage/amber/clay/rose/violet/stone), PNG export 배경색은 데이터/출력이며 chrome이 아니다 — 유지. 노드 fill은 stroke에서 `color-mix(in srgb, {color} 18%, white)`로 파생.
+- **악센트 테마(개인화)** — 사용자가 화면 설정 플라이아웃에서 프리셋을 고르면 `<html>`의 `--color-accent` 하나만 바뀐다(`lib/accent-theme.ts`, localStorage `bpm.accent`, 첫 페인트 전 적용). 그래서 **악센트 계열 톤은 절대 고정 hex로 두지 않는다**: tint·tint-border·focus·elevated·sky·선택 엣지·차트 승인/초안·서브프로세스 stroke(`--color-subprocess`) 모두 `@theme`에서 `color-mix(… var(--color-accent) …)`로 파생한다. 새 보라 톤이 필요하면 같은 방식으로 토큰을 추가한다. 프리셋은 대비 검증본만(흰 바탕·흰 글씨·선택 틴트 위 글씨 4.5:1 — `accent-theme.test.ts`), 의미색과 겹치는 초록·빨강·주황·앰버·틸은 제외. 사용자가 직접 고르는 노드 색 팔레트의 보라는 데이터라 테마를 따르지 않는다. Excel 출력처럼 CSS 변수를 못 쓰는 곳은 `getAccentHex()`.
 
 ## 2. Elevation — soft shadow 허용
 - 토큰 `--shadow-sm`(노드 hover) / `--shadow-md`(카드·패널·툴바) / `--shadow-lg`(플로팅 오버레이: 컨텍스트 메뉴·다이얼로그·토스트). 쿨톤 저확산만 — 글로우·이중 그림자 금지.

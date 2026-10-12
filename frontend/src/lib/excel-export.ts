@@ -4,6 +4,7 @@
 //       2026-07-13-node-params-redefinition-design.md §5.2,
 //       2026-07-17-excel-export-format-v1-design.md (구조 노드 정리+분기 주석),
 //       export-column-picker-design(2026-10-02, 열 선택·IO/조건/GMP/병렬 열)
+import { getAccentHex } from "./accent-theme";
 import type { Graph, GraphEdge, GraphNode } from "./api";
 import { formatSystemCell, orderNodesByFlow } from "./csv-export";
 import { EXCEL_COLUMNS, type ExcelColumnKey, normalizeExportColumns } from "./export-columns";
@@ -459,9 +460,23 @@ export async function buildExcelModel({
   return { mapName, versionLabel, exportedAt, rows, truncated };
 }
 
-// 셀 색은 출력물이라 raw hex 허용 (design.md §1 예외 — csv-export.ts와 동일 논리)
-export const HEADER_FILL = "FFF3F0FA"; // 연보라 헤더 (ARGB)
-const LINK_FONT_ARGB = "FF6A41FF";
+// 셀 색은 출력물이라 CSS 변수를 못 쓴다 — 사용자 악센트 테마의 실제 hex에서 ARGB로 만든다(헤더=악센트 8% 틴트)
+export function getExcelHeaderFill(): string {
+  return toArgb(mixHexWithWhite(getAccentHex(), 0.08));
+}
+
+function getExcelLinkFont(): string {
+  return toArgb(getAccentHex());
+}
+
+function mixHexWithWhite(hex: string, ratio: number): string {
+  const channels = [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * ratio + 255 * (1 - ratio)));
+  return `#${channels.map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function toArgb(hex: string): string {
+  return `FF${hex.slice(1).toUpperCase()}`;
+}
 export const NOTE_TEXT: Record<ExcelNoteRow["kind"], string> = {
   circular: "(circular reference)",
   denied: "(access denied)",
@@ -536,7 +551,7 @@ export function applyExcelCellFormats(
     if (column.wrap) cell.alignment = { wrapText: true, vertical: "top" };
     if (column.key === "url" && row.url) {
       cell.value = { text: row.urlLabel || row.url, hyperlink: row.url };
-      cell.font = { color: { argb: LINK_FONT_ARGB }, underline: true };
+      cell.font = { color: { argb: getExcelLinkFont() }, underline: true };
     }
   });
 }
@@ -562,7 +577,7 @@ export function writeExcelSheet(
   const headerRow = sheet.addRow(columns.map((c) => c.header));
   headerRow.eachCell((cell) => {
     cell.font = { bold: true };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: getExcelHeaderFill() } };
     cell.border = { bottom: { style: "thin" } };
   });
   columns.forEach((c, i) => { sheet.getColumn(i + 1).width = c.width; });

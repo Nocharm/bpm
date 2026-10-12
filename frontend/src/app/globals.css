@@ -11,11 +11,15 @@
 @theme {
   /* Accent — 단일 바이올렛(Whimsical), 세 역할 + tint */
   --color-accent: #6a41ff;
-  --color-accent-focus: #5733e0;
-  --color-accent-elevated: #4a29c2;
+  /* 파생 톤은 전부 --color-accent 공식 — 사용자 테마(lib/accent-theme.ts)가 --color-accent 하나만 바꿔도 따라온다.
+     비율은 기본 바이올렛에서 종전 고정값과 같은 색이 나오도록 역산 */
+  --color-accent-focus: color-mix(in srgb, var(--color-accent) 86%, black);
+  --color-accent-elevated: color-mix(in srgb, var(--color-accent) 74%, black);
   --color-on-accent: #ffffff;
-  --color-accent-tint: #efebff; /* 선택 행/활성 툴 배경 */
-  --color-accent-tint-border: #d7ccff;
+  --color-accent-tint: color-mix(in srgb, var(--color-accent) 11%, white); /* 선택 행/활성 툴 배경 */
+  --color-accent-tint-border: color-mix(in srgb, var(--color-accent) 27%, white);
+  /* 서브프로세스 노드 고정 stroke(사용자가 못 고름) — 테마를 따라 악센트의 채도 낮춘 톤 */
+  --color-subprocess: color-mix(in srgb, var(--color-accent) 60%, var(--color-ink-muted));
 
   /* Surfaces */
   --color-surface: #ffffff;
@@ -26,7 +30,7 @@
   --color-canvas-dot: #bdbdc9; /* dot-grid 점 — 가시성 위해 진하게 */
   --color-canvas-l5: #363843; /* L5 새벽 조감도 — 그라데이션 하단(차콜)·미니맵 등 단색 폴백. L5 태그로 라이트 토글 */
   --color-canvas-l5-sky: #1b2743; /* L5 새벽 조감도 — 그라데이션 상단(네이비, 하단 차콜과 확실히 구분되게) */
-  --color-accent-sky: #ad97ff; /* 새벽 하늘(남색) 위에서 읽히도록 밝힌 액센트 — accent 55% + white (운영 대시보드) */
+  --color-accent-sky: color-mix(in srgb, var(--color-accent) 55%, white); /* 새벽 하늘(남색) 위에서 읽히도록 밝힌 액센트 (운영 대시보드) */
 
   /* Ink */
   --color-ink: #16161d;
@@ -62,9 +66,9 @@
   --color-diff-changed: #0f766e;
   /* 분포 막대·상태 점 채움 — 텍스트용 시맨틱(added/changed/error)은 어둡고 탁해 조각으로 깔면 칙칙하다(사용자 피드백 2026-09-11).
      같은 의미를 밝고 채도 높은 채움색으로 — 흰 바탕 위 8px 점·막대 전용, 텍스트에 쓰지 않는다. */
-  --color-chart-draft: #c9c5dc;
+  --color-chart-draft: color-mix(in srgb, var(--color-accent) 9%, var(--color-surface-chip));
   --color-chart-pending: #f4b33d;
-  --color-chart-approved: #8f70ff;
+  --color-chart-approved: color-mix(in srgb, var(--color-accent) 75%, white);
   --color-chart-published: #2fc48c;
   --color-chart-rejected: #ff6b5e;
   --color-chart-expired: #aeabbf;
@@ -73,7 +77,7 @@
   --color-edge-in: #0d9488;
   --color-edge-out: #ea580c;
   /* 선택된 엣지 강조색 — accent보다 밝은 바이올렛으로 또렷하게 */
-  --color-edge-selected: #7c4dff;
+  --color-edge-selected: color-mix(in srgb, var(--color-accent) 91%, white);
   /* 판단(decision) 분기 엣지 — 은은한 파스텔 블루(Yes)/레드(No). 무채도 팔레트와 조화, 과강조 회피 */
   --color-branch-yes: #6f93cc;
   --color-branch-no: #cf7e84;

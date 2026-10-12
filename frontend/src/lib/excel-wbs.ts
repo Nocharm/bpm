@@ -15,7 +15,7 @@ import {
   getExcelEdgeLabel,
   getNodeDisplayTitle,
   getSubprocessExitTitles,
-  HEADER_FILL,
+  getExcelHeaderFill,
   NOTE_TEXT,
   selectExcelColumns,
 } from "./excel-export";
@@ -241,7 +241,7 @@ export function writeWbsSheet(
   ]);
   headerRow.eachCell((cell) => {
     cell.font = { bold: true };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: getExcelHeaderFill() } };
     cell.border = { bottom: { style: "thin" } };
   });
   const taskCol = 2 + model.maxLevel; // 1=No, 2..1+N=레벨, 그 다음이 Task
