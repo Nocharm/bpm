@@ -115,7 +115,7 @@ export function MapNameDropdown({
       {open && (
         <div
           data-id="map-dropdown-list"
-          className="absolute left-0 z-[1001] mt-1 w-80 rounded-md border border-hairline bg-surface py-2 shadow-lg"
+          className="absolute left-0 z-[1001] mt-1 w-80 rounded-md border py-2 glass glass-dense"
         >
             <div className="px-2 pb-2">
               <input

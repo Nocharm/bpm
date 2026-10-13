@@ -215,7 +215,7 @@ export function PersonHoverCard({ userId, className, notice, children }: PersonH
         createPortal(
           <div
             data-id="person-hover-card"
-            className="animate-item-in fixed z-[1400] w-64 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+            className="animate-item-in fixed z-[1400] w-64 rounded-md border p-3 glass"
             style={{ left: pos.left, top: pos.top }}
             onMouseEnter={cancelClose}
             onMouseLeave={scheduleClose}
@@ -277,7 +277,7 @@ export function PersonInfoPopup({ userId, position, onClose }: PersonInfoPopupPr
     >
       <div
         data-id="person-info-popup"
-        className="animate-item-in fixed w-64 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+        className="animate-item-in fixed w-64 rounded-md border p-3 glass"
         style={{ left, top }}
         // 마운트 지점의 React 조상으로 버블링 차단(행 클릭 토글 등)
         onClick={(event) => event.stopPropagation()}

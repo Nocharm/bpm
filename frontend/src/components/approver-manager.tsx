@@ -85,7 +85,7 @@ export function ApproverManager({ mapId, visibility, onClose, onSaved }: Approve
       onClose={onClose}
     >
       <div
-        className="flex w-96 flex-col gap-2 rounded-md bg-surface p-4 shadow-lg"
+        className="flex w-96 flex-col gap-2 rounded-md p-4 border glass glass-dense"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between">

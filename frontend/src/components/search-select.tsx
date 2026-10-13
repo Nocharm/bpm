@@ -299,7 +299,7 @@ export function SearchSelect({
               <div className="fixed inset-0 z-[1340]" onClick={closeMenu} />
               <div
                 data-id="search-select-flyout"
-                className="dropdown-in fixed z-[1350] w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg"
+                className="dropdown-in fixed z-[1350] w-56 rounded-md border py-1 glass glass-dense"
                 style={flyoutPos ? { left: flyoutPos.left, top: flyoutPos.top } : undefined}
               >
                 {menu}
@@ -317,7 +317,7 @@ export function SearchSelect({
               <div className="fixed inset-0 z-[1340]" onClick={closeMenu} />
               <div
                 data-id="search-select-menu"
-                className="dropdown-in fixed z-[1350] rounded-md border border-hairline bg-surface py-1 shadow-lg"
+                className="dropdown-in fixed z-[1350] rounded-md border py-1 glass glass-dense"
                 style={{ left: menuPos.left, top: menuPos.top, bottom: menuPos.bottom, width: menuPos.width }}
               >
                 {menu}

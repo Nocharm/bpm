@@ -83,7 +83,7 @@ export function NodeSearch<R extends NodeSearchResult>({
         )}
       </div>
       {results.length > 0 && (
-        <ul className="absolute left-0 top-full z-50 mt-1 max-h-72 w-full overflow-auto rounded-sm border border-hairline bg-surface py-1 shadow-lg">
+        <ul className="absolute left-0 top-full z-50 mt-1 max-h-72 w-full overflow-auto rounded-sm border py-1 glass glass-dense">
           {results.map((result, index) => (
             <li key={result.node.id}>
               <button

@@ -535,7 +535,7 @@ export function GroupBulkModal({
       <div
         data-id="group-bulk-modal"
         // w-[29rem](464px): 속성 3열 그리드의 최장 영어 라벨("Duration / run (h)")+아이콘이 버튼 안에 들어오는 최소폭(445px)+여유. 한국어(418px)도 커버.
-        className="w-[29rem] rounded-md bg-surface p-4 shadow-lg"
+        className="w-[29rem] rounded-md p-4 border glass glass-dense"
         onClick={(event) => event.stopPropagation()}
       >
         {/* 상단 고정 + 높이 전환 스무딩 — 화면(요약/마법사/메인)·모드 전환의 키가 부드럽게 이어진다 */}

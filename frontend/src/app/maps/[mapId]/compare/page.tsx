@@ -693,7 +693,7 @@ function VersionSelect({
           <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
           <div
             data-id={`${dataId}-menu`}
-            className="absolute left-0 z-[1001] mt-1 w-72 rounded-md border border-hairline bg-surface py-1 shadow-lg"
+            className="absolute left-0 z-[1001] mt-1 w-72 rounded-md border py-1 glass glass-dense"
           >
             {versions.map((version) => {
               const selected = version.id === value;
@@ -842,7 +842,7 @@ function ZoomBar() {
   const btn =
     "flex h-6 w-6 items-center justify-center rounded-xs text-ink-secondary hover:bg-surface-alt";
   return (
-    <div className="flex items-center gap-0.5 rounded-sm border border-hairline bg-surface/90 p-0.5 shadow-sm backdrop-blur-sm">
+    <div className="flex items-center gap-0.5 rounded-sm border p-0.5 glass">
       <button type="button" onClick={() => zoomOut()} title="Zoom out" className={btn}>
         <Minus size={14} strokeWidth={1.5} />
       </button>
@@ -1829,7 +1829,7 @@ function ComparePane({
           {titleMenuOpen && (
             <>
               <div className="fixed inset-0 z-[1000]" onClick={() => setTitleMenuOpen(false)} />
-              <div className="absolute left-0 z-[1001] mt-1 w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg">
+              <div className="absolute left-0 z-[1001] mt-1 w-56 rounded-md border py-1 glass glass-dense">
                 <Link
                   href={`/maps/${mapId}`}
                   onClick={() => setTitleMenuOpen(false)}
@@ -2099,7 +2099,7 @@ function ComparePane({
             {/* dot-grid 제거 · 좌상 카운트 필 제거(좌하 범례로 통합) */}
             <Panel
               position="bottom-left"
-              className="rounded-sm border border-hairline bg-surface/80 px-2.5 py-1.5 shadow-sm backdrop-blur-sm"
+              className="rounded-sm border px-2.5 py-1.5 glass"
             >
               <DiffLegend counts={counts} />
             </Panel>
@@ -2206,7 +2206,7 @@ function ComparePane({
                   {sumMenuOpen && (
                     <>
                       <div className="fixed inset-0 z-[1000]" onClick={() => setSumMenuOpen(false)} />
-                      <div className="absolute right-0 z-[1001] mt-1 max-h-80 w-52 overflow-auto rounded-md border border-hairline bg-surface py-1 shadow-lg">
+                      <div className="absolute right-0 z-[1001] mt-1 max-h-80 w-52 overflow-auto rounded-md border py-1 glass glass-dense">
                         {summaryItems.map((item) => (
                           <label
                             key={item.key}

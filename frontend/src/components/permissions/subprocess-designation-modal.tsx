@@ -597,7 +597,7 @@ export function SubprocessDesignationModal({
     >
       <div
         data-id="subprocess-designation-modal"
-        className="flex max-h-[84vh] w-full max-w-lg flex-col gap-3 rounded-md bg-surface p-6 shadow-lg"
+        className="flex max-h-[84vh] w-full max-w-lg flex-col gap-3 rounded-md p-6 border glass glass-dense"
       >
         <h2 className="flex shrink-0 items-center gap-2 text-body-strong text-ink">
           <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-accent" />

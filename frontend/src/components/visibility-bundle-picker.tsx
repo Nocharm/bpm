@@ -71,7 +71,7 @@ export function VisibilityBundlePicker({ current, value, onChange }: VisibilityB
         {open && (
           // w-max — 트리거(ko "공개"처럼 짧음)보다 옵션+Current 필이 넓을 때 메뉴가 콘텐츠 폭으로 커지게.
           // nowrap — 옵션 라벨("비공개")이 필에 밀려 한 글자씩 세로로 꺾이는 것 방지 (ko 실측 버그).
-          <div className="absolute right-0 top-full z-[1320] mt-1 w-max min-w-full rounded-md border border-hairline bg-surface p-1 shadow-lg">
+          <div className="absolute right-0 top-full z-[1320] mt-1 w-max min-w-full rounded-md border p-1 glass glass-dense">
             {options.map((v) => {
               const OptIcon = v === "public" ? Globe : Lock;
               return (

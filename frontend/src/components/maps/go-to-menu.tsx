@@ -55,7 +55,7 @@ export function GoToMenu({ x, y, items, onClose }: GoToMenuProps) {
       data-id="go-to-menu"
       role="menu"
       style={{ visibility: "hidden" }}
-      className="fixed z-[1200] min-w-40 rounded-md border border-hairline bg-surface py-1 shadow-lg"
+      className="fixed z-[1200] min-w-40 rounded-md border py-1 glass glass-dense"
       onMouseDown={(e) => e.stopPropagation()}
     >
       {items.map((it) => (

@@ -77,7 +77,7 @@ export function CategoryDeptModal({ node, onClose, onSaved, onToast }: CategoryD
     >
       <div
         data-id="framework-dept-modal"
-        className="flex w-full max-w-md flex-col gap-4 rounded-md bg-surface p-6 shadow-lg"
+        className="flex w-full max-w-md flex-col gap-4 rounded-md p-6 border glass glass-dense"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-2">

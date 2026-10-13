@@ -55,7 +55,7 @@ export function RolePopover({
       ref={popoverRef}
       data-id="add-pick-popover"
       style={{ left, top }}
-      className="fixed z-[1300] rounded-md border border-hairline bg-surface p-2 shadow-lg"
+      className="fixed z-[1300] rounded-md border p-2 glass"
     >
       <p className="max-w-[176px] truncate text-fine text-ink-tertiary">{name}</p>
       <p className="mb-1.5 text-fine text-ink-tertiary">{t("perm.addPick.title")}</p>

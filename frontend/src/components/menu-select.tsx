@@ -110,7 +110,7 @@ export function MenuSelect({
             <div
               role="listbox"
               data-id={`${dataId}-menu`}
-              className="dropdown-in fixed z-[1350] rounded-sm border border-hairline bg-surface p-0.5 shadow-lg"
+              className="dropdown-in fixed z-[1350] rounded-sm border p-0.5 glass glass-dense"
               style={{ left: pos.left, top: pos.top, width: pos.width }}
             >
               {items.map((item) => {

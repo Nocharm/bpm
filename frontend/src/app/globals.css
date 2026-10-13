@@ -11,11 +11,17 @@
 @theme {
   /* Accent — 단일 바이올렛(Whimsical), 세 역할 + tint */
   --color-accent: #6a41ff;
-  --color-accent-focus: #5733e0;
-  --color-accent-elevated: #4a29c2;
+  /* 파생 톤은 전부 --color-accent 공식 — 사용자 테마(lib/accent-theme.ts)가 --color-accent 하나만 바꿔도 따라온다.
+     비율은 기본 바이올렛에서 종전 고정값과 같은 색이 나오도록 역산 */
+  --color-accent-focus: color-mix(in srgb, var(--color-accent) 86%, black);
+  --color-accent-elevated: color-mix(in srgb, var(--color-accent) 74%, black);
   --color-on-accent: #ffffff;
-  --color-accent-tint: #efebff; /* 선택 행/활성 툴 배경 */
-  --color-accent-tint-border: #d7ccff;
+  --color-accent-tint: color-mix(in srgb, var(--color-accent) 11%, white); /* 선택 행/활성 툴 배경 */
+  --color-accent-tint-border: color-mix(in srgb, var(--color-accent) 27%, white);
+  /* 서브프로세스 노드 고정 stroke(사용자가 못 고름) — 테마를 따라 악센트의 채도 낮춘 톤 */
+  --color-subprocess: color-mix(in srgb, var(--color-accent) 60%, var(--color-ink-muted));
+  /* 캔버스 위 강조(노드 선택 링·드롭 영역·펼침 영역 테두리·포커스) — 새벽 하늘 프레임 안에선 .bpm-l5-sky가 밝은 톤으로 바꾼다 */
+  --color-accent-canvas: var(--color-accent);
 
   /* Surfaces */
   --color-surface: #ffffff;
@@ -26,7 +32,8 @@
   --color-canvas-dot: #bdbdc9; /* dot-grid 점 — 가시성 위해 진하게 */
   --color-canvas-l5: #363843; /* L5 새벽 조감도 — 그라데이션 하단(차콜)·미니맵 등 단색 폴백. L5 태그로 라이트 토글 */
   --color-canvas-l5-sky: #1b2743; /* L5 새벽 조감도 — 그라데이션 상단(네이비, 하단 차콜과 확실히 구분되게) */
-  --color-accent-sky: #ad97ff; /* 새벽 하늘(남색) 위에서 읽히도록 밝힌 액센트 — accent 55% + white (운영 대시보드) */
+  /* 새벽 하늘(다크) 위 액센트 — 대시보드 글씨·막대, L5 캔버스 선택 표시. 아래 @supports 블록이 명도 고정본으로 덮는다(이 줄은 구형 브라우저 폴백) */
+  --color-accent-sky: color-mix(in srgb, var(--color-accent) 55%, white);
 
   /* Ink */
   --color-ink: #16161d;
@@ -49,6 +56,10 @@
   --shadow-sm: 0 1px 2px rgba(22, 22, 29, 0.06);
   --shadow-md: 0 4px 12px rgba(22, 22, 29, 0.08);
   --shadow-lg: 0 8px 28px rgba(22, 22, 29, 0.12);
+  /* 유리 레이어(`glass` 유틸리티) — 윗변 내부 하이라이트 + md급 쿨톤 그림자. 하이라이트는 글로우가 아니라 유리 두께 표현 */
+  --shadow-glass:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 0 0 0.5px rgba(255, 255, 255, 0.45),
+    0 8px 28px rgba(22, 22, 29, 0.12), 0 1px 2px rgba(22, 22, 29, 0.06);
 
   /* Diff(비교) — 노드 타입 의미색으로도 재사용 */
   --color-added: #16794f;
@@ -58,9 +69,9 @@
   --color-diff-changed: #0f766e;
   /* 분포 막대·상태 점 채움 — 텍스트용 시맨틱(added/changed/error)은 어둡고 탁해 조각으로 깔면 칙칙하다(사용자 피드백 2026-09-11).
      같은 의미를 밝고 채도 높은 채움색으로 — 흰 바탕 위 8px 점·막대 전용, 텍스트에 쓰지 않는다. */
-  --color-chart-draft: #c9c5dc;
+  --color-chart-draft: color-mix(in srgb, var(--color-accent) 9%, var(--color-surface-chip));
   --color-chart-pending: #f4b33d;
-  --color-chart-approved: #8f70ff;
+  --color-chart-approved: color-mix(in srgb, var(--color-accent) 75%, white);
   --color-chart-published: #2fc48c;
   --color-chart-rejected: #ff6b5e;
   --color-chart-expired: #aeabbf;
@@ -69,7 +80,7 @@
   --color-edge-in: #0d9488;
   --color-edge-out: #ea580c;
   /* 선택된 엣지 강조색 — accent보다 밝은 바이올렛으로 또렷하게 */
-  --color-edge-selected: #7c4dff;
+  --color-edge-selected: color-mix(in srgb, var(--color-accent) 91%, white);
   /* 판단(decision) 분기 엣지 — 은은한 파스텔 블루(Yes)/레드(No). 무채도 팔레트와 조화, 과강조 회피 */
   --color-branch-yes: #6f93cc;
   --color-branch-no: #cf7e84;
@@ -135,10 +146,77 @@ body {
   );
 }
 
+/* 하늘 위 캔버스 강조는 밝은 톤으로 — 악센트 원색은 어두운 하늘과 대비 1.0~1.6이라 선택 링·선택 엣지가 묻힌다(대비 감사 2026-10-13) */
+.bpm-l5-sky {
+  --color-accent-canvas: var(--color-accent-sky);
+  --color-edge-selected: var(--color-accent-sky);
+}
+/* 명도 고정 sky — 테마마다 악센트 명도가 달라 비율 혼합으론 대비가 들쭉날쭉하다. 색상(h)만 테마를 따르고 명도·채도는 고정:
+   하늘 유리 카드 최악(#63656d) 위 작은 글씨 4.5:1을 넘기는 값 */
+@supports (color: oklch(from red l c h)) {
+  :root {
+    --color-accent-sky: oklch(from var(--color-accent) 0.95 min(c, 0.06) h);
+  }
+}
+
 /* 새벽 하늘 프레임 내부 스크롤 — 어두운 배경 위 밝은 얇은 막대(라이트 기본 막대는 하늘에서 이질적). */
 .bpm-sky-scroll {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--color-canvas) 28%, transparent) transparent;
+}
+/* 유리 레이어 — 떠 있는 오버레이의 기본 표면(크롬·칩·메뉴·피커·팝오버·다이얼로그, 규칙: rules/frontend/design.md §2). 정적 패널엔 쓰지 않는다:
+   뒤 내용이 바뀔 때마다 블러를 다시 그리므로 팬·드래그 중 상시 노출되는 작은 면적에만 둔다.
+   bg-surface·shadow-* 와 같이 쓰지 말 것(배경·그림자를 이 유틸리티가 소유).
+   채움은 --glass-fill 변수 — background 단축 속성을 쓰는 서드파티(RF MiniMap bgColor)에도 같은 값을 넘기기 위해. */
+:root {
+  --glass-fill: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface) 74%, transparent),
+    color-mix(in srgb, var(--color-surface) 56%, transparent)
+  );
+  --glass-bg: transparent;
+  --glass-blur: blur(18px) saturate(180%);
+  --glass-shadow: var(--shadow-glass);
+  --glass-border: color-mix(in srgb, var(--color-surface) 75%, transparent);
+}
+/* 새벽 하늘(다크) 위 — 기본 투명도면 남색이 비쳐 회색 크롬이 된다. 크롬은 항상 라이트(design.md §7)라 불투명도를 올린다 */
+.bpm-l5-sky {
+  --glass-fill: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface) 92%, transparent),
+    color-mix(in srgb, var(--color-surface) 84%, transparent)
+  );
+}
+@utility glass {
+  background-color: var(--glass-bg);
+  background-image: var(--glass-fill);
+  border-color: var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+  @supports not (backdrop-filter: blur(1px)) {
+    background-color: var(--color-surface);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    background-color: var(--color-surface);
+  }
+}
+/* 글자 많은 유리(피커·다이얼로그·긴 팝오버) — 기본 채움이면 뒤 노드 색이 목록 위로 번져 가독성이 떨어진다. `glass`와 함께 쓴다 */
+@utility glass-dense {
+  --glass-fill: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface) 90%, transparent),
+    color-mix(in srgb, var(--color-surface) 82%, transparent)
+  );
+}
+/* 사용자가 끈 유리(lib/glass-pref.ts, html[data-glass=off]) — 종전 불투명 카드로. 속성 대신 변수만 바꿔
+   hover:bg-* 같은 상태 배경이 계속 이긴다(배경색을 직접 덮으면 비레이어 규칙이라 hover가 죽는다) */
+:root[data-glass="off"] .glass {
+  --glass-fill: none;
+  --glass-bg: var(--color-surface);
+  --glass-blur: none;
+  --glass-shadow: var(--shadow-lg);
+  --glass-border: var(--color-hairline);
 }
 .bpm-sky-scroll::-webkit-scrollbar {
   width: 6px;
@@ -992,10 +1070,10 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 /* 출력선 선택 모달(EdgeSelectModal)에서 옵션 행 hover 시 대응 캔버스 엣지 하이라이트(accent).
    엣지의 인라인 stroke(분기 파스텔/선택 색)보다 우선해야 하므로 !important. */
 .react-flow__edge.edge-hover-highlight .react-flow__edge-path {
-  stroke: var(--color-accent) !important;
+  stroke: var(--color-accent-canvas) !important;
   stroke-width: 3.5 !important;
-  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-accent) 70%, transparent))
-    drop-shadow(0 0 5px color-mix(in srgb, var(--color-accent) 30%, transparent));
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-accent-canvas) 70%, transparent))
+    drop-shadow(0 0 5px color-mix(in srgb, var(--color-accent-canvas) 30%, transparent));
 }
 
 /* 핸들 스타일은 page.tsx의 raw <style>로 이전 — Turbopack이 dev에서 .react-flow__node 셀렉터
@@ -1031,8 +1109,8 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 /* 노드 선택 링 — 2px accent + 4px 소프트 헤일로 (E4). box-shadow라 selected 노드는 hover 그림자 미적용(충돌 회피) */
 .node-ring-selected {
   box-shadow:
-    0 0 0 2px var(--color-accent),
-    0 0 0 6px color-mix(in srgb, var(--color-accent) 12%, transparent);
+    0 0 0 2px var(--color-accent-canvas),
+    0 0 0 6px color-mix(in srgb, var(--color-accent-canvas) 12%, transparent);
 }
 
 /* 그룹 합류 대상 — 노드를 끌어와 박스 위에 머물 때 반투명 반짝임 + 커졌다 작아지기 */
@@ -1045,13 +1123,13 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
   }
   50% {
     transform: scale(1.025);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 28%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-canvas) 28%, transparent);
     background: color-mix(in srgb, var(--color-accent) 18%, white);
   }
 }
 .group-target {
   transform-origin: center;
-  border-color: var(--color-accent) !important;
+  border-color: var(--color-accent-canvas) !important;
   animation: group-target-pulse 750ms var(--ease-smooth) infinite;
 }
 

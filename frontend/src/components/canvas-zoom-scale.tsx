@@ -15,7 +15,7 @@ export function CanvasZoomScale({ onFit, leading }: { onFit: () => void; leading
   return (
     <div className="pointer-events-none absolute bottom-3 right-3 z-10 flex items-end gap-2 select-none">
       {leading}
-      <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-hairline bg-surface p-1 shadow-md">
+      <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border p-1 glass">
         <button
           type="button"
           className="flex h-7 w-7 items-center justify-center rounded-full text-ink-secondary hover:bg-surface-alt"

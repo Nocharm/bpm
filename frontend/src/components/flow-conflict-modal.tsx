@@ -32,7 +32,7 @@ export function FlowConflictModal({
   return (
     <div
       data-id="flow-conflict-modal"
-      className="absolute z-[1110] w-60 rounded-md border border-hairline bg-surface p-2 shadow-lg"
+      className="absolute z-[1110] w-60 rounded-md border p-2 glass"
       style={{ left: rect.left, top: rect.top + rect.height + 8 }}
     >
       <div className="flex items-center justify-between px-1 pb-1.5">

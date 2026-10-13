@@ -106,7 +106,7 @@ export function DataFormPicker({ value, dataId, onCommit, column = false }: Data
           createPortal(
             <ul
               data-id={`${dataId}-menu`}
-              className="fixed z-[1400] max-h-56 overflow-y-auto rounded-sm border border-hairline bg-surface py-1 shadow-lg"
+              className="fixed z-[1400] max-h-56 overflow-y-auto rounded-sm border py-1 glass glass-dense"
               style={{ top: pos.top, left: pos.left, width: DROPDOWN_WIDTH }}
             >
               {options.map((option, i) => {

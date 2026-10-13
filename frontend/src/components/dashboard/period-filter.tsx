@@ -1,6 +1,7 @@
 "use client";
 
 // 기간 선택 — 프리셋 3종 + 달력 직접 지정. 시계열 섹션에만 걸린다(스냅샷은 무관).
+// 하늘(다크) 유리 카드 위 — 선택 칩은 악센트 원색이 카드에 묻혀(대비 1.4) 밝은 sky 칩 + 잉크 글씨.
 
 import { useState } from "react";
 
@@ -53,7 +54,7 @@ export function PeriodFilter({ range, onChange }: PeriodFilterProps) {
           }}
           className={`rounded-sm px-2.5 py-1 text-fine transition-colors ${
             !custom && activePreset === preset.id
-              ? "bg-accent text-on-accent"
+              ? "bg-accent-sky text-ink"
               : "border border-surface/20 text-canvas/70 hover:bg-surface/10"
           }`}
         >
@@ -65,7 +66,7 @@ export function PeriodFilter({ range, onChange }: PeriodFilterProps) {
         onClick={() => setCustom((prev) => !prev)}
         className={`rounded-sm px-2.5 py-1 text-fine transition-colors ${
           custom
-            ? "bg-accent text-on-accent"
+            ? "bg-accent-sky text-ink"
             : "border border-surface/20 text-canvas/70 hover:bg-surface/10"
         }`}
       >

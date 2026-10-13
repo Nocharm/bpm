@@ -35,7 +35,7 @@ export function UndoLastApplyModal({
     >
       <div
         data-id="undo-last-apply-modal"
-        className="flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg"
+        className="flex w-full max-w-sm flex-col gap-4 rounded-md p-6 border glass glass-dense"
       >
         <div className="flex flex-col gap-1">
           <h2 className="flex items-center gap-1.5 text-body-strong text-ink">

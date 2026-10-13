@@ -101,7 +101,7 @@ export function EditorToolbar({
         {layoutOpen && (
           <>
             <div className="fixed inset-0 z-[1000]" onClick={() => setLayoutOpen(false)} />
-            <div className="absolute left-0 z-[1001] mt-1 w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg">
+            <div className="absolute left-0 z-[1001] mt-1 w-56 rounded-md border py-1 glass glass-dense">
               {LAYOUT_DIRS.map(({ dir, icon: Icon, labelKey }) => (
                 <button
                   key={dir}

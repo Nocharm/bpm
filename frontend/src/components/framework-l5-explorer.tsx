@@ -20,7 +20,7 @@ import { useI18n } from "@/lib/i18n";
 // bg-surface/85 — 차콜 캔버스(기본) 위에서 /40 반투명은 탁하게 묻힘, 라이트에서도 무해한 불투명도.
 // 위치(left/top)는 inset prop이 결정 — 차콜 프레임의 라운드 코너를 가리지 않게 안쪽 배치
 const CHIP_BASE =
-  "absolute z-10 rounded-sm border border-hairline bg-surface/85 shadow-sm backdrop-blur-sm";
+  "absolute z-10 rounded-sm border glass";
 
 export interface FrameworkL5ExplorerProps {
   currentCategoryId: number | null; // 이 캔버스가 결착된 L5 — null이면 렌더 안 함(방어)

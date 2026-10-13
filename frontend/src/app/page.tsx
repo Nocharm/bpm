@@ -890,7 +890,7 @@ export default function MapListPage() {
             </button>
             {createMenuOpen && (
               <div
-                className="absolute right-0 top-full z-30 mt-1 min-w-52 rounded-sm border border-hairline bg-surface py-1 shadow-lg"
+                className="absolute right-0 top-full z-30 mt-1 min-w-52 rounded-sm border py-1 glass glass-dense"
                 onMouseDown={(event) => event.stopPropagation()}
               >
                 <button

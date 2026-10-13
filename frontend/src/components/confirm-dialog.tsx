@@ -98,7 +98,7 @@ export function ConfirmDialog({
     >
       <div
         data-id={dialogId}
-        className={`flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg ${
+        className={`flex w-full max-w-sm flex-col gap-4 rounded-md p-6 border glass glass-dense ${
           isRich ? "items-center text-center" : ""
         }`}
       >

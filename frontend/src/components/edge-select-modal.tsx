@@ -66,7 +66,7 @@ export function EdgeSelectModal({
     <ModalBackdrop className="fixed inset-0 z-[1200]" style={{ background: "transparent" }} onClose={closeAndClear}>
       <div
         data-id="edge-select-modal"
-        className="fixed w-64 rounded-md border border-hairline bg-surface p-2 shadow-lg"
+        className="fixed w-64 rounded-md border p-2 glass"
         style={{ left, top }}
         onClick={(event) => event.stopPropagation()}
       >

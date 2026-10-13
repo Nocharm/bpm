@@ -60,7 +60,7 @@ export function AddNodeMenu({ onAdd, onOpenLibrary }: AddNodeMenuProps) {
         <ChevronDown size={14} strokeWidth={1.5} />
       </button>
       {open && (
-        <div className="absolute left-0 z-[1001] mt-1 w-56 rounded-md border border-hairline bg-surface py-2 shadow-lg">
+        <div className="absolute left-0 z-[1001] mt-1 w-56 rounded-md border py-2 glass glass-dense">
             <div className="px-3 pb-1 text-fine text-ink-tertiary">{t("addNode.pickShape")}</div>
             {SHAPES.map((shape) => {
               const Icon = shape.icon;

@@ -127,7 +127,7 @@ function PickerDialog({
       onClose={onClose}
       className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
     >
-      <div className="flex w-[400px] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-md bg-surface p-6 shadow-lg">
+      <div className="flex w-[400px] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-md p-6 border glass glass-dense">
         <div className="flex flex-col gap-1">
           <h2 className="text-body-strong text-ink">{title}</h2>
           <p className="text-caption text-ink-tertiary">{t("perm.group.pickerHint")}</p>

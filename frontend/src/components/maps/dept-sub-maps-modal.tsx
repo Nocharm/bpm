@@ -50,7 +50,7 @@ export function DeptSubMapsModal({ scope, maps, onPickDept, onSelectMap, onClose
         role="dialog"
         aria-modal="true"
         onMouseDown={(e) => e.stopPropagation()}
-        className="animate-hover-modal-in flex max-h-[70vh] w-full max-w-[28rem] flex-col rounded-sm border border-hairline bg-surface shadow-lg"
+        className="animate-hover-modal-in flex max-h-[70vh] w-full max-w-[28rem] flex-col rounded-sm border glass glass-dense"
       >
         <header className="flex items-center gap-2 border-b border-divider px-4 py-3">
           <Building2 size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />

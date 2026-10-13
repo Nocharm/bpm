@@ -48,7 +48,7 @@ export function IoPeersMenu({ position, items, onHoverPeer, onPick, onClose }: I
     <ModalBackdrop className="fixed inset-0 z-[1350]" style={{ background: "transparent" }} onClose={closeAndClear}>
       <div
         data-id="io-peers-menu"
-        className="fixed w-56 rounded-md border border-hairline bg-surface p-1.5 shadow-lg"
+        className="fixed w-56 rounded-md border p-1.5 glass glass-dense"
         style={{ left, top }}
         onClick={(event) => event.stopPropagation()}
       >

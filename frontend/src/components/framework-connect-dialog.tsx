@@ -102,7 +102,7 @@ export function FrameworkConnectDialog({
       >
         <div
           data-id="framework-connect-dialog"
-          className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-md border border-hairline bg-surface shadow-lg"
+          className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-md border glass glass-dense"
         >
           {/* 헤더 */}
           <div className="flex items-center gap-2.5 border-b border-hairline px-4 py-3">

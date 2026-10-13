@@ -98,7 +98,7 @@ export function NoticeEditModal({
         role="dialog"
         aria-label={t(notice ? "noticeEdit.titleEdit" : "noticeEdit.titleNew")}
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-md border border-hairline bg-surface shadow-lg"
+        className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-md border glass glass-dense"
       >
         <header className="flex items-center justify-between border-b border-hairline px-4 py-3">
           <span className="text-body-strong text-ink">

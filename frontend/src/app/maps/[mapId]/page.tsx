@@ -580,8 +580,8 @@ function InlineRegionBands({
                 zIndex: -1,
                 pointerEvents: "none",
                 borderRadius: 12,
-                background: `color-mix(in srgb, var(--color-accent) ${hovered ? 9 : 5}%, transparent)`,
-                border: `1.5px solid color-mix(in srgb, var(--color-accent) ${hovered ? 55 : 35}%, transparent)`,
+                background: `color-mix(in srgb, var(--color-accent-canvas) ${hovered ? 9 : 5}%, transparent)`,
+                border: `1.5px solid color-mix(in srgb, var(--color-accent-canvas) ${hovered ? 55 : 35}%, transparent)`,
                 transition: "background 150ms, border-color 150ms",
               }}
             />
@@ -595,7 +595,7 @@ function InlineRegionBands({
                 zIndex: 1,
               }}
             >
-              <div className="pointer-events-auto inline-flex items-center gap-1 rounded-sm border border-hairline bg-surface/85 px-0.5 py-0.5 shadow-sm backdrop-blur-[2px]">
+              <div className="pointer-events-auto inline-flex items-center gap-1 rounded-sm border px-0.5 py-0.5 glass">
                 {/* 맵 이름 — 클릭하면 이 영역 기준 메뉴(이동·접기). 바로 접히면 실수로 다 닫히는 사고가 난다.
                     캔버스(pane)로 새는 클릭/우클릭은 여기서 끊는다 — 바깥 영역이 대신 처리하지 않도록. */}
                 <button
@@ -685,9 +685,9 @@ function FocusScopeBands({
           transform: `translate(${left}px, ${topFlow}px)`,
           width: right - left,
           height: bandHeight,
-          background: "color-mix(in srgb, var(--color-accent) 5%, transparent)",
-          borderLeft: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
-          borderRight: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
+          background: "color-mix(in srgb, var(--color-accent-canvas) 5%, transparent)",
+          borderLeft: "1.5px solid color-mix(in srgb, var(--color-accent-canvas) 35%, transparent)",
+          borderRight: "1.5px solid color-mix(in srgb, var(--color-accent-canvas) 35%, transparent)",
           zIndex: -1,
           pointerEvents: "none",
         }}
@@ -9491,7 +9491,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
           globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
-      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}${buildFlowHandleStyle()}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}.react-flow__node.io-node-highlight{outline:2px solid var(--color-accent);outline-offset:3px;border-radius:8px}`}</style>
+      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}${buildFlowHandleStyle()}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}.react-flow__node.io-node-highlight{outline:2px solid var(--color-accent-canvas);outline-offset:3px;border-radius:8px}`}</style>
       <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
         {/* 좌: 사이드바 토글 · 맵네임 드롭다운(검색·최근 맵·새 맵) · 브레드크럼 구분자 · 버전 pill */}
@@ -9664,7 +9664,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 </button>
                 {aiMenuOpen ? (
                   <div
-                    className="absolute right-0 top-full z-[1100] mt-1 w-56 rounded-md border border-hairline bg-surface p-1 shadow-lg"
+                    className="absolute right-0 top-full z-[1100] mt-1 w-56 rounded-md border p-1 glass glass-dense"
                     data-id="ai-menu-pop"
                   >
                     <button
@@ -9709,7 +9709,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 {showOnboard ? (
                   // z-[1100]: RF 선택 노드(1000)·연결선(1001)이 z-40을 덮는다 — 플로팅 크롬 층으로
                   <div
-                    className="absolute right-0 top-full z-[1100] mt-2 w-72 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+                    className="absolute right-0 top-full z-[1100] mt-2 w-72 rounded-md border p-3 glass glass-dense"
                     data-id="consult-onboard"
                   >
                     <div className="flex items-start gap-2">
@@ -10023,9 +10023,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                           data-id="framework-l5-tag"
                           title={t(l5Charcoal ? "framework.bgToLight" : "framework.bgToCharcoal")}
                           onClick={toggleL5CanvasBg}
-                          className={`absolute right-5 top-5 z-10 flex select-none items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine font-semibold text-ink-secondary shadow-sm backdrop-blur-sm transition-colors duration-150 ${
+                          className={`absolute right-5 top-5 z-10 flex select-none items-center gap-1 rounded-sm border px-2 py-1 text-fine font-semibold text-ink-secondary glass transition-colors duration-150 hover:bg-surface ${
                             // 프레임 상시 유지라 위치 고정(20px) — 라이트/차콜 전환에도 버튼이 안 움직임
-                            l5Charcoal ? "bg-surface/85 hover:bg-surface" : "bg-surface/40 hover:bg-surface/70"
+                            l5Charcoal ? "glass-dense" : ""
                           }`}
                         >
                           <Workflow size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
@@ -10041,7 +10041,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       {reconcileMissing > 0 && (
                         <span
                           data-id="framework-missing-chip"
-                          className="absolute right-5 top-[52px] z-10 rounded-sm border border-hairline bg-surface/70 px-1.5 py-0.5 text-fine text-ink-tertiary shadow-sm backdrop-blur-sm"
+                          className="absolute right-5 top-[52px] z-10 rounded-sm border px-1.5 py-0.5 text-fine text-ink-tertiary glass"
                         >
                           {t("framework.missing", { n: reconcileMissing })}
                         </span>
@@ -10702,7 +10702,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                 (zone === "swap" && dropTarget.swapBlocked);
               // L5 하늘 프레임 위에서는 회색 기반색이 묻힌다 — 밝은 캔버스색·하늘 액센트로 바꾼다 (2026-09-23)
               const zoneNeutral = isFrameworkMap ? "var(--color-canvas)" : "var(--color-ink-tertiary)";
-              const zoneAccent = isFrameworkMap ? "var(--color-accent-sky)" : "var(--color-accent)";
+              // 드롭 영역 오버레이는 하늘 프레임 밖에서 그려질 수 있어 토큰 스코프 대신 실제 하늘 여부로 — 라이트로 토글한 L5도 원색
+              const zoneAccent = l5Charcoal ? "var(--color-accent-sky)" : "var(--color-accent)";
               return (
                 <div className="pointer-events-none absolute inset-0 z-[1100]">
                   <svg className="zone-fan absolute inset-0 h-full w-full overflow-visible">
@@ -10769,7 +10770,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     const tone = blocked
                       ? (isFrameworkMap ? "text-canvas opacity-40" : "text-ink-tertiary opacity-40")
                       : active
-                        ? (isFrameworkMap ? "text-accent-sky" : "text-accent")
+                        ? (l5Charcoal ? "text-accent-sky" : "text-accent")
                         : (isFrameworkMap ? "text-canvas" : "text-accent/80");
                     const pill = isFrameworkMap ? "rounded-md bg-ink/70 px-1.5 py-1" : "";
                     return (
@@ -12877,7 +12878,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           }}
           className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 backdrop-blur-sm"
         >
-          <div className="relative flex w-full max-w-lg flex-col gap-4 rounded-md bg-surface p-6 shadow-lg">
+          <div className="relative flex w-full max-w-lg flex-col gap-4 rounded-md p-6 border glass glass-dense">
             <h2 className="text-body-strong text-ink">{t("csvImport.modalTitle")}</h2>
             <CsvImportSection
               outcome={csvOutcome}

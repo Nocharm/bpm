@@ -214,7 +214,7 @@ export function SuggestInput({
             id={`${dataId}-menu`}
             data-id={`${dataId}-menu`}
             role="listbox"
-            className="fixed z-[1400] max-h-56 overflow-y-auto rounded-sm border border-hairline bg-surface py-1 shadow-lg"
+            className="fixed z-[1400] max-h-56 overflow-y-auto rounded-sm border py-1 glass glass-dense"
             style={{ top: pos.top, left: pos.left, width: DROPDOWN_WIDTH }}
             onMouseLeave={() => setHighlight(-1)}
           >
