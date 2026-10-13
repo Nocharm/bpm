@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-14 — 분기 노드 IO 아일랜드 (dev)
+
+- 호버 카드와 선택 박스 크기가 달랐고, 호버 카드 클릭이 분기 노드 선택으로 버블했다. 칩·목록을 한 상자로 합쳐 호버·선택 모두 같은 자리에서 늘어나고(다이나믹 아일랜드, 실측 크기 width/height 트랜지션+overshoot) 벗어나면 줄어든다. 상자 안 클릭은 체크·접기만(click/pointerdown 전파 차단). 알약은 아이콘+개수만, 연관 항목(링크 미러 포함) 체크 시 칸이 악센트로 바뀌고 체크 수가 바뀔 때 번쩍인다. 검증 `scripts/pw-shot-decision-island.mjs`(호버·선택 153×110 동일, 상자 클릭 후 분기 미선택).
+
 ## 2026-10-13 — 노드 조건·IO 가시성: 조건 캡션 위·아래 + 분기 IO 칩 + 연결선 전달물 점 (dev)
 
 - 분기 노드는 `selected &&`로 선택 전엔 조건·IO가 안 보였고, 노드 사이 IO 흐름은 링크 아이콘뿐이었다. 목업(현재 vs 개선안) 비교 후 사용자 결정: 조건은 모든 노드에서 노드 밖 위(시작)·아래(종료) 한 줄 캡션(LR·TB 공통, Conditions 토글, 배경 없이 tertiary 톤+헤일로, L5 하늘은 밝은 글자), 분기 IO는 In/Out 개수 칩+호버 카드(선택 시 전체 박스), 연결선엔 전달물 개수 점+호버 카드(원본→미러 링크의 최단 흐름 경로 투영, 서브프로세스는 같은 이름 매칭, 줌 0.5 미만 숨김). 간격은 저장 좌표 대신 표시 보정(에디터 height-shift `captionAbove`, 비교 화면은 배치 박스 대칭 패딩). 단일 소스 `lib/condition-captions.ts`·`lib/edge-carry.ts`, 검증 `scripts/pw-shot-condition-captions.mjs`. 제외안(재제안 금지): IO 포트 점선·조건 이음새.

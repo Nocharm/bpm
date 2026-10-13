@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -256,6 +256,15 @@ function useDelayedFlag(active: boolean, delayMs: number): boolean {
   return flag;
 }
 
+// IO 항목 체크 키 — 링크 항목은 itemId라 미러 인풋 체크 시 원본 아웃풋·형제 미러가 함께 체크된다(#9).
+// SP는 지정 IO 상속(로컬 링크 없음)이라 위치 키. NodeIoDetails 행과 분기 아일랜드 칩 하이라이트가 공유
+function getIoCheckKey(nodeId: string, data: AppNode["data"], side: "input" | "output", index: number): string {
+  if (data.nodeType === "subprocess") return `${nodeId}:${side}:${index}`;
+  return side === "input"
+    ? getIoLine(data.input_links, index) || `${nodeId}:in:${index}`
+    : getIoLine(data.output_ids, index) || getIoLine(data.output_links, index) || `${nodeId}:out:${index}`;
+}
+
 // IO 표시 — 지표 뒤 고정 순서(인풋→아웃풋, #10). 조건은 노드 밖 캡션(NodeConditionCaption)이 담당. IO는 체크리스트 영역(#9):
 // 체크는 화면 한정(저장 안 함) 상태이고, 키가 링크 itemId면 원본·미러가 동반 체크된다.
 function NodeIoDetails({
@@ -360,14 +369,7 @@ function NodeIoDetails({
                 }`}
               >
                 {visible.map(({ text, index }) => {
-                  // 링크 항목은 itemId가 키 — 미러 인풋 체크 시 원본 아웃풋·형제 미러가 함께 체크(#9)
-                  const checkKey = isSubprocess
-                    ? `${nodeId}:${side}:${index}`
-                    : side === "input"
-                      ? getIoLine(data.input_links, index) || `${nodeId}:in:${index}`
-                      : getIoLine(data.output_ids, index) ||
-                        getIoLine(data.output_links, index) ||
-                        `${nodeId}:out:${index}`;
+                  const checkKey = getIoCheckKey(nodeId, data, side, index);
                   const checked = ioChecks.has(checkKey);
                   // 체크 동기 애니메이션(#3) — key에 논스를 실어 같은 키 재체크도 재생(리마운트)
                   const pulsing = ioCheckPulse !== null && ioCheckPulse.key === checkKey;
@@ -563,9 +565,13 @@ function NodeConditionCaption({
   );
 }
 
-// 분기 노드 IO 요약 칩 — 미선택이면 In/Out 개수 한 줄(호버 시 목록 카드), 선택하면 전체 IO 박스.
-// 마름모 밖 상시 박스는 산만하고, 선택 전엔 아무것도 안 보이던 문제의 절충 (사용자 결정 2026-10-13 A안).
-function DecisionIoSummary({
+// 분기 노드 IO 아일랜드 — 쉴 땐 아이콘+개수 알약, 호버·선택하면 같은 자리에서 목록 박스로 늘어나고 벗어나면 줄어든다
+// (다이나믹 아일랜드, 사용자 결정 2026-10-14). 호버와 선택이 같은 박스라 크기가 같다. 박스 안 클릭은 체크·접기만 하고
+// 노드 선택으로 버블하지 않는다. 마름모 밖 상시 박스는 산만해 쉴 땐 알약만 둔다(2026-10-13 A안).
+const ISLAND_CLOSE_DELAY_MS = 120; // 박스 가장자리를 스칠 때 접혔다 펴지는 깜빡임 방지
+const ISLAND_LIST_WIDTH = 176; // 펼친 목록 폭(px) — 호버·선택 공통
+
+function DecisionIoIsland({
   nodeId,
   data,
   selected,
@@ -574,49 +580,116 @@ function DecisionIoSummary({
   data: AppNode["data"];
   selected: boolean;
 }) {
-  const { displayFields } = useNodeActions();
-  const [cardOpen, setCardOpen] = useState(false);
-  if (selected || data.ioDiff) return <NodeIoDetails nodeId={nodeId} data={data} nodeSelected={selected} framed />;
-  const counts = (["input", "output"] as const)
+  const { displayFields, ioChecks } = useNodeActions();
+  const [hovered, setHovered] = useState(false);
+  const closeTimer = useRef<number | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  // 내용 실측 크기 — 바깥 상자가 이 값으로 width/height 트랜지션(내용은 absolute w-max라 상자 크기와 무관하게 잰다)
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const segments = (["input", "output"] as const)
     .filter((side) => displayFields.includes(side))
-    .map((side) => ({
-      side,
-      count: (data[side] ?? "").split("\n").filter((line) => line.trim() !== "").length,
-    }))
+    .map((side) => {
+      const indexes = (data[side] ?? "")
+        .split("\n")
+        .map((line, index) => (line.trim() !== "" ? index : -1))
+        .filter((index) => index >= 0);
+      const checked = indexes.filter((index) => ioChecks.has(getIoCheckKey(nodeId, data, side, index))).length;
+      return { side, count: indexes.length, checked };
+    })
     .filter(({ count }) => count > 0);
-  if (counts.length === 0) return null;
+  const hasIsland = segments.length > 0 && !data.ioDiff;
+  // 아일랜드가 생길 때 관찰 시작 — 첫 콜백(observe 직후) 전 한 프레임은 auto 크기라 트랜지션 없이 그려진다
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!hasIsland || !el) return undefined;
+    const observer = new ResizeObserver(() => setSize({ width: el.offsetWidth, height: el.offsetHeight }));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasIsland]);
+  useEffect(
+    () => () => {
+      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    },
+    [],
+  );
+  // 비교 화면 ioDiff 요약은 알약 대신 그대로(아일랜드는 IO 목록용)
+  if (data.ioDiff) return <NodeIoDetails nodeId={nodeId} data={data} nodeSelected={selected} framed />;
+  if (segments.length === 0) return null;
+  const expanded = selected || hovered;
+  const handleEnter = () => {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    setHovered(true);
+  };
+  const handleLeave = () => {
+    closeTimer.current = window.setTimeout(() => setHovered(false), ISLAND_CLOSE_DELAY_MS);
+  };
   return (
-    // 칩과 카드를 한 호버 영역으로 — 카드는 pt로 붙여 칩→카드 이동 중 mouseleave가 나지 않게
     <div
-      className="relative flex flex-col items-center"
-      onMouseEnter={() => setCardOpen(true)}
-      onMouseLeave={() => setCardOpen(false)}
+      data-id="decision-io-island"
+      data-expanded={expanded ? "true" : "false"}
+      // nodrag/nopan + 클릭 전파 차단 — 체크·접기가 노드 선택·드래그·더블클릭(요약 모달)으로 새지 않게
+      className={`nodrag nopan relative mt-1 overflow-hidden border border-ink-tertiary/40 bg-surface shadow-sm transition-[width,height,border-radius] duration-350 ease-overshoot motion-reduce:transition-none ${
+        expanded ? "z-10 rounded-sm" : "rounded-[9px]"
+      }`}
+      style={size ? { width: size.width, height: size.height } : undefined}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
     >
-      <div
-        data-id="decision-io-chip"
-        className="mt-1 inline-flex items-stretch overflow-hidden rounded-full border border-ink-tertiary/40 bg-surface text-[10px] leading-4 text-ink-secondary shadow-sm"
-      >
-        {counts.map(({ side, count }, index) => {
-          const Icon = FIELD_ICON[side];
-          return (
-            <span
-              key={side}
-              className={`inline-flex items-center gap-0.5 px-1.5 ${index > 0 ? "border-l border-hairline" : ""}`}
-            >
-              <Icon size={10} strokeWidth={1.5} />
-              {side === "input" ? "In" : "Out"} {count}
-            </span>
-          );
-        })}
-      </div>
-      {cardOpen && (
-        <div className="absolute left-1/2 top-full z-10 -translate-x-1/2 pt-1">
-          <div data-id="decision-io-card" className="glass glass-dense w-56 rounded-sm border px-1.5 pb-1">
-            <NodeIoDetails nodeId={nodeId} data={data} nodeSelected={false} />
+      <div ref={contentRef} className={size ? "absolute left-0 top-0 w-max" : "w-max"}>
+        {expanded ? (
+          <div key="list" className="bpm-island-in px-1.5 pb-1" style={{ width: ISLAND_LIST_WIDTH }}>
+            <NodeIoDetails nodeId={nodeId} data={data} nodeSelected />
           </div>
-        </div>
-      )}
+        ) : (
+          <div key="pill" data-id="decision-io-chip" className="bpm-island-in flex items-stretch text-[10px] leading-4">
+            {segments.map((segment, index) => (
+              <IslandSegment key={segment.side} {...segment} divided={index > 0} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+// 아일랜드 알약 한 칸 — 아이콘+개수만(글자 없음). 연관 항목이 체크되면 칸이 악센트로 바뀌고, 체크 수가 바뀔 때마다 번쩍인다
+function IslandSegment({
+  side,
+  count,
+  checked,
+  divided,
+}: {
+  side: "input" | "output";
+  count: number;
+  checked: number;
+  divided: boolean;
+}) {
+  const { t } = useI18n();
+  // 체크 수 변화 감지(렌더 중 조정) — 마운트 때는 재생하지 않고 바뀔 때만 키를 올려 애니메이션을 다시 건다
+  const [prevChecked, setPrevChecked] = useState(checked);
+  const [pulseNonce, setPulseNonce] = useState(0);
+  if (checked !== prevChecked) {
+    setPrevChecked(checked);
+    setPulseNonce((nonce) => nonce + 1);
+  }
+  const Icon = FIELD_ICON[side];
+  return (
+    <span
+      key={pulseNonce}
+      data-id={`decision-io-chip-${side}`}
+      data-checked={checked > 0 ? "true" : undefined}
+      title={t(side === "input" ? "node.ioChipInput" : "node.ioChipOutput", { count, checked })}
+      className={`inline-flex items-center gap-0.5 px-1.5 transition-colors duration-150 ${
+        divided ? "border-l border-hairline" : ""
+      } ${checked > 0 ? "bg-accent-tint text-accent" : "text-ink-secondary"} ${pulseNonce > 0 ? "bpm-island-pulse" : ""}`}
+    >
+      <Icon size={10} strokeWidth={1.5} />
+      {count}
+    </span>
   );
 }
 
@@ -1781,7 +1854,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           <NodeConditionCaption data={data} side="end" placement="inline" />
           <NodeFields data={data} active={fieldsActive} />
           <NodeParams data={data} className="justify-center" />
-          <DecisionIoSummary nodeId={id} data={data} selected={selected ?? false} />
+          <DecisionIoIsland nodeId={id} data={data} selected={selected ?? false} />
         </div>
         {/* 배지는 박스 진짜 코너로 — 마름모 내접 3줄 제목을 가리지 않게 아래·바깥으로 이동(#5) */}
         {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
