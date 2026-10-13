@@ -58,6 +58,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
 import { NodeDisplayFloat } from "@/components/node-display-float";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
+import { EdgeCarryBadge } from "@/components/edge-carry-badge";
 import { EdgePulseDot } from "@/components/edge-pulse-dot";
 import { ProcessNode, resolveNodeStroke } from "@/components/process-node";
 import {
@@ -127,6 +128,8 @@ import { useEdgeObstacles } from "@/components/multiline-edge";
 import { type EdgeObstacle } from "@/lib/edge-detour";
 import { resolveEdgePath, type EdgeLineVariant, type EdgePathResult } from "@/lib/edge-path";
 import { assignEdgePulses, getDecisionTravel, isEdgePulse } from "@/lib/edge-pulse";
+import { buildEdgeCarry, isEdgeCarry } from "@/lib/edge-carry";
+import { getConditionCaptionExtents } from "@/lib/condition-captions";
 import {
   FAN_GAP,
   injectFanLanes,
@@ -245,20 +248,26 @@ function renderCompareEdge(
   const pulse = isEdgePulse(data?.pulse) ? data.pulse : null;
   // 미러 라벨(SP 끝 제목, 렌더 전용) — 에디터와 같은 표기: 점선 테두리 + 링크 아이콘으로 직접 라벨과 구분
   const mirrored = data?.labelMirrored === true;
+  // 전달물 개수 점(렌더 전용, lib/edge-carry) — 에디터와 같이 라벨 오른쪽, 라벨이 없으면 앵커에 혼자
+  const carryItems = isEdgeCarry(data?.carry) ? data.carry.items : [];
   return (
     <>
       <BaseEdge path={path} markerEnd={markerEnd} style={style} data-label-x={labelX} data-label-y={labelY} />
       {pulse ? (
         <EdgePulseDot path={path} pulse={pulse} travel={getDecisionTravel(sourceX, sourceY, targetX, targetY)} />
       ) : null}
-      {label && (
+      {(label || carryItems.length > 0) && (
         <EdgeLabelRenderer>
-          {/* 최대폭 + 자동 줄바꿈 — 수평 연결에서 긴 라벨이 이웃 노드를 덮거나 잘리지 않게 */}
           <div
-            className={`pointer-events-none absolute whitespace-pre-wrap rounded-xs px-1 text-center text-fine leading-tight text-ink-secondary ${mirrored ? "border border-dashed border-border-strong" : ""}`}
+            className="pointer-events-none absolute flex items-center gap-1"
+            style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+          >
+          {label && (
+          // 최대폭 + 자동 줄바꿈 — 수평 연결에서 긴 라벨이 이웃 노드를 덮거나 잘리지 않게
+          <div
+            className={`whitespace-pre-wrap rounded-xs px-1 text-center text-fine leading-tight text-ink-secondary ${mirrored ? "border border-dashed border-border-strong" : ""}`}
             data-mirrored={mirrored ? "true" : undefined}
             style={{
-              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               maxWidth: COMPARE_EDGE_LABEL_MAX_WIDTH,
               overflowWrap: "break-word",
               background: "color-mix(in srgb, var(--color-surface) 55%, transparent)",
@@ -274,6 +283,9 @@ function renderCompareEdge(
             ) : (
               label
             )}
+          </div>
+          )}
+          {carryItems.length > 0 && <EdgeCarryBadge items={carryItems} />}
           </div>
         </EdgeLabelRenderer>
       )}
@@ -506,6 +518,12 @@ function buildAppNodes(
       // 노드 위 조건 줄 — 인스펙터와 같은 값(target 우선). 입출력은 ioDiff 요약으로만.
       start_condition: m.node.start_condition,
       end_condition: m.node.end_condition,
+      // IO 텍스트·링크 열 — 연결선 전달물(lib/edge-carry) 계산용. 노드 위 입출력 표시는 ioDiff 요약이 담당
+      input: m.node.input,
+      output: m.node.output,
+      output_ids: m.node.output_ids ?? "",
+      input_links: m.node.input_links ?? "",
+      output_links: m.node.output_links ?? "",
       url: m.node.url ?? "",
       urlLabel: m.node.url_label ?? "",
       // 병렬 호버 배지(ProcessNode, 무변경 노드만) — 에디터와 같은 판정. SP는 비교 엣지가 변 id로 재매핑돼
@@ -1098,12 +1116,32 @@ function ComparePane({
           refs: { ...baseGraph.subprocess_refs, ...targetGraph.subprocess_refs },
         }
       : null;
-    // 실측 크기 주입 — dagre 박스·백본 정렬·핸들 중심·removed 오프셋이 모두 실제 높이로 계산된다
+    // 실측 크기 주입 — dagre 박스·백본 정렬·핸들 중심·removed 오프셋이 모두 실제 높이로 계산된다.
+    // 노드 밖 조건 캡션(위=시작·아래=종료)은 위아래 같은 패딩(큰 쪽)으로 박스에 더해 배치한다 — 비대칭으로 더하면
+    // 백본 중심 정렬이 캡션 유무에 따라 어긋난다. 배치가 끝나면 패딩만큼 내리고 실측 크기로 되돌린다(restoreSize).
+    const captionPadOf = (node: AppNode) => {
+      const { above, below } = getConditionCaptionExtents(node, displayFields);
+      return Math.max(above, below);
+    };
     const withMeasured = (nodes: AppNode[]) =>
       nodes.map((node) => {
         const size = measuredSizes.get(node.id);
-        return size ? { ...node, measured: size } : node;
+        const pad = captionPadOf(node);
+        if (pad === 0) return size ? { ...node, measured: size } : node;
+        const width = size?.width ?? compareRenderW(node);
+        const height = (size?.height ?? compareRenderH(node)) + pad * 2;
+        return { ...node, measured: { width, height } };
       });
+    const restoreSize = (node: AppNode): AppNode => {
+      const pad = captionPadOf(node);
+      if (pad === 0) return node;
+      const size = measuredSizes.get(node.id);
+      return {
+        ...node,
+        position: { x: node.position.x, y: node.position.y + pad },
+        measured: size,
+      };
+    };
     const laid = layoutWithDagre(
       withMeasured(
         buildAppNodes(
@@ -1144,8 +1182,8 @@ function ComparePane({
       const position = removedPos.get(node.id);
       return position ? { ...node, position } : node;
     });
-    return [...aligned, ...removed];
-  }, [merged, noteOf, fieldsOf, keptKeys, spKeys, flowDir, spineIds, mapMeta, baseGraph, targetGraph, measuredSizes]);
+    return [...aligned, ...removed].map(restoreSize);
+  }, [merged, noteOf, fieldsOf, keptKeys, spKeys, flowDir, spineIds, mapMeta, baseGraph, targetGraph, measuredSizes, displayFields]);
 
   // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용. 실측 렌더 폭/높이(COMPARE_RENDER_*)로 계산해야
   // 핸들 중심이 실제와 일치(nodeSizeOf는 dagre 박스라 어긋남). 세션 드래그 위치가 있으면 그 좌표를
@@ -1290,8 +1328,28 @@ function ComparePane({
         .filter((e) => e.status !== "removed")
         .map((e) => ({ id: e.id, source: e.source, sourceHandle: e.exit, gateway: e.gateway ?? null })),
     );
+    // 연결선 전달물 — 대상 버전 기준(삭제 노드·엣지 제외). SP는 두 버전 지정 정보로 같은 이름 매칭
+    const carryNodes = buildAppNodes(
+      merged.nodes.filter((m) => m.status !== "removed"),
+      () => undefined,
+      () => undefined,
+      null,
+    );
+    const carryEdges = merged.edges
+      .filter((e) => e.status !== "removed")
+      .map((e) => ({ id: e.id, source: e.source, target: e.target }));
+    const spRefs = new Map(
+      Object.entries({ ...baseGraph.subprocess_refs, ...targetGraph.subprocess_refs }).map(
+        ([id, ref]) => [Number(id), ref] as const,
+      ),
+    );
+    const carry = buildEdgeCarry(carryNodes, carryEdges, spRefs);
     return injectFanLanes(buildAppEdges(merged.edges, keptKeys, spKeys).map((edge) => {
         let styled = edge;
+        const carryItems = carry.get(edge.id);
+        if (carryItems) {
+          styled = { ...styled, data: { ...styled.data, carry: { items: carryItems } } };
+        }
         const pulse = pulses.get(edge.id);
         if (pulse) {
           styled = { ...styled, data: { ...styled.data, pulse: { ...pulse, still: true } } };
@@ -1317,7 +1375,7 @@ function ComparePane({
         }
         return styled;
       }), fanGeom);
-  }, [merged, keptKeys, spKeys, handleSides, fanGeom, occupiedRects, flowDir]);
+  }, [merged, keptKeys, spKeys, handleSides, fanGeom, occupiedRects, flowDir, baseGraph, targetGraph]);
 
   // 포커스된 엣지만 굵게 얕게 패치 — 나머지 엣지는 appEdges 객체 그대로(identity 유지)
   const displayEdges = useMemo(

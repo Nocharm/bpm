@@ -1,12 +1,14 @@
 // 표시 높이(실측)로 커진 노드가 "실제 충돌하는" 아래 노드만 미는 표시 Y 오프셋 — 저장 좌표 불변.
 // 성장분은 기존 저장 여백을 먼저 흡수하고, 밀 때 표시 간격은 min(저장 간격, MIN_GAP)을 유지한다.
 // 같은 행(저장 Y구간 strict 겹침 체인)은 밀림량을 행 max로 동기화해 가로 정렬을 보존한다.
+// 노드 밖 조건 캡션(위=시작·아래=종료)도 표시 높이로 취급해 위아래 노드와 간격을 벌린다.
 import {
   estimateNodeHeight,
   estimateNodeWidth,
   nodeSizeOf,
   type AppNode,
 } from "@/lib/canvas";
+import { NO_CAPTION_EXTENTS, type CaptionExtents } from "@/lib/condition-captions";
 
 // 4px 미만 성장은 무시 — 폰트 렌더 편차로 인한 미세 지터 방지
 const EPSILON = 4;
@@ -25,9 +27,15 @@ export interface HeightPusher {
 export interface HeightShiftField {
   offsets: ReadonlyMap<string, number>;
   pushers: readonly HeightPusher[];
+  // 노드 위 캡션 높이 — 역변환이 끌고 있는 노드 자신의 위 캡션을 순변환과 같게 반영
+  captionAbove: ReadonlyMap<string, number>;
 }
 
-export const EMPTY_HEIGHT_FIELD: HeightShiftField = { offsets: new Map(), pushers: [] };
+export const EMPTY_HEIGHT_FIELD: HeightShiftField = {
+  offsets: new Map(),
+  pushers: [],
+  captionAbove: new Map(),
+};
 
 /** 표시 높이 — React Flow 실측 우선, 미측정(첫 페인트)은 라벨 기반 추정 폴백. */
 export function getDisplayHeight(node: AppNode): number {
@@ -51,18 +59,27 @@ interface FieldItem {
   x0: number;
   x1: number;
   dispH: number;
+  capAbove: number;
+  capBelow: number;
 }
 
 /**
  * 충돌 기반 오프셋 필드 — 행(저장 Y 오름차순)을 위에서부터 처리하며, 각 행의 필요 밀림량
  * (X 구간이 겹치는 위쪽 푸셔의 dispBottom + min(savedGap, MIN_GAP) − top)의 max를 행 전체에
  * 부여한다. 밀리거나 커진 노드는 다시 푸셔가 되어 아래 행으로 연쇄한다.
+ * getCaptionExtents: 노드 밖 위·아래 캡션 높이 — 위 캡션은 그 노드의 top을, 아래 캡션은 dispBottom을 넓힌다.
  */
-export function buildHeightShiftField(nodes: AppNode[]): HeightShiftField {
+export function buildHeightShiftField(
+  nodes: AppNode[],
+  getCaptionExtents: (node: AppNode) => CaptionExtents = () => NO_CAPTION_EXTENTS,
+): HeightShiftField {
+  const captionAbove = new Map<string, number>();
   const items: FieldItem[] = nodes
     .map((node) => {
       const baseH = nodeSizeOf(node.data.nodeType).h;
       const dispH = getDisplayHeight(node);
+      const { above, below } = getCaptionExtents(node);
+      if (above > 0) captionAbove.set(node.id, above);
       return {
         id: node.id,
         top: node.position.y,
@@ -71,6 +88,8 @@ export function buildHeightShiftField(nodes: AppNode[]): HeightShiftField {
         x1: node.position.x + getDisplayWidth(node),
         // 지터 가드 — EPSILON 미만 성장은 기준높이로 취급
         dispH: dispH - baseH >= EPSILON ? dispH : baseH,
+        capAbove: above,
+        capBelow: below,
       };
     })
     .sort((a, b) => a.top - b.top);
@@ -99,14 +118,16 @@ export function buildHeightShiftField(nodes: AppNode[]): HeightShiftField {
       for (const pusher of pushers) {
         if (pusher.x1 < member.x0 || pusher.x0 > member.x1) continue;
         const savedGap = member.top - pusher.baseBottom; // 행 구조상 ≥ 0(윗행 bottom ≤ 이 행 top)
-        const needed = pusher.dispBottom + Math.min(savedGap, HEIGHT_MIN_GAP) - member.top;
+        const needed =
+          pusher.dispBottom + Math.min(savedGap, HEIGHT_MIN_GAP) + member.capAbove - member.top;
         if (needed > rowOffset) rowOffset = needed;
       }
     }
     for (const member of members) {
       if (rowOffset > 0) offsets.set(member.id, rowOffset);
-      const dispBottom = member.top + rowOffset + member.dispH;
-      if (dispBottom > member.baseBottom) {
+      const dispBottom = member.top + rowOffset + member.dispH + member.capBelow;
+      // 위 캡션이 하나라도 있으면 커지지 않은 노드도 푸셔 — 아래 노드의 위 캡션이 이 노드와 겹치는지 판정해야 한다
+      if (dispBottom > member.baseBottom || captionAbove.size > 0) {
         pushers.push({
           id: member.id,
           x0: member.x0,
@@ -117,7 +138,7 @@ export function buildHeightShiftField(nodes: AppNode[]): HeightShiftField {
       }
     }
   }
-  return { offsets, pushers };
+  return { offsets, pushers, captionAbove };
 }
 
 /**
@@ -125,6 +146,7 @@ export function buildHeightShiftField(nodes: AppNode[]): HeightShiftField {
  * 단조 비감소라 이분 탐색으로 최소 저장 y를 찾는다 — 도달 불가 갭(푸셔 baseBottom에서 표시가
  * 점프)은 경계로 클램프되고, 플래토(여러 저장 y → 같은 표시 y)는 최소 저장 y라 forward와 왕복 일치.
  * excludeId: 드래그 중인 노드 자신의 푸셔 제외 — 자기 밴드 그림자에 드롭 시 클램프 점프 방지.
+ * 그 노드의 위 캡션 높이도 순변환과 같게 더한다(없으면 0).
  */
 export function invertDisplayY(
   field: HeightShiftField,
@@ -137,18 +159,20 @@ export function invertDisplayY(
     (pusher) => pusher.id !== excludeId && !(pusher.x1 < x0 || pusher.x0 > x1),
   );
   if (active.length === 0) return displayY;
+  const capAbove = excludeId !== undefined ? (field.captionAbove.get(excludeId) ?? 0) : 0;
   const displayAt = (savedY: number): number => {
     let out = savedY;
     for (const pusher of active) {
       if (savedY < pusher.baseBottom) continue; // 저장 공간에서 위/겹침 — 영향 없음
-      const value = pusher.dispBottom + Math.min(savedY - pusher.baseBottom, HEIGHT_MIN_GAP);
+      const value =
+        pusher.dispBottom + Math.min(savedY - pusher.baseBottom, HEIGHT_MIN_GAP) + capAbove;
       if (value > out) out = value;
     }
     return out;
   };
   let span = 0;
   for (const pusher of active) {
-    span = Math.max(span, pusher.dispBottom + HEIGHT_MIN_GAP - pusher.baseBottom);
+    span = Math.max(span, pusher.dispBottom + HEIGHT_MIN_GAP + capAbove - pusher.baseBottom);
   }
   let lo = displayY - span - 1; // displayAt(lo) ≤ lo + span < displayY — 하한 보장
   let hi = displayY; // displayAt ≥ 항등이라 displayAt(hi) ≥ displayY — 상한 보장

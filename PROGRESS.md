@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-13 — 노드 조건·IO 가시성: 조건 캡션 위·아래 + 분기 IO 칩 + 연결선 전달물 점 (dev)
+
+- 분기 노드는 `selected &&`로 선택 전엔 조건·IO가 안 보였고, 노드 사이 IO 흐름은 링크 아이콘뿐이었다. 목업(현재 vs 개선안) 비교 후 사용자 결정: 조건은 모든 노드에서 노드 밖 위(시작)·아래(종료) 한 줄 캡션(LR·TB 공통, Conditions 토글, 배경 없이 tertiary 톤+헤일로, L5 하늘은 밝은 글자), 분기 IO는 In/Out 개수 칩+호버 카드(선택 시 전체 박스), 연결선엔 전달물 개수 점+호버 카드(원본→미러 링크의 최단 흐름 경로 투영, 서브프로세스는 같은 이름 매칭, 줌 0.5 미만 숨김). 간격은 저장 좌표 대신 표시 보정(에디터 height-shift `captionAbove`, 비교 화면은 배치 박스 대칭 패딩). 단일 소스 `lib/condition-captions.ts`·`lib/edge-carry.ts`, 검증 `scripts/pw-shot-condition-captions.mjs`. 제외안(재제안 금지): IO 포트 점선·조건 이음새.
+
 ## 2026-10-13 — dev → main 머지(4차): 유리(Liquid Glass) 레이어 + 개인 화면 설정(유리 끄기·악센트 테마)
 
 - 떠 있는 오버레이 전부(캔버스 크롬·메뉴·피커·팝오버·툴팁·다이얼로그 ~110곳)를 `glass` 유틸리티로, 글자 많은 면은 `glass-dense`. 정적 패널·인스펙터(흰 위 흰이라 효과 없음 실측)·유리 안 중첩 플라이아웃(backdrop root)은 비적용. CPU 4x A/B 팬·드래그 p95 동일. 표면은 `--glass-*` 변수로만 그려 사용자 끄기(`html[data-glass=off]`)가 hover 배경을 안 죽인다.

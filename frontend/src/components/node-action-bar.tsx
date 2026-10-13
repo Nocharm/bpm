@@ -51,7 +51,7 @@ export function NodeActionBar({
   onOpenLink: (url: string) => void;
 }) {
   const { t } = useI18n();
-  const { onToggleExpand, expandedInlineIds } = useNodeActions();
+  const { onToggleExpand, expandedInlineIds, displayFields } = useNodeActions();
 
   // 정확히 1개 선택 + measured일 때만 대상 — 다중 선택/미측정(임베드 자식 방어)은 null
   const target = useStore((s): BarTarget | null => {
@@ -102,7 +102,8 @@ export function NodeActionBar({
     const observer = new ResizeObserver(() => setExtensionHeight(el.offsetHeight));
     observer.observe(el);
     return () => observer.disconnect();
-  }, [targetId]);
+    // displayFields — 선택 중 표시 토글로 종료 조건 캡션이 생기거나 사라지면 확장 블록을 다시 찾는다
+  }, [targetId, displayFields]);
 
   if (!target || target.dragging) return null;
 

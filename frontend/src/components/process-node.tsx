@@ -80,6 +80,7 @@ import { PARAM_ICON } from "@/components/param-icons";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { resolveDataForm } from "@/lib/data-forms";
 import { getIoLine } from "@/lib/io-items";
+import { getConditionCaptions } from "@/lib/condition-captions";
 import { formatParamValue, PARAM_FIELDS, type ParamField } from "@/lib/params";
 import { parseAssignees } from "@/lib/assignee";
 import { OTHER_SYSTEM } from "@/lib/catalogs";
@@ -255,7 +256,7 @@ function useDelayedFlag(active: boolean, delayMs: number): boolean {
   return flag;
 }
 
-// 조건·IO 표시 — 지표 뒤 고정 순서(조건→인풋→아웃풋, #10). IO는 체크리스트 영역(#9):
+// IO 표시 — 지표 뒤 고정 순서(인풋→아웃풋, #10). 조건은 노드 밖 캡션(NodeConditionCaption)이 담당. IO는 체크리스트 영역(#9):
 // 체크는 화면 한정(저장 안 함) 상태이고, 키가 링크 itemId면 원본·미러가 동반 체크된다.
 function NodeIoDetails({
   nodeId,
@@ -283,37 +284,12 @@ function NodeIoDetails({
   } = useNodeActions();
   const isSubprocess = data.nodeType === "subprocess";
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
-  const conditionLines = displayFields.includes("conditions")
-    ? [
-        {
-          key: "start_condition",
-          icon: Play,
-          value: isSubprocess ? data.spStartCondition : data.start_condition,
-        },
-        {
-          key: "end_condition",
-          icon: Flag,
-          value: isSubprocess ? data.spEndCondition : data.end_condition,
-        },
-      ].filter((line) => !!line.value)
-    : [];
-  // 비교뷰 ioDiff가 있으면 IO 패널 대신 "I/O +N −M" 요약(조건 줄 아래) — 패널 변은 비운다
+  // 비교뷰 ioDiff가 있으면 IO 패널 대신 "I/O +N −M" 요약 — 패널 변은 비운다
   const sides = data.ioDiff
     ? []
     : (["input", "output"] as const).filter((side) => displayFields.includes(side));
   return (
     <>
-      {conditionLines.map(({ key, icon: Icon, value }) => {
-        const tint = getDiffTint(data, key);
-        return (
-          <div key={key} className="mt-0.5 text-xs text-ink-tertiary" data-diff={tint ? "true" : undefined}>
-            <span className={`inline-flex items-center gap-1${tint ? ` rounded-xs px-1 ${tint.bg}` : ""}`}>
-              <Icon size={12} strokeWidth={1.5} className={tint?.icon} />
-              {value}
-            </span>
-          </div>
-        );
-      })}
       {data.ioDiff && <NodeIoDiffSummary ioDiff={data.ioDiff} />}
       {sides.map((side) => {
         const raw = isSubprocess
@@ -537,6 +513,110 @@ function NodeIoDetails({
         );
       })}
     </>
+  );
+}
+
+// 조건 캡션 — 시작은 노드 위, 종료는 노드 아래 한 줄(사용자 결정 2026-10-13, LR·TB 공통). 절대 배치라
+// RF 측정 크기·핸들 앵커는 그대로이고, 위아래 노드와의 간격은 height-shift가 CONDITION_CAPTION_H만큼 벌린다.
+// placement="inline"은 분기 노드의 아래 확장 블록 안(정적 흐름)에 끼울 때. 긴 문구는 말줄임+툴팁.
+function NodeConditionCaption({
+  data,
+  side,
+  placement = "absolute",
+}: {
+  data: AppNode["data"];
+  side: "start" | "end";
+  placement?: "absolute" | "inline";
+}) {
+  const { displayFields } = useNodeActions();
+  const captions = getConditionCaptions(data, displayFields);
+  const text = captions?.[side] ?? "";
+  if (text === "") return null;
+  const tint = getDiffTint(data, side === "start" ? "start_condition" : "end_condition");
+  const Icon = side === "start" ? Play : Flag;
+  const body = (
+    <div
+      data-id={`node-condition-${side}`}
+      data-diff={tint ? "true" : undefined}
+      title={text}
+      // 배경 없이 글자 헤일로(.bpm-node-caption)로 가독성 — 비교 화면 diff 틴트만 칸을 칠한다
+      className={`bpm-node-caption flex max-w-full items-center gap-1 whitespace-nowrap text-xs leading-4 ${
+        tint ? `rounded-xs px-1 ${tint.bg}` : ""
+      }`}
+    >
+      <Icon size={12} strokeWidth={1.5} className={`shrink-0 ${tint?.icon ?? ""}`} />
+      <span className="min-w-0 truncate">{text}</span>
+    </div>
+  );
+  // inline(분기 노드) — 마름모 꼭짓점 핸들과 떨어지게 종료 캡션은 위로 6px 띄운다
+  if (placement === "inline") {
+    return <div className={`flex max-w-full justify-center ${side === "end" ? "mt-1.5" : ""}`}>{body}</div>;
+  }
+  // 좌우 12px 들여 코너 배지(코멘트·URL)와 덜 겹치게 — 비교 화면은 좌상단 diff 배지(변경·추가·삭제) 오른쪽으로 비킨다.
+  // 아래 캡션은 액션 바가 실측하도록 below-extension
+  return side === "start" ? (
+    <div className={`absolute bottom-full right-3 mb-[3px] flex ${data.diffStatus ? "left-16" : "left-3"}`}>{body}</div>
+  ) : (
+    <div data-id="node-below-extension" className="absolute left-3 right-3 top-full mt-[3px] flex">
+      {body}
+    </div>
+  );
+}
+
+// 분기 노드 IO 요약 칩 — 미선택이면 In/Out 개수 한 줄(호버 시 목록 카드), 선택하면 전체 IO 박스.
+// 마름모 밖 상시 박스는 산만하고, 선택 전엔 아무것도 안 보이던 문제의 절충 (사용자 결정 2026-10-13 A안).
+function DecisionIoSummary({
+  nodeId,
+  data,
+  selected,
+}: {
+  nodeId: string;
+  data: AppNode["data"];
+  selected: boolean;
+}) {
+  const { displayFields } = useNodeActions();
+  const [cardOpen, setCardOpen] = useState(false);
+  if (selected || data.ioDiff) return <NodeIoDetails nodeId={nodeId} data={data} nodeSelected={selected} framed />;
+  const counts = (["input", "output"] as const)
+    .filter((side) => displayFields.includes(side))
+    .map((side) => ({
+      side,
+      count: (data[side] ?? "").split("\n").filter((line) => line.trim() !== "").length,
+    }))
+    .filter(({ count }) => count > 0);
+  if (counts.length === 0) return null;
+  return (
+    // 칩과 카드를 한 호버 영역으로 — 카드는 pt로 붙여 칩→카드 이동 중 mouseleave가 나지 않게
+    <div
+      className="relative flex flex-col items-center"
+      onMouseEnter={() => setCardOpen(true)}
+      onMouseLeave={() => setCardOpen(false)}
+    >
+      <div
+        data-id="decision-io-chip"
+        className="mt-1 inline-flex items-stretch overflow-hidden rounded-full border border-ink-tertiary/40 bg-surface text-[10px] leading-4 text-ink-secondary shadow-sm"
+      >
+        {counts.map(({ side, count }, index) => {
+          const Icon = FIELD_ICON[side];
+          return (
+            <span
+              key={side}
+              className={`inline-flex items-center gap-0.5 px-1.5 ${index > 0 ? "border-l border-hairline" : ""}`}
+            >
+              <Icon size={10} strokeWidth={1.5} />
+              {side === "input" ? "In" : "Out"} {count}
+            </span>
+          );
+        })}
+      </div>
+      {cardOpen && (
+        <div className="absolute left-1/2 top-full z-10 -translate-x-1/2 pt-1">
+          <div data-id="decision-io-card" className="glass glass-dense w-56 rounded-sm border px-1.5 pb-1">
+            <NodeIoDetails nodeId={nodeId} data={data} nodeSelected={false} />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -890,12 +970,21 @@ function NodeIoDiffSummary({ ioDiff }: { ioDiff: IoDiffSummary }) {
 // 변경 필드 before→after 필 — 노드 아래에 절대배치(레이아웃 영향 없음). changed 노드만.
 // 최대 3줄 + "+N more"로 캡(다필드 변경 시 아래 노드 침범 방지). 값은 폭 제한 truncate.
 // 필드 단위 상태색·부분 강조·잘림 호버 팝오버는 목록 행과 공용(compare-field-diff).
-function DiffFieldPills({ fields }: { fields: NonNullable<AppNode["data"]["diffFields"]> }) {
+// belowCaption — 노드 아래 종료 조건 캡션이 있으면 그 줄(CONDITION_CAPTION_H)만큼 내려 겹치지 않게
+function DiffFieldPills({
+  fields,
+  belowCaption = false,
+}: {
+  fields: NonNullable<AppNode["data"]["diffFields"]>;
+  belowCaption?: boolean;
+}) {
   const { t } = useI18n();
   const shown = fields.slice(0, 3);
   const extra = fields.length - shown.length;
   return (
-    <div className="absolute left-0 top-full z-10 mt-1.5 flex flex-col items-start gap-1">
+    <div
+      className={`absolute left-0 top-full z-10 flex flex-col items-start gap-1 ${belowCaption ? "mt-[26px]" : "mt-1.5"}`}
+    >
       {shown.map((field) => (
         <FieldDiffHoverable
           key={field.label}
@@ -1327,7 +1416,9 @@ function externalSpNodeStyle(color: string): CSSProperties {
 // isConnectable — 노드 레벨 connectable(임베드 자식 false)이 여기로 전달됨. Handle에 명시 forward 필수 (F3).
 export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<AppNode>) {
   const { t } = useI18n();
-  const { ctrlDragIds, onConnectPlaceholder, onResizeNode } = useNodeActions();
+  const { ctrlDragIds, onConnectPlaceholder, onResizeNode, displayFields } = useNodeActions();
+  // 노드 아래 종료 조건 캡션 유무 — 비교 화면 diff 필을 그 아래로 내린다
+  const hasEndCaption = (getConditionCaptions(data, displayFields)?.end ?? "") !== "";
   const showCopyBadge = ctrlDragIds.has(id);
   // SP 폭 조절 — 드래그 중엔 로컬(전 캔버스 리렌더 방지), 종료 시 onResizeNode로 영속.
   // zoom은 구독 없이 드래그 시작 때 스토어에서 읽는다(줌 변경마다 전 노드 리렌더 금지).
@@ -1428,7 +1519,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           />
         )}
         {diff && <DiffBadge status={diff} />}
-        {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
+        {diffFields.length > 0 && <DiffFieldPills fields={diffFields} belowCaption={hasEndCaption} />}
         {/* 좌측 컬러 탭(C안) — 보더 위를 덮도록 음수 오프셋, 홈 L5 색 표시 (2026-08-29) */}
         {spExternal && !diff && (
           <span
@@ -1513,6 +1604,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         <NodeFields data={data} active={fieldsActive} />
         <NodeParams data={data} />
         <NodeIoDetails nodeId={id} data={data} nodeSelected={selected ?? false} />
+        <NodeConditionCaption data={data} side="start" />
+        <NodeConditionCaption data={data} side="end" />
         {/* 버전 추적 배너(하단) — 새 발행본이 우선(핀 고정을 함의), 아니면 핀 고정 안내만.
             점+텍스트보다 가시성 강화: 전체 폭 틴트 배너 (사용자 요청 2026-08-23) */}
         {data.updateAvailable ? (
@@ -1661,7 +1754,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           style={{ ...style, transform: "translate(-50%, -50%) scaleX(1.2) rotate(45deg)" }}
         />
         {diff && <DiffBadge status={diff} className="-top-1 left-1/2 -translate-x-1/2" />}
-        {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
+        {diffFields.length > 0 && <DiffFieldPills fields={diffFields} belowCaption={hasEndCaption} />}
         {/* GMP 태그는 왼쪽 위 바깥쪽(#4) — 가운데 3줄 제목·우상단 코멘트 배지와 겹치지 않게 */}
         <GmpPill nodeId={id} data={data} className="absolute -left-2 top-0 z-10" />
         <div className="bpm-decision-title-box relative max-w-24 text-center text-xs font-medium text-ink">
@@ -1673,18 +1766,22 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             </div>
           )}
         </div>
-        {/* 어트리뷰트·파라미터·조건/IO — 마름모 박스(h-24 w-[116px])를 넘치지 않게 아래 절대배치 캡션으로
-            (규범 순서 #10: 속성→지표→조건→IO — 프로세스/서브프로세스와 동일 수준 표시, 사용자 요청 2026-08-25).
-            절대배치라 React Flow 측정 크기가 불변 → 핸들·엣지 앵커 무영향. IO 박스는 framed(보더 강조).
-            조건/IO 박스는 노드 밖이라 상시 노출이 산만 — 선택(활성) 시에만 (사용자 요청 2026-08-25). */}
+        {/* 시작 조건 캡션 — 마름모 위(일반 노드와 같은 자리 규칙) */}
+        <div className="absolute bottom-full left-1/2 mb-2 flex w-max max-w-44 -translate-x-1/2 justify-center">
+          <NodeConditionCaption data={data} side="start" placement="inline" />
+        </div>
+        {/* 종료 조건·어트리뷰트·파라미터·IO — 마름모 박스(h-24 w-[116px])를 넘치지 않게 아래 절대배치 캡션으로.
+            절대배치라 React Flow 측정 크기가 불변 → 핸들·엣지 앵커 무영향.
+            IO는 미선택이면 개수 칩(호버 카드), 선택하면 전체 박스 (사용자 결정 2026-10-13 A안). */}
         {/* data-id: 액션 바(node-action-bar)가 이 확장 블록 높이를 실측해 겹치지 않게 내려간다 */}
         <div
           data-id="node-below-extension"
-          className="absolute left-1/2 top-full w-max max-w-44 -translate-x-1/2"
+          className="absolute left-1/2 top-full flex w-max max-w-44 -translate-x-1/2 flex-col items-center"
         >
+          <NodeConditionCaption data={data} side="end" placement="inline" />
           <NodeFields data={data} active={fieldsActive} />
           <NodeParams data={data} className="justify-center" />
-          {selected && <NodeIoDetails nodeId={id} data={data} nodeSelected framed />}
+          <DecisionIoSummary nodeId={id} data={data} selected={selected ?? false} />
         </div>
         {/* 배지는 박스 진짜 코너로 — 마름모 내접 3줄 제목을 가리지 않게 아래·바깥으로 이동(#5) */}
         {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
@@ -1720,7 +1817,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       onMouseLeave={() => setHovered(false)}
     >
       {diff && <DiffBadge status={diff} />}
-      {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
+      {diffFields.length > 0 && <DiffFieldPills fields={diffFields} belowCaption={hasEndCaption} />}
       {!diff && (
         <>
           <ParallelHoverBadge outputGroups={outputGroups} visible={hovered} />
@@ -1758,6 +1855,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       <NodeFields data={data} active={fieldsActive} />
       <NodeParams data={data} />
       <NodeIoDetails nodeId={id} data={data} nodeSelected={selected ?? false} />
+      <NodeConditionCaption data={data} side="start" />
+      <NodeConditionCaption data={data} side="end" />
       {data.hasChildren && (
         <div className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-accent">
           <CornerDownRight size={12} strokeWidth={1.5} />
