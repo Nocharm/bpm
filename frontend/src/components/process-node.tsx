@@ -656,7 +656,8 @@ function DecisionIoIsland({
   );
 }
 
-// 아일랜드 알약 한 칸 — 아이콘+개수만(글자 없음). 연관 항목이 체크되면 칸이 악센트로 바뀌고, 체크 수가 바뀔 때마다 번쩍인다
+// 아일랜드 알약 한 칸 — 아이콘+개수만(글자 없음). 체크된 수(악센트 배지)와 남은 수(평문)를 나눠 보이고,
+// 체크 수가 바뀔 때마다 배지가 번쩍인다(사용자 결정 2026-10-14)
 function IslandSegment({
   side,
   count,
@@ -677,18 +678,25 @@ function IslandSegment({
     setPulseNonce((nonce) => nonce + 1);
   }
   const Icon = FIELD_ICON[side];
+  const unchecked = count - checked;
   return (
     <span
-      key={pulseNonce}
       data-id={`decision-io-chip-${side}`}
       data-checked={checked > 0 ? "true" : undefined}
       title={t(side === "input" ? "node.ioChipInput" : "node.ioChipOutput", { count, checked })}
-      className={`inline-flex items-center gap-0.5 px-1.5 transition-colors duration-150 ${
-        divided ? "border-l border-hairline" : ""
-      } ${checked > 0 ? "bg-accent-tint text-accent" : "text-ink-secondary"} ${pulseNonce > 0 ? "bpm-island-pulse" : ""}`}
+      className={`inline-flex items-center gap-0.5 px-1.5 text-ink-secondary ${divided ? "border-l border-hairline" : ""}`}
     >
-      <Icon size={10} strokeWidth={1.5} />
-      {count}
+      <Icon size={10} strokeWidth={1.5} className={checked > 0 ? "text-accent" : undefined} />
+      {checked > 0 && (
+        <span
+          key={pulseNonce}
+          data-id={`decision-io-chip-${side}-checked`}
+          className={`rounded-full bg-accent-tint px-1 font-semibold text-accent ${pulseNonce > 0 ? "bpm-island-pulse" : ""}`}
+        >
+          {checked}
+        </span>
+      )}
+      {unchecked > 0 && <span data-id={`decision-io-chip-${side}-unchecked`}>{unchecked}</span>}
     </span>
   );
 }

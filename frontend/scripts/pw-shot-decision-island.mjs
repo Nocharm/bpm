@@ -41,7 +41,12 @@ try {
   await linkedLabel.locator('input[type="checkbox"]').check();
   await page.mouse.move(parking.x, parking.y);
   await page.waitForTimeout(250);
-  console.log(`input chip checked after linked check: ${await page.locator('[data-id="decision-io-chip-input"]').getAttribute("data-checked")}`);
+  // 체크 수·남은 수가 나뉘어 보여야 한다(입력 3개 중 링크 1개 체크 → 체크 1 · 남음 2)
+  const inputChecked = page.locator('[data-id="decision-io-chip-input-checked"]');
+  const inputUnchecked = page.locator('[data-id="decision-io-chip-input-unchecked"]');
+  console.log(
+    `input chip after linked check: checked ${(await inputChecked.count()) > 0 ? await inputChecked.innerText() : "-"}, unchecked ${(await inputUnchecked.count()) > 0 ? await inputUnchecked.innerText() : "-"}`,
+  );
   await shoot("island-2-linked-highlight");
 
   await island.hover();
@@ -67,6 +72,13 @@ try {
   await page.waitForTimeout(600);
   console.log(`output chip checked: ${await page.locator('[data-id="decision-io-chip-output"]').getAttribute("data-checked")}`);
   await shoot("island-5-collapsed-checked");
+  // 알약 확대본 — 체크 배지·남은 수 구분 확인용(분기 노드 주변만)
+  const decisionNode = page.locator(".react-flow__node").filter({ has: page.locator(".bpm-decision-title-box") }).first();
+  const nodeBox = await decisionNode.boundingBox();
+  await page.screenshot({
+    path: path.join(SHOT_DIR, "island-5-pill-zoom.png"),
+    clip: { x: nodeBox.x - 40, y: nodeBox.y - 10, width: nodeBox.width + 80, height: nodeBox.height + 60 },
+  });
 
   const decision = page.locator(".react-flow__node").filter({ has: page.locator(".bpm-decision-title-box") }).first();
   await decision.click({ position: { x: 58, y: 48 } });
