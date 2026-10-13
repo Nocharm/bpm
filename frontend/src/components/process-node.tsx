@@ -629,8 +629,10 @@ function DecisionIoIsland({
       data-id="decision-io-island"
       data-expanded={expanded ? "true" : "false"}
       // nodrag/nopan + 클릭 전파 차단 — 체크·접기가 노드 선택·드래그·더블클릭(요약 모달)으로 새지 않게
-      className={`nodrag nopan relative mt-1 overflow-hidden border border-ink-tertiary/40 bg-surface shadow-sm transition-[width,height,border-radius] duration-350 ease-overshoot motion-reduce:transition-none ${
-        expanded ? "z-10 rounded-sm" : "rounded-[9px]"
+      // 펼침(목록이 상자보다 먼저 커짐)에만 overflow-hidden — 접힌 알약은 내용이 상자보다 작아 필요 없고,
+      // 숫자 팝(bpm-count-pop)이 상자 경계에 잘리지 않는다
+      className={`nodrag nopan relative mt-1 border border-ink-tertiary/40 bg-surface shadow-sm transition-[width,height,border-radius] duration-350 ease-overshoot motion-reduce:transition-none ${
+        expanded ? "z-10 overflow-hidden rounded-sm" : "overflow-visible rounded-[9px]"
       }`}
       style={size ? { width: size.width, height: size.height } : undefined}
       onMouseEnter={handleEnter}
@@ -656,8 +658,8 @@ function DecisionIoIsland({
   );
 }
 
-// 아일랜드 알약 한 칸 — 아이콘+개수만(글자 없음). 체크된 수(악센트 배지)와 남은 수(평문)를 나눠 보이고,
-// 체크 수가 바뀔 때마다 배지가 번쩍인다(사용자 결정 2026-10-14)
+// 아일랜드 알약 한 칸 — 아이콘+개수만(글자 없음). 체크가 있으면 "체크/전체"(체크 수만 악센트), 없으면 전체 수.
+// 체크 수가 바뀔 때마다 숫자가 커졌다 돌아오는 팝으로 시선을 끈다(사용자 결정 2026-10-14)
 function IslandSegment({
   side,
   count,
@@ -678,7 +680,6 @@ function IslandSegment({
     setPulseNonce((nonce) => nonce + 1);
   }
   const Icon = FIELD_ICON[side];
-  const unchecked = count - checked;
   return (
     <span
       data-id={`decision-io-chip-${side}`}
@@ -687,16 +688,24 @@ function IslandSegment({
       className={`inline-flex items-center gap-0.5 px-1.5 text-ink-secondary ${divided ? "border-l border-hairline" : ""}`}
     >
       <Icon size={10} strokeWidth={1.5} className={checked > 0 ? "text-accent" : undefined} />
-      {checked > 0 && (
-        <span
-          key={pulseNonce}
-          data-id={`decision-io-chip-${side}-checked`}
-          className={`rounded-full bg-accent-tint px-1 font-semibold text-accent ${pulseNonce > 0 ? "bpm-island-pulse" : ""}`}
-        >
-          {checked}
+      {checked > 0 ? (
+        <span data-id={`decision-io-chip-${side}-count`} className="tabular-nums">
+          <span
+            key={pulseNonce}
+            className={`inline-block font-semibold text-accent ${pulseNonce > 0 ? "bpm-count-pop" : ""}`}
+          >
+            {checked}
+          </span>
+          <span className="text-ink-muted">/{count}</span>
+        </span>
+      ) : (
+        <span data-id={`decision-io-chip-${side}-count`} className="tabular-nums">
+          {/* 모두 해제로 0이 될 때도 전체 수가 한 번 튀어 변화를 알린다 */}
+          <span key={pulseNonce} className={`inline-block ${pulseNonce > 0 ? "bpm-count-pop" : ""}`}>
+            {count}
+          </span>
         </span>
       )}
-      {unchecked > 0 && <span data-id={`decision-io-chip-${side}-unchecked`}>{unchecked}</span>}
     </span>
   );
 }

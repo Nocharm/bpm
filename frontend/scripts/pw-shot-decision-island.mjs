@@ -40,13 +40,24 @@ try {
   await linkedLabel.hover();
   await linkedLabel.locator('input[type="checkbox"]').check();
   await page.mouse.move(parking.x, parking.y);
-  await page.waitForTimeout(250);
-  // 체크 수·남은 수가 나뉘어 보여야 한다(입력 3개 중 링크 1개 체크 → 체크 1 · 남음 2)
-  const inputChecked = page.locator('[data-id="decision-io-chip-input-checked"]');
-  const inputUnchecked = page.locator('[data-id="decision-io-chip-input-unchecked"]');
-  console.log(
-    `input chip after linked check: checked ${(await inputChecked.count()) > 0 ? await inputChecked.innerText() : "-"}, unchecked ${(await inputUnchecked.count()) > 0 ? await inputUnchecked.innerText() : "-"}`,
-  );
+  // "체크/전체"로 보여야 한다(입력 3개 중 링크 1개 체크 → 1/3) — 팝 도중(150ms)도 확대 캡처
+  const decisionNode = page.locator(".react-flow__node").filter({ has: page.locator(".bpm-decision-title-box") }).first();
+  const zoomShot = async (name) => {
+    const nodeBox = await decisionNode.boundingBox();
+    await page.screenshot({
+      path: path.join(SHOT_DIR, `${name}.png`),
+      clip: { x: nodeBox.x - 40, y: nodeBox.y - 10, width: nodeBox.width + 80, height: nodeBox.height + 60 },
+    });
+  };
+  const popState = await page.evaluate(() => {
+    const el = document.querySelector('[data-id="decision-io-chip-input-count"] .bpm-count-pop');
+    return el ? `${getComputedStyle(el).animationName} ${getComputedStyle(el).animationPlayState}` : "none";
+  });
+  console.log(`count pop: ${popState}`);
+  await page.waitForTimeout(120);
+  await zoomShot("island-2-pop-mid");
+  await page.waitForTimeout(500);
+  console.log(`input chip after linked check: ${await page.locator('[data-id="decision-io-chip-input-count"]').innerText()}`);
   await shoot("island-2-linked-highlight");
 
   await island.hover();
@@ -72,16 +83,11 @@ try {
   await page.waitForTimeout(600);
   console.log(`output chip checked: ${await page.locator('[data-id="decision-io-chip-output"]').getAttribute("data-checked")}`);
   await shoot("island-5-collapsed-checked");
-  // 알약 확대본 — 체크 배지·남은 수 구분 확인용(분기 노드 주변만)
-  const decisionNode = page.locator(".react-flow__node").filter({ has: page.locator(".bpm-decision-title-box") }).first();
-  const nodeBox = await decisionNode.boundingBox();
-  await page.screenshot({
-    path: path.join(SHOT_DIR, "island-5-pill-zoom.png"),
-    clip: { x: nodeBox.x - 40, y: nodeBox.y - 10, width: nodeBox.width + 80, height: nodeBox.height + 60 },
-  });
+  await zoomShot("island-5-pill-zoom");
 
-  const decision = page.locator(".react-flow__node").filter({ has: page.locator(".bpm-decision-title-box") }).first();
-  await decision.click({ position: { x: 58, y: 48 } });
+  // 워터마크 오버레이가 Playwright 히트 판정을 가로채는 경우가 있어 좌표 클릭으로(실제 이벤트는 노드가 받는다)
+  const diamondBox = await decisionNode.boundingBox();
+  await page.mouse.click(diamondBox.x + diamondBox.width / 2, diamondBox.y + diamondBox.height / 2);
   await page.mouse.move(parking.x, parking.y);
   await page.waitForTimeout(600);
   const selectedBox = await island.boundingBox();
