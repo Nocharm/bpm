@@ -631,8 +631,12 @@ function DecisionIoIsland({
       // nodrag/nopan + 클릭 전파 차단 — 체크·접기가 노드 선택·드래그·더블클릭(요약 모달)으로 새지 않게
       // 펼침(목록이 상자보다 먼저 커짐)에만 overflow-hidden — 접힌 알약은 내용이 상자보다 작아 필요 없고,
       // 숫자 팝(bpm-count-pop)이 상자 경계에 잘리지 않는다
-      className={`nodrag nopan relative mt-1 border border-ink-tertiary/40 bg-surface shadow-sm transition-[width,height,border-radius] duration-350 ease-overshoot motion-reduce:transition-none ${
-        expanded ? "z-10 overflow-hidden rounded-sm" : "overflow-visible rounded-[9px]"
+      // 펼치면 알약 테두리·바탕은 사라지고 Input·Output 독립 박스(framed)만 남는다(사용자 결정 2026-10-14) —
+      // 상자가 늘어나는 동안 테두리가 함께 옅어져 확장감은 유지한다
+      className={`nodrag nopan relative mt-1 border transition-[width,height,border-radius,border-color,background-color,box-shadow] duration-350 ease-overshoot motion-reduce:transition-none ${
+        expanded
+          ? "z-10 overflow-hidden rounded-sm border-transparent bg-transparent shadow-none"
+          : "overflow-visible rounded-[9px] border-ink-tertiary/40 bg-surface shadow-sm"
       }`}
       style={size ? { width: size.width, height: size.height } : undefined}
       onMouseEnter={handleEnter}
@@ -643,8 +647,9 @@ function DecisionIoIsland({
     >
       <div ref={contentRef} className={size ? "absolute left-0 top-0 w-max" : "w-max"}>
         {expanded ? (
-          <div key="list" className="bpm-island-in px-1.5 pb-1" style={{ width: ISLAND_LIST_WIDTH }}>
-            <NodeIoDetails nodeId={nodeId} data={data} nodeSelected />
+          // 좌우·아래 여백은 박스 그림자(shadow-sm)가 overflow-hidden에 잘리지 않게
+          <div key="list" className="bpm-island-in px-0.5 pb-1" style={{ width: ISLAND_LIST_WIDTH }}>
+            <NodeIoDetails nodeId={nodeId} data={data} nodeSelected framed />
           </div>
         ) : (
           <div key="pill" data-id="decision-io-chip" className="bpm-island-in flex items-stretch text-[10px] leading-4">
