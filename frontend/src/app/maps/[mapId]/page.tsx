@@ -312,6 +312,7 @@ import {
   invertDisplayY,
   type HeightShiftField,
 } from "@/lib/height-shift";
+import { getConditionCaptionExtents } from "@/lib/condition-captions";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { commitRole, commitSystem, useCatalogs } from "@/lib/catalogs";
 import { useI18n } from "@/lib/i18n";
@@ -7290,10 +7291,31 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 펼침 중 표시는 합성 좌표가 담당(베이크)하고, 평시 표시는 renderYOffsets 트윈이 담당한다(flowNodes에서 게이트).
   // 드래그 중엔 시작 시점 필드로 동결 — 커진 노드(푸셔)를 끌면 자기 영향권이 매 프레임 따라 움직여
   // 표시(offset)와 역변환이 서로 쫓으며 마우스·원위치 사이를 튀는 지터가 난다. 드롭 시 해제(트윈 복귀).
+  // 노드에 표시할 정보 필드 — 사이드바 체크박스로 토글, localStorage 영속(v2 키).
+  // height-shift(조건 캡션 간격)가 읽으므로 그보다 위에 선언한다(TDZ).
+  // params(칩 일괄) 토글은 기본 ON — 레거시 키 저장값은 parseDisplayToggles가 ON으로 이관.
+  const [displayFields, setDisplayFields] = useState<NodeDisplayToggle[]>(["assignee", "params"]);
+
+  useEffect(() => {
+    const saved = parseDisplayToggles(
+      window.localStorage.getItem("bpm.nodeDisplayFields.v2"),
+      window.localStorage.getItem("bpm.nodeDisplayFields"),
+    );
+    if (saved !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
+      setDisplayFields(saved);
+    }
+  }, []);
+  // 영속은 토글 핸들러에서만 — displayFields 의존 effect로 쓰면 StrictMode 이중 마운트가
+  // hydration 전 기본값을 저장소에 덮어써 사용자의 OFF 상태가 리셋된다(실측).
+
   const [dragFrozenField, setDragFrozenField] = useState<HeightShiftField | null>(null);
+  // 조건 캡션(노드 밖 위·아래)도 Conditions 토글을 따라 간격에 반영
   const heightField = useMemo(
-    () => dragFrozenField ?? buildHeightShiftField(nodes),
-    [dragFrozenField, nodes],
+    () =>
+      dragFrozenField ??
+      buildHeightShiftField(nodes, (node) => getConditionCaptionExtents(node, displayFields)),
+    [dragFrozenField, nodes, displayFields],
   );
   useEffect(() => {
     heightFieldRef.current = heightField;
@@ -8393,22 +8415,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     [comments, selectedId],
   );
 
-  // 노드에 표시할 정보 필드 — 사이드바 체크박스로 토글, localStorage 영속(v2 키).
-  // params(칩 일괄) 토글은 기본 ON — 레거시 키 저장값은 parseDisplayToggles가 ON으로 이관.
-  const [displayFields, setDisplayFields] = useState<NodeDisplayToggle[]>(["assignee", "params"]);
-
-  useEffect(() => {
-    const saved = parseDisplayToggles(
-      window.localStorage.getItem("bpm.nodeDisplayFields.v2"),
-      window.localStorage.getItem("bpm.nodeDisplayFields"),
-    );
-    if (saved !== null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
-      setDisplayFields(saved);
-    }
-  }, []);
-  // 영속은 토글 핸들러에서만 — displayFields 의존 effect로 쓰면 StrictMode 이중 마운트가
-  // hydration 전 기본값을 저장소에 덮어써 사용자의 OFF 상태가 리셋된다(실측).
 
   // 새 엣지 선 모양 기본값 1회 hydration — 맵별 키 우선, 구 전역 키 폴백(구버전 사용자 선호 유지).
   // 영속은 일괄 변경 확정 핸들러에서만(상태-의존 effect 영속은 StrictMode 이중 마운트가

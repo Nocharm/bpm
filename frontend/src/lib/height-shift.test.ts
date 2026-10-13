@@ -177,3 +177,44 @@ describe("invertDisplayY - 열 단위 역변환", () => {
     expect(invertDisplayY(two, 0, 170, 330, "b")).toBeCloseTo(330, 3);
   });
 });
+
+describe("buildHeightShiftField - 조건 캡션(위=시작·아래=종료, 높이 20)", () => {
+  const captions =
+    (map: Record<string, { above?: number; below?: number }>) =>
+    (node: AppNode) => ({ above: map[node.id]?.above ?? 0, below: map[node.id]?.below ?? 0 });
+
+  it("저장 간격이 캡션 두 줄+16을 흡수하면 안 밀림(간격 100)", () => {
+    const field = buildHeightShiftField(
+      [makeNode("a", 0, 0), makeNode("b", 0, 152)],
+      captions({ a: { below: 20 }, b: { above: 20 } }),
+    );
+    expect(field.offsets.size).toBe(0);
+  });
+
+  it("위 노드 종료 캡션과 아래 노드 시작 캡션 사이를 16으로 벌린다(간격 28 → 28 밀림)", () => {
+    const field = buildHeightShiftField(
+      [makeNode("a", 0, 0), makeNode("b", 0, 80)],
+      captions({ a: { below: 20 }, b: { above: 20 } }),
+    );
+    expect(field.offsets.get("b")).toBe(28);
+  });
+
+  it("아래 노드 시작 캡션만 있어도 커지지 않은 위 노드와 겹치지 않게 민다", () => {
+    const field = buildHeightShiftField(
+      [makeNode("a", 0, 0), makeNode("b", 0, 80)],
+      captions({ b: { above: 20 } }),
+    );
+    expect(field.offsets.get("b")).toBe(8);
+  });
+
+  it("역변환은 끌고 있는 노드의 위 캡션까지 반영 - 되돌린 저장 y를 다시 순변환하면 같은 표시 y", () => {
+    const withCaptions = captions({ a: { below: 20 }, b: { above: 20 } });
+    const field = buildHeightShiftField([makeNode("a", 0, 0), makeNode("b", 0, 80)], withCaptions);
+    const display = 80 + (field.offsets.get("b") ?? 0);
+    const saved = invertDisplayY(field, 0, 170, display, "b");
+    // 플래토(저장 68~88 → 표시 108)의 최소 저장 y
+    expect(saved).toBeCloseTo(68, 4);
+    const again = buildHeightShiftField([makeNode("a", 0, 0), makeNode("b", 0, saved)], withCaptions);
+    expect(saved + (again.offsets.get("b") ?? 0)).toBeCloseTo(display, 4);
+  });
+});
