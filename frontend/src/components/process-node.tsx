@@ -477,13 +477,14 @@ function NodeIoDetails({
                         <span
                           data-id={`node-io-linked-${side}-${index}`}
                           title={t(linkState === "origin" ? "node.ioLinkedOrigin" : "node.ioLinkedMirror")}
-                          className="mt-0.5 shrink-0 text-accent"
+                          // 첫 줄 높이(h-4=글자 줄 16px) 안에서 세로 가운데 — mt 오프셋은 10px 아이콘이 1px 위로 떴다
+                          className="flex h-4 shrink-0 items-center text-accent"
                         >
                           <Link2 size={10} strokeWidth={1.5} />
                         </span>
                       )}
                       {form && (
-                        <span title={form.value} className="mt-0.5 shrink-0 text-ink-muted">
+                        <span title={form.value} className="flex h-4 shrink-0 items-center text-ink-muted">
                           <form.icon size={10} strokeWidth={1.5} />
                         </span>
                       )}
