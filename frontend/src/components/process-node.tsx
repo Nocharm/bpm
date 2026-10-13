@@ -539,8 +539,9 @@ function NodeConditionCaption({
       data-id={`node-condition-${side}`}
       data-diff={tint ? "true" : undefined}
       title={text}
-      className={`flex max-w-full items-center gap-1 whitespace-nowrap rounded-xs px-1 text-xs leading-4 text-ink-tertiary ${
-        tint ? tint.bg : "bg-surface/85"
+      // 배경 없이 글자 헤일로(.bpm-node-caption)로 가독성 — 비교 화면 diff 틴트만 칸을 칠한다
+      className={`bpm-node-caption flex max-w-full items-center gap-1 whitespace-nowrap text-xs leading-4 ${
+        tint ? `rounded-xs px-1 ${tint.bg}` : ""
       }`}
     >
       <Icon size={12} strokeWidth={1.5} className={`shrink-0 ${tint?.icon ?? ""}`} />

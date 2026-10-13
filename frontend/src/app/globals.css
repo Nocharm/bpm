@@ -1334,6 +1334,25 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
     box-shadow: 0 0 0 5px transparent;
   }
 }
+/* 노드 밖 조건 캡션(위=시작·아래=종료) — 박스 없이 글자만. 배경 대신 캔버스색 헤일로로 지나가는 연결선·점 격자 위에서도
+   끊김 없이 읽히게 한다(사용자 결정 2026-10-13). 새벽 하늘(L5) 위에선 밝은 글자 + 어두운 헤일로로 뒤집는다 */
+.bpm-node-caption {
+  color: var(--color-ink-secondary);
+  text-shadow:
+    0 0 2px var(--color-canvas),
+    0 0 4px var(--color-canvas),
+    0 0 6px var(--color-canvas);
+}
+.bpm-l5-sky .bpm-node-caption {
+  color: var(--color-canvas);
+  text-shadow:
+    0 0 2px var(--color-canvas-l5),
+    0 0 4px var(--color-canvas-l5),
+    0 0 6px color-mix(in srgb, var(--color-canvas-l5) 80%, transparent);
+}
+/* 아이콘(SVG 선)엔 text-shadow가 안 먹는다 — 같은 헤일로를 drop-shadow로 */
+.bpm-node-caption svg { filter: drop-shadow(0 0 1.5px var(--color-canvas)); }
+.bpm-l5-sky .bpm-node-caption svg { filter: drop-shadow(0 0 1.5px var(--color-canvas-l5)); }
 .bpm-io-pulse { animation: bpm-io-pulse-bg 700ms var(--ease-smooth) 120ms backwards; }
 .bpm-io-pulse input { animation: bpm-io-pulse-box 450ms var(--ease-overshoot) 120ms backwards; }
 @media (prefers-reduced-motion: reduce) {
