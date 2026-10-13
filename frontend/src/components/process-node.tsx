@@ -584,7 +584,8 @@ function DecisionIoIsland({
   const [hovered, setHovered] = useState(false);
   const closeTimer = useRef<number | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  // 내용 실측 크기 — 바깥 상자가 이 값으로 width/height 트랜지션(내용은 absolute w-max라 상자 크기와 무관하게 잰다)
+  // 내용 실측 크기 — 바깥 상자가 이 값으로 width/height 트랜지션(ease-glide: 처음·끝이 느린 대칭 곡선, 되튐 없음).
+  // 내용은 absolute w-max라 상자 크기와 무관하게 잰다
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const segments = (["input", "output"] as const)
     .filter((side) => displayFields.includes(side))
@@ -633,7 +634,7 @@ function DecisionIoIsland({
       // 숫자 팝(bpm-count-pop)이 상자 경계에 잘리지 않는다
       // 펼치면 알약 테두리·바탕은 사라지고 Input·Output 독립 박스(framed)만 남는다(사용자 결정 2026-10-14) —
       // 상자가 늘어나는 동안 테두리가 함께 옅어져 확장감은 유지한다
-      className={`nodrag nopan relative mt-1 border transition-[width,height,border-radius,border-color,background-color,box-shadow] duration-350 ease-overshoot motion-reduce:transition-none ${
+      className={`nodrag nopan relative mt-1 border transition-[width,height,border-radius,border-color,background-color,box-shadow] duration-450 ease-glide motion-reduce:transition-none ${
         expanded
           ? "z-10 overflow-hidden rounded-sm border-transparent bg-transparent shadow-none"
           : "overflow-visible rounded-[9px] border-ink-tertiary/40 bg-surface shadow-sm"

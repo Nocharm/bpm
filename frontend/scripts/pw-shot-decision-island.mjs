@@ -33,6 +33,13 @@ try {
   const parking = { x: 40, y: 860 };
 
   await shoot("island-1-pill");
+  // 상자 변형 곡선 — 되튐 없는 ease-in-out(ease-glide)이어야 한다
+  console.log(
+    `island transition: ${await island.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return `${style.transitionDuration.split(",")[0]} ${style.transitionTimingFunction.match(/^[^(,]+(\([^)]*\))?/)?.[0]}`;
+    })}`,
+  );
 
   // 앞 노드의 링크된 산출물 체크 → 분기 알약 입력 칸이 하이라이트돼야 한다(연관 항목)
   const linkedRow = page.locator('[data-id^="node-io-linked-output-"]').first();

@@ -119,6 +119,8 @@
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-smooth: cubic-bezier(0.25, 1, 0.5, 1);
+  /* 처음·끝이 느린 대칭 곡선(ease-in-out) — 되튐 없이 부드럽게 늘고 줄어야 하는 형태 변화(분기 IO 아일랜드) */
+  --ease-glide: cubic-bezier(0.65, 0, 0.35, 1);
 
   /* 마스터-디테일 분기점 — 이하에선 상세를 카드 아래 아코디언으로 접는다(맵·공지·인박스 공통).
      980px: 목록 min-w 18rem + 상세 min-w 24rem + 여백이 찌그러지지 않는 하한. */
@@ -1323,7 +1325,7 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
   100% { background: transparent; }
 }
 /* 분기 노드 IO 아일랜드 — 상자가 늘거나 줄 때 새 내용은 살짝 늦게 떠오르고, 체크 수가 바뀐 알약 숫자는 한 번 커졌다 돌아온다 */
-.bpm-island-in { animation: bpm-island-in 220ms var(--ease-smooth) 60ms backwards; }
+.bpm-island-in { animation: bpm-island-in 260ms var(--ease-glide) 90ms backwards; }
 @keyframes bpm-island-in {
   0% { opacity: 0; transform: scale(0.96); }
   100% { opacity: 1; transform: scale(1); }

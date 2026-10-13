@@ -18,7 +18,7 @@ BPM 프론트엔드 시각 언어 — Whimsical 파생 토큰 시스템(`fronten
 - 시맨틱 스케일: `text-tagline`/`text-body-strong`/`text-body`/`text-caption`/`text-caption-strong`/`text-fine`.
 
 ## 4. 모션
-- 이징 `ease-spring`/`ease-overshoot`/`ease-smooth`, duration은 `duration-150/350/450/700`. 인터랙션(hover/entrance)에만.
+- 이징 `ease-spring`/`ease-overshoot`/`ease-smooth`/`ease-glide`(처음·끝이 느린 대칭 곡선 — 되튐 없이 늘고 주는 형태 변화), duration은 `duration-150/350/450/700`. 인터랙션(hover/entrance)에만.
 - **버튼 인터랙션은 전역 base(`globals.css`)에서 처리** — 모든 `<button>`은 포인터 커서 + 클릭 시 `scale(0.97)` 눌림이 자동 적용된다(`prefers-reduced-motion` 가드 포함). 컴포넌트엔 호버 배경(`hover:bg-*` 토큰)만 추가하고, 커서·클릭 눌림을 중복 정의하지 않는다.
 
 ## 5. 언어 · 아이콘
