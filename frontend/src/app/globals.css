@@ -20,6 +20,8 @@
   --color-accent-tint-border: color-mix(in srgb, var(--color-accent) 27%, white);
   /* 서브프로세스 노드 고정 stroke(사용자가 못 고름) — 테마를 따라 악센트의 채도 낮춘 톤 */
   --color-subprocess: color-mix(in srgb, var(--color-accent) 60%, var(--color-ink-muted));
+  /* 캔버스 위 강조(노드 선택 링·드롭 영역·펼침 영역 테두리·포커스) — 새벽 하늘 프레임 안에선 .bpm-l5-sky가 밝은 톤으로 바꾼다 */
+  --color-accent-canvas: var(--color-accent);
 
   /* Surfaces */
   --color-surface: #ffffff;
@@ -30,7 +32,8 @@
   --color-canvas-dot: #bdbdc9; /* dot-grid 점 — 가시성 위해 진하게 */
   --color-canvas-l5: #363843; /* L5 새벽 조감도 — 그라데이션 하단(차콜)·미니맵 등 단색 폴백. L5 태그로 라이트 토글 */
   --color-canvas-l5-sky: #1b2743; /* L5 새벽 조감도 — 그라데이션 상단(네이비, 하단 차콜과 확실히 구분되게) */
-  --color-accent-sky: color-mix(in srgb, var(--color-accent) 55%, white); /* 새벽 하늘(남색) 위에서 읽히도록 밝힌 액센트 (운영 대시보드) */
+  /* 새벽 하늘(다크) 위 액센트 — 대시보드 글씨·막대, L5 캔버스 선택 표시. 아래 @supports 블록이 명도 고정본으로 덮는다(이 줄은 구형 브라우저 폴백) */
+  --color-accent-sky: color-mix(in srgb, var(--color-accent) 55%, white);
 
   /* Ink */
   --color-ink: #16161d;
@@ -141,6 +144,19 @@ body {
     color-mix(in srgb, color-mix(in srgb, var(--color-canvas-l5-sky) 45%, var(--color-canvas-l5)) 86%, transparent) 52%,
     color-mix(in srgb, var(--color-canvas-l5) 86%, transparent) 100%
   );
+}
+
+/* 하늘 위 캔버스 강조는 밝은 톤으로 — 악센트 원색은 어두운 하늘과 대비 1.0~1.6이라 선택 링·선택 엣지가 묻힌다(대비 감사 2026-10-13) */
+.bpm-l5-sky {
+  --color-accent-canvas: var(--color-accent-sky);
+  --color-edge-selected: var(--color-accent-sky);
+}
+/* 명도 고정 sky — 테마마다 악센트 명도가 달라 비율 혼합으론 대비가 들쭉날쭉하다. 색상(h)만 테마를 따르고 명도·채도는 고정:
+   하늘 유리 카드 최악(#63656d) 위 작은 글씨 4.5:1을 넘기는 값 */
+@supports (color: oklch(from red l c h)) {
+  :root {
+    --color-accent-sky: oklch(from var(--color-accent) 0.95 min(c, 0.06) h);
+  }
 }
 
 /* 새벽 하늘 프레임 내부 스크롤 — 어두운 배경 위 밝은 얇은 막대(라이트 기본 막대는 하늘에서 이질적). */
@@ -1054,10 +1070,10 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 /* 출력선 선택 모달(EdgeSelectModal)에서 옵션 행 hover 시 대응 캔버스 엣지 하이라이트(accent).
    엣지의 인라인 stroke(분기 파스텔/선택 색)보다 우선해야 하므로 !important. */
 .react-flow__edge.edge-hover-highlight .react-flow__edge-path {
-  stroke: var(--color-accent) !important;
+  stroke: var(--color-accent-canvas) !important;
   stroke-width: 3.5 !important;
-  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-accent) 70%, transparent))
-    drop-shadow(0 0 5px color-mix(in srgb, var(--color-accent) 30%, transparent));
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-accent-canvas) 70%, transparent))
+    drop-shadow(0 0 5px color-mix(in srgb, var(--color-accent-canvas) 30%, transparent));
 }
 
 /* 핸들 스타일은 page.tsx의 raw <style>로 이전 — Turbopack이 dev에서 .react-flow__node 셀렉터
@@ -1093,8 +1109,8 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 /* 노드 선택 링 — 2px accent + 4px 소프트 헤일로 (E4). box-shadow라 selected 노드는 hover 그림자 미적용(충돌 회피) */
 .node-ring-selected {
   box-shadow:
-    0 0 0 2px var(--color-accent),
-    0 0 0 6px color-mix(in srgb, var(--color-accent) 12%, transparent);
+    0 0 0 2px var(--color-accent-canvas),
+    0 0 0 6px color-mix(in srgb, var(--color-accent-canvas) 12%, transparent);
 }
 
 /* 그룹 합류 대상 — 노드를 끌어와 박스 위에 머물 때 반투명 반짝임 + 커졌다 작아지기 */
@@ -1107,13 +1123,13 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
   }
   50% {
     transform: scale(1.025);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 28%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-canvas) 28%, transparent);
     background: color-mix(in srgb, var(--color-accent) 18%, white);
   }
 }
 .group-target {
   transform-origin: center;
-  border-color: var(--color-accent) !important;
+  border-color: var(--color-accent-canvas) !important;
   animation: group-target-pulse 750ms var(--ease-smooth) infinite;
 }
 

@@ -2,8 +2,10 @@
 // 서브프로세스 stroke 등)은 globals.css가 color-mix로 계산하므로 같이 바뀐다. 브라우저(localStorage)에만 저장.
 // 프리셋은 대비 검증본만(흰 바탕·흰 글씨·선택 틴트 위 글씨 모두 4.5:1 이상 — accent-theme.test.ts가 지킨다).
 // 의미색과 겹치는 색(초록=추가·게시, 빨강·주황=오류·삭제, 앰버=경고, 틸=비교 변경)은 일부러 뺐다.
+// 워스트 케이스 검토(2026-10-13)로 로즈(서브프로세스가 End 노드·No 분기·오류 배지와 같은 색)·그래파이트(선택 상태가
+// 중립 회색 칩과 구분 안 됨)도 제외 — 저장값이 이 둘이면 기본 바이올렛으로 돌아간다.
 
-export type AccentThemeId = "violet" | "blue" | "ocean" | "plum" | "rose" | "graphite";
+export type AccentThemeId = "violet" | "blue" | "ocean" | "plum";
 
 export interface AccentTheme {
   id: AccentThemeId;
@@ -17,8 +19,6 @@ export const ACCENT_THEMES: AccentTheme[] = [
   { id: "blue", hex: "#2f5fe0" },
   { id: "ocean", hex: "#0a6a94" },
   { id: "plum", hex: "#9b2fae" },
-  { id: "rose", hex: "#c02a5a" },
-  { id: "graphite", hex: "#4a5260" },
 ];
 
 const ACCENT_KEY = "bpm.accent";

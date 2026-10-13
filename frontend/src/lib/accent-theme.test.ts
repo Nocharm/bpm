@@ -56,7 +56,7 @@ describe("accent preference", () => {
   });
 
   it("choosing the default clears the stored value and the override", () => {
-    setAccentTheme("rose");
+    setAccentTheme("plum");
 
     setAccentTheme(DEFAULT_ACCENT);
 
