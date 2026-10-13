@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 294개 · 2026-10-08 기준
+총 295개 · 2026-10-13 기준
 
 ## components/
 
@@ -45,6 +45,7 @@
 | `dev-login-modal.tsx` | `DevLoginModal` | 로컬(인증 OFF) 임시 로그인 피커 | `app/login/page.tsx` |
 | `edge-action-modal.tsx` | `EdgeActionModal` | 출력 1개 충돌 시 선택 모달 | `app/maps/[mapId]/page.tsx` |
 | `edge-branch-modal.tsx` | `EdgeBranchModal` | 판단(decision) 노드에서 엣지를 연결할 때 뜨는 분기 선택 | `app/maps/[mapId]/page.tsx` |
+| `edge-carry-badge.tsx` | `EdgeCarryBadge` | 연결선 전달물 개수 점 + 호버 카드 | `components/multiline-edge.tsx` |
 | `edge-decision-modal.tsx` | `EdgeDecisionModal` | 디시전 노드에 노드를 드롭(출력 ≥1)했을 때 선택 모달 | `app/maps/[mapId]/page.tsx` |
 | `edge-end-modal.tsx` | `EdgeEndModal` | 하위프로세스 출구 선택 | `app/maps/[mapId]/page.tsx` |
 | `edge-label-editor.tsx` | `EdgeLabelEditor` | 엣지 더블클릭 시 캔버스 가운데(엣지 중점)에 뜨는 인라인 라벨 편집 박스 | `app/maps/[mapId]/page.tsx` |

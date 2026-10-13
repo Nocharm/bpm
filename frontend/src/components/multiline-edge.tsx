@@ -7,8 +7,10 @@
 import { BaseEdge, EdgeLabelRenderer, useNodes, type EdgeProps, type EdgeTypes } from "@xyflow/react";
 import { Link2 } from "lucide-react";
 
+import { EdgeCarryBadge } from "@/components/edge-carry-badge";
 import { EdgePulseDot } from "@/components/edge-pulse-dot";
 import { type AppNode, EDGE_LABEL_MAX_WIDTH } from "@/lib/canvas";
+import { isEdgeCarry } from "@/lib/edge-carry";
 import { type EdgeObstacle } from "@/lib/edge-detour";
 import { isEdgeFan, type EdgeFan } from "@/lib/edge-fanout";
 import { getEdgeObstacles, resolveEdgePath, type EdgeLineVariant, type EdgePathResult } from "@/lib/edge-path";
@@ -69,20 +71,26 @@ function renderEdge(props: EdgeProps, resolved: EdgePathResult) {
   // 미러 라벨(하위프로세스 끝 제목 기본값, 저장 안 됨) — 점선 테두리 + 링크 아이콘으로 직접 라벨과 구분
   const mirrored = data?.labelMirrored === true;
   const borderStyle = labelBgStyle?.strokeDasharray ? "dashed" : "solid";
+  // 전달물 개수 점(렌더 전용, lib/edge-carry) — 라벨 오른쪽에 나란히, 라벨이 없으면 앵커에 혼자
+  const carryItems = isEdgeCarry(data?.carry) ? data.carry.items : [];
   return (
     <>
       {/* data-label-x/y — 해석기 라벨 앵커(플로우 좌표). 라벨이 없어도 실려 인라인 라벨 편집기가 같은 점에 붙는다 */}
       <BaseEdge path={path} markerEnd={markerEnd} style={style} data-label-x={labelX} data-label-y={labelY} />
       {pulse ? <EdgePulseDot path={path} pulse={pulse} travel={pulseTravel} /> : null}
-      {label ? (
+      {label || carryItems.length > 0 ? (
         <EdgeLabelRenderer>
           {/* pointer-events-none — 라벨은 경로 중앙에 놓이므로 클릭/더블클릭/우클릭이
-              아래 엣지 path로 그대로 통과해야 선택·라벨편집·컨텍스트 메뉴가 유지된다 */}
+              아래 엣지 path로 그대로 통과해야 선택·라벨편집·컨텍스트 메뉴가 유지된다(개수 점만 auto) */}
           <div
-            className="nodrag nopan pointer-events-none absolute whitespace-pre-wrap text-center leading-tight"
+            className="nodrag nopan pointer-events-none absolute flex items-center gap-1"
+            style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+          >
+          {label ? (
+          <div
+            className="whitespace-pre-wrap text-center leading-tight"
             data-mirrored={mirrored ? "true" : undefined}
             style={{
-              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               // 최대폭 + 자동 줄바꿈 — 긴 라벨이 이웃 노드를 덮지 않게 (사용자 요청 2026-08-23 #6).
               // 임포트 자동배치가 이 값으로 랭크 간격을 잡는다 — canvas.ts 주석 참조
               maxWidth: EDGE_LABEL_MAX_WIDTH,
@@ -107,6 +115,9 @@ function renderEdge(props: EdgeProps, resolved: EdgePathResult) {
             ) : (
               label
             )}
+          </div>
+          ) : null}
+          {carryItems.length > 0 ? <EdgeCarryBadge items={carryItems} /> : null}
           </div>
         </EdgeLabelRenderer>
       ) : null}

@@ -1,5 +1,6 @@
-// 조건 캡션(노드 위=시작·아래=종료)과 분기 노드 IO 요약 칩(호버 카드·선택 박스)을 캡처 — 노드 조건·IO 가시성 라운드 검증용.
-// 실행(frontend/ 에서): BASE_URL=http://localhost:3047 MAP_ID=40 node scripts/pw-shot-condition-captions.mjs
+// 조건 캡션(노드 위=시작·아래=종료)·분기 노드 IO 요약 칩·연결선 전달물 개수 점을 캡처 — 노드 조건·IO 가시성 라운드 검증용.
+// 실행(frontend/ 에서): BASE_URL=http://localhost:3047 MAP_ID=40 L5_MAP_ID=41 node scripts/pw-shot-condition-captions.mjs
+// L5_MAP_ID는 새벽 하늘(L5 연계 캔버스) 위 캡션 가독성 확인용 — 비우면 건너뛴다.
 import { chromium } from "playwright-core";
 import path from "node:path";
 
@@ -7,11 +8,14 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const SHOT_DIR = process.env.SHOT_DIR ?? "../.shots";
 const MAP_ID = process.env.MAP_ID ?? "40";
+const L5_MAP_ID = process.env.L5_MAP_ID ?? "";
 const USER = process.env.USER_ID ?? "admin.sys";
 const FIELDS = ["assignee", "params", "conditions", "input", "output"];
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
-try {
+const errors = [];
+
+async function openMap(mapId) {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 2 });
   await ctx.addInitScript(([user, fields]) => {
     window.localStorage.setItem("bpm.devUser", user);
@@ -19,26 +23,51 @@ try {
     window.localStorage.setItem("bpm.nodeDisplayFields.v2", JSON.stringify(fields));
   }, [USER, FIELDS]);
   const page = await ctx.newPage();
-  const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto(`${BASE}/maps/${MAP_ID}`, { waitUntil: "networkidle", timeout: 120000 });
+  await page.goto(`${BASE}/maps/${mapId}`, { waitUntil: "networkidle", timeout: 120000 });
   const canvas = page.locator(".react-flow");
   await canvas.waitFor({ timeout: 30000 });
   await page.waitForTimeout(1200);
-  await canvas.screenshot({ path: path.join(SHOT_DIR, "condition-captions-rest.png") });
+  return { ctx, page, canvas };
+}
 
-  const chip = page.locator('[data-id="decision-io-chip"]').first();
-  await chip.hover();
-  await page.waitForTimeout(300);
-  await canvas.screenshot({ path: path.join(SHOT_DIR, "condition-captions-chip-hover.png") });
+async function shoot(canvas, name) {
+  await canvas.screenshot({ path: path.join(SHOT_DIR, `${name}.png`) });
+  console.log(`shot ${name}`);
+}
 
-  const decision = page.locator(".react-flow__node").filter({ has: page.locator(".bpm-decision-title-box") }).first();
-  await decision.click({ position: { x: 58, y: 48 } });
-  await page.waitForTimeout(400);
-  await canvas.screenshot({ path: path.join(SHOT_DIR, "condition-captions-decision-selected.png") });
-
-  console.log(`captions: ${await page.locator('[data-id^="node-condition-"]').count()}, errors: ${JSON.stringify(errors)}`);
-  await ctx.close();
+try {
+  {
+    const { ctx, page, canvas } = await openMap(MAP_ID);
+    await shoot(canvas, "condition-captions-rest");
+    await page.locator('[data-id="decision-io-chip"]').first().hover();
+    await page.waitForTimeout(300);
+    await shoot(canvas, "condition-captions-chip-hover");
+    const dots = page.locator('[data-id="edge-carry-dot"]');
+    console.log(`carry dots: ${await dots.count()}`);
+    if ((await dots.count()) > 0) {
+      await dots.last().hover();
+      await page.waitForTimeout(300);
+      await shoot(canvas, "condition-captions-carry-hover");
+    }
+    await ctx.close();
+  }
+  {
+    const { ctx, page, canvas } = await openMap(MAP_ID);
+    const decision = page.locator(".react-flow__node").filter({ has: page.locator(".bpm-decision-title-box") }).first();
+    await decision.click({ position: { x: 58, y: 48 } });
+    await page.waitForTimeout(400);
+    await shoot(canvas, "condition-captions-decision-selected");
+    await ctx.close();
+  }
+  if (L5_MAP_ID !== "") {
+    const { ctx, page } = await openMap(L5_MAP_ID);
+    console.log(`L5 captions: ${await page.locator('[data-id^="node-condition-"]').count()}`);
+    await page.locator(".react-flow").screenshot({ path: path.join(SHOT_DIR, "condition-captions-l5.png") });
+    console.log("shot condition-captions-l5");
+    await ctx.close();
+  }
+  console.log(`errors: ${JSON.stringify(errors)}`);
 } finally {
   await browser.close();
 }

@@ -312,6 +312,7 @@ import {
   invertDisplayY,
   type HeightShiftField,
 } from "@/lib/height-shift";
+import { buildEdgeCarry } from "@/lib/edge-carry";
 import { getConditionCaptionExtents } from "@/lib/condition-captions";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { commitRole, commitSystem, useCatalogs } from "@/lib/catalogs";
@@ -8013,6 +8014,11 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 엣지 렌더 변환 — 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange) 등.
   // 선 모양(type)은 엣지별 저장값 그대로 유지(구 맵 전역 일괄 적용은 "전체 일괄 변경" 액션으로 대체).
+  // 연결선 전달물(렌더 전용, lib/edge-carry) — IO 링크·SP 같은 이름 매칭을 흐름 경로에 투영한 개수 점·호버 카드 소스
+  const edgeCarry = useMemo(
+    () => buildEdgeCarry(nodes, edges, subprocessRefs),
+    [nodes, edges, subprocessRefs],
+  );
   const styledEdges = useMemo(() => {
     const hiddenIds = inlineComposition?.hiddenIds;
     const crossingIds = inlineComposition?.crossingIds;
@@ -8144,6 +8150,10 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       // 라벨이 있는 엣지(분기 Yes/No/기타 등) — 디자인 알약 스타일(lib/canvas, 펼침 자식과 공용)
       next = styleEdgeLabelPill(next);
+      const carryItems = edgeCarry.get(edge.id);
+      if (carryItems) {
+        next = { ...next, data: { ...next.data, carry: { items: carryItems } } };
+      }
       // 출력선 선택 모달에서 이 엣지 행 hover 시 캔버스 엣지 하이라이트 — className만 부여, 스타일은 globals.css.
       if (edge.id === hoveredEdgeId || ioHighlightEdgeIds?.has(edge.id) || endHoverSet.has(edge.id)) {
         next = {
@@ -8199,7 +8209,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ),
     );
     return finishEdges([...currentStyled, ...childStyled, ...gatewayStyled]);
-  }, [edges, nodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, yOffsets]);
+  }, [edges, nodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, yOffsets, edgeCarry]);
   // 흐름 점 범례(우하단 노드 표시 정보 카드) — 펄스가 붙은 엣지가 하나라도 있을 때만
   const hasFlowPulse = styledEdges.some((edge) => isEdgePulse(edge.data?.pulse));
 
