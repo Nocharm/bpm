@@ -552,9 +552,10 @@ function NodeConditionCaption({
   if (placement === "inline") {
     return <div className={`flex max-w-full justify-center ${side === "end" ? "mt-1.5" : ""}`}>{body}</div>;
   }
-  // 좌우 12px 들여 코너 배지(diff·코멘트·URL)와 덜 겹치게. 아래 캡션은 액션 바가 실측하도록 below-extension
+  // 좌우 12px 들여 코너 배지(코멘트·URL)와 덜 겹치게 — 비교 화면은 좌상단 diff 배지(변경·추가·삭제) 오른쪽으로 비킨다.
+  // 아래 캡션은 액션 바가 실측하도록 below-extension
   return side === "start" ? (
-    <div className="absolute bottom-full left-3 right-3 mb-[3px] flex">{body}</div>
+    <div className={`absolute bottom-full right-3 mb-[3px] flex ${data.diffStatus ? "left-16" : "left-3"}`}>{body}</div>
   ) : (
     <div data-id="node-below-extension" className="absolute left-3 right-3 top-full mt-[3px] flex">
       {body}
@@ -969,12 +970,21 @@ function NodeIoDiffSummary({ ioDiff }: { ioDiff: IoDiffSummary }) {
 // 변경 필드 before→after 필 — 노드 아래에 절대배치(레이아웃 영향 없음). changed 노드만.
 // 최대 3줄 + "+N more"로 캡(다필드 변경 시 아래 노드 침범 방지). 값은 폭 제한 truncate.
 // 필드 단위 상태색·부분 강조·잘림 호버 팝오버는 목록 행과 공용(compare-field-diff).
-function DiffFieldPills({ fields }: { fields: NonNullable<AppNode["data"]["diffFields"]> }) {
+// belowCaption — 노드 아래 종료 조건 캡션이 있으면 그 줄(CONDITION_CAPTION_H)만큼 내려 겹치지 않게
+function DiffFieldPills({
+  fields,
+  belowCaption = false,
+}: {
+  fields: NonNullable<AppNode["data"]["diffFields"]>;
+  belowCaption?: boolean;
+}) {
   const { t } = useI18n();
   const shown = fields.slice(0, 3);
   const extra = fields.length - shown.length;
   return (
-    <div className="absolute left-0 top-full z-10 mt-1.5 flex flex-col items-start gap-1">
+    <div
+      className={`absolute left-0 top-full z-10 flex flex-col items-start gap-1 ${belowCaption ? "mt-[26px]" : "mt-1.5"}`}
+    >
       {shown.map((field) => (
         <FieldDiffHoverable
           key={field.label}
@@ -1406,7 +1416,9 @@ function externalSpNodeStyle(color: string): CSSProperties {
 // isConnectable — 노드 레벨 connectable(임베드 자식 false)이 여기로 전달됨. Handle에 명시 forward 필수 (F3).
 export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<AppNode>) {
   const { t } = useI18n();
-  const { ctrlDragIds, onConnectPlaceholder, onResizeNode } = useNodeActions();
+  const { ctrlDragIds, onConnectPlaceholder, onResizeNode, displayFields } = useNodeActions();
+  // 노드 아래 종료 조건 캡션 유무 — 비교 화면 diff 필을 그 아래로 내린다
+  const hasEndCaption = (getConditionCaptions(data, displayFields)?.end ?? "") !== "";
   const showCopyBadge = ctrlDragIds.has(id);
   // SP 폭 조절 — 드래그 중엔 로컬(전 캔버스 리렌더 방지), 종료 시 onResizeNode로 영속.
   // zoom은 구독 없이 드래그 시작 때 스토어에서 읽는다(줌 변경마다 전 노드 리렌더 금지).
@@ -1507,7 +1519,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           />
         )}
         {diff && <DiffBadge status={diff} />}
-        {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
+        {diffFields.length > 0 && <DiffFieldPills fields={diffFields} belowCaption={hasEndCaption} />}
         {/* 좌측 컬러 탭(C안) — 보더 위를 덮도록 음수 오프셋, 홈 L5 색 표시 (2026-08-29) */}
         {spExternal && !diff && (
           <span
@@ -1742,7 +1754,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           style={{ ...style, transform: "translate(-50%, -50%) scaleX(1.2) rotate(45deg)" }}
         />
         {diff && <DiffBadge status={diff} className="-top-1 left-1/2 -translate-x-1/2" />}
-        {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
+        {diffFields.length > 0 && <DiffFieldPills fields={diffFields} belowCaption={hasEndCaption} />}
         {/* GMP 태그는 왼쪽 위 바깥쪽(#4) — 가운데 3줄 제목·우상단 코멘트 배지와 겹치지 않게 */}
         <GmpPill nodeId={id} data={data} className="absolute -left-2 top-0 z-10" />
         <div className="bpm-decision-title-box relative max-w-24 text-center text-xs font-medium text-ink">
@@ -1805,7 +1817,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       onMouseLeave={() => setHovered(false)}
     >
       {diff && <DiffBadge status={diff} />}
-      {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
+      {diffFields.length > 0 && <DiffFieldPills fields={diffFields} belowCaption={hasEndCaption} />}
       {!diff && (
         <>
           <ParallelHoverBadge outputGroups={outputGroups} visible={hovered} />

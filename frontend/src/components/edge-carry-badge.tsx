@@ -3,12 +3,15 @@
 // 연결선 전달물 개수 점 + 호버 카드 — 에디터 엣지(multiline-edge)가 라벨 옆(라벨이 없으면 라벨 앵커)에 붙인다.
 // 무엇이 어디서 왔는지는 호버해야 보여 캔버스가 거의 그대로다 (사용자 결정 2026-10-13 J안).
 // 카드는 body 포털(z 1400 호버 카드 단) — 엣지 라벨 층은 노드 층 아래라 그 안에 두면 이웃 노드에 가려진다.
+// 줌 PULSE_MIN_ZOOM(0.5) 미만이면 숨긴다 — 흐름 펄스와 같은 기준(축소 화면에선 점이 노이즈, 사용자 결정 2026-10-13).
 
+import { useStore } from "@xyflow/react";
 import { FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import type { EdgeCarryItem } from "@/lib/edge-carry";
+import { PULSE_MIN_ZOOM } from "@/lib/edge-pulse";
 import { useI18n } from "@/lib/i18n";
 
 // 점 → 카드로 커서를 옮기는 동안 닫히지 않게 주는 유예(ms)
@@ -23,6 +26,7 @@ export function EdgeCarryBadge({ items }: EdgeCarryBadgeProps) {
   const dotRef = useRef<HTMLSpanElement>(null);
   const closeTimer = useRef<number | null>(null);
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
+  const isZoomedOut = useStore((state) => state.transform[2] < PULSE_MIN_ZOOM);
 
   const cancelClose = () => {
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
@@ -39,6 +43,7 @@ export function EdgeCarryBadge({ items }: EdgeCarryBadgeProps) {
   };
   useEffect(() => cancelClose, []);
 
+  if (isZoomedOut) return null;
   return (
     <>
       <span
