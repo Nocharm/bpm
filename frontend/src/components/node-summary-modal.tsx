@@ -34,7 +34,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useEffectEvent, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { AutoHeight } from "@/components/auto-height";
 import { CostUnitTabs, CurrencyPill, type CostUnit } from "@/components/cost-unit";
@@ -136,6 +136,9 @@ interface NavNodeRef {
 // NavDock의 w-[min(12.5rem,calc(50%-17.5rem))]와 같은 수치 — 전환 애니메이션이 반대편 독 자리를 계산할 때 쓴다
 const DOCK_MAX_WIDTH = 200;
 const DOCK_INSET = 280;
+// 노드 전환 직후 카드 높이 글라이드 창(ms) — 이 동안만 직전 카드 높이 → 새 내용 높이를 ease-glide로 잇는다.
+// 창이 끝나면 높이를 내용에 맡겨 섹션 접기·펼치기는 지금처럼 즉시 반영된다(사용자 결정 2026-10-14)
+const GLIDE_WINDOW_MS = 900;
 // 선후행 전환 애니메이션 길이(ms) — globals.css .summary-swap-* 와 동기
 const SWAP_MS = 380;
 
@@ -603,6 +606,12 @@ export function NodeSummaryModal({
   const [swap, setSwap] = useState<SwapState | null>(null);
   // 마지막 전환 방향 — 전환 뒤 새 독 카드가 들어오는 방향(후행=오른쪽에서, 선행=왼쪽에서)
   const [travel, setTravel] = useState<"next" | "prev" | null>(null);
+  // 전환 글라이드 — 대상 노드 id와 현재 카드 높이(px). 대상 노드 카드가 뜨면 이 높이에서 시작해 새 내용 높이로 간다
+  const [glide, setGlide] = useState<{ nodeId: string; height: number } | null>(null);
+  const isGliding = glide !== null && glide.nodeId === nodeId;
+  const headerRef = useRef<HTMLDivElement>(null);
+  const bodyContentRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
   const [prevNodeId, setPrevNodeId] = useState(nodeId);
   if (nodeId !== prevNodeId) {
     // 노드가 바뀌면(선후행 전환 등) 폼을 새 노드 값으로 리셋 — 렌더 중 상태조정(effect 아님)
@@ -657,6 +666,8 @@ export function NodeSummaryModal({
       return;
     }
     setTravel(side === "right" ? "next" : "prev");
+    // 레이아웃 높이(offsetHeight) — 전환 중 transform(scale)의 영향을 받지 않는다
+    setGlide({ nodeId: node.id, height: card.offsetHeight });
     const c = card.getBoundingClientRect();
     const b = backdrop.getBoundingClientRect();
     const dockWidth = Math.min(DOCK_MAX_WIDTH, b.width / 2 - DOCK_INSET);
@@ -687,6 +698,33 @@ export function NodeSummaryModal({
       onNavigate(node.id);
     }, SWAP_MS);
   };
+
+  // 새 카드의 목표 높이 = 헤더 + 본문 내용 + 푸터 + 테두리, 가용 높이의 80%(max-h-[80%])에서 자른다.
+  // 본문 내용 크기를 지켜보다가(늦게 오는 코멘트 포함) 창 동안 목표를 갱신하고, 창이 끝나면 높이를 풀어 준다
+  useLayoutEffect(() => {
+    if (!isGliding) return undefined;
+    const card = cardRef.current;
+    const header = headerRef.current;
+    const content = bodyContentRef.current;
+    const footer = footerRef.current;
+    const backdrop = card?.parentElement;
+    if (!card || !header || !content || !footer || !backdrop) return undefined;
+    const backdropStyle = getComputedStyle(backdrop);
+    const available =
+      backdrop.clientHeight - parseFloat(backdropStyle.paddingTop) - parseFloat(backdropStyle.paddingBottom);
+    const chrome = card.offsetHeight - card.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const natural = header.offsetHeight + content.offsetHeight + footer.offsetHeight + chrome;
+      const target = Math.ceil(Math.min(natural, available * 0.8));
+      setGlide((prev) => (prev && prev.nodeId === nodeId ? { ...prev, height: target } : prev));
+    });
+    observer.observe(content);
+    const timer = window.setTimeout(() => setGlide(null), GLIDE_WINDOW_MS);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, [isGliding, nodeId]);
 
   // 해당 노드 코멘트 로드(진입 1회) — 실패해도 모달은 동작(빈 목록)
   useEffect(() => {
@@ -1268,13 +1306,14 @@ export function NodeSummaryModal({
         key={nodeId}
         ref={cardRef}
         data-id="node-summary-card"
+        // 전환 직후엔 팝인 대신 높이 글라이드(분기 IO 아일랜드와 같은 ease-glide) — 내용은 살짝 늦게 떠오른다
         className={`relative flex max-h-[80%] w-full max-w-lg flex-col overflow-hidden rounded-sm border glass glass-dense ${
-          swap ? "summary-swap-out" : "summary-card-in"
+          swap ? "summary-swap-out" : isGliding ? "summary-card-glide" : "summary-card-in"
         }`}
-        style={swap ? swap.cardVars : undefined}
+        style={swap ? swap.cardVars : isGliding ? { height: glide.height } : undefined}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">
+        <div ref={headerRef} className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">
           {/* 말줄임 대신 줄바꿈 — 긴 노드 제목(읽기전용 헤더)도 전문 표시 (F7) */}
           <span className="flex min-w-0 flex-1 items-center gap-2 break-keep text-body-strong text-ink">
             <SquarePen size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
@@ -1295,8 +1334,13 @@ export function NodeSummaryModal({
             죽으면 카드의 overflow-hidden이 아래를 잘라 하단까지 닿을 수 없다. 스크롤바는 숨기고 스크롤만 남긴다. */}
         <div
           data-id="node-summary-body"
-          className="scrollbar-hidden flex min-h-0 flex-col gap-3 overflow-y-auto px-4 py-3 text-caption text-ink-secondary"
+          className="scrollbar-hidden min-h-0 overflow-y-auto text-caption text-ink-secondary"
         >
+          {/* 내용 래퍼 — 전환 글라이드가 본문 자연 높이를 재는 기준(본문은 스크롤 컨테이너라 직접 못 잰다) */}
+          <div
+            ref={bodyContentRef}
+            className={`flex flex-col gap-3 px-4 py-3 ${isGliding ? "bpm-island-in" : ""}`}
+          >
           {readOnly ? (
             <div className="flex flex-col gap-2">
               {/* 설명 — 읽기전용에서도 표시(있을 때만). subprocess는 링크맵 베이스+추가분 합성(인스펙터와 동일). */}
@@ -1581,10 +1625,11 @@ export function NodeSummaryModal({
               </div>
             )}
           </div>
+          </div>
         </div>
 
         {/* 푸터 — 라이브 편집 안내 + Esc 힌트 + 완료. readOnly면 닫기만. */}
-        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hairline px-4 py-2">
+        <div ref={footerRef} className="flex shrink-0 items-center justify-between gap-2 border-t border-hairline px-4 py-2">
           {readOnly ? (
             <>
               <span />

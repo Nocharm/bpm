@@ -515,6 +515,10 @@ button:not(:disabled):active {
 .summary-card-in {
   animation: summary-card-in 260ms var(--ease-spring);
 }
+/* 선후행 전환 직후 카드 — 팝인 대신 높이만 ease-glide로(직전 카드 높이 → 새 내용 높이, node-summary-modal GLIDE) */
+.summary-card-glide {
+  transition: height 450ms var(--ease-glide);
+}
 /* 선후행 독의 장면 이동 — 전환 중 양쪽 독이 진행 방향으로 빠지고(exit), 전환 뒤 새 카드가 반대편에서 들어온다(enter).
    후행으로 가면 왼쪽으로 빠지고 오른쪽에서 들어온다 (사용자 요청 2026-09-03). */
 @keyframes dock-exit-left {
