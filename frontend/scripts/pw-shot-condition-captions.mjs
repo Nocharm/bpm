@@ -60,6 +60,17 @@ try {
     await decision.click({ position: { x: 58, y: 48 } });
     await page.waitForTimeout(400);
     await shoot(canvas, "condition-captions-decision-selected");
+    // 링크가 있는 일반 노드 선택 — 하단 액션 바(링크 열기)가 종료 캡션 아래로 내려가는지
+    const withUrl = page.locator(".react-flow__node").filter({ has: page.locator('[data-id="node-condition-end"]') }).first();
+    await withUrl.click({ position: { x: 20, y: 12 } });
+    await page.waitForTimeout(400);
+    const bar = page.locator('[data-id="node-action-bar"]');
+    if ((await bar.count()) > 0) {
+      const caption = await withUrl.locator('[data-id="node-condition-end"]').boundingBox();
+      const barBox = await bar.boundingBox();
+      console.log(`action bar top ${barBox.y.toFixed(0)} vs caption bottom ${(caption.y + caption.height).toFixed(0)}`);
+    }
+    await shoot(canvas, "condition-captions-action-bar");
     await ctx.close();
   }
   {

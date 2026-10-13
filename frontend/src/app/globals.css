@@ -1337,14 +1337,15 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 /* 노드 밖 조건 캡션(위=시작·아래=종료) — 박스 없이 글자만. 배경 대신 캔버스색 헤일로로 지나가는 연결선·점 격자 위에서도
    끊김 없이 읽히게 한다(사용자 결정 2026-10-13). 새벽 하늘(L5) 위에선 밝은 글자 + 어두운 헤일로로 뒤집는다 */
 .bpm-node-caption {
-  color: var(--color-ink-secondary);
+  /* 톤은 보조 정보 수준(tertiary) — 노드 제목보다 시선을 끌지 않게(사용자 요청 2026-10-13) */
+  color: var(--color-ink-tertiary);
   text-shadow:
     0 0 2px var(--color-canvas),
     0 0 4px var(--color-canvas),
     0 0 6px var(--color-canvas);
 }
 .bpm-l5-sky .bpm-node-caption {
-  color: var(--color-canvas);
+  color: color-mix(in srgb, var(--color-canvas) 70%, transparent);
   text-shadow:
     0 0 2px var(--color-canvas-l5),
     0 0 4px var(--color-canvas-l5),
