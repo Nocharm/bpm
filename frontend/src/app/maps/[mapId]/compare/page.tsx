@@ -303,6 +303,14 @@ const edgeTypes: EdgeTypes = { removedArc: RemovedArcEdge, labeled: LabeledSmoot
 // 사용자 조정은 에디터 키와 분리해 영속(bpm.compare.nodeDisplayFields) — 두 화면의 기본값이 다르다.
 const COMPARE_DISPLAY_DEFAULT: NodeDisplayToggle[] = ["assignee", "department", "system", "params", "conditions"];
 const COMPARE_DISPLAY_KEY = "bpm.compare.nodeDisplayFields";
+// 상태 색 구성 — C=관례형(초록·앰버·빨강, 무변경 노드 회색, 기본) / A=추가 연두·변경 청록(무변경 노드 원래 색).
+// 색은 globals.css [data-diff-palette] 토큰 덮어쓰기, 무변경 회색 처리만 여기서 켠다(사용자 요청 2026-10-14)
+type DiffPaletteKey = "a" | "c";
+const DIFF_PALETTES: Record<DiffPaletteKey, { muteUnchanged: boolean }> = {
+  a: { muteUnchanged: false },
+  c: { muteUnchanged: true },
+};
+const COMPARE_PALETTE_KEY = "bpm.compare.diffPalette";
 const COMPARE_NODE_ACTIONS: NodeActions = {
   onToggleExpand: null,
   expandedInlineIds: new Set<string>(),
@@ -497,13 +505,14 @@ function buildAppNodes(
   noteOf: (node: MergedNode) => string | undefined,
   fieldsOf: (node: MergedNode) => DiffFieldRow[] | undefined,
   spVisual: SpVisualContext | null,
+  muteUnchanged = true,
 ): AppNode[] {
   return merged.map((m) => ({
     id: m.id,
     type: "process",
     position: { x: 0, y: 0 },
     // RF 노드 래퍼 클래스 — 무변경 노드 글자 톤(globals.css .bpm-diff-muted)
-    ...(m.status === "unchanged" ? { className: "bpm-diff-muted" } : {}),
+    ...(muteUnchanged && m.status === "unchanged" ? { className: "bpm-diff-muted" } : {}),
     data: {
       label: m.node.title,
       description: m.node.description,
@@ -550,7 +559,7 @@ function buildAppNodes(
       hasChildren: false,
       diffStatus: toDiffStatus(m.status),
       // 무변경 노드는 회색으로 — 바뀐 노드만 눈에 띄고 분기 노드 앰버 테두리가 변경 앰버로 읽히지 않게
-      diffMuted: m.status === "unchanged",
+      diffMuted: muteUnchanged && m.status === "unchanged",
       diffNote: noteOf(m),
       diffFields: fieldsOf(m),
       // 비교 엣지는 전부 4변 핸들로 재매핑 — unchanged subprocess도 NodeHandles를 렌더해야 앵커됨 (F1)
@@ -959,6 +968,29 @@ function ComparePane({
       setDisplayFields(saved);
     }
   }, []);
+  // 상태 색 구성 A/C — 실제 화면에서 두 안을 오가며 비교(사용자 요청 2026-10-14). 내 브라우저에만 기억
+  const [paletteKey, setPaletteKey] = useState<DiffPaletteKey>("c");
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = window.localStorage.getItem(COMPARE_PALETTE_KEY);
+    } catch {
+      saved = null;
+    }
+    if (saved === "a" || saved === "c") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
+      setPaletteKey(saved);
+    }
+  }, []);
+  const commitPalette = (next: DiffPaletteKey) => {
+    try {
+      window.localStorage.setItem(COMPARE_PALETTE_KEY, next);
+    } catch {
+      // 저장 불가(사생활 보호 모드 등) — 이번 화면에서만 적용
+    }
+    setPaletteKey(next);
+  };
+  const palette = DIFF_PALETTES[paletteKey];
   const commitDisplayFields = (next: NodeDisplayToggle[]) => {
     window.localStorage.setItem(COMPARE_DISPLAY_KEY, JSON.stringify(next));
     setDisplayFields(next);
@@ -1160,6 +1192,7 @@ function ComparePane({
           noteOf,
           fieldsOf,
           spVisual,
+          palette.muteUnchanged,
         ),
       ),
       buildAppEdges(layoutEdges, keptKeys, spKeys),
@@ -1181,6 +1214,7 @@ function ComparePane({
         noteOf,
         fieldsOf,
         spVisual,
+        palette.muteUnchanged,
       ),
     );
     const removedPos = placeRemovedNodes(
@@ -1194,7 +1228,7 @@ function ComparePane({
       return position ? { ...node, position } : node;
     });
     return [...aligned, ...removed].map(restoreSize);
-  }, [merged, noteOf, fieldsOf, keptKeys, spKeys, flowDir, spineIds, mapMeta, baseGraph, targetGraph, measuredSizes, displayFields]);
+  }, [merged, noteOf, fieldsOf, keptKeys, spKeys, flowDir, spineIds, mapMeta, baseGraph, targetGraph, measuredSizes, displayFields, palette.muteUnchanged]);
 
   // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용. 실측 렌더 폭/높이(COMPARE_RENDER_*)로 계산해야
   // 핸들 중심이 실제와 일치(nodeSizeOf는 dagre 박스라 어긋남). 세션 드래그 위치가 있으면 그 좌표를
@@ -1333,7 +1367,10 @@ function ComparePane({
             nodeType,
             parallelOutputs: m.node.parallel_outputs ?? [],
             // 무변경 노드는 회색으로 눌렀으니 흐름 점도 회색 — 분기 노드 앰버 점이 변경(앰버)으로 읽히지 않게
-            color: m.status === "unchanged" ? "var(--color-ink-muted)" : resolveNodeStroke(m.node.color, nodeType),
+            color:
+              palette.muteUnchanged && m.status === "unchanged"
+                ? "var(--color-ink-muted)"
+                : resolveNodeStroke(m.node.color, nodeType),
           };
         }),
       merged.edges
@@ -1387,7 +1424,7 @@ function ComparePane({
         }
         return styled;
       }), fanGeom);
-  }, [merged, keptKeys, spKeys, handleSides, fanGeom, occupiedRects, flowDir, baseGraph, targetGraph]);
+  }, [merged, keptKeys, spKeys, handleSides, fanGeom, occupiedRects, flowDir, baseGraph, targetGraph, palette.muteUnchanged]);
 
   // 포커스된 엣지만 굵게 얕게 패치 — 나머지 엣지는 appEdges 객체 그대로(identity 유지)
   const displayEdges = useMemo(
@@ -1868,7 +1905,7 @@ function ComparePane({
   const targetName = versions.find((v) => v.id === targetId)?.label ?? "-";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col" data-diff-palette={paletteKey}>
       {/* 메인 캔버스 스타일 참고 — 노드 핸들(히트박스) 숨김 + 노드 호버 시 자기색 강조 링(bpm-node-emph).
           Turbopack이 dev에서 .react-flow__node 셀렉터 규칙을 purge해 raw <style>로 둔다(lessons canvas §5). */}
       <style>{`
@@ -2171,7 +2208,33 @@ function ComparePane({
               position="bottom-left"
               className="rounded-sm border px-2.5 py-1.5 glass"
             >
-              <DiffLegend counts={counts} />
+              <div className="flex items-center gap-3">
+                <DiffLegend counts={counts} />
+                {/* 색 구성 A/C 전환 — 두 안을 실제 화면에서 비교 */}
+                <div
+                  className="flex items-center gap-0.5 rounded-sm border border-hairline p-0.5 text-fine"
+                  data-id="compare-palette"
+                  role="tablist"
+                  aria-label={t("compare.paletteLabel")}
+                >
+                  {(["a", "c"] as const).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="tab"
+                      aria-selected={paletteKey === key}
+                      data-id={`compare-palette-${key}`}
+                      title={t(key === "a" ? "compare.paletteATitle" : "compare.paletteCTitle")}
+                      className={`rounded-xs px-1.5 py-0.5 font-semibold ${
+                        paletteKey === key ? "bg-accent-tint text-accent" : "text-ink-tertiary hover:bg-surface-alt"
+                      }`}
+                      onClick={() => commitPalette(key)}
+                    >
+                      {t(key === "a" ? "compare.paletteA" : "compare.paletteC")}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </Panel>
             {/* 줌 바 옆 노드 표시 정보 플로팅 — 비교 화면엔 인스펙터 섹션이 없어 이 카드가 유일한 조정 지점 */}
             <Panel position="bottom-right" className="flex items-end gap-2">
