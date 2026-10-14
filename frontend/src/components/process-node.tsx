@@ -1067,20 +1067,27 @@ function NodeIoDiffSummary({ ioDiff }: { ioDiff: IoDiffSummary }) {
 // 변경 필드 before→after 필 — 노드 아래에 절대배치(레이아웃 영향 없음). changed 노드만.
 // 최대 3줄 + "+N more"로 캡(다필드 변경 시 아래 노드 침범 방지). 값은 폭 제한 truncate.
 // 필드 단위 상태색·부분 강조·잘림 호버 팝오버는 목록 행과 공용(compare-field-diff).
-// belowCaption — 노드 아래 종료 조건 캡션이 있으면 그 줄(CONDITION_CAPTION_H)만큼 내려 겹치지 않게
+// belowCaption — 노드 아래 종료 조건 캡션이 있으면 그 줄(CONDITION_CAPTION_H)만큼 내려 겹치지 않게.
+// inline — 분기 노드처럼 아래 확장 블록(캡션·속성·입출력 요약) 흐름 안에 순서대로 쌓을 때(절대 배치 안 함)
 function DiffFieldPills({
   fields,
   belowCaption = false,
+  inline = false,
 }: {
   fields: NonNullable<AppNode["data"]["diffFields"]>;
   belowCaption?: boolean;
+  inline?: boolean;
 }) {
   const { t } = useI18n();
   const shown = fields.slice(0, 3);
   const extra = fields.length - shown.length;
   return (
     <div
-      className={`absolute left-0 top-full z-10 flex flex-col items-start gap-1 ${belowCaption ? "mt-[26px]" : "mt-1.5"}`}
+      className={
+        inline
+          ? "mt-1.5 flex flex-col items-center gap-1"
+          : `absolute left-0 top-full z-10 flex flex-col items-start gap-1 ${belowCaption ? "mt-[26px]" : "mt-1.5"}`
+      }
     >
       {shown.map((field) => (
         <FieldDiffHoverable
@@ -1851,7 +1858,6 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           style={{ ...style, transform: "translate(-50%, -50%) scaleX(1.2) rotate(45deg)" }}
         />
         {diff && <DiffBadge status={diff} className="-top-1 left-1/2 -translate-x-1/2" />}
-        {diffFields.length > 0 && <DiffFieldPills fields={diffFields} belowCaption={hasEndCaption} />}
         {/* GMP 태그는 왼쪽 위 바깥쪽(#4) — 가운데 3줄 제목·우상단 코멘트 배지와 겹치지 않게 */}
         <GmpPill nodeId={id} data={data} className="absolute -left-2 top-0 z-10" />
         <div className="bpm-decision-title-box relative max-w-24 text-center text-xs font-medium text-ink">
@@ -1879,6 +1885,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           <NodeFields data={data} active={fieldsActive} />
           <NodeParams data={data} className="justify-center" />
           <DecisionIoIsland nodeId={id} data={data} selected={selected ?? false} />
+          {/* 비교 diff 필 — 마름모 바로 아래 절대 배치는 캡션·입출력 요약을 덮었다. 블록 맨 아래에 이어 쌓는다 */}
+          {diffFields.length > 0 && <DiffFieldPills fields={diffFields} inline />}
         </div>
         {/* 배지는 박스 진짜 코너로 — 마름모 내접 3줄 제목을 가리지 않게 아래·바깥으로 이동(#5) */}
         {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}

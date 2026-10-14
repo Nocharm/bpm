@@ -480,6 +480,9 @@ function buildSpVisual(node: FlatNode, ctx: SpVisualContext): Partial<AppNode["d
 }
 
 // 변경 노드의 입출력 항목 diff — fieldChanges에 없는 변은 현재값 그대로(전부 unchanged).
+// 입출력 요약(buildIoDiffOf)이 대신 보여 주는 필드 — 비교 필에서 뺀다
+const IO_SUMMARY_FIELDS: ReadonlySet<string> = new Set(["input", "output"]);
+
 function buildIoDiffOf(m: MergedNode) {
   const sideOf = (field: "input" | "output") => {
     const change = m.fieldChanges.find((fc) => fc.field === field);
@@ -1083,10 +1086,14 @@ function ComparePane({
 
   // 변경 노드의 before→after 필 표시값 — 필드 라벨 i18n + 빈값은 None.
   // status는 None 폴백 전 원시 표시값으로 분류(생성/삭제/변경 색 구분).
+  // 입력물·산출물은 노드의 "입출력 ±n" 요약(호버 시 항목별 추가·삭제)이 맡으므로 필에서 뺀다 — 같은 변경을 두 번
+  // 보여 주며 분기 노드에선 요약을 덮었다(사용자 결정 2026-10-14, 모든 노드). 양식·플래그 등 나머지 필은 유지
   const fieldsOf = useCallback(
     (m: MergedNode): DiffFieldRow[] | undefined =>
       m.status === "changed"
-        ? m.fieldChanges.map((fc) => {
+        ? m.fieldChanges
+            .filter((fc) => !(IO_SUMMARY_FIELDS.has(fc.field) && buildIoDiffOf(m)))
+            .map((fc) => {
             const rawBefore = displayFieldValue(t, fc.field, fc.before, refNames);
             const rawAfter = displayFieldValue(t, fc.field, fc.after, refNames);
             return {
@@ -1095,7 +1102,7 @@ function ComparePane({
               after: rawAfter || t("summary.none"),
               status: classifyFieldDiff(rawBefore, rawAfter),
             };
-          })
+            })
         : undefined,
     [t, refNames],
   );
