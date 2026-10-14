@@ -49,6 +49,7 @@ import {
 import {
   hasBpmAttributes,
   hasCustomTerminalLabel,
+  sideFromHandleId,
   NODE_ALT_DELAY_MS,
   type AppNode,
   type HandleSide,
@@ -82,7 +83,7 @@ import { PARAM_ICON } from "@/components/param-icons";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { resolveDataForm } from "@/lib/data-forms";
 import { getIoLine } from "@/lib/io-items";
-import { getConditionCaptions } from "@/lib/condition-captions";
+import { getConditionCaption, getConditionCaptions } from "@/lib/condition-captions";
 import { formatParamValue, PARAM_FIELDS, type ParamField } from "@/lib/params";
 import { parseAssignees } from "@/lib/assignee";
 import { OTHER_SYSTEM } from "@/lib/catalogs";
@@ -523,7 +524,8 @@ function NodeIoDetails({
 
 // 조건 캡션 — 시작은 노드 위, 종료는 노드 아래 한 줄(사용자 결정 2026-10-13, LR·TB 공통). 절대 배치라
 // RF 측정 크기·핸들 앵커는 그대로이고, 위아래 노드와의 간격은 height-shift가 CONDITION_CAPTION_H만큼 벌린다.
-// placement="inline"은 분기 노드의 아래 확장 블록 안(정적 흐름)에 끼울 때. 긴 문구는 말줄임+툴팁.
+// placement: absolute(일반·서브프로세스) · diamond-top(분기 마름모 위) · inline(분기 아래 확장 블록 흐름 안).
+// 긴 문구는 말줄임 — 호버 툴팁이 전문(비교 화면은 이전 → 이후)을 보여 준다.
 function NodeConditionCaption({
   data,
   side,
@@ -531,36 +533,82 @@ function NodeConditionCaption({
 }: {
   data: AppNode["data"];
   side: "start" | "end";
-  placement?: "absolute" | "inline";
+  placement?: "absolute" | "diamond-top" | "inline";
 }) {
   const { displayFields } = useNodeActions();
-  const captions = getConditionCaptions(data, displayFields);
-  const text = captions?.[side] ?? "";
-  if (text === "") return null;
-  const tint = getDiffTint(data, side === "start" ? "start_condition" : "end_condition");
-  const Icon = side === "start" ? Play : Flag;
-  const body = (
-    <div
-      data-id={`node-condition-${side}`}
-      data-diff={tint ? "true" : undefined}
-      title={text}
-      // 배경 없이 글자 헤일로(.bpm-node-caption)로 가독성 — 비교 화면 diff 틴트만 칸을 칠한다
-      className={`bpm-node-caption flex max-w-full items-center gap-1 whitespace-nowrap text-xs leading-4 ${
-        tint ? `rounded-xs px-1 ${tint.bg}` : ""
-      }`}
-    >
-      <Icon size={12} strokeWidth={1.5} className={`shrink-0 ${tint?.icon ?? ""}`} />
-      <span className="min-w-0 truncate">{text}</span>
-    </div>
+  const { t } = useI18n();
+  const nodeId = useNodeId();
+  // 위쪽 변으로 드나드는 연결선이 있으면 시작 캡션을 그 진입점(가운데)에서 비킨다(사용자 결정 2026-10-14)
+  const hasTopEdge = useStore((state) =>
+    side === "start" && nodeId !== null
+      ? state.edges.some(
+          (edge) =>
+            (edge.target === nodeId && sideFromHandleId(edge.targetHandle, "left") === "top") ||
+            (edge.source === nodeId && sideFromHandleId(edge.sourceHandle, "right") === "top"),
+        )
+      : false,
   );
-  // inline(분기 노드) — 마름모 꼭짓점 핸들과 떨어지게 종료 캡션은 위로 6px 띄운다
+  const caption = getConditionCaption(data, side, displayFields);
+  if (caption === null) return null;
+  const key = side === "start" ? "start_condition" : "end_condition";
+  const tint = getDiffTint(data, key);
+  const diff = data.conditionDiffs?.[key];
+  const Icon = side === "start" ? Play : Flag;
+  const tip = diff ? (
+    <span className="flex flex-col gap-0.5 text-caption">
+      <span className="text-fine font-semibold text-ink-tertiary">
+        {t(side === "start" ? "field.startCondition" : "field.endCondition")}
+      </span>
+      <span className="break-words text-removed line-through">{diff.before || t("summary.none")}</span>
+      <span className="break-words text-ink">→ {diff.after || t("summary.none")}</span>
+    </span>
+  ) : (
+    <span className="break-words text-caption text-ink">{caption.text}</span>
+  );
+  const body = (
+    <HoverTip tip={tip} className="flex min-w-0 max-w-full">
+      <span
+        data-id={`node-condition-${side}`}
+        data-diff={tint ? "true" : undefined}
+        // 배경 없이 글자 헤일로(.bpm-node-caption)로 가독성 — 비교 화면 diff 틴트만 칸을 칠한다
+        className={`bpm-node-caption flex min-w-0 max-w-full items-center gap-1 whitespace-nowrap text-xs leading-4 ${
+          tint ? `rounded-xs px-1 ${tint.bg}` : ""
+        }`}
+      >
+        <Icon size={12} strokeWidth={1.5} className={`shrink-0 ${tint?.icon ?? ""}`} />
+        <span className={`min-w-0 truncate ${caption.removed ? "text-removed line-through" : ""}`}>{caption.text}</span>
+      </span>
+    </HoverTip>
+  );
+  // inline(분기 아래) — 마름모 꼭짓점 핸들과 떨어지게 위로 6px 띄운다
   if (placement === "inline") {
-    return <div className={`flex max-w-full justify-center ${side === "end" ? "mt-1.5" : ""}`}>{body}</div>;
+    return <div className="mt-1.5 flex max-w-full justify-center">{body}</div>;
   }
-  // 좌우 12px 들여 코너 배지(코멘트·URL)와 덜 겹치게 — 비교 화면은 좌상단 diff 배지(변경·추가·삭제) 오른쪽으로 비킨다.
+  // 분기 마름모 위 — 가운데 꼭짓점으로 연결선이 들어오면 왼쪽으로 비켜 오른쪽 끝을 꼭짓점 앞에서 끊는다
+  if (placement === "diamond-top") {
+    return (
+      <div
+        className={
+          hasTopEdge
+            ? "absolute bottom-full right-1/2 mb-2 mr-3 flex w-max max-w-40 justify-end"
+            : "absolute bottom-full left-1/2 mb-2 flex w-max max-w-44 -translate-x-1/2 justify-center"
+        }
+      >
+        {body}
+      </div>
+    );
+  }
+  // 좌우 12px 들여 코너 배지(코멘트·URL)와 덜 겹치게. 비교 화면 좌상단 diff 배지(변경·추가·삭제)가 있으면 그 위로 올려
+  // 다른 노드와 같은 왼쪽 위치를 지킨다. 위쪽 변 연결선이 있으면 왼쪽 절반만 쓴다.
   // 아래 캡션은 액션 바가 실측하도록 below-extension
   return side === "start" ? (
-    <div className={`absolute bottom-full right-3 mb-[3px] flex ${data.diffStatus ? "left-16" : "left-3"}`}>{body}</div>
+    <div
+      className={`absolute bottom-full left-3 flex ${hasTopEdge ? "right-1/2 mr-2" : "right-3"} ${
+        data.diffStatus ? "mb-[13px]" : "mb-[3px]"
+      }`}
+    >
+      {body}
+    </div>
   ) : (
     <div data-id="node-below-extension" className="absolute left-3 right-3 top-full mt-[3px] flex">
       {body}
@@ -1894,9 +1942,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           )}
         </div>
         {/* 시작 조건 캡션 — 마름모 위(일반 노드와 같은 자리 규칙) */}
-        <div className="absolute bottom-full left-1/2 mb-2 flex w-max max-w-44 -translate-x-1/2 justify-center">
-          <NodeConditionCaption data={data} side="start" placement="inline" />
-        </div>
+        <NodeConditionCaption data={data} side="start" placement="diamond-top" />
         {/* 종료 조건·어트리뷰트·파라미터·IO — 마름모 박스(h-24 w-[116px])를 넘치지 않게 아래 절대배치 캡션으로.
             절대배치라 React Flow 측정 크기가 불변 → 핸들·엣지 앵커 무영향.
             IO는 미선택이면 개수 칩(호버 카드), 선택하면 전체 박스 (사용자 결정 2026-10-13 A안). */}

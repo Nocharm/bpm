@@ -18,6 +18,12 @@ export interface CaptionExtents {
 
 export const NO_CAPTION_EXTENTS: CaptionExtents = { above: 0, below: 0 };
 
+export interface ConditionCaption {
+  text: string;
+  // 비교 화면에서 대상 버전에 없는(지워진) 조건 — 이전 값을 취소선으로 보여 준다
+  removed: boolean;
+}
+
 // 여러 줄 조건은 캡션 한 줄에 " / "로 이어 붙인다 — 전문은 툴팁
 function formatCaptionText(raw: string | null | undefined): string {
   return (raw ?? "")
@@ -27,16 +33,31 @@ function formatCaptionText(raw: string | null | undefined): string {
     .join(" / ");
 }
 
+/** 한쪽 조건 캡션 — 현재 값, 없으면 비교 화면의 지워진 이전 값(removed). 토글 꺼짐·시작/끝 노드·빈 값은 null. */
+export function getConditionCaption(
+  data: AppNode["data"],
+  side: "start" | "end",
+  displayFields: readonly NodeDisplayToggle[],
+): ConditionCaption | null {
+  if (!displayFields.includes("conditions")) return null;
+  const isSubprocess = data.nodeType === "subprocess";
+  if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
+  const key = side === "start" ? "start_condition" : "end_condition";
+  const current = formatCaptionText(
+    isSubprocess ? (side === "start" ? data.spStartCondition : data.spEndCondition) : data[key],
+  );
+  if (current !== "") return { text: current, removed: false };
+  const before = formatCaptionText(data.conditionDiffs?.[key]?.before);
+  return before !== "" ? { text: before, removed: true } : null;
+}
+
 /** 노드에 그릴 조건 캡션 — Conditions 토글이 꺼졌거나 BPM 속성이 없는 노드(시작·끝)는 null. SP는 링크 맵 지정값. */
 export function getConditionCaptions(
   data: AppNode["data"],
   displayFields: readonly NodeDisplayToggle[],
 ): ConditionCaptions | null {
-  if (!displayFields.includes("conditions")) return null;
-  const isSubprocess = data.nodeType === "subprocess";
-  if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
-  const start = formatCaptionText(isSubprocess ? data.spStartCondition : data.start_condition);
-  const end = formatCaptionText(isSubprocess ? data.spEndCondition : data.end_condition);
+  const start = getConditionCaption(data, "start", displayFields)?.text ?? "";
+  const end = getConditionCaption(data, "end", displayFields)?.text ?? "";
   if (start === "" && end === "") return null;
   return { start, end };
 }

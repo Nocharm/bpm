@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { AppNode } from "@/lib/canvas";
 import {
   CONDITION_CAPTION_H,
+  getConditionCaption,
   getConditionCaptionExtents,
   getConditionCaptions,
 } from "@/lib/condition-captions";
@@ -40,6 +41,24 @@ describe("getConditionCaptions", () => {
   it("여러 줄 조건은 한 줄로 잇는다", () => {
     const node = makeNode("decision", { end_condition: "판정 기록\n\n 결재 완료 " });
     expect(getConditionCaptions(node.data, ["conditions"])?.end).toBe("판정 기록 / 결재 완료");
+  });
+});
+
+describe("getConditionCaption - 비교 화면 지워진 조건", () => {
+  it("대상 버전에서 지워진 조건은 이전 값을 removed로 돌려준다", () => {
+    const node = makeNode("process", {
+      end_condition: "",
+      conditionDiffs: { end_condition: { before: "승인 완료", after: "" } },
+    });
+    expect(getConditionCaption(node.data, "end", ["conditions"])).toEqual({ text: "승인 완료", removed: true });
+  });
+
+  it("현재 값이 있으면 그 값(removed 아님)", () => {
+    const node = makeNode("process", {
+      start_condition: "최종 승인",
+      conditionDiffs: { start_condition: { before: "승인 완료", after: "최종 승인" } },
+    });
+    expect(getConditionCaption(node.data, "start", ["conditions"])).toEqual({ text: "최종 승인", removed: false });
   });
 });
 

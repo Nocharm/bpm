@@ -490,6 +490,8 @@ function buildSpVisual(node: FlatNode, ctx: SpVisualContext): Partial<AppNode["d
 // 변경 노드의 입출력 항목 diff — fieldChanges에 없는 변은 현재값 그대로(전부 unchanged).
 // 입출력 요약(buildIoDiffOf)이 대신 보여 주는 필드 — 비교 필에서 뺀다
 const IO_SUMMARY_FIELDS: ReadonlySet<string> = new Set(["input", "output"]);
+// 위·아래 조건 캡션이 대신 보여 주는 필드 — 조건 표시를 켠 동안 비교 필에서 뺀다
+const CONDITION_FIELDS: ReadonlySet<string> = new Set(["start_condition", "end_condition"]);
 
 function buildIoDiffOf(m: MergedNode) {
   const sideOf = (field: "input" | "output") => {
@@ -532,6 +534,11 @@ function buildAppNodes(
       // 노드 위 조건 줄 — 인스펙터와 같은 값(target 우선). 입출력은 ioDiff 요약으로만.
       start_condition: m.node.start_condition,
       end_condition: m.node.end_condition,
+      conditionDiffs: Object.fromEntries(
+        m.fieldChanges
+          .filter((fc) => fc.field === "start_condition" || fc.field === "end_condition")
+          .map((fc) => [fc.field, { before: fc.before, after: fc.after }]),
+      ),
       // IO 텍스트·링크 열 — 연결선 전달물(lib/edge-carry) 계산용. 노드 위 입출력 표시는 ioDiff 요약이 담당
       input: m.node.input,
       output: m.node.output,
@@ -1129,6 +1136,8 @@ function ComparePane({
       m.status === "changed"
         ? m.fieldChanges
             .filter((fc) => !(IO_SUMMARY_FIELDS.has(fc.field) && buildIoDiffOf(m)))
+            // 조건은 노드 위·아래 캡션(호버 시 이전 → 이후)이 맡는다 — 조건 표시를 켠 동안 필로 반복하지 않는다
+            .filter((fc) => !(CONDITION_FIELDS.has(fc.field) && displayFields.includes("conditions")))
             .map((fc) => {
             const rawBefore = displayFieldValue(t, fc.field, fc.before, refNames);
             const rawAfter = displayFieldValue(t, fc.field, fc.after, refNames);
@@ -1140,7 +1149,7 @@ function ComparePane({
             };
             })
         : undefined,
-    [t, refNames],
+    [t, refNames, displayFields],
   );
 
   // 좌표 없는 union 노드 → dagre 배치 (연결 기반, 저장 pos 무시). focus와 무관하게 1회만 계산.
@@ -1164,7 +1173,9 @@ function ComparePane({
     // 백본 중심 정렬이 캡션 유무에 따라 어긋난다. 배치가 끝나면 패딩만큼 내리고 실측 크기로 되돌린다(restoreSize).
     const captionPadOf = (node: AppNode) => {
       const { above, below } = getConditionCaptionExtents(node, displayFields);
-      return Math.max(above, below);
+      // diff 배지가 있는 노드는 시작 캡션을 배지 위로 10px 더 올린다(ProcessNode NodeConditionCaption mb-[13px])
+      const lift = above > 0 && node.data.diffStatus && node.data.nodeType !== "decision" ? 10 : 0;
+      return Math.max(above + lift, below);
     };
     const withMeasured = (nodes: AppNode[]) =>
       nodes.map((node) => {
@@ -2210,27 +2221,37 @@ function ComparePane({
             >
               <div className="flex items-center gap-3">
                 <DiffLegend counts={counts} />
-                {/* 색 구성 A/C 전환 — 두 안을 실제 화면에서 비교 */}
+                {/* 상태 색 팔레트 전환 — 각 견본은 추가·변경·삭제·바뀌지 않음 2×2. 견본 자체가 버튼 */}
                 <div
-                  className="flex items-center gap-0.5 rounded-sm border border-hairline p-0.5 text-fine"
+                  className="flex items-center gap-1 border-l border-hairline pl-2.5"
                   data-id="compare-palette"
-                  role="tablist"
+                  role="radiogroup"
                   aria-label={t("compare.paletteLabel")}
                 >
-                  {(["a", "c"] as const).map((key) => (
+                  {(["c", "a"] as const).map((key) => (
                     <button
                       key={key}
                       type="button"
-                      role="tab"
-                      aria-selected={paletteKey === key}
+                      role="radio"
+                      aria-checked={paletteKey === key}
                       data-id={`compare-palette-${key}`}
                       title={t(key === "a" ? "compare.paletteATitle" : "compare.paletteCTitle")}
-                      className={`rounded-xs px-1.5 py-0.5 font-semibold ${
-                        paletteKey === key ? "bg-accent-tint text-accent" : "text-ink-tertiary hover:bg-surface-alt"
+                      className={`rounded-sm p-1 ${
+                        paletteKey === key ? "bg-accent-tint ring-1 ring-accent" : "hover:bg-surface-alt"
                       }`}
                       onClick={() => commitPalette(key)}
                     >
-                      {t(key === "a" ? "compare.paletteA" : "compare.paletteC")}
+                      {/* data-diff-palette로 견본마다 자기 안의 토큰을 쓴다(현재 선택과 무관하게 두 안을 나란히) */}
+                      <span data-diff-palette={key} className="grid grid-cols-2 gap-px">
+                        <span className="h-2.5 w-2.5 rounded-[2px] bg-added" />
+                        <span className="h-2.5 w-2.5 rounded-[2px] bg-diff-changed" />
+                        <span className="h-2.5 w-2.5 rounded-[2px] bg-removed" />
+                        <span
+                          className={`h-2.5 w-2.5 rounded-[2px] ${
+                            DIFF_PALETTES[key].muteUnchanged ? "bg-ink-muted" : "border border-hairline bg-surface"
+                          }`}
+                        />
+                      </span>
                     </button>
                   ))}
                 </div>

@@ -101,6 +101,8 @@ export type NodeData = {
   // 비교 전용 — 바뀐 필드 → 상태(added/removed/changed). 노드의 칩·속성 줄·조건 줄 아이콘 색과 배경 틴트로
   // 노드만 봐도 변경을 유추하게 하는 힌트 (사용자 요청 2026-09-18). 키는 fieldChanges.field.
   diffFieldStatus?: Partial<Record<string, FieldDiffStatus>>;
+  // 비교 화면 조건 변경(이전·이후 원문) — 조건은 필 대신 위·아래 캡션이 맡고, 호버 툴팁이 이전 → 이후를 보여 준다
+  conditionDiffs?: Partial<Record<"start_condition" | "end_condition", { before: string; after: string }>>;
   // 비교 전용 — 입출력 항목 diff 요약. 있으면 노드는 IO 패널 대신 "I/O +N −M" 한 줄 + 통합 호버 툴팁을 그린다.
   ioDiff?: IoDiffSummary;
   hasDescendantChange?: boolean;
