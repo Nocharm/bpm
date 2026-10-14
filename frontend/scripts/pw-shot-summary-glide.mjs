@@ -38,27 +38,45 @@ try {
 
   const next = page.locator('[data-id="summary-dock-next"] button').first();
   if ((await next.count()) === 0) throw new Error("후행 독 카드가 없다 — 다른 NODE_TITLE을 지정");
-  // 전환(380ms) 뒤 새 카드의 높이를 rAF마다 기록
+  // rAF마다 카드 크기·고스트(이동 중)·이어받기 카드 불투명도를 기록 — 이동 중 고스트는 크기·불투명도 그대로여야 하고,
+  // 새 카드는 독 카드 크기에서 모달 폭·내용 높이로 점진 변화해야 한다
   await page.evaluate(() => {
-    window.__heights = [];
+    window.__frames = [];
     const start = performance.now();
     const tick = () => {
-      const el = document.querySelector('[data-id="node-summary-card"]');
-      if (el) window.__heights.push([Math.round(performance.now() - start), el.offsetHeight, el.className.includes("summary-card-glide")]);
+      const card = document.querySelector('[data-id="node-summary-card"]');
+      const ghost = document.querySelector('[data-id="summary-swap-ghost"]');
+      const handoff = document.querySelector('[data-id="summary-swap-handoff"]');
+      window.__frames.push({
+        t: Math.round(performance.now() - start),
+        w: card?.offsetWidth,
+        h: card?.offsetHeight,
+        glide: card?.className.includes("summary-card-glide") ?? false,
+        ghostW: ghost ? Math.round(ghost.getBoundingClientRect().width) : null,
+        ghostOpacity: ghost ? Number(getComputedStyle(ghost).opacity) : null,
+        handoffOpacity: handoff ? Number(getComputedStyle(handoff).opacity).toFixed(2) : null,
+      });
       if (performance.now() - start < 1600) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
   });
   await next.click();
-  await page.waitForTimeout(700);
-  await page.screenshot({ path: path.join(SHOT_DIR, `summary-glide${VERSION_ID ? "-edit" : ""}-2-mid.png`) });
-  await page.waitForTimeout(1100);
-  const heights = await page.evaluate(() => window.__heights);
-  const gliding = heights.filter(([, , isGlide]) => isGlide);
-  const distinct = [...new Set(gliding.map(([, h]) => h))];
-  console.log(`glide frames ${gliding.length}, distinct heights ${distinct.length}: ${distinct.slice(0, 12).join(" → ")}`);
-  console.log(`after window: glide class ${heights.at(-1)?.[2]}, height ${heights.at(-1)?.[1]}`);
-  await page.screenshot({ path: path.join(SHOT_DIR, `summary-glide${VERSION_ID ? "-edit" : ""}-3-after.png`) });
+  for (const [ms, name] of [[200, "2-travel"], [520, "3-expanding"], [1300, "4-after"]]) {
+    await page.waitForTimeout(ms - (name === "2-travel" ? 0 : name === "3-expanding" ? 200 : 520));
+    await page.screenshot({ path: path.join(SHOT_DIR, `summary-glide${VERSION_ID ? "-edit" : ""}-${name}.png`) });
+  }
+  await page.waitForTimeout(400);
+  const frames = await page.evaluate(() => window.__frames);
+  const travel = frames.filter((f) => f.ghostW !== null);
+  console.log(
+    `ghost travel: widths ${[...new Set(travel.map((f) => f.ghostW))].join(",")}, opacity ${[...new Set(travel.map((f) => f.ghostOpacity))].join(",")}`,
+  );
+  const gliding = frames.filter((f) => f.glide);
+  const sizes = [...new Set(gliding.map((f) => `${f.w}x${f.h}`))];
+  console.log(`expand frames ${gliding.length}: ${sizes.slice(0, 4).join(" → ")} … ${sizes.slice(-3).join(" → ")}`);
+  console.log(`handoff opacity: ${[...new Set(frames.map((f) => f.handoffOpacity).filter((v) => v !== null))].slice(0, 8).join(" → ")}`);
+  const last = frames.at(-1);
+  console.log(`after window: glide class ${last.glide}, size ${last.w}x${last.h}`);
 
   // 창이 끝난 뒤 섹션 접기 = 즉시(글라이드 없음)
   const toggle = page.locator('[data-id="summary-toggle-all-sections"]');

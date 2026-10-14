@@ -472,8 +472,8 @@ button:not(:disabled):active {
   }
 }
 
-/* 노드 편집 모달 선후행 전환 — 가운데 카드는 줄어들며 반대편 독으로, 클릭한 독 카드(고스트)는 커지며
-   가운데로, 새 내용은 팝인 (사용자 요청 2026-09-03). 이동량·배율은 호출부가 실측해 CSS 변수로 주입한다.
+/* 노드 편집 모달 선후행 전환 — 가운데 카드는 줄어들며 반대편 독으로, 클릭한 독 카드(고스트)는 크기 그대로
+   가운데로 와서 새 카드가 그 자리에서 펼쳐진다 (사용자 요청 2026-09-03, 펼침 2026-10-14). 이동량·배율은 호출부가 실측해 CSS 변수로 주입한다.
    translate/scale 개별 속성이라 transform-origin(center) 기준으로 중심이 정확히 이동한다. */
 @keyframes summary-swap-out {
   to {
@@ -486,20 +486,27 @@ button:not(:disabled):active {
   animation: summary-swap-out 380ms var(--ease-spring) forwards;
   pointer-events: none;
 }
-@keyframes summary-swap-in {
+/* 클릭한 독 카드(고스트) — 크기·불투명도 그대로 모달 자리(가운데·카드 윗변)로 이동만 한다 */
+@keyframes summary-ghost-travel {
   from {
     translate: 0 0;
-    scale: 1;
-    opacity: 1;
   }
   to {
     translate: var(--swap-dx) var(--swap-dy);
-    scale: var(--swap-scale);
+  }
+}
+.summary-ghost-travel {
+  animation: summary-ghost-travel 380ms var(--ease-glide) forwards;
+  pointer-events: none;
+}
+/* 이어받기 — 도착한 독 카드가 그 자리에서 펼쳐지는 새 카드 위에서 사라진다(HANDOFF_MS와 동기) */
+@keyframes summary-handoff-out {
+  to {
     opacity: 0;
   }
 }
-.summary-swap-in {
-  animation: summary-swap-in 380ms var(--ease-spring) forwards;
+.summary-handoff-out {
+  animation: summary-handoff-out 240ms var(--ease-glide) forwards;
   pointer-events: none;
 }
 @keyframes summary-card-in {
@@ -515,9 +522,15 @@ button:not(:disabled):active {
 .summary-card-in {
   animation: summary-card-in 260ms var(--ease-spring);
 }
-/* 선후행 전환 직후 카드 — 팝인 대신 높이만 ease-glide로(직전 카드 높이 → 새 내용 높이, node-summary-modal GLIDE) */
+/* 선후행 전환 직후 카드 — 도착한 독 카드 크기에서 모달 폭·내용 높이로 펼친다(다이나믹 아일랜드, node-summary-modal GLIDE).
+   내용은 펼침 후반에 떠오른다 */
 .summary-card-glide {
-  transition: height 450ms var(--ease-glide);
+  transition:
+    width 450ms var(--ease-glide),
+    height 450ms var(--ease-glide);
+}
+.summary-content-in {
+  animation: bpm-island-in 240ms var(--ease-glide) 220ms backwards;
 }
 /* 선후행 독의 장면 이동 — 전환 중 양쪽 독이 진행 방향으로 빠지고(exit), 전환 뒤 새 카드가 반대편에서 들어온다(enter).
    후행으로 가면 왼쪽으로 빠지고 오른쪽에서 들어온다 (사용자 요청 2026-09-03). */
@@ -569,7 +582,9 @@ button:not(:disabled):active {
 }
 @media (prefers-reduced-motion: reduce) {
   .summary-swap-out,
-  .summary-swap-in,
+  .summary-ghost-travel,
+  .summary-handoff-out,
+  .summary-content-in,
   .summary-card-in,
   .dock-exit-left,
   .dock-exit-right,
