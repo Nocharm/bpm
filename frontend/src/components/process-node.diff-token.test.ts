@@ -1,4 +1,4 @@
-// diff 변경 톤은 전용 토큰(--color-diff-changed)만 쓴다 — 경고용 --color-changed와 섞이면 분기 노드 앰버와 다시 겹친다 (spec 2026-09-23 §1 C2).
+// diff 변경 톤은 전용 토큰(--color-diff-changed)만 쓴다 — 관례형 앰버(2026-10-14). 경고용 --color-changed와는 용도가 달라 토큰을 섞지 않는다.
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
@@ -8,7 +8,7 @@ const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
 describe("diff changed token", () => {
   it("globals.css defines --color-diff-changed inside @theme", () => {
     const css = read("../app/globals.css");
-    expect(css).toMatch(/--color-diff-changed:\s*#0f766e;/);
+    expect(css).toMatch(/--color-diff-changed:\s*#9a6700;/);
   });
   it("ProcessNode diff maps use the diff token, not the warning token", () => {
     const src = read("./process-node.tsx");

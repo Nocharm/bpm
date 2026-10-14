@@ -92,6 +92,8 @@ export type NodeData = {
   scopeId?: string | null;
   // 비교 화면 전용 — diff 하이라이트 (spec §7 Phase B). 에디터에서는 미설정.
   diffStatus?: "added" | "removed" | "changed";
+  // 비교 화면에서 바뀌지 않은 노드 — 회색으로 눌러 추가·변경·삭제만 눈에 띄게(분기 노드 앰버 테두리와 변경 앰버 혼동 차단)
+  diffMuted?: boolean;
   diffNote?: string;
   // 변경 노드의 필드 diff (compare 전용) — before→after 필 렌더용. label/before/after는 표시용 포맷 완료값,
   // status는 필드 단위 생성/삭제/변경 분류(compare-field-diff).

@@ -502,6 +502,8 @@ function buildAppNodes(
     id: m.id,
     type: "process",
     position: { x: 0, y: 0 },
+    // RF 노드 래퍼 클래스 — 무변경 노드 글자 톤(globals.css .bpm-diff-muted)
+    ...(m.status === "unchanged" ? { className: "bpm-diff-muted" } : {}),
     data: {
       label: m.node.title,
       description: m.node.description,
@@ -547,6 +549,8 @@ function buildAppNodes(
       groupIds: m.node.group_ids ?? [],
       hasChildren: false,
       diffStatus: toDiffStatus(m.status),
+      // 무변경 노드는 회색으로 — 바뀐 노드만 눈에 띄고 분기 노드 앰버 테두리가 변경 앰버로 읽히지 않게
+      diffMuted: m.status === "unchanged",
       diffNote: noteOf(m),
       diffFields: fieldsOf(m),
       // 비교 엣지는 전부 4변 핸들로 재매핑 — unchanged subprocess도 NodeHandles를 렌더해야 앵커됨 (F1)

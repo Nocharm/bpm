@@ -34,6 +34,8 @@ import {
   MessageSquare,
   Pin,
   Play,
+  Minus,
+  PencilLine,
   Plus,
   RefreshCw,
   Server,
@@ -966,6 +968,16 @@ const DIFF_BADGE_BG: Record<DiffStatus, string> = {
   changed: "bg-diff-changed",
 };
 
+// 비교 화면 무변경 노드 — 회색 테두리·옅은 바탕(노드 고유색 없음). 글자 톤은 globals.css .bpm-diff-muted
+function mutedNodeStyle(): CSSProperties {
+  return {
+    borderColor: "var(--color-border-strong)",
+    borderWidth: "1.5px",
+    background: "color-mix(in srgb, var(--color-ink-muted) 6%, white)",
+    "--nc": "var(--color-border-strong)",
+  } as unknown as CSSProperties;
+}
+
 // diff 노드 스타일 — diff색 테두리(삭제=점선)+연한 틴트 fill. --nc는 호버 강조 링용.
 function diffNodeStyle(status: DiffStatus): CSSProperties {
   const c = DIFF_COLOR[status];
@@ -978,13 +990,22 @@ function diffNodeStyle(status: DiffStatus): CSSProperties {
   } as unknown as CSSProperties;
 }
 
+// 상태 뱃지 아이콘 — 색을 구분하기 어려운 사용자도 모양으로 추가·변경·삭제를 가린다(사용자 결정 2026-10-14)
+const DIFF_BADGE_ICON: Record<DiffStatus, LucideIcon> = {
+  added: Plus,
+  changed: PencilLine,
+  removed: Minus,
+};
+
 // 상태 뱃지(상단) — opacity .7로 내용 안 가림. 위치는 className으로(마름모는 상단중앙).
 function DiffBadge({ status, className = "-top-2.5 left-2.5" }: { status: DiffStatus; className?: string }) {
   const { t } = useI18n();
+  const Icon = DIFF_BADGE_ICON[status];
   return (
     <span
-      className={`absolute z-10 rounded-full px-1.5 text-[11px] font-semibold leading-5 text-on-accent opacity-70 ${DIFF_BADGE_BG[status]} ${className}`}
+      className={`absolute z-10 inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 text-[11px] font-semibold leading-5 text-on-accent opacity-70 ${DIFF_BADGE_BG[status]} ${className}`}
     >
+      <Icon size={11} strokeWidth={2.25} className="shrink-0" />
       {t(DIFF_BADGE_KEY[status])}
     </span>
   );
@@ -1564,7 +1585,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
     data.spOriginPath ?? (spPlaceholder ? (data.placeholderCategoryPath ?? null) : null);
   const style = diff
     ? diffNodeStyle(diff)
-    : spPlaceholder || spMissing
+    : data.diffMuted
+      ? mutedNodeStyle()
+      : spPlaceholder || spMissing
       ? placeholderNodeStyle()
       : spExternal
         ? externalSpNodeStyle(color)
