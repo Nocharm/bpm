@@ -38,8 +38,8 @@ try {
 
   const next = page.locator('[data-id="summary-dock-next"] button').first();
   if ((await next.count()) === 0) throw new Error("후행 독 카드가 없다 — 다른 NODE_TITLE을 지정");
-  // rAF마다 카드 크기·고스트(이동 중)·이어받기 카드 불투명도를 기록 — 이동 중 고스트는 크기·불투명도 그대로여야 하고,
-  // 새 카드는 독 카드 크기에서 모달 폭·내용 높이로 점진 변화해야 한다
+  // rAF마다 카드 크기·불투명도·고스트·이어받기 카드를 기록 — 고스트는 불투명한 채로 이동하며 커져야 하고,
+  // 새 카드는 도착 크기에서 내용 높이로 점진 변화하며, 펼침 창이 끝난 뒤 다시 팝인(깜빡임)하면 안 된다
   await page.evaluate(() => {
     window.__frames = [];
     const start = performance.now();
@@ -53,6 +53,8 @@ try {
         h: card?.offsetHeight,
         glide: card?.className.includes("summary-card-glide") ?? false,
         ghostW: ghost ? Math.round(ghost.getBoundingClientRect().width) : null,
+        cardOpacity: card ? Number(getComputedStyle(card).opacity) : null,
+        cardAnim: card ? getComputedStyle(card).animationName : null,
         ghostOpacity: ghost ? Number(getComputedStyle(ghost).opacity) : null,
         handoffOpacity: handoff ? Number(getComputedStyle(handoff).opacity).toFixed(2) : null,
       });
@@ -68,9 +70,15 @@ try {
   await page.waitForTimeout(400);
   const frames = await page.evaluate(() => window.__frames);
   const travel = frames.filter((f) => f.ghostW !== null);
+  const ghostWidths = [...new Set(travel.map((f) => f.ghostW))];
   console.log(
-    `ghost travel: widths ${[...new Set(travel.map((f) => f.ghostW))].join(",")}, opacity ${[...new Set(travel.map((f) => f.ghostOpacity))].join(",")}`,
+    `ghost travel: widths ${ghostWidths.slice(0, 3).join(" → ")} … ${ghostWidths.slice(-2).join(" → ")} (${ghostWidths.length} steps), opacity ${[...new Set(travel.map((f) => f.ghostOpacity))].join(",")}`,
   );
+  // 펼침이 끝난 뒤(글라이드 클래스가 빠진 뒤) 카드 불투명도가 1 아래로 떨어지거나 팝인이 다시 걸리면 깜빡임
+  const lastGlide = frames.findLastIndex((f) => f.glide);
+  const afterGlide = frames.slice(lastGlide + 1);
+  const dips = afterGlide.filter((f) => f.cardOpacity !== null && (f.cardOpacity < 0.999 || f.cardAnim === "summary-card-in"));
+  console.log(`after-glide frames ${afterGlide.length}, flicker frames ${dips.length}`);
   const gliding = frames.filter((f) => f.glide);
   const sizes = [...new Set(gliding.map((f) => `${f.w}x${f.h}`))];
   console.log(`expand frames ${gliding.length}: ${sizes.slice(0, 4).join(" → ")} … ${sizes.slice(-3).join(" → ")}`);

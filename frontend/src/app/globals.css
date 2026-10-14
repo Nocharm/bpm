@@ -486,13 +486,12 @@ button:not(:disabled):active {
   animation: summary-swap-out 380ms var(--ease-spring) forwards;
   pointer-events: none;
 }
-/* 클릭한 독 카드(고스트) — 크기·불투명도 그대로 모달 자리(가운데·카드 윗변)로 이동만 한다 */
+/* 클릭한 독 카드(고스트) — 불투명한 채로 모달 자리로 이동하면서 동시에 모달 크기로 커진다(scale 대신 폭·높이라 글자가 늘어나지 않는다) */
 @keyframes summary-ghost-travel {
-  from {
-    translate: 0 0;
-  }
   to {
     translate: var(--swap-dx) var(--swap-dy);
+    width: var(--swap-w);
+    height: var(--swap-h);
   }
 }
 .summary-ghost-travel {
@@ -522,15 +521,13 @@ button:not(:disabled):active {
 .summary-card-in {
   animation: summary-card-in 260ms var(--ease-spring);
 }
-/* 선후행 전환 직후 카드 — 도착한 독 카드 크기에서 모달 폭·내용 높이로 펼친다(다이나믹 아일랜드, node-summary-modal GLIDE).
-   내용은 펼침 후반에 떠오른다 */
+/* 선후행 전환 직후 카드 — 고스트가 커져 도착한 크기에서 새 내용 높이로 맞춘다(다이나믹 아일랜드, node-summary-modal GLIDE).
+   내용은 이어받기 고스트가 사라지는 동안 떠오른다 */
 .summary-card-glide {
-  transition:
-    width 450ms var(--ease-glide),
-    height 450ms var(--ease-glide);
+  transition: height 450ms var(--ease-glide);
 }
 .summary-content-in {
-  animation: bpm-island-in 240ms var(--ease-glide) 220ms backwards;
+  animation: bpm-island-in 260ms var(--ease-glide) 80ms backwards;
 }
 /* 선후행 독의 장면 이동 — 전환 중 양쪽 독이 진행 방향으로 빠지고(exit), 전환 뒤 새 카드가 반대편에서 들어온다(enter).
    후행으로 가면 왼쪽으로 빠지고 오른쪽에서 들어온다 (사용자 요청 2026-09-03). */

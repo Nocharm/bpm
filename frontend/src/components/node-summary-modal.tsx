@@ -136,9 +136,9 @@ interface NavNodeRef {
 // NavDock의 w-[min(12.5rem,calc(50%-17.5rem))]와 같은 수치 — 전환 애니메이션이 반대편 독 자리를 계산할 때 쓴다
 const DOCK_MAX_WIDTH = 200;
 const DOCK_INSET = 280;
-// 노드 전환 직후 카드 펼침 창(ms) — 클릭한 독 카드가 크기 그대로 가운데로 온 뒤, 새 카드가 그 카드 크기에서
-// 모달 폭·내용 높이로 ease-glide로 펼쳐진다(다이나믹 아일랜드, 사용자 결정 2026-10-14). 창이 끝나면 크기를
-// 레이아웃에 맡겨 섹션 접기·펼치기는 지금처럼 즉시 반영된다
+// 노드 전환 직후 카드 펼침 창(ms) — 클릭한 독 카드가 가운데로 이동하면서 동시에 모달 크기로 커지고(고스트),
+// 도착하면 새 카드가 그 크기를 이어받아 내용 높이로 ease-glide로 맞춘다(다이나믹 아일랜드, 사용자 결정 2026-10-14).
+// 창이 끝나면 크기를 레이아웃에 맡겨 섹션 접기·펼치기는 지금처럼 즉시 반영된다
 const GLIDE_WINDOW_MS = 900;
 // 가운데로 온 독 카드가 펼쳐지는 새 카드 위에서 사라지는 시간(ms) — globals.css .summary-handoff-out과 동기
 const HANDOFF_MS = 240;
@@ -609,17 +609,12 @@ export function NodeSummaryModal({
   const [swap, setSwap] = useState<SwapState | null>(null);
   // 마지막 전환 방향 — 전환 뒤 새 독 카드가 들어오는 방향(후행=오른쪽에서, 선행=왼쪽에서)
   const [travel, setTravel] = useState<"next" | "prev" | null>(null);
-  // 전환 펼침 — 대상 노드 id, 현재 상자 크기(시작은 클릭한 독 카드 크기), 목표 폭(모달 폭).
-  // 대상 노드 카드가 뜨면 이 크기에서 시작해 목표 폭·내용 높이로 간다
-  const [glide, setGlide] = useState<{ nodeId: string; width: number; height: number; toWidth: number } | null>(
-    null,
-  );
+  // 전환 펼침 — 대상 노드 id와 현재 상자 높이(시작은 고스트가 커진 크기 = 직전 카드 높이).
+  // 대상 노드 카드가 뜨면 이 높이에서 시작해 새 내용 높이로 간다(폭은 모달 폭 그대로)
+  const [glide, setGlide] = useState<{ nodeId: string; height: number } | null>(null);
   // 가운데로 온 독 카드 — 새 카드가 펼쳐지는 동안 그 위에서 사라진다(두 동작을 잇는 연결 고리)
   const [handoff, setHandoff] = useState<{ node: NavNodeRef; box: CSSProperties } | null>(null);
   const isGliding = glide !== null && glide.nodeId === nodeId;
-  // 펼치는 동안 머리·본문·바닥은 처음부터 모달 폭으로 배치 — 좁은 상자에서 줄바꿈이 바뀌며 높이가 출렁이지 않게
-  // (넘친 부분은 카드 overflow-hidden이 가리고, 내용은 펼침 후반에 떠오른다)
-  const glideInnerStyle: CSSProperties | undefined = isGliding ? { minWidth: glide.toWidth - 2 } : undefined;
   const headerRef = useRef<HTMLDivElement>(null);
   const bodyContentRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
@@ -678,8 +673,11 @@ export function NodeSummaryModal({
     }
     setTravel(side === "right" ? "next" : "prev");
     const c = card.getBoundingClientRect();
-    // 새 카드는 클릭한 독 카드 크기에서 시작해 지금 카드 폭(같은 w-full max-w-lg)으로 펼쳐진다
-    setGlide({ nodeId: node.id, width: rect.width, height: rect.height, toWidth: c.width });
+    // 크기는 레이아웃 값(offset*) — 열 때 팝인(scale)이 아직 진행 중이어도 실제 카드 크기를 쓴다
+    const cardWidth = card.offsetWidth;
+    const cardHeight = card.offsetHeight;
+    // 새 카드는 고스트가 커져 도착한 크기(= 지금 카드 크기)에서 시작해 새 내용 높이로 간다
+    setGlide({ nodeId: node.id, height: cardHeight });
     const b = backdrop.getBoundingClientRect();
     const dockWidth = Math.min(DOCK_MAX_WIDTH, b.width / 2 - DOCK_INSET);
     // 가운데 카드가 가는 곳 — 클릭한 독의 반대편 독 자리(후행을 고르면 현재 노드는 선행이 된다)
@@ -688,20 +686,21 @@ export function NodeSummaryModal({
     const dockY = b.top + b.height / 2;
     const cardCx = c.left + c.width / 2;
     const cardCy = c.top + c.height / 2;
-    const ghostCx = rect.left + rect.width / 2;
-    // 독 카드(고스트)는 크기·불투명도 그대로 모달 자리(가운데·카드 윗변)로 이동 — 새 카드가 거기서 펼쳐진다
+    // 독 카드(고스트)는 불투명한 채로 모달 자리로 이동하면서 동시에 모달 크기로 커진다(위치·폭·높이 한 번에)
     const landing = {
-      left: cardCx - b.left - rect.width / 2,
+      left: cardCx - b.left - cardWidth / 2,
       top: c.top - b.top,
-      width: rect.width,
-      height: rect.height,
+      width: cardWidth,
+      height: cardHeight,
     };
     setSwap({
       node,
       box: { left: rect.left - b.left, top: rect.top - b.top, width: rect.width, height: rect.height },
       ghostVars: {
-        "--swap-dx": `${cardCx - ghostCx}px`,
-        "--swap-dy": `${c.top - rect.top}px`,
+        "--swap-dx": `${landing.left - (rect.left - b.left)}px`,
+        "--swap-dy": `${landing.top - (rect.top - b.top)}px`,
+        "--swap-w": `${cardWidth}px`,
+        "--swap-h": `${cardHeight}px`,
       } as CSSProperties,
       cardVars: {
         "--swap-dx": `${dockX - cardCx}px`,
@@ -733,9 +732,7 @@ export function NodeSummaryModal({
     const observer = new ResizeObserver(() => {
       const natural = header.offsetHeight + content.offsetHeight + footer.offsetHeight + chrome;
       const target = Math.ceil(Math.min(natural, available * 0.8));
-      setGlide((prev) =>
-        prev && prev.nodeId === nodeId ? { ...prev, width: prev.toWidth, height: target } : prev,
-      );
+      setGlide((prev) => (prev && prev.nodeId === nodeId ? { ...prev, height: target } : prev));
     });
     observer.observe(content);
     const timer = window.setTimeout(() => setGlide(null), GLIDE_WINDOW_MS);
@@ -1329,15 +1326,15 @@ export function NodeSummaryModal({
         data-id="node-summary-card"
         // 전환 직후엔 팝인 대신 높이 글라이드(분기 IO 아일랜드와 같은 ease-glide) — 내용은 살짝 늦게 떠오른다
         className={`relative flex max-h-[80%] w-full max-w-lg flex-col overflow-hidden rounded-sm border glass glass-dense ${
-          swap ? "summary-swap-out" : isGliding ? "summary-card-glide" : "summary-card-in"
+          // 팝인은 처음 열 때만 — 전환으로 들어온 카드에 창이 끝난 뒤 다시 걸면 한 번 깜빡였다
+          swap ? "summary-swap-out" : isGliding ? "summary-card-glide" : travel === null ? "summary-card-in" : ""
         }`}
-        style={swap ? swap.cardVars : isGliding ? { width: glide.width, height: glide.height } : undefined}
+        style={swap ? swap.cardVars : isGliding ? { height: glide.height } : undefined}
         onClick={(event) => event.stopPropagation()}
       >
         <div
           ref={headerRef}
           className={`flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2 ${isGliding ? "summary-content-in" : ""}`}
-          style={glideInnerStyle}
         >
           {/* 말줄임 대신 줄바꿈 — 긴 노드 제목(읽기전용 헤더)도 전문 표시 (F7) */}
           <span className="flex min-w-0 flex-1 items-center gap-2 break-keep text-body-strong text-ink">
@@ -1360,7 +1357,6 @@ export function NodeSummaryModal({
         <div
           data-id="node-summary-body"
           className="scrollbar-hidden min-h-0 overflow-y-auto text-caption text-ink-secondary"
-          style={glideInnerStyle}
         >
           {/* 내용 래퍼 — 전환 글라이드가 본문 자연 높이를 재는 기준(본문은 스크롤 컨테이너라 직접 못 잰다) */}
           <div
@@ -1658,7 +1654,6 @@ export function NodeSummaryModal({
         <div
           ref={footerRef}
           className={`flex shrink-0 items-center justify-between gap-2 border-t border-hairline px-4 py-2 ${isGliding ? "summary-content-in" : ""}`}
-          style={glideInnerStyle}
         >
           {readOnly ? (
             <>
@@ -1727,7 +1722,8 @@ export function NodeSummaryModal({
         <div
           data-id="summary-swap-ghost"
           aria-hidden
-          className="summary-ghost-travel absolute z-10 flex items-center gap-2 rounded-md border border-accent-tint-border bg-surface px-2.5 py-2 shadow-lg"
+          // items-start — 커지는 동안 독 카드 내용은 윗변에 붙어 있다가 새 카드 위에서 사라진다
+          className="summary-ghost-travel absolute z-10 flex items-start gap-2 overflow-hidden rounded-md border border-accent-tint-border bg-surface px-2.5 py-2 shadow-lg"
           style={{ ...swap.box, ...swap.ghostVars }}
         >
           <DockCardBody node={swap.node} typeLabelOf={typeLabelOf} />
@@ -1738,7 +1734,7 @@ export function NodeSummaryModal({
         <div
           data-id="summary-swap-handoff"
           aria-hidden
-          className="summary-handoff-out absolute z-10 flex items-center gap-2 rounded-md border border-accent-tint-border bg-surface px-2.5 py-2 shadow-lg"
+          className="summary-handoff-out absolute z-10 flex items-start gap-2 overflow-hidden rounded-md border border-accent-tint-border bg-surface px-2.5 py-2 shadow-lg"
           style={handoff.box}
         >
           <DockCardBody node={handoff.node} typeLabelOf={typeLabelOf} />
