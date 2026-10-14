@@ -1332,7 +1332,8 @@ function ComparePane({
             id: m.id,
             nodeType,
             parallelOutputs: m.node.parallel_outputs ?? [],
-            color: resolveNodeStroke(m.node.color, nodeType),
+            // 무변경 노드는 회색으로 눌렀으니 흐름 점도 회색 — 분기 노드 앰버 점이 변경(앰버)으로 읽히지 않게
+            color: m.status === "unchanged" ? "var(--color-ink-muted)" : resolveNodeStroke(m.node.color, nodeType),
           };
         }),
       merged.edges

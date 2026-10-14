@@ -968,13 +968,14 @@ const DIFF_BADGE_BG: Record<DiffStatus, string> = {
   changed: "bg-diff-changed",
 };
 
-// 비교 화면 무변경 노드 — 회색 테두리·옅은 바탕(노드 고유색 없음). 글자 톤은 globals.css .bpm-diff-muted
+// 비교 화면 무변경 노드 — 회색 테두리·회색 바탕(노드 고유색 없음). 바탕은 캔버스(#f6f6f8)보다 확실히 어둡게 —
+// 6%는 캔버스보다 밝아 흰 노드로 보였다(사용자 피드백 2026-10-14). 글자 톤은 globals.css .bpm-diff-muted
 function mutedNodeStyle(): CSSProperties {
   return {
-    borderColor: "var(--color-border-strong)",
+    borderColor: "color-mix(in srgb, var(--color-ink-muted) 75%, white)",
     borderWidth: "1.5px",
-    background: "color-mix(in srgb, var(--color-ink-muted) 6%, white)",
-    "--nc": "var(--color-border-strong)",
+    background: "color-mix(in srgb, var(--color-ink-muted) 22%, white)",
+    "--nc": "var(--color-ink-muted)",
   } as unknown as CSSProperties;
 }
 
