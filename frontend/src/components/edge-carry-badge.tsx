@@ -70,8 +70,16 @@ export function EdgeCarryBadge({ items }: EdgeCarryBadgeProps) {
                 <FileText size={12} strokeWidth={1.5} className="mt-0.5 shrink-0 text-ink-tertiary" />
                 <div className="min-w-0">
                   <div className="break-words text-ink">{item.text}</div>
-                  <div className="text-[10px] text-ink-tertiary">
-                    {t(item.via ? "edge.carryVia" : "edge.carryDirect", { name: item.originLabel })}
+                  {/* 출처 = "From" + 노드 이름 필(가벼운 회색 필) — 앞에서 받아 넘기는 항목엔 "경유" 꼬리표 */}
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-ink-tertiary">
+                    <span>{t("edge.carryFrom")}</span>
+                    <span
+                      data-id="edge-carry-origin"
+                      className="inline-flex max-w-full items-center rounded-full border border-hairline bg-surface-alt px-1.5 leading-4 text-ink-secondary"
+                    >
+                      <span className="truncate">{item.originLabel}</span>
+                    </span>
+                    {item.via && <span className="text-ink-muted">· {t("edge.carryVia")}</span>}
                   </div>
                 </div>
               </div>
