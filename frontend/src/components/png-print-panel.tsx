@@ -2,7 +2,8 @@
 
 // Word 인쇄 크기 패널 — A4 세로/가로 위에 그림이 차지할 실제 상대 크기를 보여 주고 그림 너비를 조절한다.
 // 인쇄 크기(cm)·해상도(px·dpi)·노드 글자(pt)를 함께 보여 준다(계산은 lib/export getPrintPlan 단일 소스).
-// PNG 내보내기 옵션 창(png-export-modal)이 Word 문서용일 때 오른쪽으로 펼쳐 쓴다.
+// PNG 내보내기 옵션 창(png-export-modal)이 Word 문서용일 때, 비교 화면 PNG 옵션 창(compare-png-export-modal)이
+// 문서용일 때 오른쪽으로 펼쳐 쓴다.
 
 import { RectangleHorizontal, RectangleVertical } from "lucide-react";
 
@@ -18,10 +19,13 @@ import {
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 
+type PrintOptions = Pick<PngExportOptions, "paper" | "printWidthPct" | "showInfo">;
+
 interface PngPrintPanelProps {
-  frame: ExportFrame | null;
-  options: PngExportOptions;
-  onChange: (patch: Partial<PngExportOptions>) => void;
+  // 캡처 프레임 — 비교 화면은 정보 블록·범례까지 더한 출력 높이를 담아 넘기고 showInfo=false로 준다
+  frame: Pick<ExportFrame, "width" | "height" | "zoom"> | null;
+  options: PrintOptions;
+  onChange: (patch: Partial<Pick<PngExportOptions, "paper" | "printWidthPct">>) => void;
 }
 
 // 페이지 그림의 긴 변(px) — 패널 폭(300) 안에 세로·가로 모두 들어가게
