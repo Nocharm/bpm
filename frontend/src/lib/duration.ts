@@ -37,6 +37,14 @@ export function formatDurationHm(raw: string): string {
   return `${hours}h${minutes}m`;
 }
 
+/** H.MM → 총 분(정수, "1.30" → 90). 무효/빈값 → null. Excel 시간 셀(분/1440, `[h]:mm`) 변환에 쓴다. */
+export function parseDurationMinutes(raw: string): number | null {
+  const normalized = normalizeDuration(raw);
+  if (normalized === null || normalized === "") return null;
+  const [intPart, fracPart = ""] = normalized.split(".");
+  return Number.parseInt(intPart, 10) * 60 + (fracPart === "" ? 0 : Number.parseInt(fracPart, 10));
+}
+
 /** 천단위 콤마 표시형 — 비용 필드 전용(편집 중이 아닐 때). 소수부는 콤마 없이 보존. 무효/빈값 → "". */
 export function formatThousands(raw: string): string {
   const text = raw.trim();

@@ -3,10 +3,20 @@
 // 설계: 2026-07-11-numeric-params-excel-csv-export-design.md §4,
 //       2026-07-13-node-params-redefinition-design.md §5.2
 import { Workbook } from "exceljs";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Graph, GraphEdge, GraphGroup, GraphNode } from "./api";
-import { buildExcelModel, COLUMNS, formatExcelNextCell, writeExcelSheet } from "./excel-export";
+import {
+  buildExcelMeta,
+  buildExcelModel,
+  COLUMNS,
+  EXCEL_HEADER_FILL_ARGB,
+  EXCEL_LINK_ARGB,
+  formatExcelNextCell,
+  loadExcelExportFormat,
+  saveExcelExportFormat,
+  writeExcelSheet,
+} from "./excel-export";
 import { EXCEL_COLUMNS } from "./export-columns";
 
 /** GraphNode 조립 헬퍼 — csv-export.test.ts 스타일 재사용. */
@@ -308,6 +318,32 @@ describe("buildExcelModel", () => {
     expect(kinds).toEqual(["Start", "A", "B", "C", "D", "rowLimit"]);
     // rowLimit 행은 정확히 1개 — 재귀 레벨마다 중복 생성되지 않는다
     expect(model.rows.filter((r) => r.kind === "rowLimit").length).toBe(1);
+  });
+
+  it("행 상한은 노드 행만 센다 - 순환 노트 행은 상한을 소비하지 않는다", async () => {
+    const map1: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeSubNode("sub1", "Sub1", 1, 1),
+        makeSubNode("sub2", "Sub2", 2, 1),
+        makeSubNode("sub3", "Sub3", 3, 1),
+        makeNode("p1", "P", "process", 4),
+        makeNode("e1", "End", "end", 5, { is_primary_end: true }),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "sub1"), makeEdge("x2", "sub1", "sub2"), makeEdge("x3", "sub2", "sub3"),
+        makeEdge("x4", "sub3", "p1"), makeEdge("x5", "p1", "e1"),
+      ],
+      groups: [],
+    };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-10-16 10:00",
+      fetchResolved: async () => { throw new Error("unused"); }, maxRows: 5, rootMapId: 1,
+    });
+    expect(model.truncated).toBe(false);
+    expect(model.rows.map((r) => (r.kind === "node" ? r.title : r.kind))).toEqual([
+      "Start", "Sub1", "circular", "Sub2", "circular", "Sub3", "circular", "P",
+    ]);
   });
 
   it("행 상한이 서브프로세스 재귀 중에 걸려도 rowLimit은 1개뿐이고 상위 레벨로 잔여 노드를 이어가지 않는다", async () => {
@@ -961,7 +997,7 @@ describe("COLUMNS", () => {
   it("헤더가 새 라벨·순서를 따른다(design 2026-07-13 §5.2, 열 선택 2026-10-02)", () => {
     expect(COLUMNS.map((c) => c.header)).toEqual([
       "No", "Name", "Type", "Description", "Assignee", "Role", "Department", "System",
-      "Duration (h)", "Touch time (h)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE",
+      "Duration (h:mm)", "Touch time (h:mm)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE",
       "Input", "Output", "Start condition", "End condition", "GMP", "Parallel",
       "URL", "Groups", "Next",
     ]);
@@ -986,26 +1022,32 @@ describe("writeExcelSheet", () => {
     return index + 1;
   }
 
-  // exceljs Workbook 대상 순수 검증(다운로드 Blob/anchor와 분리) — 메타 3행+헤더 1행 다음이 첫 데이터 행(5)
-  function buildSheetWithOneRow(over: Partial<Record<string, string>> = {}, columns?: Parameters<typeof writeExcelSheet>[2]) {
+  const baseMeta = buildExcelMeta({ mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-13 09:00" });
+
+  // exceljs Workbook 대상 순수 검증(다운로드 Blob/anchor와 분리) — 메타 3줄+빈 줄 다음이 헤더(5), 첫 데이터 행(6)
+  function buildSheetWithOneRow(
+    over: Partial<Record<string, string>> = {},
+    columns?: Parameters<typeof writeExcelSheet>[2],
+    meta = baseMeta,
+  ) {
     const base = {
       duration: "1.30", touch_time: "0.45", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
       ...over,
     };
     const workbook = new Workbook();
-    writeExcelSheet(workbook, {
-      mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-13T00:00:00+09:00", truncated: false,
-      rows: [{ kind: "node", depth: 0, ...emptyRowFields, next: "Q", ...base }],
+    const headerRow = writeExcelSheet(workbook, {
+      mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-13 09:00", meta, truncated: false,
+      rows: [{ kind: "node", depth: 1, ...emptyRowFields, next: "Q", ...base }],
     }, columns);
     const sheet = workbook.getWorksheet("Process Map");
     if (!sheet) throw new Error("sheet missing");
-    return sheet;
+    return { sheet, workbook, headerRow, dataRow: sheet.getRow(headerRow + 1) };
   }
 
-  it("7개 숫자 컬럼에 지정된 numFmt를 적용하고, 텍스트 컬럼엔 서식을 남기지 않는다", () => {
-    const dataRow = buildSheetWithOneRow().getRow(5);
-    expect(dataRow.getCell(findColumnIndex("Duration (h)")).numFmt).toBe("0.00");
-    expect(dataRow.getCell(findColumnIndex("Touch time (h)")).numFmt).toBe("0.00");
+  it("숫자 컬럼에 지정된 numFmt를 적용하고, 시간 열은 [h]:mm, 텍스트 컬럼엔 서식을 남기지 않는다", () => {
+    const { dataRow } = buildSheetWithOneRow();
+    expect(dataRow.getCell(findColumnIndex("Duration (h:mm)")).numFmt).toBe("[h]:mm");
+    expect(dataRow.getCell(findColumnIndex("Touch time (h:mm)")).numFmt).toBe("[h]:mm");
     expect(dataRow.getCell(findColumnIndex("Cost (KRW)")).numFmt).toBe("#,##0");
     expect(dataRow.getCell(findColumnIndex("Cost (USD)")).numFmt).toBe("#,##0.00");
     expect(dataRow.getCell(findColumnIndex("Headcount")).numFmt).toBe("0.00");
@@ -1014,45 +1056,191 @@ describe("writeExcelSheet", () => {
     expect(dataRow.getCell(findColumnIndex("Name")).numFmt).toBeUndefined();
   });
 
+  it("시간 셀은 H.MM을 Excel 시간 값(시간/24)으로 — \"1.30\"은 1.5시간, \"0.45\"는 45분", () => {
+    const { dataRow } = buildSheetWithOneRow();
+    expect(dataRow.getCell(findColumnIndex("Duration (h:mm)")).value).toBeCloseTo(1.5 / 24, 12);
+    expect(dataRow.getCell(findColumnIndex("Touch time (h:mm)")).value).toBeCloseTo(0.75 / 24, 12);
+  });
+
   it("숫자 셀은 텍스트가 아니라 실제 숫자로 들어간다", () => {
-    const dataRow = buildSheetWithOneRow().getRow(5);
+    const { dataRow } = buildSheetWithOneRow();
     expect(dataRow.getCell(findColumnIndex("Cost (KRW)")).value).toBe(1250000);
-    expect(dataRow.getCell(findColumnIndex("Touch time (h)")).value).toBe(0.45);
     expect(dataRow.getCell(findColumnIndex("FTE")).value).toBe(0.8);
   });
 
+  it("숫자로 읽히지 않는 값은 NaN이 아니라 원문 텍스트로 남는다", () => {
+    const { dataRow } = buildSheetWithOneRow({ cost_krw: "abc", duration: "2일" });
+    expect(dataRow.getCell(findColumnIndex("Cost (KRW)")).value).toBe("abc");
+    expect(dataRow.getCell(findColumnIndex("Duration (h:mm)")).value).toBe("2일");
+    const values = (dataRow.values as unknown[]).slice(1);
+    expect(values.some((value) => typeof value === "number" && Number.isNaN(value))).toBe(false);
+  });
+
   it("빈 파라미터 값은 0이 아니라 빈 셀로 남는다", () => {
-    const dataRow = buildSheetWithOneRow({ cost_krw: "", cost_usd: "", headcount: "", annual_count: "", fte: "" }).getRow(5);
-    for (const header of ["Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE"]) {
+    const { dataRow } = buildSheetWithOneRow({ duration: "", cost_krw: "", cost_usd: "", headcount: "", annual_count: "", fte: "" });
+    for (const header of ["Duration (h:mm)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE"]) {
       const value = dataRow.getCell(findColumnIndex(header)).value;
       expect(value).not.toBe(0);
     }
   });
 
   it("데이터 행 셀 수 = 열 수, 마지막 셀은 Next (값 배열 수기 복제 가드)", () => {
-    const values = (buildSheetWithOneRow().getRow(5).values as unknown[]).slice(1);
+    const values = (buildSheetWithOneRow().dataRow.values as unknown[]).slice(1);
     expect(values).toHaveLength(COLUMNS.length);
     expect(values[values.length - 1]).toBe("Q");
   });
 
   it("No 셀은 모델의 row.no를 그대로 기록한다", () => {
     const workbook = new Workbook();
-    writeExcelSheet(workbook, {
-      mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00", truncated: false,
+    const headerRow = writeExcelSheet(workbook, {
+      mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17 09:00", meta: baseMeta, truncated: false,
       rows: [{ kind: "node", depth: 0, ...emptyRowFields, no: 7 }],
     });
     const sheet = workbook.getWorksheet("Process Map");
-    expect(sheet?.getRow(5).getCell(1).value).toBe(7);
+    expect(sheet?.getRow(headerRow + 1).getCell(1).value).toBe(7);
   });
 
   it("열 선택 - 선택한 열+잠금 열(No·Name·Type·Parallel·Next)만 정식 순서로, 서식·하이퍼링크 위치도 선택 열에서 파생", () => {
-    const sheet = buildSheetWithOneRow({ url: "https://example.com/doc", urlLabel: "Doc" }, ["url", "cost_krw"]);
-    expect((sheet.getRow(4).values as unknown[]).slice(1)).toEqual(["No", "Name", "Type", "Cost (KRW)", "Parallel", "URL", "Next"]);
-    const r = sheet.getRow(5);
+    const { sheet, headerRow, dataRow: r } = buildSheetWithOneRow({ url: "https://example.com/doc", urlLabel: "Doc" }, ["url", "cost_krw"]);
+    expect((sheet.getRow(headerRow).values as unknown[]).slice(1)).toEqual(["No", "Name", "Type", "Cost (KRW)", "Parallel", "URL", "Next"]);
     expect(r.getCell(4).numFmt).toBe("#,##0");
     expect(r.getCell(6).value).toEqual({ text: "Doc", hyperlink: "https://example.com/doc" });
+    expect(r.getCell(6).font).toEqual({ name: "Malgun Gothic", size: 10, color: { argb: EXCEL_LINK_ARGB }, underline: true });
     expect(r.getCell(7).value).toBe("Q");
     expect(sheet.getColumn(4).width).toBe(14);
+  });
+
+  it("메타 블록 - 라벨/값 줄(라벨은 A:B 병합), 빈 값 줄은 빠지고 빈 줄 하나 뒤에 헤더", () => {
+    const meta = buildExcelMeta({
+      mapName: "Map1", owningDept: "QA", owner: "", versionLabel: "v3", published: "", framework: "L1 > L2",
+      exportedAt: "2026-10-16 10:00",
+    });
+    const { sheet, headerRow } = buildSheetWithOneRow({}, undefined, [...meta, { label: "Empty", value: "  " }]);
+    const metaRows = [1, 2, 3, 4, 5].map((n) => [sheet.getRow(n).getCell(1).value, sheet.getRow(n).getCell(3).value]);
+    expect(metaRows).toEqual([
+      ["Map", "Map1"],
+      ["Owning dept", "QA"],
+      ["Version", "v3"],
+      ["Framework", "L1 > L2"],
+      ["Exported", "2026-10-16 10:00"],
+    ]);
+    expect(sheet.getRow(1).getCell(1).isMerged).toBe(true);
+    expect(sheet.getRow(1).getCell(3).font?.bold).toBe(true);
+    expect(sheet.getRow(6).getCell(1).value).toBeNull();
+    expect(headerRow).toBe(7);
+    expect(sheet.getRow(7).getCell(1).value).toBe("No");
+  });
+
+  it("메타가 비면 헤더가 1행", () => {
+    expect(buildSheetWithOneRow({}, undefined, []).headerRow).toBe(1);
+  });
+
+  it("인쇄 배치 - A4 가로·폭 1쪽 맞춤·좁은 여백·헤더 행 반복·머리글(맵|버전|쪽)", () => {
+    const { sheet, headerRow } = buildSheetWithOneRow();
+    expect(sheet.pageSetup).toMatchObject({
+      paperSize: 9,
+      orientation: "landscape",
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      printTitlesRow: `${headerRow}:${headerRow}`,
+      margins: { left: 0.25, right: 0.25, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 },
+    });
+    expect(sheet.headerFooter.oddHeader).toBe("&LMap1&Cv1&R&P / &N");
+  });
+
+  it("머리글의 & 는 && 로 이스케이프한다", () => {
+    const workbook = new Workbook();
+    writeExcelSheet(workbook, {
+      mapName: "R&D", versionLabel: "v1", exportedAt: "", meta: [], truncated: false, rows: [],
+    });
+    expect(workbook.getWorksheet("Process Map")?.headerFooter.oddHeader).toBe("&LR&&D&Cv1&R&P / &N");
+  });
+
+  it("헤더 행·No·Name 고정, 헤더~마지막 행 자동 필터", () => {
+    const { sheet, headerRow } = buildSheetWithOneRow();
+    expect(sheet.views).toEqual([expect.objectContaining({ state: "frozen", xSplit: 2, ySplit: headerRow })]);
+    expect(sheet.autoFilter).toEqual({
+      from: { row: headerRow, column: 1 },
+      to: { row: headerRow + 1, column: COLUMNS.length },
+    });
+  });
+
+  it("글꼴 - 헤더·본문 모두 맑은 고딕 10(헤더 굵게), 헤더는 중립 회색 채움", () => {
+    const { sheet, headerRow, dataRow } = buildSheetWithOneRow();
+    const header = sheet.getRow(headerRow).getCell(2);
+    expect(header.font).toEqual({ name: "Malgun Gothic", size: 10, bold: true });
+    expect(header.fill).toEqual({ type: "pattern", pattern: "solid", fgColor: { argb: EXCEL_HEADER_FILL_ARGB } });
+    for (let col = 1; col <= COLUMNS.length; col += 1) {
+      expect(dataRow.getCell(col).font?.name).toBe("Malgun Gothic");
+      expect(dataRow.getCell(col).font?.size).toBe(10);
+    }
+    expect(sheet.getRow(1).getCell(1).font?.name).toBe("Malgun Gothic");
+  });
+
+  it("정렬 - 텍스트 열·헤더는 줄바꿈+위 정렬, 숫자 열은 위 정렬만, Name 들여쓰기는 줄바꿈을 유지", () => {
+    const { sheet, headerRow, dataRow } = buildSheetWithOneRow();
+    expect(sheet.getRow(headerRow).getCell(1).alignment).toEqual({ vertical: "top", wrapText: true });
+    expect(dataRow.getCell(findColumnIndex("Description")).alignment).toEqual({ vertical: "top", wrapText: true });
+    expect(dataRow.getCell(findColumnIndex("Cost (KRW)")).alignment).toEqual({ vertical: "top" });
+    expect(dataRow.getCell(findColumnIndex("Name")).alignment).toEqual({ vertical: "top", wrapText: true, indent: 2 });
+  });
+
+  it("문서 속성 - 제목=맵 이름, 작성자=BPM", () => {
+    const { workbook } = buildSheetWithOneRow();
+    expect(workbook.title).toBe("Map1");
+    expect(workbook.creator).toBe("BPM");
+  });
+});
+
+describe("buildExcelMeta", () => {
+  it("순서는 맵·주관 부서·오너·버전·게시일·프레임워크·내보낸 시각, 빈 값 줄은 뺀다", () => {
+    const meta = buildExcelMeta(
+      { mapName: "M", owningDept: "QA", owner: "Kim", versionLabel: "v2", published: "2026-10-01 09:00", framework: "", exportedAt: "2026-10-16 10:00" },
+      { map: "맵", owningDept: "주관 부서", owner: "오너", version: "버전", published: "게시일", framework: "프레임워크", exportedAt: "내보낸 시각" },
+    );
+    expect(meta).toEqual([
+      { label: "맵", value: "M" },
+      { label: "주관 부서", value: "QA" },
+      { label: "오너", value: "Kim" },
+      { label: "버전", value: "v2" },
+      { label: "게시일", value: "2026-10-01 09:00" },
+      { label: "내보낸 시각", value: "2026-10-16 10:00" },
+    ]);
+  });
+});
+
+describe("loadExcelExportFormat / saveExcelExportFormat", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.localStorage.clear();
+  });
+
+  it("저장한 형식을 되읽는다", () => {
+    saveExcelExportFormat("wbs");
+    expect(window.localStorage.getItem("bpm.excelExportFormat")).toBe("wbs");
+    expect(loadExcelExportFormat()).toBe("wbs");
+    saveExcelExportFormat("map");
+    expect(loadExcelExportFormat()).toBe("map");
+  });
+
+  it("저장값이 없거나 모르는 값이면 Process Map", () => {
+    expect(loadExcelExportFormat()).toBe("map");
+    window.localStorage.setItem("bpm.excelExportFormat", "\"wbs\"");
+    expect(loadExcelExportFormat()).toBe("map");
+    window.localStorage.setItem("bpm.excelExportFormat", "WBS");
+    expect(loadExcelExportFormat()).toBe("map");
+  });
+
+  it("저장소가 막혀 있으면 읽기는 Process Map, 쓰기는 throw하지 않는다", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(loadExcelExportFormat()).toBe("map");
+    expect(() => saveExcelExportFormat("wbs")).not.toThrow();
   });
 });
 

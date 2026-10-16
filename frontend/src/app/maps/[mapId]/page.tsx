@@ -292,7 +292,7 @@ import {
   type PaperOrientation,
   type PngExportOptions,
 } from "@/lib/export";
-import { buildExcelModel } from "@/lib/excel-export";
+import { buildExcelMeta, buildExcelModel } from "@/lib/excel-export";
 import { buildWbsModel } from "@/lib/excel-wbs";
 import { buildCsvFromGraph } from "@/lib/csv-export";
 import type { CsvColumnKey } from "@/lib/export-columns";
@@ -6537,31 +6537,56 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // Excel 모달용 모델 빌더 — 저장 경로와 동일 소스(buildGraph)로 미저장 편집분까지 반영.
   // async로 감싸 buildGraph의 동기 throw까지 promise rejection으로 잡히게 한다(모달 .catch가 error로 수렴).
+  // 표 위 메타 블록 — PNG 정보 카드와 같은 값·라벨(부서 리프·오너·버전·게시/확정일·프레임워크) + 맵 이름·내보낸 시각
+  const getExcelExportContext = useCallback(() => {
+    const version = versions.find((v) => v.id === versionId);
+    const versionLabel = version?.label ?? "";
+    const exportedAt = formatKst(new Date().toISOString());
+    const publishedAt = findPublishedAt(version?.events);
+    const meta = buildExcelMeta(
+      {
+        mapName,
+        owningDept: mapOwningDept?.split("/").filter(Boolean).pop() ?? "",
+        owner: mapOwnerName ?? mapOwner ?? "",
+        versionLabel,
+        published: publishedAt ? formatKst(publishedAt) : "",
+        framework: mapCategoryPath ?? "",
+        exportedAt,
+      },
+      {
+        map: t("export.excelInfoMap"),
+        owningDept: t("export.infoOwningDept"),
+        owner: t("export.infoOwner"),
+        version: t("export.infoVersion"),
+        published: isFrameworkMap ? t("export.infoConfirmed") : t("export.infoPublished"),
+        framework: t("export.infoFramework"),
+        exportedAt: t("export.excelInfoExportedAt"),
+      },
+    );
+    return { versionLabel, exportedAt, meta };
+  }, [versions, versionId, mapName, mapOwningDept, mapOwnerName, mapOwner, mapCategoryPath, isFrameworkMap, t]);
+
   const buildMapExcelModel = useCallback(async () => {
     const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
-    const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
     return buildExcelModel({
       graph,
       mapName,
-      versionLabel,
-      exportedAt: formatKst(new Date().toISOString()),
+      ...getExcelExportContext(),
       fetchResolved: (id, follow, pinned) => getResolvedGraph(id, follow, pinned),
       rootMapId: mapId,
     });
-  }, [versions, versionId, mapName, mapId]);
+  }, [getExcelExportContext, mapName, mapId]);
 
   const buildWbsExcelModel = useCallback(async () => {
     const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
-    const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
     return buildWbsModel({
       graph,
       mapName,
-      versionLabel,
-      exportedAt: formatKst(new Date().toISOString()),
+      ...getExcelExportContext(),
       fetchResolved: (id, follow, pinned) => getResolvedGraph(id, follow, pinned),
       rootMapId: mapId,
     });
-  }, [versions, versionId, mapName, mapId]);
+  }, [getExcelExportContext, mapName, mapId]);
 
   const excelFileNameFor = useCallback(
     (format: ExcelExportFormat) =>

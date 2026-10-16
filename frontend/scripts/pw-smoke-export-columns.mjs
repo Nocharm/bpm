@@ -220,7 +220,8 @@ try {
   await (await xlsxDownload).saveAs(xlsxFile);
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(xlsxFile);
-  const xlsxHeader = workbook.worksheets[0].getRow(4).values.slice(1).map(String);
+  const xlsxSheet = workbook.worksheets[0];
+  const xlsxHeader = xlsxSheet.getRow(xlsxSheet.views[0].ySplit).values.slice(1).map(String);
   check(
     "Excel: unticked Groups is left out, new Input/GMP/Parallel columns are present",
     !xlsxHeader.includes("Groups") && ["Input", "GMP", "Parallel"].every((h) => xlsxHeader.includes(h)),

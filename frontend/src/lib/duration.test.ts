@@ -5,6 +5,7 @@ import {
   formatThousands,
   normalizeDuration,
   normalizeNumericParam,
+  parseDurationMinutes,
   stripThousands,
 } from "./duration";
 
@@ -42,6 +43,17 @@ describe("formatDurationHm", () => {
   it("빈값", () => expect(formatDurationHm("")).toBe(""));
   it("무효(레거시)", () => expect(formatDurationHm("2일")).toBe(""));
   it("비정규 입력도 정규화 후 포맷", () => expect(formatDurationHm("0.75")).toBe("1h15m"));
+});
+
+describe("parseDurationMinutes", () => {
+  it("시.분은 분으로", () => expect(parseDurationMinutes("1.30")).toBe(90));
+  it("정수 시간", () => expect(parseDurationMinutes("2")).toBe(120));
+  it("한 자리 소수는 10분 단위", () => expect(parseDurationMinutes("0.3")).toBe(30));
+  it("60분 이상은 이월", () => expect(parseDurationMinutes("0.75")).toBe(75));
+  it("빈값·무효는 null", () => {
+    expect(parseDurationMinutes("")).toBeNull();
+    expect(parseDurationMinutes("2일")).toBeNull();
+  });
 });
 
 describe("formatThousands", () => {

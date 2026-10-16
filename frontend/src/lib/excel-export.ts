@@ -4,9 +4,9 @@
 //       2026-07-13-node-params-redefinition-design.md §5.2,
 //       2026-07-17-excel-export-format-v1-design.md (구조 노드 정리+분기 주석),
 //       export-column-picker-design(2026-10-02, 열 선택·IO/조건/GMP/병렬 열)
-import { getAccentHex } from "./accent-theme";
 import type { Graph, GraphEdge, GraphNode } from "./api";
 import { formatSystemCell, orderNodesByFlow } from "./csv-export";
+import { parseDurationMinutes } from "./duration";
 import { EXCEL_COLUMNS, type ExcelColumnKey, normalizeExportColumns } from "./export-columns";
 import { formatGmp } from "./gmp";
 import { getIoLine } from "./io-items";
@@ -60,12 +60,86 @@ export interface ExcelNoteRow {
 
 export type ExcelRow = ExcelNodeRow | ExcelNoteRow;
 
+/** 표 위 메타 블록 한 줄 — 라벨/값(빈 값은 기록하지 않는다). */
+export interface ExcelMetaRow {
+  label: string;
+  value: string;
+}
+
 export interface ExcelModel {
   mapName: string;
   versionLabel: string;
   exportedAt: string;
+  meta: ExcelMetaRow[];
   rows: ExcelRow[];
   truncated: boolean;
+}
+
+export type ExcelExportFormat = "map" | "wbs";
+
+const EXCEL_FORMAT_STORAGE_KEY = "bpm.excelExportFormat";
+
+/** 마지막으로 고른 형식 — 저장값이 없거나 깨졌거나 저장소가 막혀 있으면 Process Map. */
+export function loadExcelExportFormat(): ExcelExportFormat {
+  try {
+    return window.localStorage.getItem(EXCEL_FORMAT_STORAGE_KEY) === "wbs" ? "wbs" : "map";
+  } catch {
+    return "map";
+  }
+}
+
+/** 형식 기억 — 저장 실패(차단·용량)는 이번 창의 선택만 유지하면 되므로 넘어간다. */
+export function saveExcelExportFormat(format: ExcelExportFormat): void {
+  try {
+    window.localStorage.setItem(EXCEL_FORMAT_STORAGE_KEY, format);
+  } catch {
+    // 편의 저장일 뿐 — 실패해도 현재 창의 형식은 state로 살아 있다
+  }
+}
+
+/** 메타 블록 원천 값 — 게시일·프레임워크 경로처럼 없는 값은 빈 문자열로 두면 줄째 빠진다. */
+export interface ExcelMetaInput {
+  mapName: string;
+  owningDept?: string;
+  owner?: string;
+  versionLabel: string;
+  published?: string;
+  framework?: string;
+  exportedAt: string;
+}
+
+export interface ExcelMetaLabels {
+  map: string;
+  owningDept: string;
+  owner: string;
+  version: string;
+  published: string;
+  framework: string;
+  exportedAt: string;
+}
+
+// 라벨을 받지 못한 호출(테스트·기본값)용 — 화면은 i18n 라벨(PNG 정보 카드와 같은 키)을 넘긴다
+export const DEFAULT_EXCEL_META_LABELS: ExcelMetaLabels = {
+  map: "Map",
+  owningDept: "Owning dept",
+  owner: "Owner",
+  version: "Version",
+  published: "Published",
+  framework: "Framework",
+  exportedAt: "Exported",
+};
+
+/** 메타 블록 줄 — 맵·주관 부서·오너·버전·게시일·프레임워크·내보낸 시각 순, 빈 값 줄은 뺀다. */
+export function buildExcelMeta(input: ExcelMetaInput, labels: ExcelMetaLabels = DEFAULT_EXCEL_META_LABELS): ExcelMetaRow[] {
+  return [
+    { label: labels.map, value: input.mapName },
+    { label: labels.owningDept, value: input.owningDept ?? "" },
+    { label: labels.owner, value: input.owner ?? "" },
+    { label: labels.version, value: input.versionLabel },
+    { label: labels.published, value: input.published ?? "" },
+    { label: labels.framework, value: input.framework ?? "" },
+    { label: labels.exportedAt, value: input.exportedAt },
+  ].filter((row) => row.value.trim() !== "");
 }
 
 export const EXCEL_MAX_ROWS = 2000;
@@ -297,6 +371,7 @@ export async function buildExcelModel({
   fetchResolved,
   maxRows = EXCEL_MAX_ROWS,
   rootMapId,
+  meta,
 }: {
   graph: Graph;
   mapName: string;
@@ -304,11 +379,15 @@ export async function buildExcelModel({
   exportedAt: string;
   fetchResolved: (mapId: number, followLatest: boolean, pinned: number | null) => Promise<Graph>;
   maxRows?: number;
+  // 표 위 메타 블록 — 미지정이면 맵·버전·내보낸 시각만(영문 라벨)
+  meta?: ExcelMetaRow[];
   // 루트 맵 자신의 id — 전달 시 루트 역참조 순환을 재펼침 없이 즉시 circular 차단(조상 경로에 루트 포함, design §4)
   rootMapId?: number;
 }): Promise<ExcelModel> {
   const rows: ExcelRow[] = [];
   let truncated = false;
+  // 상한은 노드 행만 센다 — 순환·권한 노트 행이 많은 맵에서 실제 업무 행이 먼저 잘리지 않게
+  let nodeRowCount = 0;
   // 규칙4 주석 — 행 "객체" 참조로 기록해 번호 부여 후 일괄 조립(역방향 분기·다이아몬드 이중 인라인 안전)
   const annotations: Array<{ target: ExcelNodeRow; decision: ExcelNodeRow; label: string }> = [];
   // Next 칸 — 대상은 같은 맵 인스턴스(scopeRows)의 행으로 풀고 번호 부여 뒤 조립(앞쪽 행이 뒤 행을 가리켜도 안전)
@@ -369,7 +448,7 @@ export async function buildExcelModel({
 
     for (const node of ordered) {
       if (isRowRemoved(node)) continue; // 삭제 행은 상한(maxRows)을 소비하지 않는다
-      if (rows.length >= maxRows) {
+      if (nodeRowCount >= maxRows) {
         // 재귀 레벨 무관 상한 공유 — truncated 이미 true면 rowLimit 재생성 없이 중단 전파.
         // return이 아닌 break — 스코프 잔여 행만 포기하고 주석 수집 패스는 실행해 이미 출력된 행의 주석을 보존
         if (!truncated) rows.push({ kind: "rowLimit", depth, title: "" });
@@ -407,6 +486,7 @@ export async function buildExcelModel({
         ...buildNodeRowFields(g, node, { groupLabel, next: "", exitTitles }),
       };
       rows.push(row);
+      nodeRowCount += 1;
       rowByNodeId.set(node.id, row);
       pendingNext.push({ row, refs: nextRefs, scopeRows: rowByNodeId });
       if (note !== null) {
@@ -457,26 +537,94 @@ export async function buildExcelModel({
     target.title += ` [${decision.no}:${label}]`;
   }
 
-  return { mapName, versionLabel, exportedAt, rows, truncated };
+  return { mapName, versionLabel, exportedAt, meta: meta ?? buildExcelMeta({ mapName, versionLabel, exportedAt }), rows, truncated };
 }
 
-// 셀 색은 출력물이라 CSS 변수를 못 쓴다 — 사용자 악센트 테마의 실제 hex에서 ARGB로 만든다(헤더=악센트 8% 틴트)
-export function getExcelHeaderFill(): string {
-  return toArgb(mixHexWithWhite(getAccentHex(), 0.08));
+// 출력물 서식 — 셀 값이라 CSS 변수를 못 쓴다(design.md §1 데이터/출력 예외). 사용자 악센트와 무관하게 고정해
+// 같은 맵은 누가 내보내도 같은 파일이 된다
+const EXCEL_FONT_NAME = "Malgun Gothic"; // 맑은 고딕 — Windows 기본 한글 글꼴(화면·인쇄 공통)
+const EXCEL_FONT_SIZE = 10;
+export const EXCEL_HEADER_FILL_ARGB = "FFE7E7E7"; // 중립 회색 헤더
+export const EXCEL_LINK_ARGB = "FF0563C1"; // Excel 기본 하이퍼링크 파랑
+export const EXCEL_MUTED_ARGB = "FF6B7280"; // 메타 라벨·보조 텍스트 회색
+// 인쇄 여백(인치) — Excel "좁게" 프리셋과 같은 값
+const EXCEL_PRINT_MARGINS = { left: 0.25, right: 0.25, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 };
+const A4_PAPER_SIZE = 9; // OOXML paperSize 코드
+
+/**
+ * 셀 글꼴 — 모든 셀 글꼴은 이 함수로만 넣는다. exceljs의 `cell.font = {...}`는 객체 전체를 바꿔서
+ * 굵게·색만 따로 넣으면 글꼴 이름·크기가 기본값(Calibri 11)으로 돌아간다.
+ */
+export function setExcelFont(cell: import("exceljs").Cell, extra: Partial<import("exceljs").Font> = {}): void {
+  cell.font = { name: EXCEL_FONT_NAME, size: EXCEL_FONT_SIZE, ...extra };
 }
 
-function getExcelLinkFont(): string {
-  return toArgb(getAccentHex());
+// 머리글 텍스트의 `&`는 Excel 머리글 코드 접두라 `&&`로 적어야 글자 그대로 찍힌다
+const escapeHeaderFooterText = (text: string): string => text.replace(/&/g, "&&");
+
+/** 문서 속성 — 파일 정보 창·검색에 맵 이름이 보이게 한다. */
+export function applyExcelWorkbookInfo(workbook: import("exceljs").Workbook, mapName: string): void {
+  workbook.title = mapName;
+  workbook.creator = "BPM";
+  workbook.created = new Date();
 }
 
-function mixHexWithWhite(hex: string, ratio: number): string {
-  const channels = [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * ratio + 255 * (1 - ratio)));
-  return `#${channels.map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+/**
+ * 표 위 메타 블록 — 라벨(A:B 병합, 회색)과 값(C) 한 줄씩, 빈 값 줄은 쓰지 않고 끝에 빈 줄 하나.
+ * 값은 줄바꿈 없이 오른쪽 빈 칸으로 넘쳐 보이게 둔다. 반환값은 다음 행 번호(헤더 자리).
+ */
+export function writeExcelMeta(sheet: import("exceljs").Worksheet, meta: readonly ExcelMetaRow[]): number {
+  const rows = meta.filter((row) => row.value.trim() !== "");
+  rows.forEach((row, index) => {
+    const r = sheet.addRow([row.label, "", row.value]);
+    sheet.mergeCells(r.number, 1, r.number, 2);
+    setExcelFont(r.getCell(1), { color: { argb: EXCEL_MUTED_ARGB } });
+    // 첫 줄(맵 이름)은 문서 제목처럼 굵게
+    setExcelFont(r.getCell(3), index === 0 ? { bold: true, size: 12 } : {});
+  });
+  if (rows.length > 0) sheet.addRow([]);
+  return sheet.rowCount + 1;
 }
 
-function toArgb(hex: string): string {
-  return `FF${hex.slice(1).toUpperCase()}`;
+/** 헤더 행 서식 — 굵은 글꼴·회색 채움·아래 테두리·줄바꿈(긴 헤더가 좁은 열에서 잘리지 않게). */
+export function applyExcelHeaderStyle(headerRow: import("exceljs").Row): void {
+  headerRow.eachCell((cell) => {
+    setExcelFont(cell, { bold: true });
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: EXCEL_HEADER_FILL_ARGB } };
+    cell.border = { bottom: { style: "thin" } };
+    cell.alignment = { vertical: "top", wrapText: true };
+  });
 }
+
+/**
+ * 인쇄·탐색 배치 — A4 가로·폭 1쪽 맞춤(높이 자유)·좁은 여백·헤더 행 반복 인쇄·머리글(맵 이름|버전|쪽),
+ * 헤더 행과 식별 열 고정, 헤더~마지막 행 자동 필터. frozenColumns=왼쪽에 고정할 열 수.
+ */
+export function applyExcelPrintLayout(
+  sheet: import("exceljs").Worksheet,
+  opts: { headerRow: number; columnCount: number; frozenColumns: number; mapName: string; versionLabel: string },
+): void {
+  const { headerRow, columnCount, frozenColumns, mapName, versionLabel } = opts;
+  sheet.pageSetup = {
+    ...sheet.pageSetup,
+    paperSize: A4_PAPER_SIZE,
+    orientation: "landscape",
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0, // 0 = 세로 쪽수 제한 없음
+    margins: EXCEL_PRINT_MARGINS,
+    printTitlesRow: `${headerRow}:${headerRow}`,
+  };
+  sheet.headerFooter = {
+    oddHeader: `&L${escapeHeaderFooterText(mapName)}&C${escapeHeaderFooterText(versionLabel)}&R&P / &N`,
+  };
+  sheet.views = [{ state: "frozen", xSplit: frozenColumns, ySplit: headerRow }];
+  sheet.autoFilter = {
+    from: { row: headerRow, column: 1 },
+    to: { row: Math.max(sheet.rowCount, headerRow), column: columnCount },
+  };
+}
+
 export const NOTE_TEXT: Record<ExcelNoteRow["kind"], string> = {
   circular: "(circular reference)",
   denied: "(access denied)",
@@ -489,12 +637,25 @@ export interface ExcelColumnSpec {
   required?: boolean;
   width: number;
   numFmt?: string;
-  // 셀 안 개행(여러 항목)이 보이도록 줄바꿈 표시
-  wrap?: boolean;
   cell: (row: ExcelRowFields) => string | number;
 }
 
-const toNumberCell = (value: string): string | number => (value === "" ? "" : Number(value));
+// 숫자 셀 — 경계에서 정규화된 값이라 보통 숫자지만, 숫자가 아니면 NaN 대신 원문 텍스트로 남긴다
+const toNumberCell = (value: string): string | number => {
+  if (value.trim() === "") return "";
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : value;
+};
+
+// 시간 셀 — H.MM(소수부=분)을 Excel 시간 값(일 단위: 분/1440)으로. `[h]:mm` 서식이라 SUM이 시:분으로 맞게 더해진다
+// (H.MM 숫자를 그대로 두면 1.30+1.30=2.60처럼 십진 합산돼 틀렸다). 해석 불가 값은 원문 텍스트
+const toDurationCell = (value: string): string | number => {
+  if (value.trim() === "") return "";
+  const minutes = parseDurationMinutes(value);
+  return minutes === null ? value : minutes / 1440;
+};
+
+export const EXCEL_DURATION_NUMFMT = "[h]:mm";
 
 // 열별 폭·서식·셀 — 키·헤더·순서는 lib/export-columns.ts EXCEL_COLUMNS가 단일 소스(design 2026-07-13 §5.2).
 // Record라 열을 추가하면 tsc가 서식·셀 누락을 잡고, numFmt·하이퍼링크 위치는 셀 인덱스가 아닌 이 정의에서 파생한다.
@@ -507,16 +668,16 @@ const EXCEL_COLUMN_FORMATS: Record<ExcelColumnKey, Omit<ExcelColumnSpec, "key" |
   role: { width: 14, cell: (row) => row.assignee_role },
   department: { width: 18, cell: (row) => row.department },
   system: { width: 14, cell: (row) => row.system },
-  // H.MM 표기 보존 — "1.30"이 1.3으로 뭉개지지 않게
-  duration: { width: 12, numFmt: "0.00", cell: (row) => toNumberCell(row.duration) },
-  touch_time: { width: 13, numFmt: "0.00", cell: (row) => toNumberCell(row.touch_time) },
+  // 시:분 시간 값(H.MM 계약 → 분/1440) — CSV는 H.MM 그대로(왕복용)
+  duration: { width: 12, numFmt: EXCEL_DURATION_NUMFMT, cell: (row) => toDurationCell(row.duration) },
+  touch_time: { width: 13, numFmt: EXCEL_DURATION_NUMFMT, cell: (row) => toDurationCell(row.touch_time) },
   cost_krw: { width: 14, numFmt: "#,##0", cell: (row) => toNumberCell(row.cost_krw) },
   cost_usd: { width: 14, numFmt: "#,##0.00", cell: (row) => toNumberCell(row.cost_usd) },
   headcount: { width: 11, numFmt: "0.00", cell: (row) => toNumberCell(row.headcount) },
   annual_count: { width: 13, numFmt: "#,##0", cell: (row) => toNumberCell(row.annual_count) },
   fte: { width: 8, numFmt: "0.00", cell: (row) => toNumberCell(row.fte) },
-  input: { width: 28, wrap: true, cell: (row) => row.input },
-  output: { width: 28, wrap: true, cell: (row) => row.output },
+  input: { width: 28, cell: (row) => row.input },
+  output: { width: 28, cell: (row) => row.output },
   start_condition: { width: 20, cell: (row) => row.start_condition },
   end_condition: { width: 20, cell: (row) => row.end_condition },
   gmp: { width: 12, cell: (row) => row.gmp },
@@ -538,7 +699,10 @@ export function selectExcelColumns(keys?: readonly ExcelColumnKey[]): ExcelColum
   return COLUMNS.filter((column) => selected.has(column.key));
 }
 
-/** 데이터 행 셀 서식 — numFmt·줄바꿈·URL 하이퍼링크를 열 정의에서 파생(1안·WBS 공용). firstCol=첫 열 위치(1-based). */
+/**
+ * 데이터 행 셀 서식 — 글꼴·위 정렬·numFmt·URL 하이퍼링크를 열 정의에서 파생(1안·WBS 공용). 텍스트 열은 줄바꿈해
+ * 여러 줄 IO·긴 설명이 인쇄에서 잘리지 않게 한다. firstCol=첫 열 위치(1-based).
+ */
 export function applyExcelCellFormats(
   r: import("exceljs").Row,
   columns: readonly ExcelColumnSpec[],
@@ -548,53 +712,57 @@ export function applyExcelCellFormats(
   columns.forEach((column, i) => {
     const cell = r.getCell(firstCol + i);
     if (column.numFmt) cell.numFmt = column.numFmt;
-    if (column.wrap) cell.alignment = { wrapText: true, vertical: "top" };
+    cell.alignment = column.numFmt ? { vertical: "top" } : { vertical: "top", wrapText: true };
     if (column.key === "url" && row.url) {
       cell.value = { text: row.urlLabel || row.url, hyperlink: row.url };
-      cell.font = { color: { argb: getExcelLinkFont() }, underline: true };
+      setExcelFont(cell, { color: { argb: EXCEL_LINK_ARGB }, underline: true });
+    } else {
+      setExcelFont(cell);
     }
   });
 }
 
 /**
- * ExcelModel → 워크시트 기록(시트 생성·스타일·셀 값). Blob/anchor(브라우저 다운로드)와 분리해
- * DOM 없이도(vitest) 컬럼 서식·값을 검증할 수 있게 한다. columnKeys 미지정이면 전 열.
+ * ExcelModel → 워크시트 기록(시트 생성·스타일·셀 값·인쇄 배치). Blob/anchor(브라우저 다운로드)와 분리해
+ * DOM 없이도(vitest) 컬럼 서식·값을 검증할 수 있게 한다. columnKeys 미지정이면 전 열. 반환값=헤더 행 번호.
  */
 export function writeExcelSheet(
   workbook: import("exceljs").Workbook,
   model: ExcelModel,
   columnKeys?: readonly ExcelColumnKey[],
-): void {
+): number {
   const columns = selectExcelColumns(columnKeys);
+  applyExcelWorkbookInfo(workbook, model.mapName);
   const sheet = workbook.addWorksheet("Process Map", {
-    views: [{ state: "frozen", ySplit: 4 }],
     properties: { outlineLevelRow: 1, defaultRowHeight: 16 },
   });
-  sheet.addRow([model.mapName]);
-  sheet.getRow(1).font = { bold: true, size: 14 };
-  sheet.addRow([`Version: ${model.versionLabel}    Exported: ${model.exportedAt}${model.truncated ? "    (truncated)" : ""}`]);
-  sheet.addRow([]);
-  const headerRow = sheet.addRow(columns.map((c) => c.header));
-  headerRow.eachCell((cell) => {
-    cell.font = { bold: true };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: getExcelHeaderFill() } };
-    cell.border = { bottom: { style: "thin" } };
-  });
+  const headerRowNo = writeExcelMeta(sheet, model.meta);
+  applyExcelHeaderStyle(sheet.addRow(columns.map((c) => c.header)));
   columns.forEach((c, i) => { sheet.getColumn(i + 1).width = c.width; });
 
   for (const row of model.rows) {
     if (row.kind !== "node") {
       const r = sheet.addRow(["", NOTE_TEXT[row.kind]]);
-      r.getCell(2).font = { italic: true };
-      r.getCell(2).alignment = { indent: row.depth * 2 };
+      setExcelFont(r.getCell(2), { italic: true, color: { argb: EXCEL_MUTED_ARGB } });
+      r.getCell(2).alignment = { vertical: "top", indent: row.depth * 2 };
       r.outlineLevel = Math.min(row.depth, 7);
       continue;
     }
     const r = sheet.addRow(columns.map((column) => column.cell(row)));
     applyExcelCellFormats(r, columns, 1, row);
-    r.getCell(2).alignment = { indent: row.depth * 2 }; // Name은 잠금 열이라 항상 2번째
+    // Name은 잠금 열이라 항상 2번째 — 정렬 객체는 통째로 바뀌므로 줄바꿈·위 정렬을 유지한 채 들여쓰기만 더한다
+    r.getCell(2).alignment = { ...r.getCell(2).alignment, indent: row.depth * 2 };
     r.outlineLevel = Math.min(row.depth, 7); // Excel outline 한계 7
   }
+  // No·Name 고정 — 옆으로 넘겨도 어느 노드의 행인지 보인다
+  applyExcelPrintLayout(sheet, {
+    headerRow: headerRowNo,
+    columnCount: columns.length,
+    frozenColumns: 2,
+    mapName: model.mapName,
+    versionLabel: model.versionLabel,
+  });
+  return headerRowNo;
 }
 
 /** 워크북 조립 콜백 → .xlsx 다운로드 — exceljs 동적 import 공용(1안/2안 시트가 공유). */
