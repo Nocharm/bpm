@@ -12,6 +12,8 @@ import {
   getApiErrorDetail, getFrameworkInterviewDocument, importInterview, openLinkageMap,
   type FwInterviewSession, type InterviewImportResult,
 } from "@/lib/api";
+import { downloadBlob } from "@/lib/download-blob";
+import { buildDownloadName } from "@/lib/download-name";
 import { useI18n } from "@/lib/i18n";
 import { buildImportReportView, buildInterviewIndex, governanceKey, parseGovernanceKey } from "@/lib/interview-report";
 import { InterviewImportReport, type InterviewPhase } from "@/components/admin/import-report/interview-import-report";
@@ -36,6 +38,7 @@ export function RegisterStep({ session, busy, onApplied, onBack }: RegisterStepP
   const [governanceChecked, setGovernanceChecked] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
+  // 임포트 리포트에 실리는 문서 이름(dry run·apply 동일) — 내려받기 이름(시각 포함)과 따로 둔다
   const fileName = `${session.category_code}-ai-consult.json`;
   const files = useMemo(() => (doc ? [{ name: fileName, content: doc }] : []), [doc, fileName]);
   const index = useMemo(() => buildInterviewIndex(files), [files]);
@@ -43,13 +46,15 @@ export function RegisterStep({ session, busy, onApplied, onBack }: RegisterStepP
 
   // 문서를 받자마자 dry run을 자동으로 돌린다 — 등록 단계에 들어오면 리포트가 바로 보이게(사용자 요청 2026-09-21).
   // 문서 fetch → dry run 체인을 한 이펙트에 두어 setState는 전부 비동기 콜백 안에서만 일어난다.
+  // 등록이 끝난 세션(새로고침 뒤)은 문서만 받는다 — JSON 다운로드가 비활성으로 남던 문제(2026-10-16), dry run은 다시 돌리지 않는다.
   useEffect(() => {
-    if (session.status === "applied") return;
+    const isApplied = session.status === "applied";
     let alive = true;
     getFrameworkInterviewDocument(session.id)
       .then(async (d) => {
         if (!alive) return;
         setDoc(d);
+        if (isApplied) return;
         const name = `${session.category_code}-ai-consult.json`;
         const r = await importInterview({ files: [{ name, content: d }], apply: false, label: session.label });
         if (!alive) return;
@@ -57,7 +62,7 @@ export function RegisterStep({ session, busy, onApplied, onBack }: RegisterStepP
         setGovernanceChecked(new Set(r.governance.filter((g) => g.default_checked).map(governanceKey)));
       })
       .catch((err) => { if (alive) setError(getApiErrorDetail(err)); })
-      .finally(() => { if (alive) setPhase(null); });
+      .finally(() => { if (alive && !isApplied) setPhase(null); });
     return () => { alive = false; };
   }, [session.id, session.status, session.category_code, session.label]);
 
@@ -79,11 +84,9 @@ export function RegisterStep({ session, busy, onApplied, onBack }: RegisterStepP
 
   function download() {
     if (!doc) return;
-    const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = fileName; a.click();
-    URL.revokeObjectURL(url);
+    // 분류 코드·세션 라벨(비면 생략, 날짜는 KST 시각 조각)·ai-consult
+    const name = buildDownloadName([session.category_code, session.label, "ai-consult"], "json");
+    downloadBlob(new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" }), name);
   }
 
   async function openCanvas() {

@@ -120,7 +120,7 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
         <div className="flex items-center gap-2">
           <ExportCsvButton
             dataId="notices-export-csv"
-            filename={`bpm-notices-${new Date().toISOString().slice(0, 10)}.csv`}
+            nameParts={["bpm-notices"]}
             getRows={getExportRows}
             disabled={notices.length === 0}
           />

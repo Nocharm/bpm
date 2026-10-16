@@ -8,6 +8,7 @@ import { AlertTriangle, BookOpen, Check, Download, ExternalLink, Sparkles } from
 
 import { copyText } from "@/lib/clipboard";
 import { buildAiPromptText, buildTemplateCsv } from "@/lib/csv-import";
+import { downloadBlob } from "@/lib/download-blob";
 import { useI18n } from "@/lib/i18n";
 
 export const CSV_OUTLINE_BTN =
@@ -26,14 +27,8 @@ export function CsvTemplateActions({
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   const handleDownloadTemplate = () => {
-    // UTF-8 BOM 접두 — Excel이 한글을 올바른 인코딩으로 열도록
-    const blob = new Blob(["﻿" + buildTemplateCsv()], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "bpm-map-template.csv";
-    anchor.click();
-    URL.revokeObjectURL(url);
+    // UTF-8 BOM 접두 — Excel이 한글을 올바른 인코딩으로 열도록. 보이지 않는 리터럴 대신 이스케이프(편집·포매터에서 증발 방지)
+    downloadBlob(new Blob(["\uFEFF" + buildTemplateCsv()], { type: "text/csv;charset=utf-8" }), "bpm-map-template.csv");
   };
 
   const handleCopyPrompt = async () => {

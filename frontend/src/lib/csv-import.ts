@@ -4,7 +4,7 @@ import type { AiEdge, AiGroup, AiNode, Catalogs, Directory, Graph, GraphEdge, Gr
 import { driftedAssignees, formatAssignees, parseAssignees } from "./assignee";
 import { type AppNode, getNewEdgeLineStyle, layoutSubsetWithDagre, layoutWithDagre, normalizeNodeType } from "./canvas";
 import { commitRole, commitSystem } from "./catalogs";
-import { escapeCsvCell } from "./csv";
+import { escapeCsvCell, unguardCsvCell } from "./csv";
 import { normalizeDuration, normalizeNumericParam, stripThousands } from "./duration";
 import { CSV_COLUMNS, type CsvColumnKey } from "./export-columns";
 import { GMP_OPTIONS } from "./gmp";
@@ -143,7 +143,8 @@ function stripBom(text: string): string {
   return text.startsWith("\uFEFF") ? text.slice(1) : text;
 }
 
-/** RFC4180 파싱 — 따옴표 셀(쉼표·줄바꿈·"" 이스케이프)·CRLF. 전부 빈 행은 건너뛴다. */
+/** RFC4180 파싱 — 따옴표 셀(쉼표·줄바꿈·"" 이스케이프)·CRLF. 전부 빈 행은 건너뛴다.
+ *  내보내기의 수식 가드(`'=`·`'-` 등, csv.ts escapeCsvCell)는 셀마다 한 번 벗겨 원문으로 돌린다. */
 export function parseCsvRecords(text: string): CsvRecord[] {
   const records: CsvRecord[] = [];
   let cells: string[] = [];
@@ -152,7 +153,7 @@ export function parseCsvRecords(text: string): CsvRecord[] {
   let line = 1;
   let recordLine = 1;
   const endCell = () => {
-    cells.push(cell);
+    cells.push(unguardCsvCell(cell));
     cell = "";
   };
   const endRecord = () => {

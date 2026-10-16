@@ -198,7 +198,7 @@ export function DepartmentTable() {
       <div className="flex justify-end">
         <ExportCsvButton
           dataId="departments-export-csv"
-          filename={`bpm-departments-${new Date().toISOString().slice(0, 10)}.csv`}
+          nameParts={["bpm-departments"]}
           getRows={getExportRows}
           disabled={rows.length === 0}
         />

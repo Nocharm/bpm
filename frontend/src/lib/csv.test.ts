@@ -1,7 +1,7 @@
 // 범용 CSV 유틸 단위 테스트 — 이스케이프 규칙 + CRLF 조인.
 import { describe, expect, it } from "vitest";
 
-import { buildCsv, escapeCsvCell } from "./csv";
+import { buildCsv, escapeCsvCell, unguardCsvCell } from "./csv";
 
 describe("escapeCsvCell", () => {
   it("특수문자 없는 셀은 그대로 반환", () => {
@@ -37,5 +37,16 @@ describe("buildCsv", () => {
       ["B, C", 'say "hi"'],
     ]);
     expect(csv).toBe('Name,Dept\r\nA,Quality\r\n"B, C","say ""hi"""');
+  });
+});
+
+describe("unguardCsvCell", () => {
+  it("strips one ' before a formula lead and leaves other text alone", () => {
+    for (const text of ["=SUM(A1)", "+1", "- 확인", "@멘션", "\t탭"]) {
+      expect(unguardCsvCell(escapeCsvCell(text))).toBe(text);
+    }
+    expect(unguardCsvCell("'일반")).toBe("'일반");
+    expect(unguardCsvCell("''=x")).toBe("''=x");
+    expect(unguardCsvCell("3. 검토")).toBe("3. 검토");
   });
 });
