@@ -401,7 +401,7 @@ function ExportPreview({
   const cellCls = "h-6 truncate whitespace-nowrap border-b border-hairline px-2 leading-6";
   return (
     <div data-id="excel-export-preview" className="overflow-x-auto rounded-sm border border-hairline bg-surface">
-      <div data-id="excel-export-preview-meta" className="grid w-max grid-cols-[auto_auto] gap-x-3 gap-y-0.5 px-2 py-1.5 text-fine">
+      <div data-id="excel-export-preview-meta" className="grid w-max grid-cols-[auto_auto] gap-x-3 gap-y-1 px-2 py-2 text-fine leading-5">
         {model.meta.map((meta, index) => (
           <div key={index} className="contents">
             <span className="text-ink-tertiary">{meta.label}</span>
