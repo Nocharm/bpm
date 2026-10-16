@@ -229,6 +229,16 @@ await page.screenshot({ path: `${OUT}/png-export-a4-guide-portrait.png` });
 await page.locator('[data-id="canvas-a4-guide-paper-landscape"]').click();
 await page.waitForTimeout(400);
 await page.screenshot({ path: `${OUT}/png-export-a4-guide-landscape.png` });
+// 가이드를 켠 채로 내보내도 출력에는 안내선이 없어야 한다(화면 전용)
+await page.keyboard.press("Escape");
+await openModal();
+await download("word-navy-with-guide");
+// 묶음 상자는 크기 0이라 isVisible 대신 계산된 display로 — 캡처 뒤 인라인 숨김이 원복됐는지
+check(
+  "a4 guide stays on screen after export",
+  await page.locator('[data-id="canvas-a4-guide"]').evaluate((el) => getComputedStyle(el).display !== "none"),
+);
+await page.locator('[data-id="canvas-node-display-float-toggle"]').click();
 await page.locator('[data-id="canvas-a4-guide-toggle"]').click();
 
 await browser.close();

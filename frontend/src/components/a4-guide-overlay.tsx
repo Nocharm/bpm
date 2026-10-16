@@ -43,7 +43,8 @@ export function A4GuideOverlay({ bounds, paper }: A4GuideOverlayProps) {
     </span>
   );
   return (
-    <div data-id="canvas-a4-guide" className="pointer-events-none absolute left-0 top-0" style={{ zIndex: -1000 }}>
+    // bpm-print-hide — 화면 전용 안내선이라 PNG 캡처(lib/export)에서 뺀다
+    <div data-id="canvas-a4-guide" className="bpm-print-hide pointer-events-none absolute left-0 top-0" style={{ zIndex: -1000 }}>
       <div
         className="absolute"
         style={{

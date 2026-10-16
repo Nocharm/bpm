@@ -526,6 +526,10 @@ function applyEdgeFixups(
       setImportant(banner, "display", "none");
     }
   }
+  // 화면 전용 안내(A4 가이드 등) — 어떤 형식이든 출력엔 넣지 않는다
+  for (const el of viewport.querySelectorAll(".bpm-print-hide")) {
+    setImportant(el, "display", "none");
+  }
   // SP "최신본 따르는 중"은 화면 전용 상태 표시(정상 상태 안내) — 출력물엔 불필요.
   // display:none이라 노드 높이도 그만큼 줄어든다 (사용자 요청 2026-08-31)
   for (const banner of viewport.querySelectorAll('[data-id="sp-banner-following"]')) {
