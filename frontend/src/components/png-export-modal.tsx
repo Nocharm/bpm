@@ -5,7 +5,7 @@
 // 미리보기 구성요소는 켜고 끌 때 쉬머로 생기고 사라진다(ShimmerPresence). 마지막 선택은 브라우저에 기억(lib/export).
 // 에디터(maps/[mapId]/page.tsx)의 PNG 내보내기 진입점(인스펙터 버튼·우클릭 메뉴·Ctrl+⇧E)이 공유.
 
-import { Fragment, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ListTree, PanelTop, X } from "lucide-react";
 
@@ -15,6 +15,7 @@ import { TOGGLE_ICONS, TOGGLE_LABEL_KEY } from "@/components/node-display-sectio
 import { PngPrintPanel } from "@/components/png-print-panel";
 import { resolveNodeStroke } from "@/components/process-node";
 import { ShimmerPresence } from "@/components/shimmer-presence";
+import { ToggleChip } from "@/components/toggle-chip";
 import {
   CROSSING_STYLES,
   loadPngExportOptions,
@@ -382,33 +383,6 @@ export function PngExportModal({ frame, canvasDisplayFields, onClose, onExport }
       </div>
     </ModalBackdrop>,
     document.body,
-  );
-}
-
-interface ToggleChipProps {
-  dataId: string;
-  icon: ReactNode;
-  label: string;
-  on: boolean;
-  onToggle: () => void;
-}
-
-// 켜짐/꺼짐 칩 — 켜지면 액센트 틴트, 꺼지면 헤어라인 테두리만(폭은 내용만큼)
-function ToggleChip({ dataId, icon, label, on, onToggle }: ToggleChipProps) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      data-id={dataId}
-      onClick={onToggle}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-fine transition-colors duration-150 ${
-        on ? "border-accent bg-accent-tint text-accent" : "border-hairline text-ink-tertiary hover:bg-surface-alt"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }
 
