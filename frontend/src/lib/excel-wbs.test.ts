@@ -5,7 +5,7 @@ import { Workbook } from "exceljs";
 
 import type { Graph, GraphEdge, GraphNode } from "./api";
 import { buildWbsModel, writeWbsSheet } from "./excel-wbs";
-import { COLUMNS } from "./excel-export";
+import { buildExcelMeta, COLUMNS } from "./excel-export";
 
 /** GraphNode 조립 헬퍼 — excel-export.test.ts 스타일 재사용. */
 function makeNode(id: string, title: string, node_type: string, sort_order: number, over: Partial<GraphNode> = {}): GraphNode {
@@ -312,10 +312,10 @@ describe("buildWbsModel", () => {
 describe("writeWbsSheet", () => {
   function buildSheet(model: Parameters<typeof writeWbsSheet>[1], columns?: Parameters<typeof writeWbsSheet>[2]) {
     const workbook = new Workbook();
-    writeWbsSheet(workbook, model, columns);
+    const headerRow = writeWbsSheet(workbook, model, columns);
     const sheet = workbook.getWorksheet("WBS");
     if (!sheet) throw new Error("sheet missing");
-    return sheet;
+    return { sheet, headerRow, workbook };
   }
   const baseRow = {
     kind: "node" as const, no: 1, levels: ["Root", "Sub"], title: "P", type: "process",
@@ -325,75 +325,107 @@ describe("writeWbsSheet", () => {
     url: "https://example.com/doc", urlLabel: "Doc", groups: "", next: "Next step",
   };
   const model = {
-    mapName: "Root", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00",
+    mapName: "Root", versionLabel: "v1", exportedAt: "2026-07-17 09:00",
+    meta: buildExcelMeta({ mapName: "Root", versionLabel: "v1", exportedAt: "2026-07-17 09:00" }),
     maxLevel: 2, truncated: false, rows: [baseRow],
   };
 
-  it("동적 헤더: No, Level 1..N, Task, 그리고 1안 속성 꼬리(Type~Next)", () => {
-    const sheet = buildSheet(model);
-    const header = sheet.getRow(4).values as unknown[];
+  it("메타 3줄+빈 줄 다음이 헤더, 동적 헤더: No, Level 1..N, Task, 그리고 1안 속성 꼬리(Type~Next)", () => {
+    const { sheet, headerRow } = buildSheet(model);
+    expect(headerRow).toBe(5);
+    expect(sheet.getRow(1).getCell(3).value).toBe("Root");
+    const header = sheet.getRow(headerRow).values as unknown[];
     expect(header.slice(1)).toEqual([
       "No", "Level 1", "Level 2", "Task",
       ...COLUMNS.slice(2).map((c) => c.header),
     ]);
   });
 
-  it("레벨 셀은 모든 행에 반복 기재 + 회색 폰트, No·Task는 모델 그대로", () => {
-    const sheet = buildSheet(model);
-    const r = sheet.getRow(5);
+  it("Level 1(루트 맵 이름)은 첫 행에만, Level 2 이하는 행마다 + 회색 폰트, No·Task는 모델 그대로", () => {
+    const { sheet, headerRow } = buildSheet({ ...model, rows: [baseRow, { ...baseRow, no: 2, title: "Q" }] });
+    const r = sheet.getRow(headerRow + 1);
     expect(r.getCell(1).value).toBe(1);
     expect(r.getCell(2).value).toBe("Root");
     expect(r.getCell(3).value).toBe("Sub");
     expect(r.getCell(4).value).toBe("P");
     expect(r.getCell(2).font?.color?.argb).toBe("FF9CA3AF");
     expect(r.getCell(3).font?.color?.argb).toBe("FF9CA3AF");
+    const r2 = sheet.getRow(headerRow + 2);
+    expect(r2.getCell(2).value).toBe("");
+    expect(r2.getCell(3).value).toBe("Sub");
+    expect(r2.getCell(4).value).toBe("Q");
   });
 
-  it("numFmt는 레벨 수만큼 시프트된 위치에 적용되고 숫자 셀은 실제 숫자", () => {
-    const sheet = buildSheet(model);
-    const r = sheet.getRow(5);
+  it("numFmt는 레벨 수만큼 시프트된 위치에 적용, 시간 셀은 [h]:mm 시간 값, 숫자 셀은 실제 숫자", () => {
+    const { sheet, headerRow } = buildSheet(model);
+    const r = sheet.getRow(headerRow + 1);
     // Task(4열) 다음이 Type(5열) — Duration은 COLUMNS 꼬리에서 찾은 인덱스 + 시프트
     const tail = COLUMNS.slice(2);
-    const durationCol = 5 + tail.findIndex((c) => c.header === "Duration (h)");
-    expect(r.getCell(durationCol).numFmt).toBe("0.00");
-    expect(r.getCell(durationCol).value).toBe(1.3);
+    const durationCol = 5 + tail.findIndex((c) => c.header === "Duration (h:mm)");
+    expect(r.getCell(durationCol).numFmt).toBe("[h]:mm");
+    expect(r.getCell(durationCol).value).toBeCloseTo(1.5 / 24, 12);
     const krwCol = 5 + tail.findIndex((c) => c.header === "Cost (KRW)");
     expect(r.getCell(krwCol).numFmt).toBe("#,##0");
     expect(r.getCell(krwCol).value).toBe(1250000);
-    const touchCol = 5 + tail.findIndex((c) => c.header === "Touch time (h)");
-    expect(r.getCell(touchCol).numFmt).toBe("0.00");
-    expect(r.getCell(touchCol).value).toBe(0.45);
+    const touchCol = 5 + tail.findIndex((c) => c.header === "Touch time (h:mm)");
+    expect(r.getCell(touchCol).numFmt).toBe("[h]:mm");
+    expect(r.getCell(touchCol).value).toBeCloseTo(0.75 / 24, 12);
   });
 
   it("데이터 행 셀 수 = No + 레벨 + Task + 꼬리, 마지막 셀은 Next", () => {
-    const sheet = buildSheet(model);
-    const values = (sheet.getRow(5).values as unknown[]).slice(1);
+    const { sheet, headerRow } = buildSheet(model);
+    const values = (sheet.getRow(headerRow + 1).values as unknown[]).slice(1);
     expect(values).toHaveLength(1 + model.maxLevel + 1 + COLUMNS.slice(2).length);
     expect(values[values.length - 1]).toBe("Next step");
   });
 
   it("열 선택 - 꼬리는 선택한 열+잠금 열(Type·Parallel·Next)만 정식 순서로, 서식·하이퍼링크 위치도 선택 열에서 파생", () => {
-    const sheet = buildSheet(model, ["url", "duration"]);
-    expect((sheet.getRow(4).values as unknown[]).slice(1)).toEqual([
-      "No", "Level 1", "Level 2", "Task", "Type", "Duration (h)", "Parallel", "URL", "Next",
+    const { sheet, headerRow } = buildSheet(model, ["url", "duration"]);
+    expect((sheet.getRow(headerRow).values as unknown[]).slice(1)).toEqual([
+      "No", "Level 1", "Level 2", "Task", "Type", "Duration (h:mm)", "Parallel", "URL", "Next",
     ]);
-    const r = sheet.getRow(5);
-    expect(r.getCell(6).numFmt).toBe("0.00");
+    const r = sheet.getRow(headerRow + 1);
+    expect(r.getCell(6).numFmt).toBe("[h]:mm");
     expect(r.getCell(8).value).toEqual({ text: "Doc", hyperlink: "https://example.com/doc" });
     expect(r.getCell(9).value).toBe("Next step");
   });
 
   it("URL 하이퍼링크·노트 행 이탤릭이 시프트된 위치에 기록된다", () => {
-    const sheet = buildSheet({
+    const { sheet, headerRow } = buildSheet({
       ...model,
       rows: [baseRow, { kind: "denied" as const, levels: ["Root"], title: "Sub" }],
     });
     const tail = COLUMNS.slice(2);
     const urlCol = 5 + tail.findIndex((c) => c.header === "URL");
-    const r5 = sheet.getRow(5);
-    expect(r5.getCell(urlCol).value).toEqual({ text: "Doc", hyperlink: "https://example.com/doc" });
-    const r6 = sheet.getRow(6);
-    expect(r6.getCell(4).value).toBe("(access denied)");
-    expect(r6.getCell(4).font?.italic).toBe(true);
+    expect(sheet.getRow(headerRow + 1).getCell(urlCol).value).toEqual({ text: "Doc", hyperlink: "https://example.com/doc" });
+    const note = sheet.getRow(headerRow + 2);
+    expect(note.getCell(4).value).toBe("(access denied)");
+    expect(note.getCell(4).font?.italic).toBe(true);
+    expect(note.getCell(4).font?.name).toBe("Malgun Gothic");
+  });
+
+  it("인쇄 배치·고정·필터 - A4 가로 폭 맞춤, 헤더 행 반복, No~Task 고정, 헤더~마지막 행 필터", () => {
+    const { sheet, headerRow, workbook } = buildSheet(model);
+    expect(sheet.pageSetup).toMatchObject({
+      paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      printTitlesRow: `${headerRow}:${headerRow}`,
+    });
+    expect(sheet.headerFooter.oddHeader).toBe("&LRoot&Cv1&R&P / &N");
+    expect(sheet.views).toEqual([expect.objectContaining({ state: "frozen", xSplit: 4, ySplit: headerRow })]);
+    const columnCount = 1 + model.maxLevel + 1 + COLUMNS.slice(2).length;
+    expect(sheet.autoFilter).toEqual({ from: { row: headerRow, column: 1 }, to: { row: headerRow + 1, column: columnCount } });
+    expect(workbook.title).toBe("Root");
+  });
+
+  it("글꼴·정렬 - 헤더·No·레벨·Task·꼬리 모두 맑은 고딕 10, 텍스트는 줄바꿈+위 정렬", () => {
+    const { sheet, headerRow } = buildSheet(model);
+    expect(sheet.getRow(headerRow).getCell(4).font).toEqual({ name: "Malgun Gothic", size: 10, bold: true });
+    const r = sheet.getRow(headerRow + 1);
+    const columnCount = 1 + model.maxLevel + 1 + COLUMNS.slice(2).length;
+    for (let col = 1; col <= columnCount; col += 1) {
+      expect(r.getCell(col).font?.name).toBe("Malgun Gothic");
+      expect(r.getCell(col).alignment?.vertical).toBe("top");
+    }
+    expect(r.getCell(4).alignment).toEqual({ vertical: "top", wrapText: true });
   });
 });

@@ -123,13 +123,14 @@ try {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(xlsxPath);
   const sheet = wb.worksheets[0];
-  const header = sheet.getRow(4).values.slice(1).map(String);
+  const headerRowNo = sheet.views[0].ySplit; // 헤더 행 = 고정 행(메타 블록 줄 수에 따라 달라진다)
+  const header = sheet.getRow(headerRowNo).values.slice(1).map(String);
   // 열 위치는 헤더에서 찾는다 — 열 선택·열 추가에 인덱스가 흔들리지 않게
   const typeCol = header.indexOf("Type") + 1;
   const nextCol = header.indexOf("Next") + 1;
   const rows = []; // { no, name, type, next }
   sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (rowNumber < 5) return;
+    if (rowNumber <= headerRowNo) return;
     rows.push({ no: row.getCell(1).value, name: String(row.getCell(2).value ?? ""), type: String(row.getCell(typeCol).value ?? ""), next: String(row.getCell(nextCol).value ?? "") });
   });
 

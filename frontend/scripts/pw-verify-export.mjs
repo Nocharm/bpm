@@ -325,15 +325,15 @@ try {
   const wbA = new ExcelJS.Workbook();
   await wbA.xlsx.readFile(xlsxPathA);
   const sheetA = wbA.worksheets[0];
-  const headerRowA = sheetA.getRow(4).values.slice(1).map(String);
+  const headerRowA = sheetA.getRow(sheetA.views[0].ySplit).values.slice(1).map(String);
   // lib/export-columns.ts EXCEL_COLUMNS와 같은 순서 — 셀 위치는 이 목록에서 찾는다(인덱스 하드코딩 금지)
   const expectedXlsxHeader = [
     "No", "Name", "Type", "Description", "Assignee", "Role", "Department", "System",
-    "Duration (h)", "Touch time (h)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE",
+    "Duration (h:mm)", "Touch time (h:mm)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE",
     "Input", "Output", "Start condition", "End condition", "GMP", "Parallel", "URL", "Groups", "Next",
   ];
   check(
-    `Excel header row (row 4) has ${expectedXlsxHeader.length} expected columns`,
+    `Excel header row (frozen row) has ${expectedXlsxHeader.length} expected columns`,
     headerRowA.length === expectedXlsxHeader.length && expectedXlsxHeader.every((h, i) => headerRowA[i] === h),
     headerRowA.join(","),
   );
@@ -342,12 +342,13 @@ try {
   sheetA.eachRow({ includeEmpty: false }, (row) => {
     if (row.getCell(2).value === "Widget Step") widgetXlsxRow = row;
   });
-  const numericCols = ["Duration (h)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE"].map(xlsxCol);
+  const numericCols = ["Duration (h:mm)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE"].map(xlsxCol);
   const cellOf = (header) => widgetXlsxRow?.getCell(xlsxCol(header)).value;
   check(
     "Excel numeric cells (duration/cost_krw/headcount/annual_count/fte) are real numbers, cost_usd empty",
     widgetXlsxRow !== null &&
-      cellOf("Duration (h)") === 1.15 &&
+      // 1.15 = 1시간 15분 → Excel 시간 값 75/1440 ([h]:mm)
+      Math.abs(cellOf("Duration (h:mm)") - 75 / 1440) < 1e-9 &&
       cellOf("Cost (KRW)") === 300 &&
       (cellOf("Cost (USD)") ?? "") === "" &&
       cellOf("Headcount") === 2 &&

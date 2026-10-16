@@ -5,9 +5,15 @@ import type { Graph, GraphEdge, GraphNode } from "./api";
 import { orderNodesByFlow } from "./csv-export";
 import {
   applyExcelCellFormats,
+  applyExcelHeaderStyle,
+  applyExcelPrintLayout,
+  applyExcelWorkbookInfo,
+  buildExcelMeta,
   buildNodeRowFields,
   dedupeExcelNextRefs,
   EXCEL_MAX_ROWS,
+  EXCEL_MUTED_ARGB,
+  type ExcelMetaRow,
   type ExcelNextRef,
   type ExcelRowFields,
   downloadWorkbookXlsx,
@@ -15,9 +21,10 @@ import {
   getExcelEdgeLabel,
   getNodeDisplayTitle,
   getSubprocessExitTitles,
-  getExcelHeaderFill,
   NOTE_TEXT,
   selectExcelColumns,
+  setExcelFont,
+  writeExcelMeta,
 } from "./excel-export";
 import type { ExcelColumnKey } from "./export-columns";
 
@@ -38,6 +45,7 @@ export interface WbsModel {
   mapName: string;
   versionLabel: string;
   exportedAt: string;
+  meta: ExcelMetaRow[];
   maxLevel: number; // 레벨 컬럼 수 — rows의 levels 최대 길이(행 없으면 1)
   rows: WbsRow[];
   truncated: boolean;
@@ -51,6 +59,7 @@ export async function buildWbsModel({
   fetchResolved,
   maxRows = EXCEL_MAX_ROWS,
   rootMapId,
+  meta,
 }: {
   graph: Graph;
   mapName: string;
@@ -59,9 +68,11 @@ export async function buildWbsModel({
   fetchResolved: (mapId: number, followLatest: boolean, pinned: number | null) => Promise<Graph>;
   maxRows?: number;
   rootMapId?: number;
+  meta?: ExcelMetaRow[]; // 표 위 메타 블록 — 미지정이면 맵·버전·내보낸 시각만(1안과 동일)
 }): Promise<WbsModel> {
   const rows: WbsRow[] = [];
   let truncated = false;
+  let nodeRowCount = 0; // 상한은 노드 행만 센다(1안과 동일)
   // 규칙4 주석 — 행 "객체" 참조로 기록해 번호 부여 후 일괄 조립(역방향 분기·다이아몬드 안전, 1안과 동일)
   const annotations: Array<{ target: WbsNodeRow; decision: WbsNodeRow; label: string }> = [];
   // Next 칸 — 같은 맵 인스턴스의 행으로 풀고 번호 부여 뒤 조립(1안과 동일). 시작·끝·펼친 SP는 행이 없어 제목만
@@ -124,7 +135,7 @@ export async function buildWbsModel({
 
     for (const node of ordered) {
       if (isRowRemoved(node)) continue; // 삭제 노드는 상한(maxRows)을 소비하지 않는다
-      if (rows.length >= maxRows) {
+      if (nodeRowCount >= maxRows) {
         // return이 아닌 break — 주석 수집 패스를 실행해 이미 출력된 행의 주석 보존(1안과 동일)
         if (!truncated) rows.push({ kind: "rowLimit", levels, title: "" });
         truncated = true;
@@ -157,6 +168,7 @@ export async function buildWbsModel({
           ...buildNodeRowFields(g, node, { groupLabel, next: "", exitTitles }),
         };
         rows.push(spRow);
+        nodeRowCount += 1;
         rowByNodeId.set(node.id, spRow);
         pendingNext.push({ row: spRow, refs: nextRefsOf(node, exitTitles), scopeRows: rowByNodeId });
         rows.push({ kind: "denied", levels: [...levels, displayTitle], title: displayTitle });
@@ -169,6 +181,7 @@ export async function buildWbsModel({
         ...buildNodeRowFields(g, node, { groupLabel, next: "", exitTitles: null }),
       };
       rows.push(row);
+      nodeRowCount += 1;
       rowByNodeId.set(node.id, row);
       pendingNext.push({ row, refs: nextRefsOf(node, null), scopeRows: rowByNodeId });
     }
@@ -213,37 +226,49 @@ export async function buildWbsModel({
   }
 
   const maxLevel = rows.reduce((m, r) => Math.max(m, r.levels.length), 1);
-  return { mapName, versionLabel, exportedAt, maxLevel, rows, truncated };
+  return {
+    mapName,
+    versionLabel,
+    exportedAt,
+    meta: meta ?? buildExcelMeta({ mapName, versionLabel, exportedAt }),
+    maxLevel,
+    rows,
+    truncated,
+  };
 }
 
 const LEVEL_FONT_ARGB = "FF9CA3AF"; // 레벨 경로 회색 톤다운 — 출력물이라 raw hex 허용(design.md §1 예외)
 
 /**
- * WbsModel → "WBS" 워크시트 기록 — 동적 레벨 컬럼(No | Level 1..N | Task | 속성 꼬리).
+ * 레벨 셀 값 — Level 1은 모든 행이 루트 맵 이름이라 첫 행에만 적고(반복은 정보가 없다), Level 2 이하는
+ * 하위프로세스 경로라 필터·정렬에 쓰도록 행마다 적는다. 미리보기도 같은 규칙.
+ */
+export function getWbsLevelCells(row: WbsRow, rowIndex: number, maxLevel: number): string[] {
+  return Array.from({ length: maxLevel }, (_, i) => (i === 0 && rowIndex > 0 ? "" : (row.levels[i] ?? "")));
+}
+
+/**
+ * WbsModel → "WBS" 워크시트 기록 — 메타 블록 + 동적 레벨 컬럼(No | Level 1..N | Task | 속성 꼬리) + 인쇄 배치.
  * 꼬리는 1안 열 정의의 Type 이후 선택분(No·Name은 구조 열이 대신한다) — 서식은 정의에서 파생(1안 교훈).
+ * 반환값=헤더 행 번호.
  */
 export function writeWbsSheet(
   workbook: import("exceljs").Workbook,
   model: WbsModel,
   columnKeys?: readonly ExcelColumnKey[],
-): void {
-  const sheet = workbook.addWorksheet("WBS", { views: [{ state: "frozen", ySplit: 4 }] });
-  sheet.addRow([model.mapName]);
-  sheet.getRow(1).font = { bold: true, size: 14 };
-  sheet.addRow([`Version: ${model.versionLabel}    Exported: ${model.exportedAt}${model.truncated ? "    (truncated)" : ""}`]);
-  sheet.addRow([]);
+): number {
+  applyExcelWorkbookInfo(workbook, model.mapName);
+  const sheet = workbook.addWorksheet("WBS");
+  const headerRowNo = writeExcelMeta(sheet, model.meta);
   const tail = selectExcelColumns(columnKeys).filter((c) => c.key !== "no" && c.key !== "name");
-  const headerRow = sheet.addRow([
-    "No",
-    ...Array.from({ length: model.maxLevel }, (_, i) => `Level ${i + 1}`),
-    "Task",
-    ...tail.map((c) => c.header),
-  ]);
-  headerRow.eachCell((cell) => {
-    cell.font = { bold: true };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: getExcelHeaderFill() } };
-    cell.border = { bottom: { style: "thin" } };
-  });
+  applyExcelHeaderStyle(
+    sheet.addRow([
+      "No",
+      ...Array.from({ length: model.maxLevel }, (_, i) => `Level ${i + 1}`),
+      "Task",
+      ...tail.map((c) => c.header),
+    ]),
+  );
   const taskCol = 2 + model.maxLevel; // 1=No, 2..1+N=레벨, 그 다음이 Task
   sheet.getColumn(1).width = 6;
   for (let i = 0; i < model.maxLevel; i += 1) sheet.getColumn(2 + i).width = 18;
@@ -251,19 +276,40 @@ export function writeWbsSheet(
   tail.forEach((c, i) => {
     sheet.getColumn(taskCol + 1 + i).width = c.width;
   });
+  // No·레벨 셀 서식 — 위 정렬·줄바꿈(긴 하위프로세스 이름), 레벨은 회색
+  const styleStructureCells = (r: import("exceljs").Row) => {
+    setExcelFont(r.getCell(1));
+    r.getCell(1).alignment = { vertical: "top" };
+    for (let i = 0; i < model.maxLevel; i += 1) {
+      setExcelFont(r.getCell(2 + i), { color: { argb: LEVEL_FONT_ARGB } });
+      r.getCell(2 + i).alignment = { vertical: "top", wrapText: true };
+    }
+  };
 
-  for (const row of model.rows) {
-    const levelCells = Array.from({ length: model.maxLevel }, (_, i) => row.levels[i] ?? "");
+  model.rows.forEach((row, rowIndex) => {
+    const levelCells = getWbsLevelCells(row, rowIndex, model.maxLevel);
     if (row.kind !== "node") {
       const r = sheet.addRow(["", ...levelCells, NOTE_TEXT[row.kind]]);
-      r.getCell(taskCol).font = { italic: true };
-      for (let i = 0; i < model.maxLevel; i += 1) r.getCell(2 + i).font = { color: { argb: LEVEL_FONT_ARGB } };
-      continue;
+      styleStructureCells(r);
+      setExcelFont(r.getCell(taskCol), { italic: true, color: { argb: EXCEL_MUTED_ARGB } });
+      r.getCell(taskCol).alignment = { vertical: "top", wrapText: true };
+      return;
     }
     const r = sheet.addRow([row.no, ...levelCells, row.title, ...tail.map((column) => column.cell(row))]);
-    for (let i = 0; i < model.maxLevel; i += 1) r.getCell(2 + i).font = { color: { argb: LEVEL_FONT_ARGB } };
+    styleStructureCells(r);
+    setExcelFont(r.getCell(taskCol));
+    r.getCell(taskCol).alignment = { vertical: "top", wrapText: true };
     applyExcelCellFormats(r, tail, taskCol + 1, row);
-  }
+  });
+  // No·레벨·Task 고정 — 옆으로 넘겨도 어느 업무의 행인지 보인다
+  applyExcelPrintLayout(sheet, {
+    headerRow: headerRowNo,
+    columnCount: taskCol + tail.length,
+    frozenColumns: taskCol,
+    mapName: model.mapName,
+    versionLabel: model.versionLabel,
+  });
+  return headerRowNo;
 }
 
 /** WbsModel → .xlsx 다운로드 — 1안과 동일한 공용 다운로드 경로(선택 열). */

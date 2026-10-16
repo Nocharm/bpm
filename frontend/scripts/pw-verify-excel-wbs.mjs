@@ -191,7 +191,8 @@ try {
   const mapSheet = wbMap.worksheets[0];
   check("체크3a: 시트명 Process Map", mapSheet.name === "Process Map", mapSheet.name);
   // 열 수는 열 선택(localStorage)에 따라 달라진다 — 잠금 열 No·Name 위치와 마지막 열 Next만 고정 단언
-  const mapHeader = mapSheet.getRow(4).values.slice(1).map(String);
+  const mapHeaderRow = mapSheet.views[0].ySplit; // 헤더 행 = 고정 행(위 메타 블록 줄 수에 따라 달라진다)
+  const mapHeader = mapSheet.getRow(mapHeaderRow).values.slice(1).map(String);
   check(
     "체크3b: 헤더 No·Name 선두, Next 끝",
     mapHeader[0] === "No" && mapHeader[1] === "Name" && mapHeader[mapHeader.length - 1] === "Next",
@@ -199,7 +200,7 @@ try {
   );
   const mapRows = [];
   mapSheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (rowNumber < 5) return;
+    if (rowNumber <= mapHeaderRow) return;
     mapRows.push({ name: String(row.getCell(2).value ?? ""), indent: row.getCell(2).alignment?.indent ?? 0 });
   });
   const subWorkRow = mapRows.find((r) => r.name === "SubWork");
@@ -237,7 +238,8 @@ try {
   const wbsSheet = wbWbs.worksheets[0];
   check("체크5a: 시트명 WBS", wbsSheet.name === "WBS", wbsSheet.name);
 
-  const wbsHeaderRaw = wbsSheet.getRow(4).values; // 1-based sparse array — index0 undefined
+  const wbsHeaderRow = wbsSheet.views[0].ySplit;
+  const wbsHeaderRaw = wbsSheet.getRow(wbsHeaderRow).values; // 1-based sparse array — index0 undefined
   const wbsHeader = wbsHeaderRaw.slice(1).map(String);
   const taskIdx = wbsHeader.indexOf("Task"); // 0-based within trimmed header
   check(
@@ -254,7 +256,7 @@ try {
 
   const wbsRows = [];
   wbsSheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (rowNumber < 5) return;
+    if (rowNumber <= wbsHeaderRow) return;
     wbsRows.push({
       no: row.getCell(noCol).value,
       level1: String(row.getCell(level1Col).value ?? ""),
@@ -278,10 +280,11 @@ try {
   );
 
   const prepareWbsRow = wbsRows.find((r) => r.title === "Prepare");
+  // Level 1(루트 맵 이름)은 첫 행에만 적는다 — 나머지 행은 빈칸
   check(
-    "체크8: 루트 잎(Prepare) Level 1=맵 A 이름, Level 2 빈칸",
-    prepareWbsRow?.level1 === mapA.name && prepareWbsRow?.level2 === "",
-    `level1="${prepareWbsRow?.level1}" level2="${prepareWbsRow?.level2}" expected="${mapA.name}"`,
+    "체크8: 첫 행 Level 1=맵 A 이름(이후 빈칸), 루트 잎(Prepare) Level 2 빈칸",
+    wbsRows[0]?.level1 === mapA.name && wbsRows.slice(1).every((r) => r.level1 === "") && prepareWbsRow?.level2 === "",
+    `first="${wbsRows[0]?.level1}" prepare.level2="${prepareWbsRow?.level2}" expected="${mapA.name}"`,
   );
 
   const approveWbsRow = wbsRows.find((r) => r.title.startsWith("Approve?"));
