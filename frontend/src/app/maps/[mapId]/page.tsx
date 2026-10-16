@@ -294,8 +294,6 @@ import {
 } from "@/lib/export";
 import { buildExcelModel } from "@/lib/excel-export";
 import { buildWbsModel } from "@/lib/excel-wbs";
-import { buildCsvFromGraph } from "@/lib/csv-export";
-import type { CsvColumnKey } from "@/lib/export-columns";
 import { formatKst } from "@/lib/datetime";
 import { constrainToAxis } from "@/lib/drag-constrain";
 import { autoLayoutFlow, autoLayoutSubsetFlow, type FlowDir, inferFlowDir } from "@/lib/flow-layout";
@@ -1292,8 +1290,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [csvKeepRemoved, setCsvKeepRemoved] = useState(false);
   // Excel 내보내기 형식 선택 모달(Process Map/WBS 토글) — design 2026-07-17-excel-export-wbs-v2
   const [excelExportOpen, setExcelExportOpen] = useState(false);
-  // CSV 내보내기 열 선택 모달 — export-column-picker-design(2026-10-02)
-  const [csvExportOpen, setCsvExportOpen] = useState(false);
+  // CSV 내보내기 창 — 연 순간의 그래프·파일 이름 스냅샷(null=닫힘). export-column-picker-design(2026-10-02)
+  const [csvExport, setCsvExport] = useState<{ graph: Graph; fileName: string } | null>(null);
   // PNG 내보내기 옵션 창 — 화면 그대로 / Word 문서용(스타일·병렬 표시·정보 블록)
   const [pngExportOpen, setPngExportOpen] = useState(false);
   // PNG 출력 중에만 캔버스에 덮어쓰는 보기 — 옵션 창에서 고른 표시 정보·입출력 펼침. null=평소(사용자 표시 정보)
@@ -6520,20 +6518,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     setChildNodes,
   ]);
 
-  const handleExportCsv = useCallback((columns: CsvColumnKey[]) => {
-    // 저장 경로와 동일 소스(buildGraph)로 조립 — 캔버스 미저장 편집분까지 반영. 열은 CSV 모달에서 고른 것만
-    const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
-    const { csv, warnings } = buildCsvFromGraph(graph, { columns });
-    // BOM은 이스케이프로 명시 — 보이지 않는 리터럴은 포매터/편집에서 증발할 수 있다
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = buildExportFileName("csv");
-    anchor.click();
-    URL.revokeObjectURL(url);
-    if (warnings.length > 0) showToast(t("export.csvWarnings"));
-  }, [buildExportFileName, showToast, t]);
+  const openCsvExport = () => {
+    // 저장 경로와 동일 소스(buildGraph)로 조립 — 캔버스 미저장 편집분까지 반영. 창이 미리보기·경고·내려받기를 이 스냅샷으로 한다
+    setCsvExport({
+      graph: buildGraph(nodesRef.current, edgesRef.current, groupsRef.current),
+      fileName: buildExportFileName("csv"),
+    });
+  };
 
   // Excel 모달용 모델 빌더 — 저장 경로와 동일 소스(buildGraph)로 미저장 편집분까지 반영.
   // async로 감싸 buildGraph의 동기 throw까지 promise rejection으로 잡히게 한다(모달 .catch가 error로 수렴).
@@ -12179,7 +12170,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <button
                         type="button"
                         data-id="export-csv"
-                        onClick={() => setCsvExportOpen(true)}
+                        onClick={openCsvExport}
                         className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-semibold text-on-accent hover:bg-accent-focus"
                       >
                         <FileDown size={16} strokeWidth={1.5} />
@@ -13016,7 +13007,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         buildWbs={buildWbsExcelModel}
         fileNameFor={excelFileNameFor}
       />
-      <CsvExportModal open={csvExportOpen} onClose={() => setCsvExportOpen(false)} onDownload={handleExportCsv} />
+      <CsvExportModal graph={csvExport?.graph ?? null} fileName={csvExport?.fileName ?? ""} onClose={() => setCsvExport(null)} />
       {pngExportOpen && (
         <PngExportModal
           frame={nodes.length > 0 ? measureExportFrame(nodes) : null}
