@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { formatKst } from "@/lib/datetime";
+import { downloadBlob } from "@/lib/download-blob";
 import { useI18n } from "@/lib/i18n";
 
 const JOBS = [
@@ -108,13 +109,8 @@ export function BatchRunsPanel() {
     async (filename: string) => {
       setBackupError(null);
       try {
-        const blob = await downloadBackupFile(filename);
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = filename;
-        anchor.click();
-        URL.revokeObjectURL(url);
+        // 백업 파일 이름은 서버가 붙인 백업 시각 그대로 둔다 — 내려받은 시각으로 바꾸면 어느 백업인지 잃는다
+        downloadBlob(await downloadBackupFile(filename), filename);
       } catch (error) {
         setBackupError(humanizeApiError(error, t));
       }

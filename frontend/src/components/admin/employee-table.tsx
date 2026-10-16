@@ -178,7 +178,7 @@ export function EmployeeTable() {
         <div className="flex items-center gap-2">
           <ExportCsvButton
             dataId="employees-export-csv"
-            filename={`bpm-employees-${new Date().toISOString().slice(0, 10)}.csv`}
+            nameParts={["bpm-employees"]}
             getRows={getExportRows}
             disabled={rows.length === 0}
           />

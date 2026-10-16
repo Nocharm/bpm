@@ -17,6 +17,7 @@ import {
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { downloadCsv } from "@/lib/csv";
+import { buildDownloadName } from "@/lib/download-name";
 import { useI18n } from "@/lib/i18n";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -164,7 +165,7 @@ export function TableViewer() {
     setExporting(true);
     try {
       const csv = await exportDbTableCsv(selected, { sort: sort ?? undefined, order, q: query || undefined });
-      downloadCsv(`${selected}.csv`, csv);
+      downloadCsv(buildDownloadName(["bpm", selected], "csv"), csv);
     } catch (err) {
       setError(humanizeApiError(err, t));
     } finally {
