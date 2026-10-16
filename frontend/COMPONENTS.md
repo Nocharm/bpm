@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 300개 · 2026-10-16 기준
+총 301개 · 2026-10-16 기준
 
 ## components/
 
@@ -51,6 +51,7 @@
 | `edge-decision-modal.tsx` | `EdgeDecisionModal` | 디시전 노드에 노드를 드롭(출력 ≥1)했을 때 선택 모달 | `app/maps/[mapId]/page.tsx` |
 | `edge-end-modal.tsx` | `EdgeEndModal` | 하위프로세스 출구 선택 | `app/maps/[mapId]/page.tsx` |
 | `edge-label-editor.tsx` | `EdgeLabelEditor` | 엣지 더블클릭 시 캔버스 가운데(엣지 중점)에 뜨는 인라인 라벨 편집 박스 | `app/maps/[mapId]/page.tsx` |
+| `edge-label-portal.tsx` | `EdgeLabelPortal` | 연결선 HTML 라벨 포털 | `app/maps/[mapId]/compare/page.tsx`, `components/multiline-edge.tsx` |
 | `edge-pulse-dot.tsx` | `EdgePulseDot` | 엣지 흐름 펄스 점 | `app/maps/[mapId]/compare/page.tsx`, `components/multiline-edge.tsx` |
 | `edge-select-modal.tsx` | `EdgeSelectModal` | 다중 출력 노드에 삽입 시 | `app/maps/[mapId]/page.tsx` |
 | `editor-left-sidebar.tsx` | `EditorLeftSidebar` | 에디터 좌측 사이드바 | `app/maps/[mapId]/page.tsx` |

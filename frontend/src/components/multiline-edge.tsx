@@ -1,13 +1,14 @@
 "use client";
 
-// 에디터 엣지 — 선 모양 3종(곡선/꺾은선/직선) 경로 + HTML 라벨(EdgeLabelRenderer).
+// 에디터 엣지 — 선 모양 3종(곡선/꺾은선/직선) 경로 + HTML 라벨(EdgeLabelPortal = 가벼운 EdgeLabelRenderer).
 // React Flow 기본 라벨은 SVG <text>라 줄바꿈(\n)을 렌더하지 못한다 → Alt/Shift+Enter 다중행 라벨을 위해
 // HTML 라벨로 대체. 빌트인 타입 키(default/smoothstep/straight)를 그대로 덮어 기존 edge.type을 재사용한다.
 
-import { BaseEdge, EdgeLabelRenderer, useNodes, type EdgeProps, type EdgeTypes } from "@xyflow/react";
+import { BaseEdge, useStore, type EdgeProps, type EdgeTypes, type Node, type ReactFlowState } from "@xyflow/react";
 import { Link2 } from "lucide-react";
 
 import { EdgeCarryBadge } from "@/components/edge-carry-badge";
+import { EdgeLabelPortal } from "@/components/edge-label-portal";
 import { EdgePulseDot } from "@/components/edge-pulse-dot";
 import { type AppNode, EDGE_LABEL_MAX_WIDTH } from "@/lib/canvas";
 import { isEdgeCarry } from "@/lib/edge-carry";
@@ -27,12 +28,27 @@ export function getObstacles(nodes: AppNode[]): EdgeObstacle[] {
   return getEdgeObstacles(nodes);
 }
 
+// 드래그 중 장애물 동결 — 노드를 끄는 동안 노드 배열이 프레임마다 바뀌어 꺾은선 엣지 전부가 다시 그려졌다(120노드 맵
+// 화면 맞춤 드래그에서 메인 스레드 95%, 2026-10-16 실측). 끄는 동안엔 직전 배열을 돌려줘 무관한 엣지는 그대로 두고,
+// 끄는 노드에 붙은 엣지는 자기 끝점 props가 바뀌어 어차피 다시 그려진다(자기 노드는 장애물에서 빠짐). 놓으면 한 번 갱신.
+// RF 인스턴스(domNode)별로 따로 기억한다 — 비교·인터뷰처럼 캔버스가 여럿 떠도 섞이지 않게.
+const settledNodesByRoot = new WeakMap<HTMLElement, Node[]>();
+
+function selectObstacleNodes(state: ReactFlowState): Node[] {
+  const root = state.domNode;
+  if (!root) return state.nodes;
+  const settled = settledNodesByRoot.get(root);
+  if (settled && state.nodes.some((node) => node.dragging)) return settled;
+  settledNodesByRoot.set(root, state.nodes);
+  return state.nodes;
+}
+
 /**
- * 현재 RF 인스턴스의 렌더 노드 → 우회 장애물. 꺾은선 엣지만 구독해야 한다 — 직선·곡선까지 useNodes를 걸면
+ * 현재 RF 인스턴스의 렌더 노드 → 우회 장애물. 꺾은선 엣지만 구독해야 한다 — 직선·곡선까지 노드를 구독하면
  * 노드가 움직일 때마다 전 엣지가 다시 그려진다. 여러 RF 인스턴스가 동시에 떠도 캐시가 인스턴스별로 갈린다.
  */
 export function useEdgeObstacles(): EdgeObstacle[] {
-  return getEdgeObstacles(useNodes());
+  return getEdgeObstacles(useStore(selectObstacleNodes));
 }
 
 /** EdgeProps → 경로 해석(lib/edge-path). obstacles는 꺾은선에서만 넘긴다 */
@@ -79,7 +95,7 @@ function renderEdge(props: EdgeProps, resolved: EdgePathResult) {
       <BaseEdge path={path} markerEnd={markerEnd} style={style} data-label-x={labelX} data-label-y={labelY} />
       {pulse ? <EdgePulseDot path={path} pulse={pulse} travel={pulseTravel} /> : null}
       {label || carryItems.length > 0 ? (
-        <EdgeLabelRenderer>
+        <EdgeLabelPortal>
           {/* pointer-events-none — 라벨은 경로 중앙에 놓이므로 클릭/더블클릭/우클릭이
               아래 엣지 path로 그대로 통과해야 선택·라벨편집·컨텍스트 메뉴가 유지된다(개수 점만 auto) */}
           <div
@@ -119,7 +135,7 @@ function renderEdge(props: EdgeProps, resolved: EdgePathResult) {
           ) : null}
           {carryItems.length > 0 ? <EdgeCarryBadge items={carryItems} /> : null}
           </div>
-        </EdgeLabelRenderer>
+        </EdgeLabelPortal>
       ) : null}
     </>
   );

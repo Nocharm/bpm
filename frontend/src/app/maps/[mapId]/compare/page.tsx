@@ -8,7 +8,6 @@ import {
   type Edge,
   type EdgeProps,
   type EdgeTypes,
-  EdgeLabelRenderer,
   applyNodeChanges,
   MarkerType,
   type NodeChange,
@@ -53,6 +52,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { EdgeLabelPortal } from "@/components/edge-label-portal";
 import { type CompareAiMeta, type CompareAiRun, CompareAiSummary } from "@/components/compare-ai-summary";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
@@ -257,7 +257,7 @@ function renderCompareEdge(
         <EdgePulseDot path={path} pulse={pulse} travel={getDecisionTravel(sourceX, sourceY, targetX, targetY)} />
       ) : null}
       {(label || carryItems.length > 0) && (
-        <EdgeLabelRenderer>
+        <EdgeLabelPortal>
           <div
             className="pointer-events-none absolute flex items-center gap-1"
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
@@ -287,7 +287,7 @@ function renderCompareEdge(
           )}
           {carryItems.length > 0 && <EdgeCarryBadge items={carryItems} />}
           </div>
-        </EdgeLabelRenderer>
+        </EdgeLabelPortal>
       )}
     </>
   );

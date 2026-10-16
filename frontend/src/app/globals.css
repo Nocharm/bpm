@@ -1402,9 +1402,8 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
     0 0 4px var(--color-canvas-l5),
     0 0 6px color-mix(in srgb, var(--color-canvas-l5) 80%, transparent);
 }
-/* 아이콘(SVG 선)엔 text-shadow가 안 먹는다 — 같은 헤일로를 drop-shadow로 */
-.bpm-node-caption svg { filter: drop-shadow(0 0 1.5px var(--color-canvas)); }
-.bpm-l5-sky .bpm-node-caption svg { filter: drop-shadow(0 0 1.5px var(--color-canvas-l5)); }
+/* 아이콘엔 헤일로를 걸지 않는다 — 노드마다 svg drop-shadow(filter)를 두면 캡션 수만큼 합성 레이어가 생겨
+   연결선 애니메이션이 도는 동안 매 프레임 GPU 합성이 ~20ms 늘어 캔버스가 60→28fps로 떨어졌다(2026-10-16 실측) */
 .bpm-io-pulse { animation: bpm-io-pulse-bg 700ms var(--ease-smooth) 120ms backwards; }
 .bpm-io-pulse input { animation: bpm-io-pulse-box 450ms var(--ease-overshoot) 120ms backwards; }
 @media (prefers-reduced-motion: reduce) {
