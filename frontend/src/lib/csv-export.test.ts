@@ -44,7 +44,7 @@ describe("buildCsvFromGraph - round trip", () => {
     expect(first.errors).toEqual([]);
     const graph = first.graph!;
     const { csv: exported, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual([]);
+    expect(warnings.map((w) => w.message)).toEqual([]);
     // 비용은 콤마 없이(raw 숫자) 내보내야 왕복이 무손실 — "1,250,000"이 아니라 "1250000"
     expect(exported).toContain(",1250000,,1,1200,0.8,");
     const second = buildGraphFromCsv(exported, { base: graph });
@@ -69,7 +69,7 @@ describe("buildCsvFromGraph - round trip", () => {
       groups: [],
     };
     const { csv: exported, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual([]);
+    expect(warnings.map((w) => w.message)).toEqual([]);
     expect(exported.split("\r\n")[0]).toContain("Input,Input_Flags,Input_Forms,Output,Output_Forms");
     const re = buildGraphFromCsv(exported, { base: graph });
     expect(re.errors).toEqual([]);
@@ -130,7 +130,7 @@ describe("buildCsvFromGraph - round trip", () => {
       groups: [],
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual([]);
+    expect(warnings.map((w) => w.message)).toEqual([]);
     expect(csv).toContain('"Review, ""carefully"" and\nreport to manager"');
     const reimported = buildGraphFromCsv(csv);
     expect(reimported.errors).toEqual([]);
@@ -149,7 +149,7 @@ describe("buildCsvFromGraph - round trip", () => {
       groups: [],
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual(['Secondary end node "Extra End" is not expressible in CSV - skipped']);
+    expect(warnings.map((w) => w.message)).toEqual(['Secondary end node "Extra End" is not expressible in CSV - skipped']);
     const lines = csv.split("\r\n");
     expect(lines.length).toBe(2); // header + A만 (start/end/extra end 모두 행이 아님)
     expect(lines[1].startsWith("A,")).toBe(true);
@@ -166,7 +166,7 @@ describe("buildCsvFromGraph - round trip", () => {
       groups: [],
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual([
+    expect(warnings.map((w) => w.message)).toEqual([
       'Edge "A" → End (label "reject") is not expressible in CSV - dropped',
       'Decision "A" has fewer than 2 branches - re-import will infer process',
     ]);
@@ -187,7 +187,7 @@ describe("buildCsvFromGraph - round trip", () => {
       groups: [],
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual(['Edge "A" → End is not expressible in CSV - dropped']);
+    expect(warnings.map((w) => w.message)).toEqual(['Edge "A" → End is not expressible in CSV - dropped']);
     expect(cellsByHeader(csv, "A,").Next).toBe("B"); // End행 엣지는 드랍, B만 남는다
   });
 
@@ -203,7 +203,7 @@ describe("buildCsvFromGraph - round trip", () => {
       groups: [],
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual([
+    expect(warnings.map((w) => w.message)).toEqual([
       'Next target "C:review" contains ";" or ":" - re-import will misparse this reference',
       'Edge label "ok;fine" (from "A") contains ";" - re-import will misparse this reference',
     ]);
@@ -218,7 +218,7 @@ describe("buildCsvFromGraph - round trip", () => {
       groups: [],
     };
     const { warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual(['Duplicate title "A" - re-import will fail on this file']);
+    expect(warnings.map((w) => w.message)).toEqual(['Duplicate title "A" - re-import will fail on this file']);
   });
 
   it("start의 outgoing 대상이 진입 엣지 없는 노드 집합과 다르면 경고", () => {
@@ -234,7 +234,7 @@ describe("buildCsvFromGraph - round trip", () => {
       groups: [],
     };
     const { warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual(["Start connections differ from computed roots - re-import will recompute them"]);
+    expect(warnings.map((w) => w.message)).toEqual(["Start connections differ from computed roots - re-import will recompute them"]);
   });
 
   it("숫자 파라미터 필드가 undefined일 때도 안전하게 빈 문자열로 직렬화된다", () => {
@@ -247,7 +247,7 @@ describe("buildCsvFromGraph - round trip", () => {
     };
     const graph: Graph = { nodes: [bare], edges: [], groups: [] };
     const { csv, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual([]);
+    expect(warnings.map((w) => w.message)).toEqual([]);
     const cells = cellsByHeader(csv, "N,");
     for (const header of ["Duration", "Touch_Time", "Cost_KRW", "Cost_USD", "Headcount", "Annual_Count", "FTE"]) {
       expect(cells[header]).toBe("");
@@ -388,7 +388,7 @@ describe("buildCsvFromGraph - GMP and data form columns", () => {
       groups: [],
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual([]);
+    expect(warnings.map((w) => w.message)).toEqual([]);
     expect(csv.split("\r\n")[0]).toContain("Input_Forms");
     const fresh = buildGraphFromCsv(csv);
     expect(fresh.errors).toEqual([]);
@@ -416,7 +416,7 @@ describe("buildCsvFromGraph - structures the table cannot hold", () => {
       groups: [],
     };
     const { warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual([
+    expect(warnings.map((w) => w.message)).toEqual([
       'Secondary end node "Extra End" is not expressible in CSV - skipped',
       'Edge "A" → secondary end "Extra End" (label "reject") is not expressible in CSV - dropped (re-import connects this row to the primary End)',
     ]);
@@ -445,10 +445,10 @@ describe("buildCsvFromGraph - structures the table cannot hold", () => {
     const { warnings } = buildCsvFromGraph(graph);
 
     // Assert
-    expect(warnings).toContain(
+    expect(warnings.map((w) => w.message)).toContain(
       'Edge "D" → secondary end "Extra End" (label "reject") is not expressible in CSV - dropped',
     );
-    expect(warnings.some((w) => w.includes("re-import connects this row"))).toBe(false);
+    expect(warnings.some((w) => w.message.includes("re-import connects this row"))).toBe(false);
   });
 
   it("does not write Parallel=Y for a decision node with a stray flag", () => {
@@ -489,7 +489,7 @@ describe("buildCsvFromGraph - structures the table cannot hold", () => {
       groups: [],
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual([
+    expect(warnings.map((w) => w.message)).toEqual([
       'Subprocess "SP" exit "반려" → "B" is not expressible in CSV - re-import keeps it only when the same connection already exists',
     ]);
     const merged = buildGraphFromCsv(csv, { base: graph });
@@ -521,7 +521,7 @@ describe("buildCsvFromGraph - structures the table cannot hold", () => {
       groups: [],
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toContain('Subprocess "SP" has a parallel exit on end "반려" - per-end parallel is not expressible in CSV');
+    expect(warnings.map((w) => w.message)).toContain('Subprocess "SP" has a parallel exit on end "반려" - per-end parallel is not expressible in CSV');
     const merged = buildGraphFromCsv(csv, { base: graph }).graph!;
     expect(merged.nodes.find((n) => n.id === "sp")?.parallel_outputs).toEqual(["반려"]);
     expect(merged.edges.every((e) => e.source_node_id !== "sp" || e.source_handle === "반려")).toBe(true);
@@ -541,7 +541,62 @@ describe("buildCsvFromGraph - structures the table cannot hold", () => {
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
     expect(cellsByHeader(csv, "SP,").Next).toBe("A");
-    expect(warnings).toContain('"SP" reaches "A" more than once - kept once in Next');
+    expect(warnings.map((w) => w.message)).toContain('"SP" reaches "A" more than once - kept once in Next');
     expect(buildGraphFromCsv(csv).errors).toEqual([]);
+  });
+});
+
+describe("buildCsvFromGraph - formula guard", () => {
+  const formulaText = '=HYPERLINK("https://example.com","x")';
+  const graph: Graph = {
+    nodes: [
+      makeNode("s", "Start", "start", 0),
+      makeNode("a", "- 확인", "process", 1, { description: formulaText, assignee_role: "+담당", input: "@메모\n- 두번째" }),
+      makeNode("b", "검토", "process", 2, { description: "-5", url: "https://example.com/doc", url_label: "=1+1" }),
+      makeNode("e", "End", "end", 3, { is_primary_end: true }),
+    ],
+    edges: [makeEdge("e1", "s", "a"), makeEdge("e2", "a", "b", "-예"), makeEdge("e3", "b", "e")],
+    groups: [],
+  };
+
+  it("prefixes formula-like cells with ' and leaves plain Next cells alone", () => {
+    const { csv } = buildCsvFromGraph(graph);
+    const lines = csv.split("\r\n");
+    // 머리 행은 가드 대상이 아니다
+    expect(lines[0]).toBe(CSV_COLUMNS.map((c) => c.header).join(","));
+    expect(lines[1].startsWith("'- 확인,")).toBe(true);
+    expect(lines[1]).toContain(`"'${formulaText.replace(/"/g, '""')}"`);
+    // Next "검토:-예"는 - 로 시작하지 않아 그대로
+    expect(lines[1].endsWith(",검토:-예")).toBe(true);
+    // 대상 제목이 - 로 시작하면 Next 셀 전체가 가드된다(임포트가 벗긴다)
+    expect(buildCsvFromGraph({ ...graph, edges: [makeEdge("e1", "s", "b"), makeEdge("e2", "b", "a")] }).csv).toContain(",'- 확인");
+  });
+
+  it("round-trips formula-like text unchanged through re-import", () => {
+    const { csv } = buildCsvFromGraph(graph);
+    const re = buildGraphFromCsv(csv, { base: graph });
+    expect(re.errors).toEqual([]);
+    expect(re.merge.addedNodeIds).toEqual([]);
+    expect(re.merge.lostEdges).toEqual([]);
+    const a = re.graph!.nodes.find((n) => n.id === "a")!;
+    expect(a.title).toBe("- 확인");
+    expect(a.description).toBe(formulaText);
+    expect(a.assignee_role).toBe("+담당");
+    expect(a.input).toBe("@메모\n- 두번째");
+    const b = re.graph!.nodes.find((n) => n.id === "b")!;
+    expect(b.description).toBe("-5");
+    expect(b.url_label).toBe("=1+1");
+    expect(re.graph!.edges.find((e) => e.source_node_id === "a" && e.target_node_id === "b")?.label).toBe("-예");
+  });
+
+  it("keeps warning kinds and parameters for the dialog", () => {
+    const { warnings } = buildCsvFromGraph({
+      nodes: [makeNode("a1", "A", "process", 1), makeNode("a2", "A", "process", 2)],
+      edges: [],
+      groups: [],
+    });
+    expect(warnings.map(({ kind, params }) => ({ kind, params }))).toEqual([
+      { kind: "duplicateTitle", params: { title: "A", count: "2" } },
+    ]);
   });
 });
