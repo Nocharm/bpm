@@ -284,6 +284,7 @@ import {
   type WorkflowState,
 } from "@/lib/api";
 import { humanizeApiError, isCanvasRepointedError, PERMISSION_PENDING_DETAIL_PREFIX } from "@/lib/api-errors";
+import { buildDownloadName } from "@/lib/download-name";
 import {
   exportCanvasPng,
   loadPngExportOptions,
@@ -6399,13 +6400,11 @@ function MapEditor({ mapId }: { mapId: number }) {
     [currentParentId, reactFlow, navigateTo],
   );
 
-  // PNG/Excel/CSV 3버튼 공유 — 파일명 규칙(sanitize+stamp) 단일 소스
+  // PNG/Excel/CSV 3버튼 공유 — 파일명 규칙은 lib/download-name(맵 이름_버전_KST 시각)
   const buildExportFileName = useCallback(
     (ext: string) => {
       const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
-      const sanitize = (text: string) => text.replace(/[^\w가-힣.-]+/g, "-");
-      const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
-      return `${sanitize(mapName)}_${sanitize(versionLabel)}_${stamp}.${ext}`;
+      return buildDownloadName([mapName, versionLabel], ext);
     },
     [versions, versionId, mapName],
   );
