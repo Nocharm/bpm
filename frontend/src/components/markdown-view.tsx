@@ -45,10 +45,20 @@ function inline(s: string): string {
     );
 }
 
-function markdownToHtml(md: string): string {
+/** 마크다운 → HTML(이스케이프 후 서식). 테스트가 직접 검증한다. */
+export function markdownToHtml(md: string): string {
   const lines = md.replace(/\r/g, "").split("\n");
   let html = "";
   let i = 0;
+  // 목록 항목 — 바로 아래 들여쓴 이어지는 줄(목록 기호 아님)은 같은 항목 안의 줄바꿈으로 붙인다
+  const readListItem = (first: string): string => {
+    const parts = [inline(first)];
+    while (i < lines.length && /^\s{2,}\S/.test(lines[i]) && !/^\s*([-*]|\d+\.)\s/.test(lines[i])) {
+      parts.push(inline(lines[i].trim()));
+      i++;
+    }
+    return parts.join("<br>");
+  };
   while (i < lines.length) {
     const l = lines[i];
     if (/^```/.test(l)) {
@@ -123,8 +133,11 @@ function markdownToHtml(md: string): string {
     if (/^\s*[-*]\s/.test(l)) {
       let items = "";
       while (i < lines.length && /^\s*[-*]\s/.test(lines[i])) {
-        items += `<li>${inline(lines[i].replace(/^\s*[-*]\s/, ""))}</li>`;
+        // 두 칸 이상 들여쓴 항목은 하위 항목 — 한 단 더 들여 그린다(중첩 목록 대신 표시만)
+        const isSub = /^\s{2,}[-*]\s/.test(lines[i]);
+        const first = lines[i].replace(/^\s*[-*]\s/, "");
         i++;
+        items += `<li${isSub ? ' class="md-sub"' : ""}>${readListItem(first)}</li>`;
       }
       html += `<ul>${items}</ul>`;
       continue;
@@ -132,8 +145,9 @@ function markdownToHtml(md: string): string {
     if (/^\s*\d+\.\s/.test(l)) {
       let items = "";
       while (i < lines.length && /^\s*\d+\.\s/.test(lines[i])) {
-        items += `<li>${inline(lines[i].replace(/^\s*\d+\.\s/, ""))}</li>`;
+        const first = lines[i].replace(/^\s*\d+\.\s/, "");
         i++;
+        items += `<li>${readListItem(first)}</li>`;
       }
       html += `<ol>${items}</ol>`;
       continue;
@@ -142,17 +156,19 @@ function markdownToHtml(md: string): string {
       i++;
       continue;
     }
-    let p = l;
+    // 문단 안의 한 줄 바꿈은 그대로 줄바꿈(<br>)으로 — 공백으로 이어 붙이면 작성자가 나눈 줄이 한 덩어리로 읽혔다.
+    // 빈 줄로 나뉜 문단은 CSS(.md p 여백)가 줄 간격보다 확실히 넓게 띄운다
+    const paraLines = [l];
     i++;
     while (
       i < lines.length &&
       lines[i].trim() !== "" &&
       !/^(#{1,6}\s|>|\s*[-*]\s|\s*\d+\.\s|```|-{3,}\s*$)/.test(lines[i])
     ) {
-      p += " " + lines[i];
+      paraLines.push(lines[i]);
       i++;
     }
-    html += `<p>${inline(p)}</p>`;
+    html += `<p>${paraLines.map((line) => inline(line.trim())).join("<br>")}</p>`;
   }
   return html;
 }

@@ -1296,16 +1296,22 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 }
 
 /* 마크다운 뷰어(.md) — AI 답변·게시글·매뉴얼 공용(markdown-view.tsx). 블록 hover=현재 위치·코드블록 복사. */
-.md { font-size: var(--text-caption); color: var(--color-ink-secondary); line-height: 1.55; }
+/* 줄 간격(1.65) < 목록 항목 사이(0.35em) < 문단 사이(1em) < 제목 위(1.4em) — 단계가 보이게 벌린다 */
+.md { font-size: var(--text-caption); color: var(--color-ink-secondary); line-height: 1.65; }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
-.md h1 { font-size: 18px; font-weight: 600; color: var(--color-ink); margin: 0.7em 0 0.35em; }
-.md h2 { font-size: 15px; font-weight: 600; color: var(--color-ink); margin: 0.7em 0 0.3em; }
-.md h3 { font-size: 14px; font-weight: 600; color: var(--color-ink); margin: 0.6em 0 0.2em; }
-.md h4, .md h5, .md h6 { font-size: 13px; font-weight: 600; color: var(--color-ink-secondary); margin: 0.55em 0 0.2em; }
-.md p { margin: 0.45em 0; }
-.md ul, .md ol { margin: 0.45em 0; padding-left: 1.3em; }
-.md li { margin: 0.15em 0; }
+.md h1 { font-size: 18px; font-weight: 600; color: var(--color-ink); margin: 1.4em 0 0.5em; }
+.md h2 { font-size: 15px; font-weight: 600; color: var(--color-ink); margin: 1.4em 0 0.45em; }
+.md h3 { font-size: 14px; font-weight: 600; color: var(--color-ink); margin: 1.15em 0 0.35em; }
+.md h4, .md h5, .md h6 { font-size: 13px; font-weight: 600; color: var(--color-ink-secondary); margin: 1em 0 0.3em; }
+.md p { margin: 1em 0; }
+.md ul, .md ol { margin: 0.8em 0; padding-left: 1.3em; }
+/* 글머리표·번호 — Tailwind preflight가 지운 기본 표식을 되살려 항목 경계가 보이게(하위 항목은 속 빈 원) */
+.md ul { list-style: disc; }
+.md ol { list-style: decimal; }
+.md li::marker { color: var(--color-ink-muted); }
+.md li { margin: 0.35em 0; }
+.md li.md-sub { margin-left: 1.2em; list-style-type: circle; }
 /* 인라인 코드는 문장 속이라 흰 채움+강한 테두리, 코드블록·표 헤더는 어두운 회색+흰 글씨로 강조 */
 .md code { font-family: ui-monospace, Menlo, monospace; font-size: 0.88em; background: var(--color-surface); border: 1px solid var(--color-surface-chip); border-radius: 4px; padding: 0.05em 0.35em; }
 .md pre { background: var(--color-ink-secondary); color: var(--color-on-accent); border: 1px solid var(--color-ink-secondary); border-radius: var(--radius-sm); padding: 8px 10px; overflow-x: auto; margin: 0.55em 0; }
@@ -1315,10 +1321,10 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 .md-codeline { cursor: copy; border-radius: 3px; transition: background-color 0.12s; }
 .md-codeline:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
 .md code.md-copied, .md-codeline.md-copied { background: var(--color-accent-tint); color: var(--color-accent); }
-.md blockquote { border-left: 3px solid var(--color-accent-tint-border); background: var(--color-accent-tint); border-radius: var(--radius-xs); padding: 6px 12px; color: var(--color-ink-secondary); margin: 0.55em 0; }
+.md blockquote { border-left: 3px solid var(--color-accent-tint-border); background: var(--color-accent-tint); border-radius: var(--radius-xs); padding: 8px 12px; color: var(--color-ink-secondary); margin: 1em 0; }
 .md a { color: var(--color-accent); text-decoration: underline; }
 .md strong { font-weight: 600; color: var(--color-ink); }
-.md hr { border: 0; border-top: 1px solid var(--color-hairline); margin: 0.8em 0; }
+.md hr { border: 0; border-top: 1px solid var(--color-hairline); margin: 1.4em 0; }
 .md-tablewrap { overflow-x: auto; margin: 0.55em 0; }
 .md table { border-collapse: collapse; font-size: 0.95em; }
 .md th, .md td { border: 1px solid var(--color-surface-chip); padding: 4px 9px; text-align: left; white-space: nowrap; }
