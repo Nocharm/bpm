@@ -6,6 +6,7 @@
 // 좌하단 맵 정보 카드(이름·부서·오너·버전·게시일·프레임워크)를 그린 뒤 저장.
 // Word 문서용 테마(word 옵션)는 캡처 동안 뷰포트에 .bpm-export-word 클래스를 붙여 노드·라벨·글꼴을 문서 톤으로
 // 덮고(globals.css 토큰), 흰 배경 위 상단 정보 블록·병렬 범례를 합성한다.
+// 비교 화면(exportComparePng)은 엣지 diff 색을 그대로 인라인하고 정보 블록·범례를 합성한다(파일 아래쪽 절).
 // 색상은 출력물이라 raw hex 허용(design.md §1).
 
 import { getNodesBounds, getViewportForBounds, type Node } from "@xyflow/react";
@@ -449,10 +450,13 @@ interface FixupResult {
 // dark(L5 새벽 조감도) 캡처는 엣지 색을 라이트 톤으로 스왑 — 어두운 배경 위 검정 실선은 안 보인다.
 // word면 Word 팔레트 색으로 엣지·영역 박스를 칠하고(SVG는 클론에 스타일시트가 안 실린다) 펄스 점을 빼고
 // 병렬 표시를 원하면 막대를 심는다.
+// compare면(비교 화면) 검정 강제 대신 엣지마다 실제 계산 색·점선·굵기·화살촉 색을 인라인한다 — diff 색이 출력의 내용이다.
+// 문서용(compare.document)은 펄스 점을 빼고, 무변경 엣지의 중립 회색은 globals.css .bpm-export-compare-doc 변수가 정한다.
 function applyEdgeFixups(
   viewport: HTMLElement,
   dark: boolean,
   word: { palette: WordPalette; showParallel: boolean; crossing: CrossingStyle } | null,
+  compare: { document: boolean } | null = null,
 ): FixupResult {
   const edgeStroke = word ? word.palette.edge : dark ? EDGE_STROKE_DARK : EDGE_STROKE;
   const edgeStrokeWidth = word ? WORD_EDGE_STROKE_WIDTH : EDGE_STROKE_WIDTH;
@@ -467,19 +471,42 @@ function applyEdgeFixups(
       else style.removeProperty(prop);
     });
   };
-  for (const path of viewport.querySelectorAll(".react-flow__edge-path")) {
+  // 계산값을 먼저 모두 읽고 나서 심는다 — 읽기·쓰기를 번갈아 하면 엣지마다 스타일 재계산이 돈다
+  const edgePaths = Array.from(viewport.querySelectorAll(".react-flow__edge-path"));
+  const heads = Array.from(viewport.querySelectorAll(".react-flow__arrowhead *"));
+  const computedPaths = compare
+    ? edgePaths.map((path) => {
+        const css = getComputedStyle(path);
+        return { stroke: css.stroke, width: css.strokeWidth, dash: css.strokeDasharray };
+      })
+    : null;
+  const computedHeads = compare
+    ? heads.map((head) => {
+        const css = getComputedStyle(head);
+        return { stroke: css.stroke, fill: css.fill };
+      })
+    : null;
+  edgePaths.forEach((path, index) => {
+    const computed = computedPaths?.[index];
+    if (computed) {
+      setImportant(path, "stroke", computed.stroke);
+      setImportant(path, "stroke-width", computed.width);
+      setImportant(path, "stroke-dasharray", computed.dash);
+      return;
+    }
     setImportant(path, "stroke", edgeStroke);
     setImportant(path, "stroke-width", edgeStrokeWidth);
     setImportant(path, "stroke-dasharray", "none"); // animated 점선도 출력에선 실선
-  }
+  });
   for (const hit of viewport.querySelectorAll(".react-flow__edge-interaction")) {
     setImportant(hit, "stroke", "none"); // 히트박스는 지금처럼 안 보이게
   }
-  for (const head of viewport.querySelectorAll(".react-flow__arrowhead *")) {
-    // marker 색은 var() 참조 — 클론에서 해석 불가라 엣지와 같은 색으로 고정
-    setImportant(head, "stroke", edgeStroke);
-    setImportant(head, "fill", edgeStroke);
-  }
+  heads.forEach((head, index) => {
+    // marker 색은 var() 참조 — 클론에서 해석 불가라 실값으로 고정(편집 화면은 엣지와 같은 색, 비교는 계산 색)
+    const computed = computedHeads?.[index];
+    setImportant(head, "stroke", computed?.stroke ?? edgeStroke);
+    setImportant(head, "fill", computed?.fill ?? edgeStroke);
+  });
   // 마름모 제목 — 인쇄(PNG)에선 3줄 클램프만 해제해 전문 노출. 폭은 화면 그대로(max-w-24) 유지
   // — 폭을 늘리면 마름모 밖으로 퍼져 어색 (사용자 결정 2026-08-23)
   for (const span of viewport.querySelectorAll(".bpm-decision-title")) {
@@ -492,7 +519,20 @@ function applyEdgeFixups(
     setImportant(dot, "display", "none");
   }
   let parallelMarks = 0;
+  // 비교 화면 정지 장면 점(숨김 클래스 없이 상시 표시, data-pulse-kind) — 문서용은 빼고, 화면 그대로는 var() 색을 실값으로
+  if (compare) {
+    const dots = Array.from(viewport.querySelectorAll("[data-pulse-kind]"));
+    const fills = dots.map((dot) => getComputedStyle(dot).fill);
+    dots.forEach((dot, index) => {
+      if (compare.document) setImportant(dot, "display", "none");
+      else setImportant(dot, "fill", fills[index]);
+    });
+  }
   for (const dot of viewport.querySelectorAll(".bpm-edge-pulse-still")) {
+    if (compare?.document) {
+      setImportant(dot, "display", "none");
+      continue;
+    }
     if (!word) {
       setImportant(dot, "display", "inline");
       continue;
@@ -507,8 +547,8 @@ function applyEdgeFixups(
     parallelMarks += 1;
   }
   if (word && word.crossing !== "none") {
-    const edgePaths = Array.from(viewport.querySelectorAll<SVGPathElement>(".react-flow__edge-path"));
-    const layer = drawCrossings(edgePaths, word.crossing, edgeStroke);
+    const crossingPaths = Array.from(viewport.querySelectorAll<SVGPathElement>(".react-flow__edge-path"));
+    const layer = drawCrossings(crossingPaths, word.crossing, edgeStroke);
     if (layer) undos.push(() => layer.remove());
   }
   if (word) {
@@ -773,6 +813,36 @@ async function composePng(
   return canvas.toDataURL("image/png");
 }
 
+// 뷰포트를 프레임 크기·변환으로 투명 캡처 — 편집 화면·비교 화면 공통
+function captureViewport(viewport: HTMLElement, frame: ExportFrame, pixelRatio: number): Promise<string> {
+  return toPng(viewport, {
+    pixelRatio,
+    width: frame.width,
+    height: frame.height,
+    style: {
+      width: `${frame.width}px`,
+      height: `${frame.height}px`,
+      transform: `translate(${frame.x}px, ${frame.y}px) scale(${frame.zoom})`,
+    },
+  });
+}
+
+function clickDownload(fileName: string, href: string): void {
+  const link = document.createElement("a");
+  link.download = fileName;
+  link.href = href;
+  link.click();
+}
+
+// 인쇄 dpi(pHYs)를 실어 Blob URL로 내려받는다 — Word가 고른 너비로 삽입하게
+function downloadPngWithDpi(fileName: string, dataUrl: string, dpi: number): void {
+  const bytes = setPngDpi(decodeDataUrl(dataUrl), dpi);
+  const url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: "image/png" }));
+  clickDownload(fileName, url);
+  // 다운로드가 URL을 잡은 뒤 회수
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 // 보정을 심은 채 투명 캡처 → 배경·정보 카드 합성 → 다운로드. finally로 반드시 원복.
 // word면 캡처 동안만 Word 테마 클래스를 붙인다(화면엔 그 순간만 문서 톤이 비친다).
 async function downloadViewportPng(
@@ -796,48 +866,32 @@ async function downloadViewportPng(
       dark,
       word && palette ? { palette, showParallel: word.showParallel, crossing: word.crossing } : null,
     );
-    dataUrl = await toPng(viewport, {
-      pixelRatio,
-      width: frame.width,
-      height: frame.height,
-      style: {
-        width: `${frame.width}px`,
-        height: `${frame.height}px`,
-        transform: `translate(${frame.x}px, ${frame.y}px) scale(${frame.zoom})`,
-      },
-    });
+    dataUrl = await captureViewport(viewport, frame, pixelRatio);
   } finally {
     fixups?.undo();
     viewport.classList.remove(...wordClasses);
   }
-  const link = document.createElement("a");
-  link.download = fileName;
   if (!word || !palette || !plan) {
-    link.href = await composePng(dataUrl, frame, info, dark);
-    link.click();
+    clickDownload(fileName, await composePng(dataUrl, frame, info, dark));
     return;
   }
   const composed = await composeWordPng(dataUrl, frame, info, word, palette, fixups?.parallelMarks ?? 0, pixelRatio);
-  // 인쇄 dpi를 실어 Word가 고른 너비로 삽입하게 한다
-  const bytes = setPngDpi(decodeDataUrl(composed), plan.dpi);
-  const url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: "image/png" }));
-  link.href = url;
-  link.click();
-  // 다운로드가 URL을 잡은 뒤 회수
-  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  downloadPngWithDpi(fileName, composed, plan.dpi);
 }
 
 /** 전체 노드 bounds 기준으로 현재 캔버스를 PNG 파일로 저장한다.
  *  dark=true면 L5 새벽 조감도 톤(남색→차콜)으로 배경·엣지 색을 맞춘다(캔버스가 그 상태로 보일 때만 전달).
- *  word를 주면 Word 문서용 테마로 찍는다(dark 무시 — 문서는 항상 흰 바탕). */
+ *  word를 주면 Word 문서용 테마로 찍는다(dark 무시 — 문서는 항상 흰 바탕).
+ *  root는 캡처할 캔버스를 품은 요소 — 기본은 문서 전체(에디터는 캔버스가 하나). */
 export async function exportCanvasPng(
   nodes: Node[],
   fileName: string,
   info?: ExportMapInfo,
   dark?: boolean,
   word?: WordExportConfig,
+  root: ParentNode = document,
 ): Promise<void> {
-  const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
+  const viewport = root.querySelector<HTMLElement>(".react-flow__viewport");
   if (!viewport || nodes.length === 0) {
     return;
   }
@@ -851,38 +905,267 @@ export async function exportCanvasPng(
   );
 }
 
-/** 고정 프레임(비교 화면 등) PNG 저장 — 호출측 캔버스의 viewport를 지정 크기로 맞춰 캡처. */
-export async function exportFramedPng(
+// ---- 비교 화면 PNG ----
+// 비교 화면은 diff 색이 내용이라 엣지·화살촉 색을 지우지 않고(applyEdgeFixups compare), 캡처 동안 뷰포트에
+// .bpm-export-compare(+문서용 .bpm-export-compare-doc)를 붙인다(globals.css). 위에 정보 블록, 아래에 범례 줄을 합성.
+
+/** 그림 경계(flow 좌표). */
+export interface FlowBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// 프레임 — 그림 경계 + 여백. 작은 맵은 키우지 않고(줌 상한 1) 큰 맵만 긴 변 상한에 맞춰 줄인다
+const COMPARE_FRAME_PADDING_PX = 40;
+const COMPARE_FRAME_MIN_PX = 320;
+
+/** 그림 경계 → 캡처 프레임. 줌은 1을 넘지 않고, 최소 크기보다 크면 경계 + 여백 그대로(가운데 정렬). */
+export function measureCompareFrame(bounds: FlowBounds): ExportFrame {
+  const inner = MAX_SIZE_PX - COMPARE_FRAME_PADDING_PX * 2;
+  const zoom = Math.min(1, inner / Math.max(bounds.width, 1), inner / Math.max(bounds.height, 1));
+  const width = Math.max(COMPARE_FRAME_MIN_PX, Math.ceil(bounds.width * zoom) + COMPARE_FRAME_PADDING_PX * 2);
+  const height = Math.max(COMPARE_FRAME_MIN_PX, Math.ceil(bounds.height * zoom) + COMPARE_FRAME_PADDING_PX * 2);
+  return {
+    width,
+    height,
+    zoom,
+    x: (width - bounds.width * zoom) / 2 - bounds.x * zoom,
+    y: (height - bounds.height * zoom) / 2 - bounds.y * zoom,
+  };
+}
+
+// 합성 치수(css px) — 정보 블록(제목 + 메타 2줄 + 구분선)과 범례 줄. 메타는 줄바꿈 없이 말줄임이라 높이가 고정이다
+// (옵션 창 인쇄 크기 계산이 출력과 같은 높이를 쓰도록, lib/compare-png-export getCompareOutputHeight)
+const COMPARE_MARGIN = 20;
+const COMPARE_HEADER_TOP = 16;
+const COMPARE_TITLE_LINE_H = 22;
+const COMPARE_META_LINE_H = 16;
+const COMPARE_META_LINES = 2;
+const COMPARE_RULE_GAP = 6;
+const COMPARE_RULE_H = 2;
+const COMPARE_HEADER_GAP = 10;
+export const COMPARE_HEADER_H =
+  COMPARE_HEADER_TOP +
+  COMPARE_TITLE_LINE_H +
+  COMPARE_META_LINE_H * COMPARE_META_LINES +
+  COMPARE_RULE_GAP +
+  COMPARE_RULE_H +
+  COMPARE_HEADER_GAP;
+export const COMPARE_LEGEND_H = 36;
+const COMPARE_SWATCH = 12;
+// 문서용 클래스가 글꼴·테두리를 바꾸면 노드 실측이 달라져 비교 화면이 다시 배치한다 — 자리 잡을 때까지 기다린 뒤 잰다
+// (비교 화면 배치 안정 대기 120ms + 측정 프레임 여유)
+const COMPARE_DOC_SETTLE_MS = 450;
+
+export type CompareLegendStatus = "added" | "changed" | "removed" | "unchanged";
+
+/** 비교 PNG 실행 인자 — 문구(i18n)는 호출측이 조립한다. */
+export interface CompareExportConfig {
+  document: boolean;
+  header: { title: string; metaLines: string[] } | null;
+  legend: { status: CompareLegendStatus; label: string }[] | null;
+  // 무변경 노드를 회색으로 누르는 상태 색 구성(C안) — 범례 '바뀌지 않음' 견본 색
+  muteUnchanged: boolean;
+  paper: PaperOrientation;
+  printWidthPct: number;
+}
+
+/** 실제로 그려진 그림의 경계(flow 좌표) — 노드 밖에 매달린 diff 필·조건 캡션, 우회 아크, 연결선 라벨까지.
+ *  측정할 것이 없으면(가려진 캔버스 등) null. */
+export function measureRenderedFlowBounds(viewport: HTMLElement): FlowBounds | null {
+  const zoom = new DOMMatrixReadOnly(getComputedStyle(viewport).transform).a || 1;
+  const origin = viewport.getBoundingClientRect();
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  const add = (x: number, y: number, width: number, height: number) => {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x + width);
+    maxY = Math.max(maxY, y + height);
+  };
+  for (const el of viewport.querySelectorAll(".react-flow__node, .react-flow__node *, .react-flow__edgelabel-renderer *")) {
+    // 투명 핸들·숨긴 호버 요소는 그림이 아니다
+    if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) continue;
+    add((rect.left - origin.left) / zoom, (rect.top - origin.top) / zoom, rect.width / zoom, rect.height / zoom);
+  }
+  for (const path of viewport.querySelectorAll<SVGPathElement>(".react-flow__edge-path")) {
+    // 연결선 svg는 flow 좌표 그대로라 getBBox가 곧 flow 경계
+    const box = path.getBBox();
+    if (box.width === 0 && box.height === 0) continue;
+    add(box.x, box.y, box.width, box.height);
+  }
+  if (!Number.isFinite(minX)) return null;
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+interface CompareColors {
+  added: string;
+  changed: string;
+  removed: string;
+  unchangedFill: string;
+  unchangedFillAlpha: number;
+  unchangedStroke: string;
+  ink: string;
+  sub: string;
+  rule: string;
+}
+
+// 상태 색은 뷰포트가 물려받은 [data-diff-palette] 토큰 실값, 문서용 중립 톤은 .bpm-export-compare-doc 변수
+function readCompareColors(viewport: HTMLElement, isDocument: boolean, muteUnchanged: boolean): CompareColors {
+  const css = getComputedStyle(viewport);
+  const read = (name: string) => css.getPropertyValue(name).trim();
+  const mutedInk = read("--color-ink-muted");
+  return {
+    added: read("--color-added"),
+    changed: read("--color-diff-changed"),
+    removed: read("--color-removed"),
+    unchangedFill: isDocument ? read("--cmp-doc-node-fill") : muteUnchanged ? mutedInk : CARD_BG,
+    // 화면 C안 무변경 노드는 회색 22% 바탕(process-node mutedNodeStyle과 같은 비율)
+    unchangedFillAlpha: !isDocument && muteUnchanged ? 0.22 : 1,
+    unchangedStroke: isDocument ? read("--cmp-doc-node-stroke") : muteUnchanged ? mutedInk : CARD_BORDER,
+    ink: isDocument ? read("--cmp-doc-ink") : INK,
+    sub: isDocument ? read("--cmp-doc-sub") : INK_TERTIARY,
+    rule: isDocument ? read("--cmp-doc-ink") : CARD_BORDER,
+  };
+}
+
+// 비교 PNG 합성 — 바탕(화면=캔버스 톤+점 격자 / 문서=흰 바탕), (선택) 상단 정보 블록, 그림, (선택) 하단 범례 줄
+async function composeComparePng(
+  dataUrl: string,
+  frame: ExportFrame,
+  config: CompareExportConfig,
+  colors: CompareColors,
+  pixelRatio: number,
+): Promise<string> {
+  const image = await decodeImage(dataUrl);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return dataUrl;
+  const headerHeight = config.header ? COMPARE_HEADER_H : 0;
+  const legendHeight = config.legend ? COMPARE_LEGEND_H : 0;
+  const totalHeight = headerHeight + frame.height + legendHeight;
+  const family = config.document ? WORD_FONT_FAMILY : "Pretendard, sans-serif";
+  canvas.width = frame.width * pixelRatio;
+  canvas.height = totalHeight * pixelRatio;
+  ctx.scale(pixelRatio, pixelRatio);
+  if (config.document) {
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(0, 0, frame.width, totalHeight);
+  } else {
+    ctx.fillStyle = BG_COLOR;
+    ctx.fillRect(0, 0, frame.width, totalHeight);
+    ctx.fillStyle = DOT_COLOR;
+    for (let x = DOT_GAP / 2; x < frame.width; x += DOT_GAP) {
+      for (let y = DOT_GAP / 2; y < totalHeight; y += DOT_GAP) {
+        ctx.beginPath();
+        ctx.arc(x, y, DOT_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  const innerWidth = frame.width - COMPARE_MARGIN * 2;
+  ctx.textBaseline = "middle";
+  if (config.header) {
+    ctx.font = config.document ? `700 15px ${family}` : `600 17px ${family}`;
+    ctx.fillStyle = colors.ink;
+    let y = COMPARE_HEADER_TOP + COMPARE_TITLE_LINE_H / 2;
+    ctx.fillText(truncateToWidth(ctx, config.header.title, innerWidth), COMPARE_MARGIN, y);
+    ctx.font = config.document ? `400 11px ${family}` : `400 12px ${family}`;
+    ctx.fillStyle = colors.sub;
+    y += COMPARE_TITLE_LINE_H / 2 + COMPARE_META_LINE_H / 2;
+    for (const line of config.header.metaLines.slice(0, COMPARE_META_LINES)) {
+      ctx.fillText(truncateToWidth(ctx, line, innerWidth), COMPARE_MARGIN, y);
+      y += COMPARE_META_LINE_H;
+    }
+    ctx.fillStyle = colors.rule;
+    const ruleHeight = config.document ? COMPARE_RULE_H : 1;
+    ctx.fillRect(COMPARE_MARGIN, headerHeight - COMPARE_HEADER_GAP - ruleHeight, innerWidth, ruleHeight);
+  }
+  ctx.drawImage(image, 0, headerHeight, frame.width, frame.height);
+
+  if (config.legend) {
+    const y = headerHeight + frame.height + COMPARE_LEGEND_H / 2 - 4;
+    ctx.font = `400 12px ${family}`;
+    let x = COMPARE_MARGIN;
+    const colorOf: Record<Exclude<CompareLegendStatus, "unchanged">, string> = {
+      added: colors.added,
+      changed: colors.changed,
+      removed: colors.removed,
+    };
+    for (const item of config.legend) {
+      const top = y - COMPARE_SWATCH / 2;
+      const stroke = item.status === "unchanged" ? colors.unchangedStroke : colorOf[item.status];
+      // 노드와 같은 표기 — 상태색 12% 틴트 + 테두리(삭제는 점선), 바뀌지 않음은 현재 구성의 무변경 노드 톤
+      ctx.fillStyle = config.document ? PAPER : BG_COLOR;
+      ctx.fillRect(x, top, COMPARE_SWATCH, COMPARE_SWATCH);
+      ctx.globalAlpha = item.status === "unchanged" ? colors.unchangedFillAlpha : 0.12;
+      ctx.fillStyle = item.status === "unchanged" ? colors.unchangedFill : stroke;
+      ctx.fillRect(x, top, COMPARE_SWATCH, COMPARE_SWATCH);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash(item.status === "removed" ? [3, 2] : []);
+      ctx.strokeRect(x + 0.75, top + 0.75, COMPARE_SWATCH - 1.5, COMPARE_SWATCH - 1.5);
+      ctx.setLineDash([]);
+      x += COMPARE_SWATCH + 6;
+      ctx.fillStyle = colors.ink;
+      ctx.fillText(item.label, x, y);
+      x += ctx.measureText(item.label).width + 16;
+    }
+  }
+  return canvas.toDataURL("image/png");
+}
+
+/** 비교 화면 캔버스(root 안의 뷰포트)를 PNG로 저장한다 — 그려진 그림 경계 + 여백(작은 맵은 확대하지 않음).
+ *  문서용은 흰 바탕·Arial·중립 무변경 노드에 상태 색을 유지하고, 인쇄 계획의 dpi를 PNG에 싣는다.
+ *  찍을 캔버스나 노드가 없으면 Error — 호출측이 사용자에게 알린다. */
+export async function exportComparePng(
+  root: ParentNode,
   nodes: Node[],
   fileName: string,
-  options: { width: number; height: number; minZoom: number },
-  info?: ExportMapInfo,
+  config: CompareExportConfig,
 ): Promise<void> {
-  const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
-  if (!viewport || nodes.length === 0) {
+  const viewport = root.querySelector<HTMLElement>(".react-flow__viewport");
+  if (!viewport) throw new Error("compare PNG export: canvas viewport not found");
+  if (nodes.length === 0) throw new Error("compare PNG export: no nodes to capture");
+  const classes = ["bpm-export-compare", ...(config.document ? ["bpm-export-compare-doc"] : [])];
+  viewport.classList.add(...classes);
+  let fixups: FixupResult | null = null;
+  let dataUrl: string;
+  let frame: ExportFrame;
+  let colors: CompareColors;
+  let pixelRatio = PIXEL_RATIO;
+  let dpi: number | null = null;
+  try {
+    if (config.document) await new Promise<void>((resolve) => window.setTimeout(resolve, COMPARE_DOC_SETTLE_MS));
+    frame = measureCompareFrame(measureRenderedFlowBounds(viewport) ?? getNodesBounds(nodes));
+    colors = readCompareColors(viewport, config.document, config.muteUnchanged);
+    if (config.document) {
+      const height = frame.height + (config.header ? COMPARE_HEADER_H : 0) + (config.legend ? COMPARE_LEGEND_H : 0);
+      const plan = getPrintPlan(
+        { width: frame.width, height, zoom: frame.zoom },
+        { paper: config.paper, printWidthPct: config.printWidthPct, showInfo: false },
+      );
+      pixelRatio = plan.pixelRatio;
+      dpi = plan.dpi;
+    }
+    fixups = applyEdgeFixups(viewport, false, null, { document: config.document });
+    dataUrl = await captureViewport(viewport, frame, pixelRatio);
+  } finally {
+    fixups?.undo();
+    viewport.classList.remove(...classes);
+  }
+  const composed = await composeComparePng(dataUrl, frame, config, colors, pixelRatio);
+  if (dpi === null) {
+    clickDownload(fileName, composed);
     return;
   }
-  const { width, height, minZoom } = options;
-  const bounds = getNodesBounds(nodes);
-  // minZoom으로도 지정 프레임에 안 들어가는 큰 맵은 프레임을 키워 잘림 방지(우측 끝 노드 잘림 픽스).
-  // 1.25 = getViewportForBounds 패딩(0.1)보다 넉넉한 여유율. MAX_SIZE_PX 상한은 비율 유지 축소.
-  let frameWidth = width;
-  let frameHeight = height;
-  const neededWidth = bounds.width * minZoom * 1.25;
-  const neededHeight = bounds.height * minZoom * 1.25;
-  if (neededWidth > frameWidth || neededHeight > frameHeight) {
-    const shrink = Math.min(MAX_SIZE_PX / neededWidth, MAX_SIZE_PX / neededHeight, 1);
-    frameWidth = Math.max(frameWidth, Math.ceil(neededWidth * shrink));
-    frameHeight = Math.max(frameHeight, Math.ceil(neededHeight * shrink));
-  }
-  // zoom 하한을 낮춰 전달 — 프레임을 키웠으니 fit 줌이 항상 하한 위에서 잡히고, MAX 상한에
-  // 눌린 초대형 맵도 fit이 이겨 잘리지 않는다.
-  const transform = getViewportForBounds(bounds, frameWidth, frameHeight, 0.05, 2, 0.1);
-  await downloadViewportPng(
-    viewport,
-    fileName,
-    { width: frameWidth, height: frameHeight, x: transform.x, y: transform.y, zoom: transform.zoom },
-    info,
-    false,
-  );
+  downloadPngWithDpi(fileName, composed, dpi);
 }

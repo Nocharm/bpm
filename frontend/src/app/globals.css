@@ -1621,6 +1621,61 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
   font-weight: 600;
 }
 
+/* 비교 화면 PNG(lib/export exportComparePng) — 캡처 순간에만 비교 캔버스 뷰포트에 붙는다.
+   연결선 라벨의 반투명+블러 바탕은 캡처(foreignObject)에서 블러가 빠져 아래 선이 비친다 — 출력에선 불투명으로. */
+.bpm-export-compare .bpm-compare-edge-label {
+  background: var(--color-surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+/* 문서용 — 결재자 보고용 흰 바탕·Arial·각진 모서리. 바뀌지 않은 노드·연결선은 중립 회색, 상태 색(추가·변경·삭제)은
+   [data-diff-palette] 토큰 그대로 둔다(Word 테마 .bpm-export-word는 색을 지워 재사용하지 않는다). 옵션 창 미리보기
+   (compare-png-export-modal)와 출력 합성(정보 블록·범례)이 같은 변수를 읽는다. 출력 전용 색이라 raw hex 허용(design.md §1). */
+.bpm-export-compare-doc {
+  --cmp-doc-ink: #1f2937;
+  --cmp-doc-sub: #4b5563;
+  --cmp-doc-edge: #4b5563;
+  --cmp-doc-node-fill: #ffffff;
+  --cmp-doc-node-stroke: #6b7280;
+  --cmp-doc-label-stroke: #9ca3af;
+  /* 무변경 연결선·화살촉(var(--color-border-strong))과 RF 기본 선을 문서 톤으로 */
+  --color-border-strong: var(--cmp-doc-edge);
+  --xy-edge-stroke: var(--cmp-doc-edge);
+}
+.bpm-export-compare-doc,
+.bpm-export-compare-doc * {
+  font-family: Arial, "Malgun Gothic", "맑은 고딕", sans-serif !important;
+  transition: none !important;
+}
+.bpm-export-compare-doc [data-shell]:not([data-diff-status]) {
+  background: var(--cmp-doc-node-fill) !important;
+  border: 1px solid var(--cmp-doc-node-stroke) !important;
+}
+.bpm-export-compare-doc [data-shell] {
+  outline: none !important;
+  box-shadow: none !important;
+}
+.bpm-export-compare-doc :is([data-shell="process"], [data-shell="subprocess"], [data-shell="decision"]) {
+  border-radius: 2px !important;
+}
+.bpm-export-compare-doc .react-flow__node :is(.text-ink, .text-ink-secondary) {
+  color: var(--cmp-doc-ink) !important;
+}
+.bpm-export-compare-doc .react-flow__node :is(.text-ink-tertiary, .text-ink-muted) {
+  color: var(--cmp-doc-sub) !important;
+}
+.bpm-export-compare-doc .bpm-compare-edge-label {
+  border: 1px solid var(--cmp-doc-label-stroke) !important;
+  border-radius: 3px !important;
+  color: var(--cmp-doc-ink) !important;
+}
+.bpm-export-compare-doc .bpm-compare-edge-label[data-mirrored] {
+  border-style: dashed !important;
+}
+.bpm-export-compare-doc :is(.bpm-node-badge, .bpm-edge-carry, .bpm-io-link-mark) {
+  display: none !important;
+}
+
 /* 등장·퇴장 쉬머(components/shimmer-presence) — 액센트 빛띠가 지나가며 나타나고(in) 사라진다(out).
    퇴장은 animationend(shimmer-presence-out)로 언마운트하므로 모션 축소에서도 1ms로 재생해 이벤트를 남긴다.
    호스트에 position(relative·absolute)이 있어야 빛띠가 제자리에 깔린다. */

@@ -1660,6 +1660,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         className="group bpm-node-emph relative flex min-h-[64px] w-[180px] flex-col justify-start rounded-sm px-3 py-2 text-sm transition-all duration-150"
         style={{ ...style, ...(spWidth !== null ? { width: spWidth } : null), ...spRingStyle }}
         data-shell="subprocess"
+        data-diff-status={diff}
         data-parallel-ring={spRingStyle ? "" : undefined}
         title={data.diffNote}
         onMouseEnter={() => setHovered(true)}
@@ -1937,6 +1938,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           className="bpm-node-emph absolute left-1/2 top-1/2 h-[72px] w-[72px] rounded-sm transition-all duration-150"
           style={{ ...style, transform: "translate(-50%, -50%) scaleX(1.2) rotate(45deg)" }}
           data-shell="decision"
+          data-diff-status={diff}
         />
         {diff && <DiffBadge status={diff} className="-top-1 left-1/2 -translate-x-1/2" />}
         {/* GMP 태그는 왼쪽 위 바깥쪽(#4) — 가운데 3줄 제목·우상단 코멘트 배지와 겹치지 않게 */}

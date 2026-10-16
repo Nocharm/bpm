@@ -54,7 +54,9 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 
 import { EdgeLabelPortal } from "@/components/edge-label-portal";
 import { type CompareAiMeta, type CompareAiRun, CompareAiSummary } from "@/components/compare-ai-summary";
+import { ComparePngExportModal, type CompareLegendItem } from "@/components/compare-png-export-modal";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
 import { NodeDisplayFloat } from "@/components/node-display-float";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
@@ -123,7 +125,10 @@ import { PARAM_ICON } from "@/components/param-icons";
 import { findPublishedAt } from "@/components/version/requester-comment-banner";
 import { formatKst, formatKstShort } from "@/lib/datetime";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
-import { exportFramedPng } from "@/lib/export";
+import { exportComparePng, measureCompareFrame, measureRenderedFlowBounds, type ExportFrame } from "@/lib/export";
+import type { ComparePngExportOptions } from "@/lib/compare-png-export";
+import { buildDownloadName } from "@/lib/download-name";
+import { genId } from "@/lib/id";
 import { useEdgeObstacles } from "@/components/multiline-edge";
 import { type EdgeObstacle } from "@/lib/edge-detour";
 import { resolveEdgePath, type EdgeLineVariant, type EdgePathResult } from "@/lib/edge-path";
@@ -265,7 +270,7 @@ function renderCompareEdge(
           {label && (
           // 최대폭 + 자동 줄바꿈 — 수평 연결에서 긴 라벨이 이웃 노드를 덮거나 잘리지 않게
           <div
-            className={`whitespace-pre-wrap rounded-xs px-1 text-center text-fine leading-tight text-ink-secondary ${mirrored ? "border border-dashed border-border-strong" : ""}`}
+            className={`bpm-compare-edge-label whitespace-pre-wrap rounded-xs px-1 text-center text-fine leading-tight text-ink-secondary ${mirrored ? "border border-dashed border-border-strong" : ""}`}
             data-mirrored={mirrored ? "true" : undefined}
             style={{
               maxWidth: COMPARE_EDGE_LABEL_MAX_WIDTH,
@@ -968,6 +973,9 @@ function ComparePane({
   // 노드 표시 필드 — 우하단 플로팅 카드(NodeDisplayFloat)로 조정. 1회 hydration 후 영속은 핸들러에서만
   // (상태-의존 effect 영속은 StrictMode 이중 마운트가 저장값을 리셋 — 에디터와 같은 랜드마인).
   const [displayFields, setDisplayFields] = useState<NodeDisplayToggle[]>(COMPARE_DISPLAY_DEFAULT);
+  // PNG 출력 중에만 옵션 창에서 고른 표시 정보로 그린다(끝나면 null → 사용자 설정). 배치·필·캡션도 이 값을 따른다
+  const [exportDisplayFields, setExportDisplayFields] = useState<NodeDisplayToggle[] | null>(null);
+  const viewDisplayFields = exportDisplayFields ?? displayFields;
   useEffect(() => {
     const saved = parseDisplayToggles(window.localStorage.getItem(COMPARE_DISPLAY_KEY), null);
     if (saved !== null) {
@@ -1003,8 +1011,8 @@ function ComparePane({
     setDisplayFields(next);
   };
   const nodeActions = useMemo<NodeActions>(
-    () => ({ ...COMPARE_NODE_ACTIONS, displayFields }),
-    [displayFields],
+    () => ({ ...COMPARE_NODE_ACTIONS, displayFields: viewDisplayFields }),
+    [viewDisplayFields],
   );
   // 속성 탭 범위 — 모두 / 변경만(변경 노드에서 바뀐 필드만). 추가·삭제 노드는 전체가 새 값이라 모두로 취급.
   const [propsScope, setPropsScope] = useState<"all" | "changed">("changed");
@@ -1137,7 +1145,7 @@ function ComparePane({
         ? m.fieldChanges
             .filter((fc) => !(IO_SUMMARY_FIELDS.has(fc.field) && buildIoDiffOf(m)))
             // 조건은 노드 위·아래 캡션(호버 시 이전 → 이후)이 맡는다 — 조건 표시를 켠 동안 필로 반복하지 않는다
-            .filter((fc) => !(CONDITION_FIELDS.has(fc.field) && displayFields.includes("conditions")))
+            .filter((fc) => !(CONDITION_FIELDS.has(fc.field) && viewDisplayFields.includes("conditions")))
             .map((fc) => {
             const rawBefore = displayFieldValue(t, fc.field, fc.before, refNames);
             const rawAfter = displayFieldValue(t, fc.field, fc.after, refNames);
@@ -1149,7 +1157,7 @@ function ComparePane({
             };
             })
         : undefined,
-    [t, refNames, displayFields],
+    [t, refNames, viewDisplayFields],
   );
 
   // 좌표 없는 union 노드 → dagre 배치 (연결 기반, 저장 pos 무시). focus와 무관하게 1회만 계산.
@@ -1172,7 +1180,7 @@ function ComparePane({
     // 노드 밖 조건 캡션(위=시작·아래=종료)은 위아래 같은 패딩(큰 쪽)으로 박스에 더해 배치한다 — 비대칭으로 더하면
     // 백본 중심 정렬이 캡션 유무에 따라 어긋난다. 배치가 끝나면 패딩만큼 내리고 실측 크기로 되돌린다(restoreSize).
     const captionPadOf = (node: AppNode) => {
-      const { above, below } = getConditionCaptionExtents(node, displayFields);
+      const { above, below } = getConditionCaptionExtents(node, viewDisplayFields);
       // diff 배지가 있는 노드는 시작 캡션을 배지 위로 10px 더 올린다(ProcessNode NodeConditionCaption mb-[13px])
       const lift = above > 0 && node.data.diffStatus && node.data.nodeType !== "decision" ? 10 : 0;
       return Math.max(above + lift, below);
@@ -1239,7 +1247,7 @@ function ComparePane({
       return position ? { ...node, position } : node;
     });
     return [...aligned, ...removed].map(restoreSize);
-  }, [merged, noteOf, fieldsOf, keptKeys, spKeys, flowDir, spineIds, mapMeta, baseGraph, targetGraph, measuredSizes, displayFields, palette.muteUnchanged]);
+  }, [merged, noteOf, fieldsOf, keptKeys, spKeys, flowDir, spineIds, mapMeta, baseGraph, targetGraph, measuredSizes, viewDisplayFields, palette.muteUnchanged]);
 
   // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용. 실측 렌더 폭/높이(COMPARE_RENDER_*)로 계산해야
   // 핸들 중심이 실제와 일치(nodeSizeOf는 dagre 박스라 어긋남). 세션 드래그 위치가 있으면 그 좌표를
@@ -1570,43 +1578,6 @@ function ComparePane({
     onChangeTarget(baseId);
   }, [onChangeBase, onChangeTarget, baseId, targetId]);
 
-  // 병합 캔버스를 PNG로 저장 — 저장 노드 범위를 1600×1000(대형 맵은 프레임 확장)에 맞춰 렌더.
-  // 좌하단 정보 카드: 이름·부서·오너·버전(base → target)·게시일(있으면)·프레임워크(등록 시).
-  const handleExport = useCallback(() => {
-    const baseLabel = versions.find((v) => v.id === baseId)?.label ?? "-";
-    const targetLabel = versions.find((v) => v.id === targetId)?.label ?? "-";
-    const basePub = mapMeta.publishedById.get(baseId) ?? null;
-    const targetPub = mapMeta.publishedById.get(targetId) ?? null;
-    const fmtPub = (iso: string | null) => (iso ? formatKst(iso) : "-");
-    void exportFramedPng(
-      flow.getNodes(),
-      `${mapName}-compare.png`,
-      { width: 1600, height: 1000, minZoom: 0.5 },
-      {
-        title: mapName,
-        rows: [
-          {
-            label: t("export.infoOwningDept"),
-            value: mapMeta.owningDept?.split("/").filter(Boolean).pop() ?? "-",
-          },
-          { label: t("export.infoOwner"), value: mapMeta.ownerName ?? "-" },
-          { label: t("export.infoVersion"), value: `${baseLabel} → ${targetLabel}` },
-          ...(basePub || targetPub
-            ? [
-                {
-                  label: mapMeta.framework ? t("export.infoConfirmed") : t("export.infoPublished"),
-                  value: `${fmtPub(basePub)} → ${fmtPub(targetPub)}`,
-                },
-              ]
-            : []),
-          ...(mapMeta.categoryPath
-            ? [{ label: t("export.infoFramework"), value: mapMeta.categoryPath }]
-            : []),
-        ],
-      },
-    );
-  }, [flow, mapName, versions, baseId, targetId, mapMeta, t]);
-
   const badgeClass: Record<MergedNodeStatus, string> = {
     added: "bg-added/10 text-added",
     removed: "bg-removed/10 text-removed",
@@ -1721,6 +1692,75 @@ function ComparePane({
     }
     return acc;
   }, [changeItems]);
+
+  // ---- PNG 내보내기 — 옵션 창(compare-png-export-modal) → 선택·표시 정보 잠시 적용 → 캡처(lib/export exportComparePng) ----
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [pngExport, setPngExport] = useState<{ frame: ExportFrame | null; exportedAt: string } | null>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const pngHeader = pngExport
+    ? {
+        title: mapName,
+        metaLines: [
+          `${t("comparePng.metaVersions", { base: versionTitle(baseId), target: versionTitle(targetId) })} · ${t(
+            "comparePng.metaExported",
+            { time: formatKst(pngExport.exportedAt) },
+          )}`,
+          t("comparePng.metaCounts", { added: counts.added, changed: counts.changed, removed: counts.removed }),
+        ],
+      }
+    : null;
+  const pngLegend: CompareLegendItem[] = [
+    { status: "added", label: t("compare.legendAdded") },
+    { status: "changed", label: t("compare.legendChanged") },
+    { status: "removed", label: t("compare.legendRemoved") },
+    { status: "unchanged", label: t("comparePng.legendUnchanged") },
+  ];
+  const openPngExport = () => {
+    const viewport = canvasRef.current?.querySelector<HTMLElement>(".react-flow__viewport");
+    const bounds = viewport ? measureRenderedFlowBounds(viewport) : null;
+    setPngExport({ frame: bounds ? measureCompareFrame(bounds) : null, exportedAt: new Date().toISOString() });
+  };
+  const runPngExport = async (options: ComparePngExportOptions, fields: NodeDisplayToggle[]) => {
+    const root = canvasRef.current;
+    const header = pngHeader;
+    setPngExport(null);
+    if (!root || !header) return;
+    // 선택 링·굵은 포커스 엣지는 focusId가 그린다 — 비우고 페인트를 기다린 뒤 찍고, 끝나면 되돌린다(편집 화면과 같은 규칙)
+    const prevFocusId = focusId;
+    const isFieldsChanged =
+      fields.length !== displayFields.length || fields.some((field) => !displayFields.includes(field));
+    setFocusId(null);
+    if (isFieldsChanged) setExportDisplayFields(fields);
+    // 표시 정보가 바뀌면 노드 실측 → 재배치가 돈다(배치 안정 대기 LAYOUT_SETTLE_MS + 측정 여유)
+    if (isFieldsChanged) await new Promise<void>((resolve) => window.setTimeout(resolve, LAYOUT_SETTLE_MS + 480));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    try {
+      await exportComparePng(
+        root,
+        flow.getNodes(),
+        buildDownloadName([mapName, `${versionTitle(baseId)}-vs-${versionTitle(targetId)}`, "compare"], "png"),
+        {
+          document: options.format === "document",
+          header: options.showInfo ? header : null,
+          legend: options.showLegend ? pngLegend : null,
+          muteUnchanged: palette.muteUnchanged,
+          paper: options.paper,
+          printWidthPct: options.printWidthPct,
+        },
+      );
+    } catch (err) {
+      // 메시지를 먼저 만든다 — catch 변수를 업데이트 함수 클로저로 잡으면 React Compiler가 컴포넌트를 포기한다
+      const toast: ToastItem = {
+        id: genId(),
+        tone: "error",
+        message: t("comparePng.exportFailed", { reason: humanizeApiError(err, t) }),
+      };
+      setToasts((prev) => [toast, ...prev]);
+    }
+    // catch가 모든 실패를 받으니 복원은 try 뒤에 둔다
+    setExportDisplayFields(null);
+    setFocusId(prevFocusId);
+  };
 
   const kindCounts = useMemo(
     () => ({
@@ -2009,7 +2049,8 @@ function ComparePane({
           </button>
           <button
             type="button"
-            onClick={handleExport}
+            data-id="compare-export-png"
+            onClick={openPngExport}
             className="flex h-8 items-center gap-1.5 rounded-sm border border-hairline px-3 text-caption text-ink-secondary hover:bg-surface-alt"
           >
             <Download size={14} strokeWidth={1.5} />
@@ -2171,7 +2212,7 @@ function ComparePane({
           </div>
         </aside>
         )}
-        <div className="relative min-w-0 flex-1 overflow-hidden bg-canvas" data-id="compare-canvas">
+        <div ref={canvasRef} className="relative min-w-0 flex-1 overflow-hidden bg-canvas" data-id="compare-canvas">
           {/* Compare View 워터마크 — 읽기전용 인지(에디터 read-only 워터마크 재활용, dot-grid 대체).
               z-[4]로 노드(z-2) 위에 덮되 opacity .14로 투과 — 에디터 워터마크와 동일. */}
           <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
@@ -2931,6 +2972,19 @@ function ComparePane({
           </>
         )}
       </div>
+      {pngExport && pngHeader && (
+        <ComparePngExportModal
+          frame={pngExport.frame}
+          paletteKey={paletteKey}
+          muteUnchanged={palette.muteUnchanged}
+          header={pngHeader}
+          legendItems={pngLegend}
+          canvasDisplayFields={displayFields}
+          onClose={() => setPngExport(null)}
+          onExport={(options, fields) => void runPngExport(options, fields)}
+        />
+      )}
+      <ToastStack toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((toast) => toast.id !== id))} />
     </div>
   );
 }
