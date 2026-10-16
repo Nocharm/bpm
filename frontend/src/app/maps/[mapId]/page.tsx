@@ -86,6 +86,7 @@ import {
 import { IoImportModal } from "@/components/io-import-modal";
 import { CsvExportModal } from "@/components/csv-export-modal";
 import { ExcelExportModal, type ExcelExportFormat } from "@/components/excel-export-modal";
+import { PngExportModal } from "@/components/png-export-modal";
 import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
 import { EDITOR_EDGE_TYPES } from "@/components/multiline-edge";
@@ -280,7 +281,7 @@ import {
   type WorkflowState,
 } from "@/lib/api";
 import { humanizeApiError, isCanvasRepointedError, PERMISSION_PENDING_DETAIL_PREFIX } from "@/lib/api-errors";
-import { exportCanvasPng } from "@/lib/export";
+import { exportCanvasPng, measureExportFrame, type PngExportOptions } from "@/lib/export";
 import { buildExcelModel } from "@/lib/excel-export";
 import { buildWbsModel } from "@/lib/excel-wbs";
 import { buildCsvFromGraph } from "@/lib/csv-export";
@@ -1280,6 +1281,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [excelExportOpen, setExcelExportOpen] = useState(false);
   // CSV 내보내기 열 선택 모달 — export-column-picker-design(2026-10-02)
   const [csvExportOpen, setCsvExportOpen] = useState(false);
+  // PNG 내보내기 옵션 창 — 화면 그대로 / Word 문서용(스타일·병렬 표시·정보 블록)
+  const [pngExportOpen, setPngExportOpen] = useState(false);
   // 신원·워크플로우 상태 (spec §workflow 2026-06-14)
   const [username, setUsername] = useState<string | null>(null);
   const [mapOwner, setMapOwner] = useState<string | null>(null);
@@ -6391,7 +6394,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     [versions, versionId, mapName],
   );
 
-  const handleExportPng = useCallback(async () => {
+  const handleExportPng = useCallback(async (exportOptions: PngExportOptions) => {
     // 선택 링·IO 상세·흐름 강조는 React 상태(selected 플래그·selectedId)가 그린다 — 캡처 전에 선택을
     // 비우고 한 프레임 기다려 평상시 모습으로 찍은 뒤 원래 선택을 복원한다(사용자 요청 2026-09-18).
     const prevSelectedId = selectedId;
@@ -6456,8 +6459,21 @@ function MapEditor({ mapId }: { mapId: number }) {
             : []),
         ],
       };
-      // L5 새벽 조감도(다크) 캔버스를 보고 있으면 export도 같은 톤(배경·엣지)으로 — 라이트 고정 회귀 없음(그 외엔 dark=false)
-      await exportCanvasPng(exportNodes, buildExportFileName("png"), info, l5Charcoal);
+      // L5 새벽 조감도(다크) 캔버스를 보고 있으면 export도 같은 톤(배경·엣지)으로 — 라이트 고정 회귀 없음(그 외엔 dark=false).
+      // Word 문서용은 흰 바탕 고정이라 dark를 무시한다(lib/export)
+      const word =
+        exportOptions.theme === "word"
+          ? {
+              style: exportOptions.wordStyle,
+              showParallel: exportOptions.showParallel,
+              showInfo: exportOptions.showInfo,
+              crossing: exportOptions.crossing,
+              paper: exportOptions.paper,
+              printWidthPct: exportOptions.printWidthPct,
+              parallelLabel: t("pngExport.parallelLegend"),
+            }
+          : undefined;
+      await exportCanvasPng(exportNodes, buildExportFileName("png"), info, l5Charcoal, word);
     } catch (err) {
       setStatus(humanizeApiError(err, t));
     } finally {
@@ -6690,7 +6706,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             label: t("ctx.exportPng"),
             icon: Download,
             shortcut: "Ctrl+⇧E",
-            onSelect: () => void handleExportPng(),
+            onSelect: () => setPngExportOpen(true),
           },
         ],
       };
@@ -7068,7 +7084,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleAddNode,
     handleRecolor,
     applyNodesTransform,
-    handleExportPng,
     createGroupFromSelection,
     disbandGroup,
     groups,
@@ -9149,7 +9164,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         if (event.code === "KeyG" && !event.shiftKey) {
           fire(() => createGroupFromSelection());
         } else if (event.code === "KeyE" && event.shiftKey) {
-          fire(() => void handleExportPng());
+          fire(() => setPngExportOpen(true));
         } else if (event.code === "KeyC" && !event.shiftKey) {
           // 선택 노드가 없거나 **텍스트를 드래그 선택 중**이면 브라우저 기본 복사로 흘려보낸다 —
           // 노드가 선택된 채 AI 챗 본문을 선택 복사하면 노드 복사가 가로채 토스트만 뜨고
@@ -9216,7 +9231,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     applyNodesTransform,
     applyAutoLayout,
     createGroupFromSelection,
-    handleExportPng,
     handleCopy,
     handlePaste,
     isFrameworkMap,
@@ -12088,7 +12102,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <button
                         type="button"
                         data-id="export-png"
-                        onClick={() => void handleExportPng()}
+                        onClick={() => setPngExportOpen(true)}
                         className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-semibold text-on-accent hover:bg-accent-focus"
                       >
                         <Download size={16} strokeWidth={1.5} />
@@ -12944,6 +12958,17 @@ function MapEditor({ mapId }: { mapId: number }) {
         fileNameFor={excelFileNameFor}
       />
       <CsvExportModal open={csvExportOpen} onClose={() => setCsvExportOpen(false)} onDownload={handleExportCsv} />
+      {pngExportOpen && (
+        <PngExportModal
+          frame={nodes.length > 0 ? measureExportFrame(nodes) : null}
+          onClose={() => setPngExportOpen(false)}
+          onExport={(exportOptions) => {
+            // 창을 먼저 닫고 찍는다 — 캡처는 캔버스 DOM만 쓰지만 선택 해제·복원 프레임이 창 뒤에서 돌지 않게
+            setPngExportOpen(false);
+            void handleExportPng(exportOptions);
+          }}
+        />
+      )}
       {/* 링크 미리보기 — 액션 바 "링크 열기"로 오픈, 인스펙터 포함 우측 전체를 덮는 오버레이 */}
       <LinkPreviewPanel url={linkPreviewUrl} onClose={() => setLinkPreviewUrl(null)} />
       {/* GMP 분류 피커 — 캔버스 필 클릭 좌표 앵커, 분류가 필 색을 자동 확정 (design 2026-08-20) */}

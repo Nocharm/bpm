@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-16 — PNG 내보내기 Word 문서용 테마 + 옵션 창 (dev)
+
+- 사내 Word 문서에 순서도를 붙이려면 캔버스 톤(파스텔·점 격자·Pretendard)이 안 맞았다. 시안 3종 → 최악 케이스 목업 비교 후 B안 구조(그레이 노드+알약 터미널+상단 정보 블록)에 스타일 3종(모노·그레이·그레이+네이비) 선택으로 결정. 캡처 순간에만 뷰포트에 `.bpm-export-word--<style>` 토큰 클래스를 붙여 CSS로 덮는다(Arial+맑은 고딕, 노드 지정 색 무시, 편집 배지·SP 배너 제외, 노드 `transition-all`은 캡처가 시작값을 찍어 끔). SVG는 클론에 스타일시트가 안 실려 엣지·영역은 같은 변수를 읽어 인라인으로.
+- PNG 버튼·우클릭·Ctrl+⇧E가 옵션 창(`png-export-modal`)을 연다: 화면 그대로/Word, 샘플 미리보기, 병렬 표시(출구 뒤 이중 막대+범례)·정보 블록 칩, 교차 표시(없음·점프·터널, 직교 구간 교차만·T자 합류 제외), 켜고 끌 때 쉬머 등장·퇴장(`ShimmerPresence`). Word면 오른쪽 인쇄 크기 패널이 펼쳐져 A4 세로/가로·그림 너비로 cm·dpi·노드 글자 pt를 보여 주고, 출력 배율을 300dpi 쪽으로 올리며 PNG에 pHYs를 실어 Word가 그 너비로 삽입하게 한다(Windows Word 실물 미확인). 선택은 localStorage `bpm.pngExport`.
+- 검증: vitest 1406·tsc·lint, `pw-png-export-word.mjs` 22항목(스타일별 실제 다운로드·dpi 청크·캔버스 원복).
+
 ## 2026-10-14 — dev → main 머지(5차): 노드 조건·IO 가시성 + 비교 화면 상태 색 정리
 
 - 조건·IO 가시성(목업 비교 후 사용자 결정): 조건은 모든 노드 밖 위(시작)·아래(종료) 한 줄 캡션(Conditions 토글, 배경 없이 tertiary+헤일로, L5 하늘은 밝은 글자, 호버 툴팁 전문, 위쪽 변 연결선이 있으면 왼쪽 절반), 간격은 표시 보정(에디터 height-shift `captionAbove`·비교 배치 대칭 패딩, `lib/condition-captions.ts`). 연결선엔 전달물 개수 점+호버 카드(`From [노드 필]`·경유, 원본→미러 최단 흐름 경로, 서브프로세스는 같은 이름 매칭, 줌 0.5 미만 숨김, `lib/edge-carry.ts`).

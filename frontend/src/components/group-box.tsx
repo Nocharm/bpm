@@ -26,8 +26,9 @@ export function GroupBox({
       className={`pointer-events-none ${targeted ? "group-target" : ""}`}
       style={{ overflow: "visible" }}
     >
-      <path d={fill} style={{ fill: `color-mix(in srgb, ${stroke} 16%, transparent)` }} />
+      <path className="bpm-group-fill" d={fill} style={{ fill: `color-mix(in srgb, ${stroke} 16%, transparent)` }} />
       <path
+        className="bpm-group-outline"
         d={outline}
         fill="none"
         style={{ stroke }}

@@ -81,6 +81,7 @@ function PulseStillDot({ path, pulse, at, hidden }: PulseStillDotProps) {
       <circle
         ref={dotRef}
         className={`pointer-events-none${hidden ? " bpm-edge-pulse-still" : ""}`}
+        data-pulse-kind={pulse.kind}
         r={getPulseRadius(pulse)}
         fill={getPulseFill(pulse)}
         fillOpacity={PULSE_STILL_OPACITY}

@@ -57,7 +57,7 @@ export function GroupTitleBar({
   return (
     // 목업 pill — 그룹 색 배경 + 밝은 콘텐츠(이동 그립·색 점·이름·연필 리네임·일괄편집)
     <div
-      className="pointer-events-auto relative flex items-center gap-1.5 rounded-md px-1.5 py-1 shadow-sm"
+      className="bpm-group-title pointer-events-auto relative flex items-center gap-1.5 rounded-md px-1.5 py-1 shadow-sm"
       style={{ background: stroke, maxWidth: Math.max(80, width) }}
     >
       {!readOnly && (

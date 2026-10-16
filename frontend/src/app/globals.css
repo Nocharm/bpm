@@ -1463,3 +1463,213 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
   .swap-pair-line, .swap-pair-end, .swap-pair-fade { animation: none; }
   .swap-pair-dot { animation: none; opacity: 0; }
 }
+
+/* PNG Word 문서용 테마(lib/export) — 캡처 순간에만 .react-flow__viewport에 .bpm-export-word + 스타일 클래스
+   (--mono·--gray·--navy)를 붙여 노드·라벨·영역 제목·글꼴을 문서 톤으로 덮는다. html-to-image가 HTML 요소의
+   계산 스타일을 인라인하므로 CSS만으로 출력에 실린다(SVG 하위 요소는 예외라 엣지·영역 박스는 lib/export가
+   이 변수를 읽어 인라인으로 심는다). 옵션 창 미리보기(png-export-modal)도 같은 변수를 쓴다(단일 소스).
+   출력 전용 색이라 raw hex 허용(design.md §1 출력 예외). Arial엔 한글이 없어 한글만 맑은 고딕으로 떨어진다. */
+.bpm-export-word--mono {
+  --word-ink: #000000;
+  --word-sub: #333333;
+  --word-edge: #000000;
+  --word-task-fill: #ffffff;
+  --word-task-stroke: #000000;
+  --word-term-fill: #000000;
+  --word-term-ink: #ffffff;
+  --word-dec-fill: #ffffff;
+  --word-dec-stroke: #000000;
+  --word-sp-fill: #ffffff;
+  --word-sp-stroke: #000000;
+  --word-sp-bar: #000000;
+  --word-region-fill: transparent;
+  --word-region-stroke: #000000;
+  --word-region-dash: 4 3;
+  --word-label-stroke: #000000;
+  --word-pill-stroke: #000000;
+  --word-pill-ink: #000000;
+  --word-accent: #000000;
+  --word-meta: #333333;
+}
+.bpm-export-word--gray {
+  --word-ink: #1f2937;
+  --word-sub: #6b7280;
+  --word-edge: #4b5563;
+  --word-task-fill: #f3f4f6;
+  --word-task-stroke: #9ca3af;
+  --word-term-fill: #4b5563;
+  --word-term-ink: #ffffff;
+  --word-dec-fill: #ffffff;
+  --word-dec-stroke: #374151;
+  --word-sp-fill: #e5e7eb;
+  --word-sp-stroke: #6b7280;
+  --word-sp-bar: #374151;
+  --word-region-fill: #fafafb;
+  --word-region-stroke: #c4c8cf;
+  --word-region-dash: none;
+  --word-label-stroke: #9ca3af;
+  --word-pill-stroke: #9ca3af;
+  --word-pill-ink: #374151;
+  --word-accent: #374151;
+  --word-meta: #4b5563;
+}
+.bpm-export-word--navy {
+  --word-ink: #1f2937;
+  --word-sub: #6b7280;
+  --word-edge: #4b5563;
+  --word-task-fill: #f3f4f6;
+  --word-task-stroke: #9ca3af;
+  --word-term-fill: #1f3a5f;
+  --word-term-ink: #ffffff;
+  --word-dec-fill: #ffffff;
+  --word-dec-stroke: #1f3a5f;
+  --word-sp-fill: #eaf0f6;
+  --word-sp-stroke: #1f3a5f;
+  --word-sp-bar: #1f3a5f;
+  --word-region-fill: #f7f9fc;
+  --word-region-stroke: #c9d3e0;
+  --word-region-dash: none;
+  --word-label-stroke: #9ca3af;
+  --word-pill-stroke: #1f3a5f;
+  --word-pill-ink: #1f3a5f;
+  --word-accent: #1f3a5f;
+  --word-meta: #4b5563;
+}
+.bpm-export-word,
+.bpm-export-word * {
+  font-family: Arial, "Malgun Gothic", "맑은 고딕", sans-serif !important;
+  /* 노드의 transition-all이 덮어쓴 색을 150ms에 걸쳐 바꾸면 캡처가 전환 시작값(원래 색)을 찍는다 */
+  transition: none !important;
+}
+/* 노드 몸체 — data-shell은 process-node가 모양별로 단다(start·end·process·decision·subprocess) */
+.bpm-export-word [data-shell] {
+  background: var(--word-task-fill) !important;
+  border: 1px solid var(--word-task-stroke) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+.bpm-export-word :is([data-shell="start"], [data-shell="end"]) {
+  background: var(--word-term-fill) !important;
+  border-color: var(--word-term-fill) !important;
+}
+.bpm-export-word [data-shell="decision"] {
+  background: var(--word-dec-fill) !important;
+  border: 1.5px solid var(--word-dec-stroke) !important;
+}
+/* 하위프로세스 — 왼쪽 막대(안쪽 그림자)로 일반 노드와 구분 */
+.bpm-export-word [data-shell="subprocess"] {
+  background: var(--word-sp-fill) !important;
+  border: 1.25px solid var(--word-sp-stroke) !important;
+  box-shadow: inset 5px 0 0 var(--word-sp-bar) !important;
+}
+.bpm-export-word .react-flow__node .text-ink {
+  color: var(--word-ink) !important;
+}
+.bpm-export-word .react-flow__node :is(.text-ink-secondary, .text-ink-tertiary, .text-ink-muted) {
+  color: var(--word-sub) !important;
+}
+/* 터미널은 채움이 진해 글자를 뒤집는다 — 위 text-ink 규칙과 특이도가 같아 뒤에 둔다 */
+.bpm-export-word .react-flow__node :is([data-shell="start"], [data-shell="end"]) * {
+  color: var(--word-term-ink) !important;
+  border-color: currentColor !important;
+  background: transparent !important;
+}
+.bpm-export-word .bpm-gmp-pill {
+  background: transparent !important;
+  border-color: var(--word-pill-stroke) !important;
+  color: var(--word-pill-ink) !important;
+}
+/* 편집 상태 배지(코멘트·경고·링크·잠금·하위 변경·SP 출구 수)는 문서에 의미가 없다 */
+.bpm-export-word .bpm-node-badge {
+  display: none !important;
+}
+.bpm-export-word .react-flow__edgelabel-renderer > div {
+  background: #ffffff !important;
+  border-color: var(--word-label-stroke) !important;
+  border-width: 1px !important;
+  border-radius: 999px !important;
+  color: var(--word-ink) !important;
+  box-shadow: none !important;
+}
+.bpm-export-word .react-flow__edgelabel-renderer > div:not([data-mirrored]) {
+  border-style: solid !important;
+}
+.bpm-export-word .bpm-group-title {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.bpm-export-word .bpm-group-title button {
+  display: none !important;
+}
+.bpm-export-word .bpm-group-title span {
+  color: var(--word-accent) !important;
+  font-weight: 600;
+}
+
+/* 등장·퇴장 쉬머(components/shimmer-presence) — 액센트 빛띠가 지나가며 나타나고(in) 사라진다(out).
+   퇴장은 animationend(shimmer-presence-out)로 언마운트하므로 모션 축소에서도 1ms로 재생해 이벤트를 남긴다.
+   호스트에 position(relative·absolute)이 있어야 빛띠가 제자리에 깔린다. */
+@keyframes shimmer-presence-in {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+@keyframes shimmer-presence-out {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+@keyframes shimmer-presence-sweep {
+  0% {
+    background-position: 150% 0;
+    opacity: 1;
+  }
+  100% {
+    background-position: -50% 0;
+    opacity: 0;
+  }
+}
+.shimmer-in {
+  animation: shimmer-presence-in 450ms var(--ease-smooth) both;
+}
+.shimmer-out {
+  pointer-events: none;
+  animation: shimmer-presence-out 450ms var(--ease-smooth) both;
+}
+.shimmer-in::after,
+.shimmer-out::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    color-mix(in srgb, var(--color-accent) 24%, transparent) 50%,
+    transparent 75%
+  );
+  background-size: 250% 100%;
+  animation: shimmer-presence-sweep 450ms ease-in-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-in,
+  .shimmer-out {
+    animation-duration: 1ms;
+  }
+  .shimmer-in::after,
+  .shimmer-out::after {
+    animation: none;
+    opacity: 0;
+  }
+}

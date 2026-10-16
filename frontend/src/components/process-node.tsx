@@ -788,7 +788,7 @@ function GmpPill({ nodeId, data, className: extra }: { nodeId: string; data: App
   // 노드 안쪽 배치(사용자 결정 2026-08-20) — 배치는 호출부 className이 담당(사각=본문 첫 줄, 마름모=상단 중앙)
   // whitespace-nowrap — 좁은 노드에서 "GMP Indirect"가 두 줄로 꺾이지 않게 (사용자 요청 2026-08-21 #8)
   const className =
-    "nodrag nopan inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border px-1.5 py-0 text-[10px] leading-4 " +
+    "bpm-gmp-pill nodrag nopan inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border px-1.5 py-0 text-[10px] leading-4 " +
     (label ? "border-transparent " : "border-hairline bg-surface text-ink-muted ") +
     (floating
       ? "absolute -left-2 -top-2 z-10 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
@@ -1196,7 +1196,7 @@ function UnresolvedCommentBadge({
   const { t } = useI18n();
   return (
     <span
-      className={`absolute ${className} rounded-full bg-removed px-1 text-[10px] leading-4 text-on-accent`}
+      className={`bpm-node-badge absolute ${className} rounded-full bg-removed px-1 text-[10px] leading-4 text-on-accent`}
       title={t("node.unresolvedAria", { n: count })}
     >
       <span className="inline-flex items-center gap-0.5">
@@ -1214,7 +1214,7 @@ function UrlBadge({ url, className = "-bottom-2 -left-2" }: { url: string; class
   return (
     <span
       data-id="node-url-badge"
-      className={`absolute ${className} rounded-xs border border-accent-tint-border bg-accent-tint/80 p-0.5 text-accent opacity-70`}
+      className={`bpm-node-badge absolute ${className} rounded-xs border border-accent-tint-border bg-accent-tint/80 p-0.5 text-accent opacity-70`}
       title={url}
     >
       <LinkIcon size={12} strokeWidth={1.5} />
@@ -1227,7 +1227,7 @@ function DescendantChangeBadge({ className = "-right-2 -top-2" }: { className?: 
   const { t } = useI18n();
   return (
     <span
-      className={`absolute ${className} rounded-full bg-diff-changed px-1 text-[10px] leading-4 text-on-accent`}
+      className={`bpm-node-badge absolute ${className} rounded-full bg-diff-changed px-1 text-[10px] leading-4 text-on-accent`}
       title={t("node.childChangedTitle")}
     >
       <Zap size={10} strokeWidth={1.5} />
@@ -1282,7 +1282,7 @@ function NodeWarningBadge({
     </div>
   );
   return (
-    <HoverTip tip={tip} className={`absolute ${className} z-10`}>
+    <HoverTip tip={tip} className={`bpm-node-badge absolute ${className} z-10`}>
       <span
         data-id="node-warning-badge"
         className="flex items-center gap-0.5 rounded-full border border-hairline bg-surface px-1 py-0.5 text-fine font-semibold text-warn shadow-sm"
@@ -1299,7 +1299,7 @@ function LockedBadge() {
   const { t } = useI18n();
   return (
     <span
-      className="absolute -right-2 -top-2 rounded-xs border border-hairline bg-surface p-0.5 text-ink-secondary shadow-sm"
+      className="bpm-node-badge absolute -right-2 -top-2 rounded-xs border border-hairline bg-surface p-0.5 text-ink-secondary shadow-sm"
       title={t("subprocess.locked")}
     >
       <Lock size={16} strokeWidth={1.5} />
@@ -1480,7 +1480,7 @@ function SpOutputBadge({ outputGroups: groups, ends }: { outputGroups: OutputGro
   const connected = groups.reduce((sum, group) => sum + (group.parallel ? 1 : group.count), 0);
   if (ends.length < 2 && excess === 0) return null;
   const ratio = `${connected}/${total}`;
-  const pillBase = "ml-1 inline-grid rounded-xs border px-1 py-px align-[1px] text-fine leading-none";
+  const pillBase = "bpm-node-badge ml-1 inline-grid rounded-xs border px-1 py-px align-[1px] text-fine leading-none";
   if (excess === 0) {
     return (
       <span
@@ -1652,6 +1652,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       <div
         className="group bpm-node-emph relative flex min-h-[64px] w-[180px] flex-col justify-start rounded-sm px-3 py-2 text-sm transition-all duration-150"
         style={{ ...style, ...(spWidth !== null ? { width: spWidth } : null), ...spRingStyle }}
+        data-shell="subprocess"
         data-parallel-ring={spRingStyle ? "" : undefined}
         title={data.diffNote}
         onMouseEnter={() => setHovered(true)}
@@ -1928,6 +1929,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         <div
           className="bpm-node-emph absolute left-1/2 top-1/2 h-[72px] w-[72px] rounded-sm transition-all duration-150"
           style={{ ...style, transform: "translate(-50%, -50%) scaleX(1.2) rotate(45deg)" }}
+          data-shell="decision"
         />
         {diff && <DiffBadge status={diff} className="-top-1 left-1/2 -translate-x-1/2" />}
         {/* GMP 태그는 왼쪽 위 바깥쪽(#4) — 가운데 3줄 제목·우상단 코멘트 배지와 겹치지 않게 */}
@@ -1985,6 +1987,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           : "min-w-[150px] max-w-[240px] rounded-sm"
       }`}
       style={ringStyle ? { ...style, ...ringStyle } : style}
+      data-shell={data.nodeType}
       data-parallel-ring={ringStyle ? "" : undefined}
       title={data.diffNote}
       data-diff-status={diff}
