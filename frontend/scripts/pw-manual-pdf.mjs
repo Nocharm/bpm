@@ -1,5 +1,6 @@
 // 매뉴얼 뷰어 "한눈에 보기" 메뉴의 슬라이드 PDF 다운로드 스모크 — 메뉴가 env 없이도 뜨고, 사용자/관리자 항목이 언어 선택
 // 다이얼로그를 열며, 한국어·English 링크가 /manuals/ 정적 파일(200, application/pdf)을 가리키는지 확인한다.
+// 현재 UI 언어가 앞에 표시되는지·파일 크기·파일이 없을 때(HEAD 404로 가장) 링크 대신 오류가 뜨는지도 본다.
 // 캡처는 ../.shots/manual-pdf-menu.png · manual-pdf-dialog.png. 실행(frontend/ 에서): BASE_URL=http://localhost:3047 node scripts/pw-manual-pdf.mjs
 import { chromium } from "playwright-core";
 import fs from "node:fs";
@@ -38,14 +39,20 @@ try {
   await page.locator('[data-id="manual-pdf-user"]').waitFor({ state: "visible", timeout: 5000 });
   await page.screenshot({ path: path.join(SHOT_DIR, "manual-pdf-menu.png") });
 
+  const OTHER_LANG = UI_LANG === "ko" ? "en" : "ko";
   for (const kind of ["user", "admin"]) {
     if (kind === "admin") await menuBtn.click();
     await page.locator(`[data-id="manual-pdf-${kind}"]`).click();
     const dialog = page.locator('[data-id="manual-pdf-dialog"]');
     await dialog.waitFor({ state: "visible", timeout: 5000 });
     check(`${kind}: language dialog opens`, true);
+    // HEAD 확인이 끝나면 타일이 링크(<a>)로 바뀐다
+    await dialog.locator(`a[data-id="manual-pdf-lang-${UI_LANG}"]`).waitFor({ timeout: 10000 });
+    const order = await dialog.locator('[data-id^="manual-pdf-lang-"]').evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute("data-id")));
+    check(`${kind}: current UI language listed first and marked`, order[0] === `manual-pdf-lang-${UI_LANG}` && (await dialog.locator(`[data-id="manual-pdf-current-${UI_LANG}"]`).count()) === 1, order.join(","));
+    check(`${kind}: file size shown`, /PDF · [\d.]+ (MB|KB)/.test(await dialog.locator(`[data-id="manual-pdf-lang-${UI_LANG}"]`).innerText()));
     for (const lang of ["ko", "en"]) {
-      const link = dialog.locator(`[data-id="manual-pdf-lang-${lang}"]`);
+      const link = dialog.locator(`a[data-id="manual-pdf-lang-${lang}"]`);
       const href = await link.getAttribute("href");
       const expected = `/manuals/bpm-manual-${kind}-${lang}.pdf`;
       check(`${kind}/${lang}: link href`, href === expected, href ?? "(none)");
@@ -54,7 +61,7 @@ try {
       const type = res.headers()["content-type"] ?? "";
       check(`${kind}/${lang}: pdf served`, res.ok() && type.includes("application/pdf"), `${res.status()} ${type}`);
     }
-    if (kind === "user") await page.screenshot({ path: path.join(SHOT_DIR, "manual-pdf-dialog.png") });
+    if (kind === "user") await dialog.screenshot({ path: path.join(SHOT_DIR, "manual-pdf-dialog.png") });
     // 언어 클릭 = 다운로드 시작 + 닫힘
     const [download] = await Promise.all([
       page.waitForEvent("download", { timeout: 10000 }),
@@ -64,6 +71,19 @@ try {
     await dialog.waitFor({ state: "hidden", timeout: 5000 });
     check(`${kind}: dialog closes after pick`, true);
   }
+  // 파일이 없을 때 — HEAD를 404 HTML로 가장하면 그 언어는 링크 대신 오류를 보인다(HTML이 .pdf로 저장되던 문제)
+  await page.route(`**/manuals/bpm-manual-user-${OTHER_LANG}.pdf`, (route) =>
+    route.fulfill({ status: 404, contentType: "text/html", body: "<html>not found</html>" }),
+  );
+  await menuBtn.click();
+  await page.locator('[data-id="manual-pdf-user"]').click();
+  const dialog = page.locator('[data-id="manual-pdf-dialog"]');
+  await dialog.locator(`[data-id="manual-pdf-error-${OTHER_LANG}"]`).waitFor({ timeout: 10000 });
+  check(
+    "missing file shows an error instead of a link",
+    (await dialog.locator(`a[data-id="manual-pdf-lang-${OTHER_LANG}"]`).count()) === 0 && (await dialog.locator(`a[data-id="manual-pdf-lang-${UI_LANG}"]`).count()) === 1,
+  );
+  await dialog.screenshot({ path: path.join(SHOT_DIR, "manual-pdf-dialog-missing.png") });
   await ctx.close();
 } finally {
   await browser.close();
