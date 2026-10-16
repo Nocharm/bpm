@@ -9,6 +9,7 @@ import {
   type Connection,
   type Edge,
   type FinalConnectionState,
+  getNodesBounds,
   MarkerType,
   type NodeChange,
   type NodeTypes,
@@ -87,6 +88,8 @@ import { IoImportModal } from "@/components/io-import-modal";
 import { CsvExportModal } from "@/components/csv-export-modal";
 import { ExcelExportModal, type ExcelExportFormat } from "@/components/excel-export-modal";
 import { PngExportModal } from "@/components/png-export-modal";
+import { A4GuideControl } from "@/components/a4-guide-control";
+import { A4GuideOverlay } from "@/components/a4-guide-overlay";
 import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
 import { EDITOR_EDGE_TYPES } from "@/components/multiline-edge";
@@ -281,7 +284,13 @@ import {
   type WorkflowState,
 } from "@/lib/api";
 import { humanizeApiError, isCanvasRepointedError, PERMISSION_PENDING_DETAIL_PREFIX } from "@/lib/api-errors";
-import { exportCanvasPng, measureExportFrame, type PngExportOptions } from "@/lib/export";
+import {
+  exportCanvasPng,
+  loadPngExportOptions,
+  measureExportFrame,
+  type PaperOrientation,
+  type PngExportOptions,
+} from "@/lib/export";
 import { buildExcelModel } from "@/lib/excel-export";
 import { buildWbsModel } from "@/lib/excel-wbs";
 import { buildCsvFromGraph } from "@/lib/csv-export";
@@ -462,6 +471,9 @@ const TEXT_HISTORY_GAP_MS = 2000; // 타이핑은 이 간격 안에서 한 번�
 const AUTO_SAVE_DELAY_MS = 2000; // 마지막 변경 후 자동 저장까지의 디바운스
 const CHECKOUT_POLL_MS = 10_000; // 점유 상태 재조회 주기(요청 승인/이전 반영). sticky라 TTL 연장 아님
 const COMMENT_POLL_MS = 5_000; // 코멘트 "실시간" 폴링 주기 (spec §7 Phase C)
+// PNG 출력 보기 적용 뒤 대기 — 노드 재실측 + height-shift 간격 트윈·분기 IO 아일랜드 펼침(450ms)이 끝나는 시간
+const PRINT_VIEW_SETTLE_MS = 600;
+const A4_GUIDE_STORAGE_KEY = "bpm.a4Guide";
 
 const SEARCH_RESULT_LIMIT = 20; // 검색 드롭다운 최대 표시 수
 
@@ -1283,6 +1295,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [csvExportOpen, setCsvExportOpen] = useState(false);
   // PNG 내보내기 옵션 창 — 화면 그대로 / Word 문서용(스타일·병렬 표시·정보 블록)
   const [pngExportOpen, setPngExportOpen] = useState(false);
+  // PNG 출력 중에만 캔버스에 덮어쓰는 보기 — 옵션 창에서 고른 표시 정보·입출력 펼침. null=평소(사용자 표시 정보)
+  const [printView, setPrintView] = useState<{ displayFields: NodeDisplayToggle[]; expandIo: boolean } | null>(null);
+  // A4 가이드(캔버스 경계선) — 개인 보기 설정, localStorage `bpm.a4Guide`. 처음엔 꺼짐·PNG 창에서 마지막 고른 용지
+  const [a4Guide, setA4Guide] = useState<{ on: boolean; paper: PaperOrientation }>({ on: false, paper: "portrait" });
   // 신원·워크플로우 상태 (spec §workflow 2026-06-14)
   const [username, setUsername] = useState<string | null>(null);
   const [mapOwner, setMapOwner] = useState<string | null>(null);
@@ -6394,7 +6410,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     [versions, versionId, mapName],
   );
 
-  const handleExportPng = useCallback(async (exportOptions: PngExportOptions) => {
+  const handleExportPng = useCallback(async (exportOptions: PngExportOptions, exportFields: NodeDisplayToggle[]) => {
+    // 고른 표시 정보·입출력 펼침을 캔버스에 잠시 적용 — 노드 실측과 간격 보정(height-shift 트윈)이 자리 잡은 뒤 찍는다
+    setPrintView({ displayFields: exportFields, expandIo: exportOptions.expandIo });
+    await new Promise<void>((resolve) => window.setTimeout(resolve, PRINT_VIEW_SETTLE_MS));
     // 선택 링·IO 상세·흐름 강조는 React 상태(selected 플래그·selectedId)가 그린다 — 캡처 전에 선택을
     // 비우고 한 프레임 기다려 평상시 모습으로 찍은 뒤 원래 선택을 복원한다(사용자 요청 2026-09-18).
     const prevSelectedId = selectedId;
@@ -6477,6 +6496,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     } catch (err) {
       setStatus(humanizeApiError(err, t));
     } finally {
+      setPrintView(null);
       if (hadSelection) {
         setSelectedId(prevSelectedId);
         setSelectedEdgeId(prevSelectedEdgeId);
@@ -7324,14 +7344,43 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, []);
   // 영속은 토글 핸들러에서만 — displayFields 의존 effect로 쓰면 StrictMode 이중 마운트가
   // hydration 전 기본값을 저장소에 덮어써 사용자의 OFF 상태가 리셋된다(실측).
+  useEffect(() => {
+    let saved: { on: boolean; paper: PaperOrientation } | null = null;
+    try {
+      const parsed: unknown = JSON.parse(window.localStorage.getItem(A4_GUIDE_STORAGE_KEY) ?? "null");
+      if (typeof parsed === "object" && parsed !== null && "on" in parsed && "paper" in parsed) {
+        saved = {
+          on: parsed.on === true,
+          paper: parsed.paper === "landscape" ? "landscape" : "portrait",
+        };
+      }
+    } catch {
+      // 깨진 저장값·차단된 저장소 — 기본값(꺼짐)으로
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
+    setA4Guide(saved ?? { on: false, paper: loadPngExportOptions().paper });
+  }, []);
+  // A4 가이드 변경 — 영속은 핸들러에서(위 displayFields와 같은 이유)
+  const updateA4Guide = (next: { on: boolean; paper: PaperOrientation }) => {
+    setA4Guide(next);
+    try {
+      window.localStorage.setItem(A4_GUIDE_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // 저장 실패는 새로고침 때 꺼짐으로 돌아갈 뿐
+    }
+  };
+  // 가이드 기준 bounds — 켜졌을 때만 계산(노드 이동마다 따라간다)
+  const a4GuideBounds = useMemo(() => (a4Guide.on && nodes.length > 0 ? getNodesBounds(nodes) : null), [a4Guide.on, nodes]);
 
   const [dragFrozenField, setDragFrozenField] = useState<HeightShiftField | null>(null);
   // 조건 캡션(노드 밖 위·아래)도 Conditions 토글을 따라 간격에 반영
+  // 노드가 실제로 그리는 표시 정보 — PNG 출력 중엔 옵션 창 선택(printView), 평소엔 사용자 설정
+  const nodeDisplayFields = printView?.displayFields ?? displayFields;
   const heightField = useMemo(
     () =>
       dragFrozenField ??
-      buildHeightShiftField(nodes, (node) => getConditionCaptionExtents(node, displayFields)),
-    [dragFrozenField, nodes, displayFields],
+      buildHeightShiftField(nodes, (node) => getConditionCaptionExtents(node, nodeDisplayFields)),
+    [dragFrozenField, nodes, nodeDisplayFields],
   );
   useEffect(() => {
     heightFieldRef.current = heightField;
@@ -8619,7 +8668,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     () => ({
       onToggleExpand: toggleInlineExpand,
       expandedInlineIds: expandedInline,
-      displayFields,
+      displayFields: nodeDisplayFields,
+      printIoExpanded: printView?.expandIo ?? false,
       editingNodeId,
       onStartRename: startRename,
       onRename: renameNode,
@@ -8643,7 +8693,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     [
       toggleInlineExpand,
       expandedInline,
-      displayFields,
+      nodeDisplayFields,
+      printView,
       editingNodeId,
       startRename,
       renameNode,
@@ -10465,6 +10516,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             label={lane.label}
                           />
                         ))}
+                        {a4GuideBounds && <A4GuideOverlay bounds={a4GuideBounds} paper={a4Guide.paper} />}
                         {groupBoxes.map((box) => (
                           <Fragment key={box.id}>
                             {/* 반투명 박스 — 노드 뒤로, 멤버 적은 그룹이 위(z) */}
@@ -10545,6 +10597,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                             displayFields={displayFields}
                             onToggle={toggleDisplayField}
                             onSetCategory={setCategoryDisplayFields}
+                            topSlot={
+                              <A4GuideControl
+                                on={a4Guide.on}
+                                paper={a4Guide.paper}
+                                onToggle={() => updateA4Guide({ ...a4Guide, on: !a4Guide.on })}
+                                onPaperChange={(paper) => updateA4Guide({ ...a4Guide, paper })}
+                              />
+                            }
                           />
                         }
                       />
@@ -12961,11 +13021,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       {pngExportOpen && (
         <PngExportModal
           frame={nodes.length > 0 ? measureExportFrame(nodes) : null}
+          canvasDisplayFields={displayFields}
           onClose={() => setPngExportOpen(false)}
-          onExport={(exportOptions) => {
+          onExport={(exportOptions, exportFields) => {
             // 창을 먼저 닫고 찍는다 — 캡처는 캔버스 DOM만 쓰지만 선택 해제·복원 프레임이 창 뒤에서 돌지 않게
             setPngExportOpen(false);
-            void handleExportPng(exportOptions);
+            void handleExportPng(exportOptions, exportFields);
           }}
         />
       )}

@@ -113,6 +113,9 @@ export interface NodeActions {
   // 조직 참조 점검 소스 — null이면 판정 비활성(디렉터리·후보 미도착, 비교/프리뷰 표면).
   // null 가드가 핵심: 로드 전에 판정하면 전 노드가 경고로 물든다 (2026-09-10)
   refCheck: NodeRefCheck | null;
+  // PNG 출력 중 — 입출력 목록을 줄 수 제한 없이 펼치고, 분기 노드 IO 아일랜드도 목록으로 편다(옵션 창 선택).
+  // 미지정=false(평소·비교·프리뷰)
+  printIoExpanded?: boolean;
 }
 
 // IO 체크리스트 3단계(#2): collapsed=0줄(헤더만) · capped=3.5줄+오버플로 히든 · all=전부

@@ -1,15 +1,17 @@
 "use client";
 
-// PNG 내보내기 옵션 창 — 화면 그대로 / Word 문서용(스타일 3종·병렬 표시·맵 정보 블록 토글) 선택 + 샘플 흐름 미리보기.
+// PNG 내보내기 옵션 창 — 화면 그대로 / Word 문서용(스타일 3종·병렬 표시·맵 정보 블록 토글) 선택, 표시 정보·입출력 펼침
+// (두 테마 공통, 출력 순간에만 캔버스에 적용) + 샘플 흐름 미리보기.
 // 미리보기 구성요소는 켜고 끌 때 쉬머로 생기고 사라진다(ShimmerPresence). 마지막 선택은 브라우저에 기억(lib/export).
 // 에디터(maps/[mapId]/page.tsx)의 PNG 내보내기 진입점(인스펙터 버튼·우클릭 메뉴·Ctrl+⇧E)이 공유.
 
 import { Fragment, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { PanelTop, X } from "lucide-react";
+import { ListTree, PanelTop, X } from "lucide-react";
 
 import { HoverTip } from "@/components/hover-tip";
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { TOGGLE_ICONS, TOGGLE_LABEL_KEY } from "@/components/node-display-section";
 import { PngPrintPanel } from "@/components/png-print-panel";
 import { resolveNodeStroke } from "@/components/process-node";
 import { ShimmerPresence } from "@/components/shimmer-presence";
@@ -25,13 +27,29 @@ import {
 } from "@/lib/export";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import type { NodeDisplayToggle } from "@/lib/node-actions";
 
 interface PngExportModalProps {
   // 현재 맵의 캡처 프레임(lib/export measureExportFrame) — 인쇄 크기 패널의 비율·해상도 계산. 노드가 없으면 null
   frame: ExportFrame | null;
+  // 캔버스의 현재 표시 정보 — 창을 열 때 표시 정보 칩의 시작값(창에서 바꿔도 캔버스 설정은 그대로)
+  canvasDisplayFields: NodeDisplayToggle[];
   onClose: () => void;
-  onExport: (options: PngExportOptions) => void;
+  onExport: (options: PngExportOptions, displayFields: NodeDisplayToggle[]) => void;
 }
+
+// 표시 정보 칩 순서 — 노드 표시 정보 카드의 묶음 순서(속성 → 수행 지표 → 입출력·조건)
+const DISPLAY_CHIP_ORDER: NodeDisplayToggle[] = [
+  "assignee",
+  "department",
+  "system",
+  "url",
+  "gmp",
+  "params",
+  "input",
+  "output",
+  "conditions",
+];
 
 const STYLE_LABEL_KEY: Record<WordExportStyle, MessageKey> = {
   mono: "pngExport.styleMono",
@@ -47,7 +65,7 @@ const CROSSING_LABEL_KEY: Record<CrossingStyle, MessageKey> = {
 
 // 미리보기 흐름 좌표(viewBox) — 시작 → 접수 → 병렬 두 갈래 → 판단 → 끝, 판단 아니오는 접수로 되돌아가며 갈래와 교차
 const VIEW_W = 520;
-const VIEW_H = 150;
+const VIEW_H_MIN = 150; // 샘플 노드가 표시 정보로 길어지면 그만큼 늘어난다
 const PARALLEL_MARK_X = 204;
 const PARALLEL_MARK_Y = 60;
 // 되돌림 선(y 96)이 두 세로 갈래(x 214·356)를 지나는 자리
@@ -58,14 +76,19 @@ const CROSSING_POINTS: [number, number][] = [
 const CROSSING_BOX = 16; // 교차 글리프 상자(viewBox 단위)
 
 // 교차 글리프 상자 — 미리보기 svg와 같은 비율로 늘어나도록 % 위치·크기
-function getCrossingBoxStyle(x: number, y: number): CSSProperties {
+function getCrossingBoxStyle(x: number, y: number, viewH: number): CSSProperties {
   const half = CROSSING_BOX / 2;
   return {
     left: `${((x - half) / VIEW_W) * 100}%`,
-    top: `${((y - half) / VIEW_H) * 100}%`,
+    top: `${((y - half) / viewH) * 100}%`,
     width: `${(CROSSING_BOX / VIEW_W) * 100}%`,
-    height: `${(CROSSING_BOX / VIEW_H) * 100}%`,
+    height: `${(CROSSING_BOX / viewH) * 100}%`,
   };
+}
+
+// 미리보기 viewBox 좌표 사각형 → 겹쳐 그리는 HTML 상자의 % 위치
+function getBoxStyle(x: number, y: number, w: number, viewH: number): CSSProperties {
+  return { left: `${(x / VIEW_W) * 100}%`, top: `${(y / viewH) * 100}%`, width: `${(w / VIEW_W) * 100}%` };
 }
 
 // 교차 자리 덧그림 — 바탕으로 지운 뒤 jump는 세로선 + 반원 넘김, gap은 가로선 + 끊긴 세로선(lib/export drawCrossings와 같은 모양)
@@ -94,6 +117,10 @@ interface PreviewPalette {
   decFill: string;
   decStroke: string;
   labelStroke: string;
+  sub: string;
+  // 노드·라벨 모서리 — Word는 각지게(globals.css .bpm-export-word와 같은 값)
+  nodeRadius: number;
+  labelRadius: number;
 }
 
 // 화면 그대로 — 노드 타입 기본색(파스텔 채움)과 검정 엣지(현행 PNG 출력과 같은 톤)
@@ -113,6 +140,9 @@ function getScreenPalette(): PreviewPalette {
     decFill: tint(dec),
     decStroke: dec,
     labelStroke: "var(--color-hairline)",
+    sub: "var(--color-ink-tertiary)",
+    nodeRadius: 4,
+    labelRadius: 7,
   };
 }
 
@@ -128,6 +158,9 @@ const WORD_PALETTE: PreviewPalette = {
   decFill: "var(--word-dec-fill)",
   decStroke: "var(--word-dec-stroke)",
   labelStroke: "var(--word-label-stroke)",
+  sub: "var(--word-sub)",
+  nodeRadius: 2,
+  labelRadius: 3,
 };
 
 // 테마·스타일 전환 때 색이 부드럽게 넘어가도록(SVG 속성 대신 style 속성이라 전이가 걸린다)
@@ -142,15 +175,19 @@ const PRINT_PANEL_W = 300;
 // 펼침 동안 왼쪽 가장자리를 붙잡는 이동 — 절반 폭만큼 오른쪽으로 밀되 화면 오른쪽 여백(16px)을 넘지 않게
 const EXPANDED_SHIFT = `max(0px, min(${PRINT_PANEL_W / 2}px, calc(50vw - ${(560 + PRINT_PANEL_W) / 2 + 16}px)))`;
 
-export function PngExportModal({ frame, onClose, onExport }: PngExportModalProps) {
+export function PngExportModal({ frame, canvasDisplayFields, onClose, onExport }: PngExportModalProps) {
   const { t } = useI18n();
   const [options, setOptions] = useState<PngExportOptions>(() => loadPngExportOptions());
+  const [displayFields, setDisplayFields] = useState<NodeDisplayToggle[]>(canvasDisplayFields);
   const isWord = options.theme === "word";
+  const hasIo = displayFields.includes("input") || displayFields.includes("output");
   const update = (patch: Partial<PngExportOptions>) => setOptions((prev) => ({ ...prev, ...patch }));
+  const toggleField = (field: NodeDisplayToggle) =>
+    setDisplayFields((prev) => (prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field]));
 
   const handleExport = () => {
     savePngExportOptions(options);
-    onExport(options);
+    onExport(options, displayFields);
   };
 
   return createPortal(
@@ -198,7 +235,36 @@ export function PngExportModal({ frame, onClose, onExport }: PngExportModalProps
           <div className="flex w-[560px] max-w-full shrink-0 flex-col">
             <div className="px-4 pt-3">
               <div className="mb-1.5 text-caption text-ink-secondary">{t("pngExport.preview")}</div>
-              <PngPreview options={options} />
+              <PngPreview options={options} displayFields={displayFields} />
+            </div>
+
+            {/* 표시 정보 — 두 테마 공통. 출력 순간에만 캔버스에 적용하고 끝나면 원래 표시로 돌아간다 */}
+            <div className="px-4 pt-3">
+              <div className="mb-1.5 text-caption text-ink-secondary">{t("pngExport.displayInfo")}</div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {DISPLAY_CHIP_ORDER.map((field) => {
+                  const Icon = TOGGLE_ICONS[field];
+                  return (
+                    <ToggleChip
+                      key={field}
+                      dataId={`png-export-field-${field}`}
+                      icon={<Icon size={14} strokeWidth={1.5} />}
+                      label={t(TOGGLE_LABEL_KEY[field])}
+                      on={displayFields.includes(field)}
+                      onToggle={() => toggleField(field)}
+                    />
+                  );
+                })}
+                <ShimmerPresence show={hasIo} dataId="png-export-expand-io-wrap" className="relative rounded-full">
+                  <ToggleChip
+                    dataId="png-export-expand-io"
+                    icon={<ListTree size={14} strokeWidth={1.5} />}
+                    label={t("pngExport.expandIo")}
+                    on={options.expandIo}
+                    onToggle={() => update({ expandIo: !options.expandIo })}
+                  />
+                </ShimmerPresence>
+              </div>
             </div>
 
             {/* 모드 안내 ↔ Word 옵션 — 같은 칸에 겹쳐 두어 전환 중 높이가 출렁이지 않게 한다 */}
@@ -385,8 +451,27 @@ function StyleThumb({ style }: { style: WordExportStyle }) {
   );
 }
 
-// 샘플 흐름 미리보기 — 실제 맵이 아니라 출력 모양의 차이(배경·색·병렬 표시·정보 블록)를 보여 준다
-function PngPreview({ options }: { options: PngExportOptions }) {
+// 미리보기 샘플 노드(요청 접수)에 그릴 표시 정보 줄 — 아이콘·문구. gmp(제목 위 필)·conditions(노드 밖 캡션)는 따로
+const SAMPLE_LINE_FIELDS: NodeDisplayToggle[] = ["assignee", "department", "system", "url", "params", "input", "output"];
+const SAMPLE_LINE_KEY: Partial<Record<NodeDisplayToggle, MessageKey>> = {
+  assignee: "pngExport.sampleRole",
+  department: "pngExport.sampleDept",
+  system: "pngExport.sampleSystem",
+  url: "pngExport.sampleUrl",
+  params: "pngExport.sampleParams",
+  input: "pngExport.sampleInput",
+  output: "pngExport.sampleOutput",
+};
+// 샘플 노드 세로 치수(viewBox) — 제목 줄 가운데가 60(연결선 높이), 위 여백·GMP 필·제목·표시 줄·아래 여백
+const TITLE_Y = 60;
+const PAD_Y = 8;
+const GMP_ROW = 12;
+const TITLE_ROW = 18;
+const LINE_ROW = 11;
+const LANE_Y = 96; // 되돌림 선 높이 — 교차 자리(CROSSING_POINTS)와 같은 값
+
+// 샘플 흐름 미리보기 — 실제 맵이 아니라 출력 모양의 차이(배경·색·병렬 표시·정보 블록·표시 정보)를 보여 준다
+function PngPreview({ options, displayFields }: { options: PngExportOptions; displayFields: NodeDisplayToggle[] }) {
   const { t } = useI18n();
   const isWord = options.theme === "word";
   const palette = isWord ? WORD_PALETTE : getScreenPalette();
@@ -396,6 +481,21 @@ function PngPreview({ options }: { options: PngExportOptions }) {
     `${t("export.infoVersion")} v3`,
     `${t("export.infoPublished")} 2026-10-14`,
   ];
+  // 샘플 노드 치수 — 켠 표시 정보만큼 아래로 길어진다(제목 줄 높이는 고정이라 연결선이 흔들리지 않는다)
+  const hasGmp = displayFields.includes("gmp");
+  const hasConditions = displayFields.includes("conditions");
+  const lineFields = SAMPLE_LINE_FIELDS.filter((field) => displayFields.includes(field));
+  const t1Top = TITLE_Y - TITLE_ROW / 2 - PAD_Y - (hasGmp ? GMP_ROW : 0);
+  const t1Bottom = TITLE_Y + TITLE_ROW / 2 + lineFields.length * LINE_ROW + PAD_Y;
+  // 분기 노드 입출력 — 알약(접힘) 또는 목록(펼침), 판단 마름모 오른쪽 아래
+  const decIo = (["input", "output"] as const).filter((side) => displayFields.includes(side));
+  const decIoBottom = decIo.length === 0 ? 0 : options.expandIo ? 90 + PAD_Y + decIo.length * LINE_ROW : 104;
+  const viewH = Math.max(VIEW_H_MIN, t1Bottom + (hasConditions ? 22 : 12), decIoBottom + 10);
+  // 되돌림 선 — 노드가 짧으면 아래 변으로, 길어 선 높이를 덮으면 오른쪽 변으로 들어간다
+  const loopPath =
+    t1Bottom >= LANE_Y + 3
+      ? `M410,82 L410,${LANE_Y} L197,${LANE_Y}`
+      : `M410,82 L410,${LANE_Y} L180,${LANE_Y} L180,${t1Bottom + 1}`;
   const edgeLabel = (x: number, y: number, label: string) => {
     const width = label.length * 9 + 10;
     return (
@@ -405,7 +505,7 @@ function PngPreview({ options }: { options: PngExportOptions }) {
           y={y - 7}
           width={width}
           height="14"
-          rx="7"
+          rx={palette.labelRadius}
           strokeWidth={1}
           style={{ fill: "var(--color-surface)", stroke: palette.labelStroke }}
         />
@@ -424,7 +524,7 @@ function PngPreview({ options }: { options: PngExportOptions }) {
           y={y}
           width={w}
           height={h}
-          rx={isTerm ? h / 2 : 3}
+          rx={isTerm ? h / 2 : palette.nodeRadius}
           strokeWidth={isWord ? 1 : 1.5}
           style={getShapeStyle(isTerm ? palette.termFill : palette.taskFill, isTerm ? palette.termStroke : palette.taskStroke)}
         />
@@ -471,7 +571,7 @@ function PngPreview({ options }: { options: PngExportOptions }) {
         </div>
       </ShimmerPresence>
       <div className="relative">
-        <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} className="block w-full" aria-hidden>
+        <svg viewBox={`0 0 ${VIEW_W} ${viewH}`} className="block w-full" aria-hidden>
           <path d="M72,60 L99,60" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
           <path d="M196,60 L214,60 L214,22 L231,22" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
           <path d="M196,60 L214,60 L214,118 L231,118" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
@@ -479,19 +579,19 @@ function PngPreview({ options }: { options: PngExportOptions }) {
           <path d="M332,118 L356,118 L356,60 L375,60" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
           <path d="M444,60 L465,60" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
           {/* 되돌림 — 두 세로 갈래와 교차한다(교차 표시 차이를 보여 주는 자리) */}
-          <path d="M410,82 L410,96 L148,96 L148,78" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
+          <path d={loopPath} fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
           <defs>
             <marker id="png-preview-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
               <path d="M0,0 L10,5 L0,10 z" style={{ fill: palette.edge, transition: COLOR_TRANSITION }} />
             </marker>
           </defs>
           {node(12, 47, 60, 26, "Start", "term")}
-          {node(100, 43, 96, 34, t("pngExport.sampleReceive"), "task")}
           {node(232, 5, 100, 34, t("pngExport.sampleBudget"), "task")}
           {node(232, 101, 100, 34, t("pngExport.sampleVendor"), "task")}
           <polygon
             points="410,38 444,60 410,82 376,60"
             strokeWidth={1.5}
+            strokeLinejoin={isWord ? "miter" : "round"}
             style={getShapeStyle(palette.decFill, palette.decStroke)}
           />
           <text x="410" y="60" textAnchor="middle" dominantBaseline="central" fontSize="10" style={{ fill: palette.ink }}>
@@ -499,15 +599,113 @@ function PngPreview({ options }: { options: PngExportOptions }) {
           </text>
           {node(466, 47, 48, 26, "End", "term")}
           {edgeLabel(455, 47, t("pngExport.sampleYes"))}
-          {edgeLabel(385, 96, t("pngExport.sampleNo"))}
+          {edgeLabel(385, LANE_Y, t("pngExport.sampleNo"))}
         </svg>
+        {/* 샘플 노드(요청 접수) — HTML로 겹쳐 그려 표시 정보 줄마다 쉬머로 생기고 사라진다. 높이는 줄 수만큼 늘어난다 */}
+        <div
+          data-id="png-export-preview-node"
+          className="absolute overflow-hidden border transition-[top,height,border-radius] duration-350 ease-smooth"
+          style={{
+            ...getBoxStyle(100, t1Top, 96, viewH),
+            height: `${((t1Bottom - t1Top) / viewH) * 100}%`,
+            padding: `${PAD_Y}px 6px`,
+            background: palette.taskFill,
+            borderColor: palette.taskStroke,
+            borderWidth: isWord ? 1 : 1.5,
+            borderRadius: palette.nodeRadius,
+          }}
+        >
+          <ShimmerPresence show={hasGmp} dataId="png-export-preview-gmp" className="relative flex rounded-full" style={{ height: GMP_ROW }}>
+            <span
+              className="rounded-full border px-1 text-[8px] leading-[10px]"
+              style={{ borderColor: isWord ? "var(--word-pill-stroke)" : "var(--color-hairline)", color: palette.sub }}
+            >
+              GMP Direct
+            </span>
+          </ShimmerPresence>
+          <div className="truncate text-center text-[11px]" style={{ height: TITLE_ROW, lineHeight: `${TITLE_ROW}px`, color: palette.ink }}>
+            {t("pngExport.sampleReceive")}
+          </div>
+          {SAMPLE_LINE_FIELDS.map((field) => {
+            const Icon = TOGGLE_ICONS[field];
+            const labelKey = SAMPLE_LINE_KEY[field];
+            return (
+              <ShimmerPresence
+                key={field}
+                show={displayFields.includes(field)}
+                dataId={`png-export-preview-line-${field}`}
+                className="relative flex items-center gap-1 rounded-xs text-[8px]"
+                style={{ height: LINE_ROW, color: palette.sub }}
+              >
+                <Icon size={8} strokeWidth={1.5} className="shrink-0" />
+                <span className="truncate">{labelKey ? t(labelKey) : ""}</span>
+              </ShimmerPresence>
+            );
+          })}
+        </div>
+        {/* 시작·종료 조건 — 노드 밖 위·아래 캡션 */}
+        <ShimmerPresence
+          show={hasConditions}
+          dataId="png-export-preview-cond-start"
+          className="absolute truncate rounded-xs text-[8px]"
+          style={{ ...getBoxStyle(100, t1Top - 11, 120, viewH), color: palette.sub }}
+        >
+          {`▷ ${t("pngExport.sampleStart")}`}
+        </ShimmerPresence>
+        <ShimmerPresence
+          show={hasConditions}
+          dataId="png-export-preview-cond-end"
+          className="absolute truncate rounded-xs text-[8px]"
+          style={{ ...getBoxStyle(100, t1Bottom + 2, 76, viewH), color: palette.sub }}
+        >
+          {`■ ${t("pngExport.sampleEnd")}`}
+        </ShimmerPresence>
+        {/* 분기 노드 입출력 — 접힘 알약 ↔ 펼친 목록(입출력 펼침) */}
+        <ShimmerPresence
+          show={decIo.length > 0 && !options.expandIo}
+          dataId="png-export-preview-dec-chip"
+          className="absolute flex items-center gap-1.5 rounded-full border px-1.5 text-[8px] leading-[12px]"
+          style={{ ...getBoxStyle(418, 88, 46, viewH), width: "auto", borderColor: palette.labelStroke, color: palette.sub, background: "var(--color-surface)" }}
+        >
+          {decIo.map((side) => {
+            const Icon = TOGGLE_ICONS[side];
+            return (
+              <span key={side} className="inline-flex items-center gap-0.5">
+                <Icon size={8} strokeWidth={1.5} />1
+              </span>
+            );
+          })}
+        </ShimmerPresence>
+        <ShimmerPresence
+          show={decIo.length > 0 && options.expandIo}
+          dataId="png-export-preview-dec-list"
+          className="absolute flex flex-col border px-1.5"
+          style={{
+            ...getBoxStyle(418, 90, 94, viewH),
+            paddingTop: 4,
+            paddingBottom: 4,
+            borderColor: palette.labelStroke,
+            borderRadius: palette.nodeRadius,
+            background: "var(--color-surface)",
+          }}
+        >
+          {decIo.map((side) => {
+            const Icon = TOGGLE_ICONS[side];
+            return (
+              <span key={side} className="flex items-center gap-1 text-[8px]" style={{ height: LINE_ROW, color: palette.sub }}>
+                <Icon size={8} strokeWidth={1.5} className="shrink-0" />
+                <span className="truncate">{t(side === "input" ? "pngExport.sampleDecInput" : "pngExport.sampleDecOutput")}</span>
+              </span>
+            );
+          })}
+        </ShimmerPresence>
         {CROSSING_POINTS.map(([x, y]) => (
           <Fragment key={`${x}:${y}`}>
             <ShimmerPresence
               show={isWord && options.crossing === "jump"}
               dataId={`png-export-preview-jump-${x}`}
               className="absolute"
-              style={getCrossingBoxStyle(x, y)}
+              style={getCrossingBoxStyle(x, y, viewH)}
             >
               <CrossingGlyph kind="jump" />
             </ShimmerPresence>
@@ -515,7 +713,7 @@ function PngPreview({ options }: { options: PngExportOptions }) {
               show={isWord && options.crossing === "gap"}
               dataId={`png-export-preview-gap-${x}`}
               className="absolute"
-              style={getCrossingBoxStyle(x, y)}
+              style={getCrossingBoxStyle(x, y, viewH)}
             >
               <CrossingGlyph kind="gap" />
             </ShimmerPresence>
@@ -528,7 +726,8 @@ function PngPreview({ options }: { options: PngExportOptions }) {
           className="absolute h-[10%] w-[1.6%] -translate-x-1/2 -translate-y-1/2"
           style={{
             left: `${(PARALLEL_MARK_X / VIEW_W) * 100}%`,
-            top: `${(PARALLEL_MARK_Y / VIEW_H) * 100}%`,
+            top: `${(PARALLEL_MARK_Y / viewH) * 100}%`,
+            height: `${(14 / viewH) * 100}%`,
             borderLeft: "1.25px solid var(--word-edge)",
             borderRight: "1.25px solid var(--word-edge)",
           }}

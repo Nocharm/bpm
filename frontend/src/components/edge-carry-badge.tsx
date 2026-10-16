@@ -51,7 +51,7 @@ export function EdgeCarryBadge({ items }: EdgeCarryBadgeProps) {
         data-id="edge-carry-dot"
         onMouseEnter={openCard}
         onMouseLeave={scheduleClose}
-        className="nodrag nopan pointer-events-auto inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full border-[1.5px] border-accent bg-surface px-1 text-[10px] font-semibold leading-none text-accent tabular-nums"
+        className="bpm-edge-carry nodrag nopan pointer-events-auto inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full border-[1.5px] border-accent bg-surface px-1 text-[10px] font-semibold leading-none text-accent tabular-nums"
       >
         {items.length}
       </span>

@@ -44,10 +44,18 @@ const REGION = `g-${tag}`;
 const START = node("start", "", 0, 160, { node_type: "start" });
 const T1 = node("t1", "구매 요청서 작성 및\n예산 코드 확인", 160, 140, { assignee_role: "요청자", system: "SAP", group_ids: [REGION] });
 const T2 = node("t2", "요청 접수", 420, 150, { assignee_role: "구매 담당", group_ids: [REGION], parallel_outputs: ["__primary__"] });
-const P1 = node("p1", "예산 잔액 검토", 680, 40, { assignee_role: "재무 담당", system: "SAP", color: "#c2849a" });
+// 입출력 링크(P1 산출물 → Q 입력물) — 연결선 전달물 점·링크 표식이 Word 출력에서 빠지는지 본다
+const IO_ITEM = `io-${tag}-budget`;
+const P1 = node("p1", "예산 잔액 검토", 680, 40, {
+  assignee_role: "재무 담당",
+  system: "SAP",
+  color: "#c2849a",
+  output: "예산 승인서",
+  output_ids: IO_ITEM,
+});
 const P2 = node("p2", "공급업체 이력 조회\n(최근 3년 거래 실적·품질 이슈 포함)", 680, 260, { assignee_role: "구매 담당", gmp: "direct" });
-const Q = node("q", "품질 검토 및 GMP 적합성 평가", 960, 150, { gmp: "indirect" });
-const D = node("d", "금액 1억 원\n초과 여부", 1240, 140, { node_type: "decision" });
+const Q = node("q", "품질 검토 및 GMP 적합성 평가", 960, 150, { gmp: "indirect", input: "예산 승인서", input_links: IO_ITEM });
+const D = node("d", "금액 1억 원\n초과 여부", 1240, 140, { node_type: "decision", input: "결재 기준표", output: "승인 결과" });
 const T3 = node("t3", "경영진 결재", 1480, 20, { assignee_role: "대표이사" });
 const T4 = node("t4", "팀장 결재", 1480, 160, { assignee_role: "구매팀장" });
 const T5 = node("t5", "추가 자료 요청 및\n요청 부서 회신", 1480, 320, { assignee_role: "구매 담당" });
@@ -192,6 +200,36 @@ await page.locator('[data-id="png-export-toggle-info"]').click();
 await page.locator('[data-id="png-export-toggle-parallel"]').click();
 await page.waitForTimeout(600);
 await download("word-navy-bare");
+
+// 표시 정보 — 입력물·산출물을 켜고 입출력 펼침, 미리보기에 줄이 생기는지 보고 그 보기로 출력한다
+await openModal();
+await page.locator('[data-id="png-export-toggle-info"]').click();
+for (const field of ["input", "output"]) {
+  const chip = page.locator(`[data-id="png-export-field-${field}"]`);
+  if ((await chip.getAttribute("aria-checked")) !== "true") await chip.click();
+}
+await page.waitForTimeout(200);
+await modal.screenshot({ path: `${OUT}/png-export-modal-fields-shimmer.png` });
+await page.waitForTimeout(500);
+check("preview shows io lines", (await page.locator('[data-id="png-export-preview-line-input"]').count()) === 1);
+await page.locator('[data-id="png-export-expand-io"]').click();
+await page.waitForTimeout(600);
+check("preview expands decision io", (await page.locator('[data-id="png-export-preview-dec-list"]').count()) === 1);
+await modal.screenshot({ path: `${OUT}/png-export-modal-fields.png` });
+await download("word-navy-io");
+// 출력 뒤 캔버스는 원래 표시 정보로 — 분기 IO 아일랜드는 다시 알약
+check("canvas back to own display after export", (await page.locator('[data-id="decision-io-island"][data-expanded="true"]').count()) === 0);
+
+// A4 가이드 — 보기 카드 스위치로 켜고 세로·가로 캡처
+await page.locator('[data-id="canvas-node-display-float-toggle"]').click();
+await page.locator('[data-id="canvas-a4-guide-toggle"]').click();
+await page.waitForTimeout(500);
+check("a4 guide draws on canvas", (await page.locator('[data-id="canvas-a4-guide"]').count()) === 1);
+await page.screenshot({ path: `${OUT}/png-export-a4-guide-portrait.png` });
+await page.locator('[data-id="canvas-a4-guide-paper-landscape"]').click();
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${OUT}/png-export-a4-guide-landscape.png` });
+await page.locator('[data-id="canvas-a4-guide-toggle"]').click();
 
 await browser.close();
 if (!KEEP) await api("DELETE", `/api/maps/${map.id}`).catch(() => undefined);

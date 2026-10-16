@@ -23,7 +23,8 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
 
-const TOGGLE_ICONS: Record<NodeDisplayToggle, LucideIcon> = {
+// PNG 내보내기 옵션 창(png-export-modal)도 같은 아이콘·라벨로 표시 정보 칩을 그린다
+export const TOGGLE_ICONS: Record<NodeDisplayToggle, LucideIcon> = {
   assignee: UserRound,
   department: Building2,
   system: Server,
@@ -35,7 +36,7 @@ const TOGGLE_ICONS: Record<NodeDisplayToggle, LucideIcon> = {
   conditions: Play,
 };
 
-const TOGGLE_LABEL_KEY: Record<NodeDisplayToggle, MessageKey> = {
+export const TOGGLE_LABEL_KEY: Record<NodeDisplayToggle, MessageKey> = {
   assignee: "field.assignee",
   department: "field.department",
   system: "field.system",

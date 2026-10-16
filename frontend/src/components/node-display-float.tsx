@@ -4,7 +4,7 @@
 "use client";
 
 import { Eye } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { NodeDisplaySection } from "@/components/node-display-section";
 import { PulseLegend } from "@/components/pulse-legend";
@@ -21,6 +21,8 @@ interface NodeDisplayFloatProps {
   compact?: boolean;
   // 흐름 점 범례 — 맵에 병렬·분기 펄스가 있을 때만. "still"은 정지 장면으로만 그리는 표면(비교 화면)
   pulseLegend?: "motion" | "still";
+  // 카드 맨 위 추가 조작(에디터 A4 가이드) — 비교 화면은 없음
+  topSlot?: ReactNode;
 }
 
 export function NodeDisplayFloat({
@@ -30,6 +32,7 @@ export function NodeDisplayFloat({
   idPrefix,
   compact = false,
   pulseLegend,
+  topSlot,
 }: NodeDisplayFloatProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -78,6 +81,7 @@ export function NodeDisplayFloat({
           data-id={`${idPrefix}-node-display-float`}
           className="absolute bottom-full right-0 mb-2 w-60 rounded-md border border-hairline bg-surface p-3 shadow-lg"
         >
+          {topSlot}
           <NodeDisplaySection
             flat
             idPrefix={idPrefix}

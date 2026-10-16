@@ -293,6 +293,7 @@ function NodeIoDetails({
     onSetIoListState,
     ioCheckPulse,
     onHoverIoLink,
+    printIoExpanded,
   } = useNodeActions();
   const isSubprocess = data.nodeType === "subprocess";
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
@@ -317,7 +318,8 @@ function NodeIoDetails({
         const Icon = FIELD_ICON[side];
         // 표시 3단계(#2): collapsed=헤더만 · capped=3.5줄 오버플로 히든 · all=전부. 화면 한정 상태
         const listKey = `${nodeId}:${side}`;
-        const listState = ioListStates.get(listKey) ?? "capped";
+        // 출력 중 펼침이면 접힘·줄 제한 없이 전부(문서에 잘린 목록이 남지 않게)
+        const listState = printIoExpanded ? "all" : (ioListStates.get(listKey) ?? "capped");
         const hiddenCount = Math.max(0, visible.length - 3);
         // 단일 항목은 목록 대신 행 하나로 — 헤더 생략, side 구분은 체크박스 자리 호버 아이콘이 담당.
         // 접힘 상태도 무시(헤더가 없어 다시 펼 수 없으므로) (사용자 요청 2026-08-27)
@@ -481,7 +483,7 @@ function NodeIoDetails({
                           data-id={`node-io-linked-${side}-${index}`}
                           title={t(linkState === "origin" ? "node.ioLinkedOrigin" : "node.ioLinkedMirror")}
                           // 첫 줄 높이(h-4=글자 줄 16px) 안에서 세로 가운데 — mt 오프셋은 10px 아이콘이 1px 위로 떴다
-                          className="flex h-4 shrink-0 items-center text-accent"
+                          className="bpm-io-link-mark flex h-4 shrink-0 items-center text-accent"
                         >
                           <Link2 size={10} strokeWidth={1.5} />
                         </span>
@@ -631,7 +633,7 @@ function DecisionIoIsland({
   data: AppNode["data"];
   selected: boolean;
 }) {
-  const { displayFields, ioChecks } = useNodeActions();
+  const { displayFields, ioChecks, printIoExpanded = false } = useNodeActions();
   const [hovered, setHovered] = useState(false);
   const closeTimer = useRef<number | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -667,7 +669,7 @@ function DecisionIoIsland({
   // 비교 화면 ioDiff 요약은 알약 대신 그대로(아일랜드는 IO 목록용)
   if (data.ioDiff) return <NodeIoDetails nodeId={nodeId} data={data} nodeSelected={selected} framed />;
   if (segments.length === 0) return null;
-  const expanded = selected || hovered;
+  const expanded = selected || hovered || printIoExpanded;
   const handleEnter = () => {
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
     closeTimer.current = null;
@@ -690,17 +692,22 @@ function DecisionIoIsland({
           ? "z-10 overflow-hidden rounded-sm border-transparent bg-transparent shadow-none"
           : "overflow-visible rounded-[9px] border-ink-tertiary/40 bg-surface shadow-sm"
       }`}
-      style={size ? { width: size.width, height: size.height } : undefined}
+      // 출력 펼침은 실측 크기 트랜지션 없이 내용 크기 그대로(캡처가 늘어나는 도중을 찍지 않게)
+      style={size && !printIoExpanded ? { width: size.width, height: size.height } : undefined}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
-      <div ref={contentRef} className={size ? "absolute left-0 top-0 w-max" : "w-max"}>
+      <div ref={contentRef} className={size && !printIoExpanded ? "absolute left-0 top-0 w-max" : "w-max"}>
         {expanded ? (
           // 좌우·아래 여백은 박스 그림자(shadow-sm)가 overflow-hidden에 잘리지 않게
-          <div key="list" className="bpm-island-in px-0.5 pb-1" style={{ width: ISLAND_LIST_WIDTH }}>
+          <div
+            key="list"
+            className={`${printIoExpanded ? "" : "bpm-island-in "}px-0.5 pb-1`}
+            style={{ width: ISLAND_LIST_WIDTH }}
+          >
             <NodeIoDetails nodeId={nodeId} data={data} nodeSelected framed />
           </div>
         ) : (

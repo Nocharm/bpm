@@ -4,12 +4,14 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 298개 · 2026-10-16 기준
+총 300개 · 2026-10-16 기준
 
 ## components/
 
 | 파일 | 컴포넌트 | 역할 | 사용처 |
 |------|----------|------|--------|
+| `a4-guide-control.tsx` | `A4GuideControl` | A4 가이드 스위치 + 세로/가로 | `app/maps/[mapId]/page.tsx` |
+| `a4-guide-overlay.tsx` | `A4GuideOverlay` | A4 가이드 | `app/maps/[mapId]/page.tsx` |
 | `activity-digest.tsx` | `ActivityDigest` | 미선택 우측 공용 다이제스트 | `app/inbox/page.tsx`, `app/notices/page.tsx` |
 | `add-node-menu.tsx` | `AddNodeMenu` | 좌측 사이드바 +노드 메뉴 | `components/editor-toolbar.tsx` |
 | `ai-button.tsx` | `AiButton` | AI 액션 버튼 | `components/admin/fw-level-actions.tsx`, `components/framework-interview/feedback-chat.tsx`, `components/framework-interview/plan-brief-panel.tsx`, `components/framework-interview/questionnaire-form.tsx`, `components/framework-interview/relations-step.tsx`, `components/framework-interview/task-panel.tsx` |
@@ -108,7 +110,7 @@
 | `node-details-card.tsx` | `NodeDetailsCard` | 인스펙터 I/O & Conditions 카드 | `app/maps/[mapId]/page.tsx` |
 | `node-details-fields.tsx` | `NodeDetailsFields` | 노드 상세(승격) 필드 편집 | `components/group-bulk-modal.tsx`, `components/node-details-card.tsx` |
 | `node-display-float.tsx` | `NodeDisplayFloat` | 캔버스 우하단 노드 표시 정보 플로팅 카드 | `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/page.tsx` |
-| `node-display-section.tsx` | `NodeDisplaySection` | Node display(캔버스 노드 표시 정보) 토글 섹션 | `app/maps/[mapId]/page.tsx`, `components/node-display-float.tsx` |
+| `node-display-section.tsx` | `NodeDisplaySection` | Node display(캔버스 노드 표시 정보) 토글 섹션 | `app/maps/[mapId]/page.tsx`, `components/node-display-float.tsx`, `components/png-export-modal.tsx` |
 | `node-metrics-card.tsx` | `NodeMetricsCard` | 인스펙터 수행 지표 카드 | `app/maps/[mapId]/page.tsx` |
 | `node-search.tsx` | `NodeSearch` | 노드 검색 | `app/maps/[mapId]/page.tsx` |
 | `node-selection-ring.tsx` | `NodeSelectionRing` |   | `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/page.tsx` |
@@ -137,7 +139,7 @@
 | `section-header.tsx` | `SectionHeader` | 섹션 헤더 | `components/maps/category-summary-card.tsx`, `components/maps/map-detail-description.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/maps/map-notes-section.tsx` |
 | `section-overlay.tsx` | `SectionOverlay` | 섹션 덮개 | `app/maps/[mapId]/page.tsx`, `components/admin/import-report/interview-import-report.tsx`, `components/nav-pending-scope.tsx` |
 | `self-publish-popover.tsx` | `SelfPublishPopover` | 셀프 게시 확인 팝오버 | `app/maps/[mapId]/page.tsx`, `components/permissions/versions-publish-panel.tsx` |
-| `shimmer-presence.tsx` | `ShimmerPresence` | 등장·퇴장 쉬머 래퍼 | `components/png-export-modal.tsx` |
+| `shimmer-presence.tsx` | `ShimmerPresence` | 등장·퇴장 쉬머 래퍼 | `components/a4-guide-control.tsx`, `components/png-export-modal.tsx` |
 | `skeleton.tsx` | `SkeletonBlock`, `SkeletonLine`, `SkeletonPill`, `SkeletonCard` | 스켈레톤 플레이스홀더 | `app/notices/page.tsx`, `components/admin/import-report/person-pill.tsx`, `components/map-ownership-section.tsx`, `components/maps/approvals-card.tsx`, `components/maps/dashboard-activity-tiles.tsx`, `components/maps/dashboard-profile.tsx`, `components/maps/framework-card.tsx`, `components/maps/home-skeleton.tsx`, `components/maps/recent-events-card.tsx`, `components/user-pill.tsx` |
 | `status-badge.tsx` | `StatusBadge` | 버전 라이프사이클 상태 pill | `app/maps/[mapId]/page.tsx`, `components/approval-panel.tsx` |
 | `subprocess-inspector-card.tsx` | `SubprocessInspectorCard` | 인스펙터 서브프로세스 카드 | `app/maps/[mapId]/page.tsx` |

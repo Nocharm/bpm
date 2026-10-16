@@ -88,7 +88,7 @@ function renderEdge(props: EdgeProps, resolved: EdgePathResult) {
           >
           {label ? (
           <div
-            className="whitespace-pre-wrap text-center leading-tight"
+            className="bpm-edge-label whitespace-pre-wrap text-center leading-tight"
             data-mirrored={mirrored ? "true" : undefined}
             style={{
               // 최대폭 + 자동 줄바꿈 — 긴 라벨이 이웃 노드를 덮지 않게 (사용자 요청 2026-08-23 #6).

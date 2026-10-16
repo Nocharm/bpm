@@ -1583,16 +1583,26 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 .bpm-export-word .bpm-node-badge {
   display: none !important;
 }
-.bpm-export-word .react-flow__edgelabel-renderer > div {
+/* 연결선 라벨 — 안쪽 라벨(bpm-edge-label)만 덮는다. 바깥 묶음(라벨+전달물 점)에 그리면 테두리가 두 겹이 됐다.
+   Yes/No 분기 색도 여기서 문서 톤 하나로 */
+.bpm-export-word .bpm-edge-label {
   background: #ffffff !important;
   border-color: var(--word-label-stroke) !important;
   border-width: 1px !important;
-  border-radius: 999px !important;
+  border-radius: 3px !important;
   color: var(--word-ink) !important;
   box-shadow: none !important;
 }
-.bpm-export-word .react-flow__edgelabel-renderer > div:not([data-mirrored]) {
+.bpm-export-word .bpm-edge-label:not([data-mirrored]) {
   border-style: solid !important;
+}
+/* 연결선 전달물 개수 점·입출력 링크 표식은 화면 탐색용 — 문서엔 뺀다 */
+.bpm-export-word :is(.bpm-edge-carry, .bpm-io-link-mark) {
+  display: none !important;
+}
+/* 각진 모서리 — 화면 라운드(rounded-sm)를 따르지 않는다. 터미널은 순서도 관례(알약)라 유지 */
+.bpm-export-word :is([data-shell="process"], [data-shell="subprocess"], [data-shell="decision"]) {
+  border-radius: 2px !important;
 }
 .bpm-export-word .bpm-group-title {
   background: transparent !important;

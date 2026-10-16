@@ -95,6 +95,8 @@ export interface PngExportOptions {
   paper: PaperOrientation;
   // 그림 너비 — 본문 폭 대비 %(30..100). Word에 넣으면 이 크기로 들어가도록 PNG에 DPI를 싣는다
   printWidthPct: number;
+  // 입출력 목록을 줄 제한 없이 펼쳐 찍고 분기 노드 IO 아일랜드도 목록으로 편다(두 테마 공통)
+  expandIo: boolean;
 }
 
 /** Word 모드 실행 인자 — 옵션 + 호출측이 번역한 범례 문구. */
@@ -117,6 +119,7 @@ const DEFAULT_PNG_EXPORT_OPTIONS: PngExportOptions = {
   crossing: "jump",
   paper: "portrait",
   printWidthPct: 100,
+  expandIo: false,
 };
 
 /** 마지막 선택 — 저장값이 없거나 깨졌으면 기본값(화면 그대로). */
@@ -140,6 +143,7 @@ export function loadPngExportOptions(): PngExportOptions {
         value.printWidthPct <= PRINT_WIDTH_PCT_MAX
           ? value.printWidthPct
           : DEFAULT_PNG_EXPORT_OPTIONS.printWidthPct,
+      expandIo: typeof value.expandIo === "boolean" ? value.expandIo : DEFAULT_PNG_EXPORT_OPTIONS.expandIo,
     };
   } catch {
     // 사생활 모드·차단된 저장소 — 기본값으로 진행(기억은 편의 기능)
@@ -214,6 +218,19 @@ export function getPrintPlan(
     nodeTextPt: (NODE_TITLE_PX * frame.zoom * widthInch * PT_PER_INCH) / frame.width,
   };
 }
+
+/** A4 가이드 경계 — 노드 제목이 readablePt·minimumPt로 인쇄되는 캡처 프레임 폭(css px, 여백 50 포함). 에디터 가이드 선이 쓴다. */
+export const A4_GUIDE_READABLE_PT = 9;
+export const A4_GUIDE_MINIMUM_PT = 7;
+
+export function getA4GuideWidths(paper: PaperOrientation): { readable: number; minimum: number; contentWidthCm: number } {
+  const contentWidthCm = (paper === "portrait" ? A4_SHORT_CM : A4_LONG_CM) - WORD_PAGE_MARGIN_CM * 2;
+  const widthAt = (pt: number) => (NODE_TITLE_PX * (contentWidthCm / CM_PER_INCH) * PT_PER_INCH) / pt;
+  return { readable: widthAt(A4_GUIDE_READABLE_PT), minimum: widthAt(A4_GUIDE_MINIMUM_PT), contentWidthCm };
+}
+
+/** 가이드 선 기준 왼쪽 끝 — 내보내기 프레임과 같은 여백(PADDING_PX)만큼 노드 bounds 바깥. */
+export const A4_GUIDE_PADDING_PX = PADDING_PX;
 
 // PNG CRC32(IEEE) — pHYs 청크 무결성
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
@@ -502,6 +519,7 @@ function applyEdgeFixups(
       setImportant(outline, "stroke", word.palette.regionStroke);
       setImportant(outline, "stroke-dasharray", word.palette.regionDash);
       setImportant(outline, "stroke-width", "1");
+      setImportant(outline, "stroke-linejoin", "miter"); // 문서용은 각진 모서리
     }
     // SP 상태 배너(새 게시본·핀 고정·미지정 안내)는 편집 안내라 문서엔 뺀다 — 노드 높이도 함께 줄어든다
     for (const banner of viewport.querySelectorAll('[data-id^="sp-banner-"]')) {

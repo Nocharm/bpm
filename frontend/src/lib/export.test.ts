@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   findAxisRuns,
+  getA4GuideWidths,
   findCrossings,
   getPrintPlan,
   loadPngExportOptions,
@@ -24,6 +25,7 @@ describe("loadPngExportOptions", () => {
       crossing: "jump",
       paper: "portrait",
       printWidthPct: 100,
+      expandIo: false,
     });
   });
 
@@ -36,6 +38,7 @@ describe("loadPngExportOptions", () => {
       crossing: "gap",
       paper: "landscape",
       printWidthPct: 60,
+      expandIo: true,
     } as const;
     savePngExportOptions(saved);
     expect(loadPngExportOptions()).toEqual(saved);
@@ -52,6 +55,7 @@ describe("loadPngExportOptions", () => {
         crossing: "bridge",
         paper: "letter",
         printWidthPct: 140,
+        expandIo: "yes",
       }),
     );
     expect(loadPngExportOptions()).toEqual({
@@ -62,6 +66,7 @@ describe("loadPngExportOptions", () => {
       crossing: "jump",
       paper: "portrait",
       printWidthPct: 100,
+      expandIo: false,
     });
   });
 
@@ -139,6 +144,18 @@ describe("getPrintPlan", () => {
     const plan = getPrintPlan({ width: 4096, height: 4096, zoom: 0.5 }, { paper: "landscape", printWidthPct: 100, showInfo: true });
     expect(plan.pixelRatio).toBe(2);
     expect(plan.nodeTextPt).toBeCloseTo((7 * (24.62 / 2.54) * 72) / 4096);
+  });
+});
+
+describe("getA4GuideWidths", () => {
+  it("returns the frame widths that print node titles at 9pt and 7pt", () => {
+    const portrait = getA4GuideWidths("portrait");
+    expect(portrait.readable).toBeCloseTo((14 * (15.92 / 2.54) * 72) / 9);
+    expect(portrait.minimum).toBeCloseTo((14 * (15.92 / 2.54) * 72) / 7);
+    // 가이드 폭으로 찍으면 인쇄 계획이 정확히 9pt를 낸다(두 계산이 같은 식)
+    const plan = getPrintPlan({ width: portrait.readable, height: 400, zoom: 1 }, { paper: "portrait", printWidthPct: 100, showInfo: false });
+    expect(plan.nodeTextPt).toBeCloseTo(9);
+    expect(getA4GuideWidths("landscape").readable).toBeGreaterThan(portrait.readable);
   });
 });
 
