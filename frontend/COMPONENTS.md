@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 303개 · 2026-10-16 기준
+총 305개 · 2026-10-17 기준
 
 ## components/
 
@@ -46,6 +46,7 @@
 | `data-form-picker.tsx` | `DataFormPicker` | IO 항목별 데이터 폼 피커 | `components/multi-value-input.tsx` |
 | `dept-pill.tsx` | `DeptPill` | 부서 말단 필 | `components/admin/category-dept-modal.tsx`, `components/attribute-read-rows.tsx`, `components/maps/category-summary-card.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/framework-access-panel.tsx`, `components/permissions/pending-approvals-panel.tsx`, `components/permissions/subprocess-designation-panel.tsx` |
 | `dev-login-modal.tsx` | `DevLoginModal` | 로컬(인증 OFF) 임시 로그인 피커 | `app/login/page.tsx` |
+| `drop-zone-overlay.tsx` | `DropZoneOverlay` | 노드 드래그-오버 4방향 드롭 링(앞·뒤·스왑·영역) | `app/maps/[mapId]/page.tsx` |
 | `edge-action-modal.tsx` | `EdgeActionModal` | 출력 1개 충돌 시 선택 모달 | `app/maps/[mapId]/page.tsx` |
 | `edge-branch-modal.tsx` | `EdgeBranchModal` | 판단(decision) 노드에서 엣지를 연결할 때 뜨는 분기 선택 | `app/maps/[mapId]/page.tsx` |
 | `edge-carry-badge.tsx` | `EdgeCarryBadge` | 연결선 전달물 개수 점 + 호버 카드 | `app/maps/[mapId]/compare/page.tsx`, `components/multiline-edge.tsx` |
@@ -76,6 +77,7 @@
 | `framework-tree-picker.tsx` | `FrameworkTreePicker` | 연계 캔버스용 framework 트리 피커 | `app/framework/consult/[sessionId]/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/framework-connect-dialog.tsx`, `components/framework-interview/external-l6-modal.tsx` |
 | `gmp-notice-popover.tsx` | `GmpNoticePopover` | GMP 분류 확정 안내 팝오버 | `app/maps/[mapId]/page.tsx` |
 | `gmp-picker-popup.tsx` | `GmpColorSwatch`, `GmpPickerPopup` | GMP 분류 픽커 팝업 | `app/maps/[mapId]/page.tsx`, `components/gmp-notice-popover.tsx` |
+| `group-box-layer.tsx` | `GroupBoxLayer` | 에디터 영역(그룹) 박스 층 | `app/maps/[mapId]/page.tsx` |
 | `group-box.tsx` | `GroupBox` | 업무 묶음 박스 | `app/maps/[mapId]/page.tsx` |
 | `group-bulk-modal.tsx` | `GroupBulkModal` | 그룹 멤버 일괄 편집 | `app/maps/[mapId]/page.tsx` |
 | `group-title-bar.tsx` | `GroupTitleBar` | 그룹 박스 타이틀바 | `app/maps/[mapId]/page.tsx` |

@@ -5,6 +5,7 @@
 
 ## 2026-10-17 — 출력 라운드 후속 정리 (dev)
 
+- 축소 드래그 성능: 영역(그룹) 멤버는 드래그 동결(#R2)에서 빠져 프레임마다 nodes를 커밋했고, 그때마다 페이지·노드·엣지 전부가 다시 렌더됐다(시드 120노드 맵 한 제스처에 노드 재렌더 ~1.2만). 영역 박스를 `GroupBoxLayer`로 떼어 라이브 좌표 신호(`lib/drag-live`)만 구독하게 하고 영역 멤버도 동결, 드롭 링·합류 강조는 `lib/drop-target` 스토어로 옮겨 드래그 중 페이지 렌더 0. 운영 빌드 A/B(새 시드 3회, 첫 제스처): drag-fit p95 33.4→16.8ms, 33ms 초과 ~55→~3프레임, 메인 스레드 95→63%, 노드 재렌더 ~12,200→~540. idle·pan·zoom 동일 60fps. 노드별 엣지 셀렉터는 이제 샘플 1.4%라 유지. `pw-perf-canvas` 계측 보강(`RENDERS`·`WHY`·`DRAG_FIT_NODE`·`DRAG_PACE`·`CPU_THROTTLE`·재렌더 계수)·스모크 `pw-verify-group-drag-live`.
 - webpack 빌드: page.tsx가 테스트용으로 export하던 `toAppEdges`·`buildGraph`(+`normalizeEdgeLineStyle`)를 `lib/graph-serialize.ts`로 옮겼다(Next 페이지 모듈은 허용된 export만 — `--webpack` 타입 검사 실패, 배포 Turbopack은 무관했다). 동작 불변, 두 빌드·vitest 통과.
 
 ## 2026-10-16 — 출력 형식 전수 개선: Excel·CSV·비교 PNG·다운로드 (dev, 3갈래 병렬 머지)

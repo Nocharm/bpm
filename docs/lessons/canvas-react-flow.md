@@ -35,4 +35,8 @@
 - 프론트 로드 경로는 `toAppEdges`가 정규화한다(SP 소스의 변 id→`__primary__`, SP 타깃의 변 id→`in` 변형). 이게 없으면 CSV·AI가 만든 핸들 없는 엣지도 같은 방식으로 사라진다.
 - 핸들이 맞아도 사라질 수 있다: **끝 핸들은 링크 맵 해석(resolved)이 도착한 뒤에 늘어나므로**, `SubprocessHandles`가 끝 키 집합이 바뀔 때마다 `updateNodeInternals`를 호출해야 보조 끝 저장 엣지가 로드 직후 렌더된다(RF handleBounds가 스테일).
 
+## 7. 드래그 성능 — 페이지가 다시 렌더되면 노드·엣지 전부가 다시 그려진다
+- 드래그 프레임에 `nodes` state를 커밋하면 MapEditor가 다시 렌더되고, RF `StoreUpdater`가 새 노드 배열을 스토어에 넣어 **노드·엣지 래퍼 전부**가 다시 렌더된다(120노드 맵 한 제스처에 노드 재렌더 1.2만 회). 프레임 경로는 `storeApi.setNodes` 직행(동결 #R2)만 쓰고, 드래그 중 바뀌는 화면 조각(영역 박스·드롭 링·합류 강조)은 모듈 스토어 + `useSyncExternalStore`로 그 조각만 구독한다(`lib/drag-live.ts`·`lib/drop-target.ts`, `GroupBoxLayer`·`DropZoneOverlay`). 2026-10-17 전엔 영역 멤버가 동결에서 빠져 영역을 쓰는 맵의 축소 드래그가 메인 스레드를 95% 채웠다.
+- 측정 함정(`scripts/pw-perf-canvas.mjs`): ① `PROFILE`(CPU 프로파일러)은 깊은 커밋 스택에서 오버헤드가 커져 비싼 쪽을 몇 배 과장한다 — 프레임 수치는 끈 실행으로. ② 드롭이 맵을 바꾼다(자동 저장·영역 이탈) — `RUNS=3` 중앙값은 첫 제스처의 차이를 묻을 수 있어 A/B는 `RUNS=1`로 새 시드를 여러 번. ③ 원인 귀속은 `next build --profile --no-mangling` + `RENDERS=1 WHY=<컴포넌트>`(커밋별 실제 렌더·바뀐 훅), 운영 빌드에선 출력의 `re-render node/edge`(DOM `__reactProps` 교체 수)로 확인.
+
 관련 메모리: 인라인 자식 React Flow 함정 / 브라우저 검증 하네스.

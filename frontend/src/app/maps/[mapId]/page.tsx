@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MessageSquare, Monitor, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pencil, PencilLine, Plus, Redo2, RotateCcw, Route, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeftRight, ArrowRight, BadgeCheck, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MessageSquare, Monitor, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pencil, PencilLine, Plus, Redo2, RotateCcw, Route, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -122,6 +122,8 @@ import { deriveSlotState, isRecentHandover } from "@/lib/framework-slot-state";
 import { hasSlotHistory, L5NodeInfoPanel, type L5NodeInfo } from "@/components/l5-node-info-panel";
 import { FrameworkTreePicker } from "@/components/framework-tree-picker";
 import { GroupBox } from "@/components/group-box";
+import { GroupBoxLayer } from "@/components/group-box-layer";
+import { DropZoneOverlay } from "@/components/drop-zone-overlay";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-dialog";
@@ -174,7 +176,6 @@ import {
   withSubprocessHandles,
   pickDropZone,
   DROPZONE_HIT_OUTER_PAD,
-  rectWithExclusions,
   branchKindOf,
   canSwapTypes,
   isCopyableNodeType,
@@ -212,7 +213,16 @@ import {
   type ProcessNodeType,
 } from "@/lib/canvas";
 import { buildFanGeom, injectFanLanes } from "@/lib/edge-fanout";
+import { generalDragLive, notifyDragLive } from "@/lib/drag-live";
+import {
+  getDropTarget,
+  getGroupDropTarget,
+  setDropTarget,
+  setGroupDropTarget,
+  type ScreenRect,
+} from "@/lib/drop-target";
 import { buildGraph, normalizeEdgeLineStyle, toAppEdges } from "@/lib/graph-serialize";
+import { GROUP_PAD, GROUP_TITLE_GAP } from "@/lib/group-boxes";
 import {
   applyReconnect,
   checkReconnect,
@@ -388,15 +398,9 @@ const nodeTypes: NodeTypes = { process: ProcessNode };
 // 돌려줘 RF가 무변경 노드를 리렌더하지 않게 한다. 종전엔 오프셋≠0인 노드 전부가 displayNodes
 // 재계산(드래그 프레임마다)에서 새 객체가 돼 전 노드 리렌더를 유발했다. WeakMap이라 노드 교체 시 자동 회수.
 const shiftedNodeCache = new WeakMap<AppNode, { yOff: number; out: AppNode }>();
-// 일반 드래그 동결(#R2) 중 제스처 노드의 라이브 표시좌표 — 프레임마다 setState 없이(페이지 리렌더 0)
-// RF 스토어 직행 echo(dropDraggingPositions)와 displayNodes 재계산 시 오버레이가 함께 읽는다.
-// shiftedNodeCache처럼 단일 에디터 인스턴스 전제 모듈 캐시(마운트·제스처 시작/종료 시 clear).
-const generalDragLive = new Map<string, { x: number; y: number }>();
 
 const DWELL_MS = 300; // 노드 위에 머무는 시간이 이만큼 넘으면 드롭 영역(앞/그룹/뒤) 표시
 const DROP_GAP = 24; // 삽입 시 A를 B 좌/우로 떨어뜨리는 간격
-const GROUP_PAD = 16; // 그룹 박스가 멤버 bounding box를 감싸는 여백
-const GROUP_TITLE_GAP = 26; // 박스 상단에 타이틀바를 얹을 추가 여백 — 멤버 노드와 제목 겹침 방지
 const EXTENT_MARGIN = 600; // 우/하단 패닝·노드 여백 — 콘텐츠 성장 여유
 const EXTENT_TOPLEFT_MARGIN = 120; // 좌/상단 여백 — 작게(좌상단 고정: 위/왼쪽으로 콘텐츠가 가운데로 밀리지 않게)
 const MIN_ZOOM = 0.2; // 최소 줌 — translateExtent 우하단 확장(pane/MIN_ZOOM)이 이 값과 일치해야 줌아웃 centering 방지
@@ -427,7 +431,6 @@ const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 부채
 const ZONE_TILE_H = 58; // 링을 시야로 끌어오는 패닝 여유(ensureRingVisible) 계산용
 const AI_WINDOW_KEY = "ai"; // windowGeom 맵에서 AI 플로팅 창 기하 키 (스코프 키와 충돌 없음)
 
-type ScreenRect = { left: number; top: number; width: number; height: number; radius: number };
 
 // 색 프리셋 — 첫 항목(빈 값)은 타입 기본색. 세련된 무채도(muted) 8톤 stroke(데이터/출력 예외).
 // 노드 타입별 사용 가능 색 세트 (#8) — 첫 항목 ""=타입 기본색.
@@ -1288,21 +1291,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 전체 일괄 변경 확인 모달 — 선택한 목표 스타일(null=닫힘)
   const [bulkEdgeStyle, setBulkEdgeStyle] = useState<EdgeLineStyle | null>(null);
 
-  // 드래그-오버 드롭 영역 (Phase 1: 앞/뒤 흐름 삽입). rect는 활성 시점에 계산해 저장(렌더 중 ref 접근 회피).
-  const [dropTarget, setDropTarget] = useState<{
-    id: string;
-    zone: DropZone | null;
-    rect: ScreenRect;
-    // 시작/끝 규칙 위반으로 비활성화된 흐름존 — 활성 시점에 계산(렌더 중 ref 접근 회피)
-    frontBlocked: boolean;
-    backBlocked: boolean;
-    // 다른 종류 노드라 비활성화된 스왑존(subprocess↔process 예외 외)
-    swapBlocked: boolean;
-  } | null>(null);
-  // 드래그 노드가 기존 그룹 박스 빈 영역 위에 머무는 중 — 합류 대상 그룹 id(펄스 강조)
-  const [groupDropTarget, setGroupDropTarget] = useState<string | null>(null);
-  const dropTargetRef = useRef<typeof dropTarget>(null);
-  const groupDropTargetRef = useRef<string | null>(null);
+  // 드래그-오버 드롭 영역(노드 4방향 링)·영역 합류 대상은 lib/drop-target 스토어 — 드래그 중 바뀌어도 페이지는
+  // 다시 렌더하지 않고 DropZoneOverlay·GroupBoxLayer만 구독해 갱신한다(축소 드래그 성능).
   const dwellRef = useRef<{ id: string; since: number } | null>(null);
   const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 현재 드래그 중인 노드 id — 드롭존 흐름 규칙(시작/끝) 판정에 드래그 노드 타입이 필요
@@ -1560,7 +1550,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const renderYOffsetsRef = useRef<ReadonlyMap<string, number>>(new Map());
   // 드래그 제스처 동결 오프셋 미러 — dropDraggingPositions(정의가 앞선 useCallback)의 선형 역변환용. TDZ 회피.
   const dragYOffsetsRef = useRef<ReadonlyMap<string, number>>(new Map());
-  // 일반 드래그 동결(#R2) 활성 플래그 — 제스처 시작 시 판정(captureGeneralDragFreeze: 그룹 멤버·인라인 제외), 종료 시 해제.
+  // 일반 드래그 동결(#R2) 활성 플래그 — 제스처 시작 시 판정(captureGeneralDragFreeze: 인라인 펼침 제외), 종료 시 해제.
   const generalFreezeRef = useRef(false);
   // 마지막 렌더된 RF nodes prop(displayNodes) 미러 — 동결 드래그 프레임의 스토어 echo 베이스(dropDraggingPositions).
   const displayNodesRef = useRef<AppNode[]>([]);
@@ -1942,6 +1932,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               return live ? { ...node, position: { x: live.x, y: live.y }, dragging: true } : node;
             }),
           );
+          notifyDragLive(); // 영역 박스 층(GroupBoxLayer)만 라이브 추종 — 페이지는 다시 렌더하지 않는다
         }
       }
       // height-shift(#1) 역변환 — RF가 흘려보내는 position은 표시 좌표(오프셋 포함)라
@@ -2049,12 +2040,6 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     groupsRef.current = groups;
   }, [groups]);
-  useEffect(() => {
-    dropTargetRef.current = dropTarget;
-  }, [dropTarget]);
-  useEffect(() => {
-    groupDropTargetRef.current = groupDropTarget;
-  }, [groupDropTarget]);
   useEffect(() => {
     dragLiveByIdRef.current = dragLiveById;
   }, [dragLiveById]);
@@ -5656,7 +5641,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       dragCursorRef.current = { x: curX, y: curY };
 
       // 이미 떠 있는 링 — 커서가 유지 경계 안이면 zone만 갱신, 밖으로 나가면 해제 후 재탐지
-      const active = dropTargetRef.current;
+      const active = getDropTarget();
       if (active && active.id !== node.id) {
         const r = active.rect;
         const cx = r.left + r.width / 2;
@@ -7295,18 +7280,18 @@ function MapEditor({ mapId }: { mapId: number }) {
     setDragYOffsets(null);
   }
 
-  // 일반 드래그 동결(#R2) 게이트 — 제스처 시작 시 판정. 그룹 멤버가 끼면 그룹 박스(nodes 기반 memo)가
-  // 라이브 추종해야 하므로 동결하지 않고 기존 per-frame 커밋 경로를 유지한다. 인라인 펼침 중엔 전용
-  // 경로(dragLiveById·suppressPosIdsRef)가 담당하므로 역시 비활성.
-  function captureGeneralDragFreeze(dragged: AppNode[]) {
+  // 일반 드래그 동결(#R2) 게이트 — 제스처 시작 시 판정. 인라인 펼침 중엔 전용 경로(dragLiveById·
+  // suppressPosIdsRef)가 담당하므로 비활성. 영역 멤버도 동결한다 — 영역 박스는 GroupBoxLayer가 라이브 신호
+  // (lib/drag-live)를 구독해 따라간다(종전엔 영역 멤버 드래그가 프레임마다 nodes를 커밋해 페이지·전 노드·전 엣지가
+  // 다시 렌더됐다 — 영역을 쓰는 맵의 축소 드래그 병목).
+  function captureGeneralDragFreeze() {
     generalDragLive.clear();
-    generalFreezeRef.current =
-      inlineCompositionRef.current === null &&
-      dragged.every((node) => node.data.groupIds.length === 0);
+    generalFreezeRef.current = inlineCompositionRef.current === null;
   }
   function clearGeneralDragFreeze() {
     generalFreezeRef.current = false;
     generalDragLive.clear();
+    notifyDragLive();
   }
 
   const inlineComposition = useMemo(() => {
@@ -7965,6 +7950,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [displayNodes]);
   useEffect(() => {
     generalDragLive.clear(); // 모듈 캐시 — 리마운트 잔존 방지
+    setDropTarget(null);
+    setGroupDropTarget(null);
   }, []);
 
   // 엣지 렌더 변환 — 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange) 등.
@@ -8168,100 +8155,6 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 흐름 점 범례(우하단 노드 표시 정보 카드) — 펄스가 붙은 엣지가 하나라도 있을 때만
   const hasFlowPulse = styledEdges.some((edge) => isEdgePulse(edge.data?.pulse));
 
-  // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
-  // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
-  const groupBoxes = useMemo(() => {
-    // 인라인 펼침 중엔 그룹 박스 숨김 — 노드가 dagre로 재배치돼 raw 위치 기준 박스가 어긋나는 것 방지(Phase 2 단순화)
-    if (expandedInline.size > 0) {
-      return [];
-    }
-    // 저장좌표(nodes)에 height-shift 표시 오프셋을 더해야 멤버가 실제 렌더 위치(밀려난 하단)와 일치한다(I2).
-    const dispY = (node: AppNode) => node.position.y + (renderYOffsets.get(node.id) ?? 0);
-    return groups.flatMap((group) => {
-      const members = nodes.filter((node) => node.data.groupIds.includes(group.id));
-      if (members.length === 0) {
-        return [];
-      }
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-      for (const member of members) {
-        const w = member.measured?.width ?? NODE_WIDTH;
-        const h = member.measured?.height ?? NODE_HEIGHT;
-        const my = dispY(member);
-        minX = Math.min(minX, member.position.x);
-        minY = Math.min(minY, my);
-        maxX = Math.max(maxX, member.position.x + w);
-        maxY = Math.max(maxY, my + h);
-      }
-      // 멤버 많을수록 패딩↑ → 큰 그룹이 작은 그룹을 시각적으로 감쌈
-      const pad = GROUP_PAD + Math.min(members.length, 8) * 4;
-      const originX = minX - pad;
-      const originY = minY - pad - GROUP_TITLE_GAP;
-      const width = maxX - minX + pad * 2;
-      const height = maxY - minY + pad * 2 + GROUP_TITLE_GAP;
-      // 기본 사각형(멤버 padded bbox)에서, 범위 안에 들어온 비멤버 노드를 가장 가까운 변쪽으로 잘라냄.
-      // 좌표는 박스 좌상단(origin) 기준 상대. y는 타이틀바 헤드룸(GROUP_TITLE_GAP)만큼 내림.
-      const intruderMargin = 8;
-      const intruders = nodes
-        .filter((node) => !node.data.groupIds.includes(group.id))
-        .flatMap((node) => {
-          const w = node.measured?.width ?? NODE_WIDTH;
-          const h = node.measured?.height ?? NODE_HEIGHT;
-          const ny = dispY(node);
-          // 멤버 padded bbox와 겹치는 비멤버만
-          if (
-            node.position.x >= maxX + pad ||
-            node.position.x + w <= minX - pad ||
-            ny >= maxY + pad ||
-            ny + h <= minY - pad
-          ) {
-            return [];
-          }
-          return [
-            {
-              x: node.position.x - intruderMargin - originX,
-              y: ny - intruderMargin - originY,
-              w: w + intruderMargin * 2,
-              h: h + intruderMargin * 2,
-            },
-          ];
-        });
-      // 멤버 노드(작은 여백)는 notch보다 우선 — notch가 멤버를 반만 자르지 않게 비껴감
-      const memberKeep = 6;
-      const memberRects = members.map((member) => {
-        const w = member.measured?.width ?? NODE_WIDTH;
-        const h = member.measured?.height ?? NODE_HEIGHT;
-        return {
-          x: member.position.x - memberKeep - originX,
-          y: dispY(member) - memberKeep - originY,
-          w: w + memberKeep * 2,
-          h: h + memberKeep * 2,
-        };
-      });
-      const region = rectWithExclusions(
-        { x: 0, y: GROUP_TITLE_GAP, w: width, h: height - GROUP_TITLE_GAP },
-        intruders,
-        memberRects,
-      );
-      return [
-        {
-          id: group.id,
-          label: group.label,
-          color: group.color,
-          x: originX,
-          y: originY,
-          width,
-          height,
-          fill: region.fill,
-          outline: region.outline,
-          // 멤버 적은 그룹이 위(z 큼). 전부 노드(z:0)보다 뒤
-          z: -members.length,
-        },
-      ];
-    });
-  }, [nodes, groups, expandedInline, renderYOffsets]);
 
   // 노드 위치(nodeExtent)·패닝(translateExtent) 허용 범위 = 콘텐츠 bbox + 사방 대칭 여백(무한 캔버스 느낌, 자유 패닝).
   const contentExtent = useMemo<
@@ -10231,7 +10124,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         );
                         setDragFrozenField(heightFieldRef.current); // 드래그 중 height-shift 필드 동결(지터 방지)
                         captureDragYOffsets(nodes); // 제스처 오프셋 동결 — 드래그 중 선형 왕복(커서 1:1)
-                        captureGeneralDragFreeze(nodes); // 일반 드래그 동결(#R2) 게이트 판정
+                        captureGeneralDragFreeze(); // 일반 드래그 동결(#R2) 게이트 판정
                         captureRootDragStart([node]);
                         beginCtrlDrag(event.ctrlKey || event.metaKey, node.id, nodes);
                       }}
@@ -10244,7 +10137,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                           applyCtrlDragCopy();
                         } else if (!tracked || committed) {
                           // 추적 드래그인데 무효(취소)면 zone/group/collision/save 모두 생략 — 원위치 복귀만.
-                          const drop = dropTargetRef.current;
+                          const drop = getDropTarget();
+                          const joinGroupId = getGroupDropTarget();
                           if (
                             !readOnly &&
                             drop &&
@@ -10252,8 +10146,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                             drop.zone !== null
                           ) {
                             handleZoneDrop(node.id, drop.id, drop.zone);
-                          } else if (!readOnly && groupDropTargetRef.current) {
-                            addToGroupId(node.id, groupDropTargetRef.current);
+                          } else if (!readOnly && joinGroupId) {
+                            addToGroupId(node.id, joinGroupId);
                           } else if (!readOnly) {
                             setNodes((current) => resolveCollision(current, node.id));
                             scheduleAutoSave();
@@ -10281,7 +10175,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         );
                         setDragFrozenField(heightFieldRef.current); // 드래그 중 height-shift 필드 동결(지터 방지)
                         captureDragYOffsets(nodes); // 제스처 오프셋 동결 — 드래그 중 선형 왕복(커서 1:1)
-                        captureGeneralDragFreeze(nodes); // 일반 드래그 동결(#R2) 게이트 판정
+                        captureGeneralDragFreeze(); // 일반 드래그 동결(#R2) 게이트 판정
                         captureRootDragStart(nodes);
                         // 선택박스 오버레이(빈 공간) 드래그는 항상 의도된 선택 드래그 → grabbedId=null(선택 집합 전체).
                         beginCtrlDrag(event.ctrlKey || event.metaKey, null, nodes);
@@ -10408,8 +10302,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                           />
                         ))}
                         {a4GuideBounds && <A4GuideOverlay bounds={a4GuideBounds} paper={a4Guide.paper} />}
-                        {groupBoxes.map((box) => (
-                          <Fragment key={box.id}>
+                        {/* 영역 박스 — 펼침 중엔 숨김(노드가 dagre로 재배치돼 raw 위치 기준 박스가 어긋남, Phase 2 단순화) */}
+                        {expandedInline.size === 0 && (
+                          <GroupBoxLayer
+                            groups={groups}
+                            nodes={nodes}
+                            yOffsets={renderYOffsets}
+                            renderBox={(box, targeted) => (
+                              <>
                             {/* 반투명 박스 — 노드 뒤로, 멤버 적은 그룹이 위(z) */}
                             <div
                               style={{
@@ -10426,7 +10326,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 height={box.height}
                                 fill={box.fill}
                                 outline={box.outline}
-                                targeted={groupDropTarget === box.id}
+                                targeted={targeted}
                               />
                             </div>
                             {/* 타이틀바 — 노드 위, 박스 상단 좌측. 우클릭 시 그룹 멤버 정렬 메뉴 */}
@@ -10458,8 +10358,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 onBulkEdit={setBulkEditGroupId}
                               />
                             </div>
-                          </Fragment>
-                        ))}
+                              </>
+                            )}
+                          />
+                        )}
                       </ViewportPortal>
                       {/* 편집 가능 시에만 모눈(dot) 배경. 뷰모드는 점 없이 워터마크로 표시(아래) */}
                       {/* 차콜 L5는 무늬 없는 민 무대 — 도트를 걷고 모드 링(프레임 액센트 테두리)이 신호를 담당 */}
@@ -10630,144 +10532,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               onClose={() => setMenu(null)}
             />
           )}
-          {dropTarget &&
-            (() => {
-              const r = dropTarget.rect;
-              const cx = r.left + r.width / 2;
-              const cy = r.top + r.height / 2;
-              // 링 반경 — screenRectOf에서 줌 무관 고정값으로 계산됨 (hit-test와 공용)
-              const radius = r.radius;
-              // 부채꼴: 노드 근처(ri)에서 바깥(ro)으로 팬, 아이콘/라벨은 중간 반경(rm)
-              const ri = radius * 0.8; // 밴드 두께 축소 — 가장자리(ro)는 유지, 안쪽만 바깥으로
-              const ro = radius + 48;
-              const rm = (ri + ro) / 2;
-              const rad = (d: number) => (d * Math.PI) / 180;
-              const HALF = rad(19); // 활성 부채꼴 반각(=38° 폭) — 각폭 좁혀 조각 사이 간극 확대
-              const DHALF = rad(16); // 대각 점선 부채꼴 반각
-              const CR = 7; // 모서리 라운드 반경(px) — 이미지처럼 둥근 부채꼴
-              const pt = (rr: number, a: number) =>
-                `${(cx + rr * Math.cos(a)).toFixed(2)} ${(cy + rr * Math.sin(a)).toFixed(2)}`;
-              // 라운드 모서리 annular sector — 각도 화면좌표(y-down, 0°=동). 방사형 변은 곧게(중심 방향)
-              // 두어 각도 차만큼 조각 사이 간극이 바깥으로 갈수록 넓어진다. 네 모서리만 CR로 둥글림.
-              const sector = (axis: number, half: number, r0: number, r1: number) => {
-                const a0 = axis - half;
-                const a1 = axis + half;
-                const di = CR / r0; // 내호 각도 오프셋
-                const dO = CR / r1; // 외호 각도 오프셋
-                const R0 = r0.toFixed(2);
-                const R1 = r1.toFixed(2);
-                return [
-                  `M ${pt(r0 + CR, a0)}`,
-                  `L ${pt(r1 - CR, a0)}`,
-                  `Q ${pt(r1, a0)} ${pt(r1, a0 + dO)}`,
-                  `A ${R1} ${R1} 0 0 1 ${pt(r1, a1 - dO)}`,
-                  `Q ${pt(r1, a1)} ${pt(r1 - CR, a1)}`,
-                  `L ${pt(r0 + CR, a1)}`,
-                  `Q ${pt(r0, a1)} ${pt(r0, a1 - di)}`,
-                  `A ${R0} ${R0} 0 0 0 ${pt(r0, a0 + di)}`,
-                  `Q ${pt(r0, a0)} ${pt(r0 + CR, a0)}`,
-                  "Z",
-                ].join(" ");
-              };
-              // 사용 4방향 — group=상(N)/back=우(E)/swap=하(S)/front=좌(W)
-              const zones = [
-                { zone: "group", axis: rad(-90), Icon: Boxes, label: t("dropzone.group") },
-                { zone: "back", axis: rad(0), Icon: ArrowRight, label: t("dropzone.back") },
-                { zone: "swap", axis: rad(90), Icon: ArrowLeftRight, label: t("dropzone.swap") },
-                { zone: "front", axis: rad(180), Icon: ArrowLeft, label: t("dropzone.front") },
-              ] as const;
-              const diagAxes = [rad(-45), rad(45), rad(135), rad(-135)]; // NE·SE·SW·NW — 추후 확장
-              const blockedOf = (zone: string) =>
-                (zone === "front" && dropTarget.frontBlocked) ||
-                (zone === "back" && dropTarget.backBlocked) ||
-                (zone === "swap" && dropTarget.swapBlocked);
-              // L5 하늘 프레임 위에서는 회색 기반색이 묻힌다 — 밝은 캔버스색·하늘 액센트로 바꾼다 (2026-09-23)
-              const zoneNeutral = isFrameworkMap ? "var(--color-canvas)" : "var(--color-ink-tertiary)";
-              // 드롭 영역 오버레이는 하늘 프레임 밖에서 그려질 수 있어 토큰 스코프 대신 실제 하늘 여부로 — 라이트로 토글한 L5도 원색
-              const zoneAccent = l5Charcoal ? "var(--color-accent-sky)" : "var(--color-accent)";
-              return (
-                <div className="pointer-events-none absolute inset-0 z-[1100]">
-                  <svg className="zone-fan absolute inset-0 h-full w-full overflow-visible">
-                    {/* 추후 확장 — 점선 대각 부채꼴 */}
-                    {diagAxes.map((axis, i) => (
-                      <path
-                        key={`d${i}`}
-                        d={sector(axis, DHALF, ri, ro)}
-                        style={{
-                          fill: `color-mix(in srgb, ${zoneNeutral} ${isFrameworkMap ? 10 : 4}%, transparent)`,
-                          stroke: `color-mix(in srgb, ${zoneNeutral} ${isFrameworkMap ? 45 : 36}%, transparent)`,
-                          strokeWidth: 1.5,
-                          strokeDasharray: "4 4",
-                          strokeLinejoin: "round",
-                        }}
-                      />
-                    ))}
-                    {/* 사용 4방향 부채꼴 */}
-                    {zones.map(({ zone, axis }) => {
-                      const active = dropTarget.zone === zone;
-                      const blocked = blockedOf(zone);
-                      const style = blocked
-                        ? {
-                            fill: `color-mix(in srgb, ${zoneNeutral} ${isFrameworkMap ? 14 : 7}%, transparent)`,
-                            stroke: `color-mix(in srgb, ${zoneNeutral} ${isFrameworkMap ? 35 : 25}%, transparent)`,
-                            strokeWidth: 1.5,
-                          }
-                        : active
-                          ? {
-                              fill: `color-mix(in srgb, ${zoneAccent} 34%, transparent)`,
-                              stroke: zoneAccent,
-                              strokeWidth: 2.5,
-                            }
-                          : {
-                              fill: `color-mix(in srgb, ${zoneAccent} ${isFrameworkMap ? 24 : 18}%, transparent)`,
-                              stroke: `color-mix(in srgb, ${zoneAccent} ${isFrameworkMap ? 55 : 32}%, transparent)`,
-                              strokeWidth: 1.5,
-                            };
-                      return (
-                        <path
-                          key={zone}
-                          d={sector(axis, HALF, ri, ro)}
-                          style={{ ...style, strokeLinejoin: "round" }}
-                        />
-                      );
-                    })}
-                  </svg>
-                  {/* 대각 + 표시(추후 확장) */}
-                  {diagAxes.map((axis, i) => (
-                    <span
-                      key={`p${i}`}
-                      className="absolute -translate-x-1/2 -translate-y-1/2 text-body font-light text-ink-tertiary/40"
-                      style={{ left: cx + rm * Math.cos(axis), top: cy + rm * Math.sin(axis) }}
-                    >
-                      +
-                    </span>
-                  ))}
-                  {/* 아이콘 + 라벨 */}
-                  {zones.map(({ zone, axis, Icon, label }) => {
-                    const active = dropTarget.zone === zone;
-                    const blocked = blockedOf(zone);
-                    // L5 하늘 프레임에선 라벨이 어두운 하늘과 밝은 노드 양쪽 위에 놓인다 — 보라 글자는 하늘에 묻히고
-                    // 흰 글자는 노드에 묻히므로 잉크색 반투명 알약 위의 밝은 글자로 고정한다(둘 다 읽힘, 2026-09-23)
-                    const tone = blocked
-                      ? (isFrameworkMap ? "text-canvas opacity-40" : "text-ink-tertiary opacity-40")
-                      : active
-                        ? (l5Charcoal ? "text-accent-sky" : "text-accent")
-                        : (isFrameworkMap ? "text-canvas" : "text-accent/80");
-                    const pill = isFrameworkMap ? "rounded-md bg-ink/70 px-1.5 py-1" : "";
-                    return (
-                      <div
-                        key={`l${zone}`}
-                        className={`zone-pop absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 ${pill} ${tone}`}
-                        style={{ left: cx + rm * Math.cos(axis), top: cy + rm * Math.sin(axis) }}
-                      >
-                        <Icon size={18} strokeWidth={1.5} />
-                        <span className="text-fine font-semibold leading-none">{label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
+          <DropZoneOverlay isFrameworkMap={isFrameworkMap} l5Charcoal={l5Charcoal} />
           {/* 엣지 더블클릭 → 엣지 중점에 인라인 라벨 편집 박스 (인스펙터 입력과 동시) */}
           {editingEdgeId && editingEdgePos && editingEdgeInitial !== null && (
             <EdgeLabelEditor
