@@ -1,12 +1,12 @@
 // Edge.gateway 왕복(load→save) 회귀 테스트 — finding: graph PUT(delete-후-재삽입)마다
 // gateway가 서버에서 소거되던 버그(§4 게이트 6 plain_fanout 예외 판정 재료).
-// toAppEdges/buildGraph는 page.tsx 내부 순수 변환 함수 — placeholder_category_id 왕복 선례와 동일 패턴.
+// toAppEdges/buildGraph는 lib/graph-serialize.ts 순수 변환 함수 — placeholder_category_id 왕복 선례와 동일 패턴.
 import { describe, expect, it } from "vitest";
 
 import type { AppNode } from "@/lib/canvas";
 import type { Graph } from "@/lib/api";
 
-import { buildGraph, toAppEdges } from "./page";
+import { buildGraph, toAppEdges } from "@/lib/graph-serialize";
 
 // inline-expand.test.ts의 mkChild 선례와 동일 — AppNode는 필수 필드만 채우면 나머지 옵셔널
 function makeNode(id: string): AppNode {

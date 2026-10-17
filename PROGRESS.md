@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-17 — 출력 라운드 후속 정리 (dev)
+
+- webpack 빌드: page.tsx가 테스트용으로 export하던 `toAppEdges`·`buildGraph`(+`normalizeEdgeLineStyle`)를 `lib/graph-serialize.ts`로 옮겼다(Next 페이지 모듈은 허용된 export만 — `--webpack` 타입 검사 실패, 배포 Turbopack은 무관했다). 동작 불변, 두 빌드·vitest 통과.
+
 ## 2026-10-16 — 출력 형식 전수 개선: Excel·CSV·비교 PNG·다운로드 (dev, 3갈래 병렬 머지)
 
 - PNG Word 작업을 기준으로 다른 출력 전부를 검토(실행 확인 포함) 후 추천안 전부 진행(사용자 결정: Excel 소요시간=실제 시간 값 `[h]:mm`, 비교 PNG=표시 토글 실시간 미리보기). 파일 이름은 `lib/download-name`(KST `YYYYMMDD-HHmm`, 빈 조각 제거) 한 규칙 — 종전 UTC라 오전 파일이 전날로 찍혔다.
