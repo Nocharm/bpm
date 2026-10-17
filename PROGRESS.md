@@ -7,6 +7,7 @@
 
 - 축소 드래그 성능: 영역(그룹) 멤버는 드래그 동결(#R2)에서 빠져 프레임마다 nodes를 커밋했고, 그때마다 페이지·노드·엣지 전부가 다시 렌더됐다(시드 120노드 맵 한 제스처에 노드 재렌더 ~1.2만). 영역 박스를 `GroupBoxLayer`로 떼어 라이브 좌표 신호(`lib/drag-live`)만 구독하게 하고 영역 멤버도 동결, 드롭 링·합류 강조는 `lib/drop-target` 스토어로 옮겨 드래그 중 페이지 렌더 0. 운영 빌드 A/B(새 시드 3회, 첫 제스처): drag-fit p95 33.4→16.8ms, 33ms 초과 ~55→~3프레임, 메인 스레드 95→63%, 노드 재렌더 ~12,200→~540. idle·pan·zoom 동일 60fps. 노드별 엣지 셀렉터는 이제 샘플 1.4%라 유지. `pw-perf-canvas` 계측 보강(`RENDERS`·`WHY`·`DRAG_FIT_NODE`·`DRAG_PACE`·`CPU_THROTTLE`·재렌더 계수)·스모크 `pw-verify-group-drag-live`.
 - `pw-verify-export` 8건 실패는 스크립트가 낡은 것(기능 무결): Metrics 섹션이 버퍼 편집이라 섹션 Save를 안 눌러 파라미터가 저장되지 않았고 칩·새로고침·CSV·Excel 단언이 연쇄 실패했다. 현재 계약으로 갱신 — 섹션 Save, CSV H.MM·수식 셀 `'` 가드 왕복, Excel 머리글 행 탐색(맵 정보 행 아래)·소요시간 `[h]:mm` 시간 값(ExcelJS는 Date로 읽어 직렬값 환산), 분기 노드 파라미터는 마름모 아래 확장 블록. 22/22.
+- 매뉴얼 슬라이드(사용자 ko/en 74→78장): 출력 라운드 화면 반영 — 데이터 장의 "내보내기" 1장을 PNG 옵션 창·인쇄 크기와 A4 가이드·Excel 인쇄용 문서·CSV 미리보기와 경고 4장으로 나누고, 비교 장에 비교 PNG 내보내기 1장. 캡처는 이번 라운드 스모크(`pw-png-export-word`·`pw-compare-png-export`·`pw-excel-export-print`·`pw-smoke-csv-export-dialog`, PW_LANG)를 `.shots/manual9/`로(세로로 긴 창은 잘라 쪽 번호와 겹치지 않게 — 넘침 검사는 글 열만 본다). PDF 4종 재생성.
 - webpack 빌드: page.tsx가 테스트용으로 export하던 `toAppEdges`·`buildGraph`(+`normalizeEdgeLineStyle`)를 `lib/graph-serialize.ts`로 옮겼다(Next 페이지 모듈은 허용된 export만 — `--webpack` 타입 검사 실패, 배포 Turbopack은 무관했다). 동작 불변, 두 빌드·vitest 통과.
 
 ## 2026-10-16 — 출력 형식 전수 개선: Excel·CSV·비교 PNG·다운로드 (dev, 3갈래 병렬 머지)
