@@ -1,11 +1,12 @@
 // 숫자 파라미터 6필드(duration·cost_krw·cost_usd·headcount·annual_count·fte) + Excel/CSV 내보내기 — 브라우저 실기동 통합 검증.
-// 6시나리오: ①파라미터 입력·정규화·노드칩 ②새로고침 저장왕복 ③CSV 내보내기→재임포트 diff 0
-// ④Excel 내보내기(서브프로세스 재귀·outlineLevel·하이퍼링크·숫자셀) ⑤콘솔에러 0
-// ⑥[Task3 이월] 디시전 노드 파라미터 칩의 마름모 밖 overflow 여부(boundingBox 판정, 스크린샷 증거)
+// 6시나리오: ①파라미터 입력(Metrics 섹션 Save)·정규화·노드칩 ②새로고침 저장왕복
+// ③CSV 내보내기(H.MM 그대로·수식 셀 ' 가드)→재임포트 diff 0(가드 복원)
+// ④Excel 내보내기(서브프로세스 재귀·outlineLevel·하이퍼링크·숫자셀, 소요시간=시간/24 [h]:mm, 머리글 행은 맵 정보 행 아래라 찾아서)
+// ⑤콘솔에러 0 ⑥디시전 노드 파라미터 칩은 마름모 상자 아래 확장 블록(node-below-extension)
 //
 // 실행 (frontend/ 에서):
-//   bash:       node scripts/pw-verify-export.mjs
-//   PowerShell: node scripts\pw-verify-export.mjs
+//   bash:       BASE_URL=http://localhost:3047 node scripts/pw-verify-export.mjs
+//   PowerShell: $env:BASE_URL="http://localhost:3047"; node scripts\pw-verify-export.mjs
 // 전제:
 //   backend :8000 — cd backend && .venv/bin/python -m scripts.reset_db && .venv/bin/uvicorn app.main:app --port 8000
 //     (auth_enabled 기본 False + dev_enforce_permissions 기본 False → 로컬은 전원 sysadmin, 별도 env 불필요)
@@ -102,6 +103,15 @@ async function ensureMapTab() {
   }
 }
 
+// Excel 머리글 행 — 맵 정보 행(제목·메타) 아래라 번호를 고정하지 않고 No·Name 머리글을 찾는다
+const findHeaderRow = (sheet) => {
+  let found = 0;
+  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (found === 0 && row.getCell(1).value === "No" && row.getCell(2).value === "Name") found = rowNumber;
+  });
+  return found;
+};
+
 // 노드 카드의 파라미터 칩 컨테이너 — NodeParams 렌더 div(flex flex-wrap gap-x-2), NodeFields와 구분되는 유일 클래스 조합
 const paramChipsLocator = (nodeSel) => page.locator(`${nodeSel} div.flex.flex-wrap.gap-x-2`);
 
@@ -152,7 +162,8 @@ try {
   const seedGraph = {
     nodes: [
       { id: sId, title: "Start", node_type: "start", pos_x: 0, pos_y: 200, sort_order: 0 },
-      { id: pId, title: "Widget Step", node_type: "process", pos_x: 260, pos_y: 200, sort_order: 1 },
+      // 설명이 "-"로 시작 — CSV 수식 셀 가드(' 접두) 왕복 확인용
+      { id: pId, title: "Widget Step", description: "-check first", node_type: "process", pos_x: 260, pos_y: 200, sort_order: 1 },
       { id: eId, title: "End", node_type: "end", pos_x: 520, pos_y: 200, sort_order: 2, is_primary_end: true },
     ],
     edges: [
@@ -185,6 +196,8 @@ try {
     await loc.fill(raw);
     await loc.blur();
   }
+  // Metrics 섹션은 버퍼 편집 — 섹션 Save를 눌러야 노드에 반영된다("Unsaved changes - press Save to apply.")
+  await page.locator('[data-id="inspector-params-save"]').click();
   // autosave 디바운스(2s) 이후 서버 반영을 폴링 — 고정 sleep 대신 실제 저장 완료를 기다림
   const savedDuration = await waitForCondition(async () => {
     const g = await api(`/versions/${v1}/graph`);
@@ -252,8 +265,9 @@ try {
   const colIdx = Object.fromEntries(header.map((h, i) => [h, i]));
   const widgetRow = csvLines.slice(1).find((l) => l.startsWith("Widget Step,"))?.split(",");
   check(
-    "CSV row carries the normalized numeric values (raw H.MM - round-trip exception)",
+    "CSV row carries H.MM duration, numeric values and the ' formula guard",
     widgetRow !== undefined &&
+      widgetRow[colIdx.Description] === "'-check first" &&
       widgetRow[colIdx.Duration] === "1.15" &&
       widgetRow[colIdx.Cost_KRW] === "300" &&
       widgetRow[colIdx.Cost_USD] === "" &&
@@ -284,10 +298,11 @@ try {
   const gAfterReimport = await api(`/versions/${v1}/graph`);
   const pAfter = gAfterReimport.nodes.find((n) => n.title === "Widget Step");
   check(
-    "graph unchanged after CSV round-trip apply",
-    pAfter?.duration === "1.15" && pAfter?.cost_krw === "300" && pAfter?.headcount === "2" &&
+    "graph unchanged after CSV round-trip apply (guard stripped on import)",
+    pAfter?.description === "-check first" &&
+      pAfter?.duration === "1.15" && pAfter?.cost_krw === "300" && pAfter?.headcount === "2" &&
       pAfter?.annual_count === "7" && pAfter?.fte === "1.5" && gAfterReimport.nodes.length === 3,
-    `nodes=${gAfterReimport.nodes.length} duration=${pAfter?.duration}`,
+    `nodes=${gAfterReimport.nodes.length} duration=${pAfter?.duration} description=${JSON.stringify(pAfter?.description)}`,
   );
 
   // ── URL + 디시전 노드 추가(USD 통화 경로 커버) — Map A는 스크래치라 자유롭게 변형 ────
@@ -325,7 +340,8 @@ try {
   const wbA = new ExcelJS.Workbook();
   await wbA.xlsx.readFile(xlsxPathA);
   const sheetA = wbA.worksheets[0];
-  const headerRowA = sheetA.getRow(sheetA.views[0].ySplit).values.slice(1).map(String);
+  const headerRowNoA = findHeaderRow(sheetA);
+  const headerRowA = headerRowNoA > 0 ? sheetA.getRow(headerRowNoA).values.slice(1).map(String) : [];
   // lib/export-columns.ts EXCEL_COLUMNS와 같은 순서 — 셀 위치는 이 목록에서 찾는다(인덱스 하드코딩 금지)
   const expectedXlsxHeader = [
     "No", "Name", "Type", "Description", "Assignee", "Role", "Department", "System",
@@ -333,29 +349,33 @@ try {
     "Input", "Output", "Start condition", "End condition", "GMP", "Parallel", "URL", "Groups", "Next",
   ];
   check(
-    `Excel header row (frozen row) has ${expectedXlsxHeader.length} expected columns`,
+    `Excel header row (found at row ${headerRowNoA}) has ${expectedXlsxHeader.length} expected columns`,
     headerRowA.length === expectedXlsxHeader.length && expectedXlsxHeader.every((h, i) => headerRowA[i] === h),
     headerRowA.join(","),
   );
   const xlsxCol = (header) => expectedXlsxHeader.indexOf(header) + 1;
   let widgetXlsxRow = null;
-  sheetA.eachRow({ includeEmpty: false }, (row) => {
-    if (row.getCell(2).value === "Widget Step") widgetXlsxRow = row;
+  sheetA.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber > headerRowNoA && row.getCell(2).value === "Widget Step") widgetXlsxRow = row;
   });
   const numericCols = ["Duration (h:mm)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE"].map(xlsxCol);
   const cellOf = (header) => widgetXlsxRow?.getCell(xlsxCol(header)).value;
+  // [h]:mm 서식 셀은 ExcelJS가 읽을 때 Date(1899-12-30 기준)로 돌려준다 — 일 단위 직렬값으로 환산
+  const toSerial = (v) => (v instanceof Date ? v.getTime() / 86_400_000 + 25_569 : v);
   check(
-    "Excel numeric cells (duration/cost_krw/headcount/annual_count/fte) are real numbers, cost_usd empty",
+    "Excel numeric cells (duration=[h]:mm time value, cost_krw/headcount/annual_count/fte numbers), cost_usd empty",
     widgetXlsxRow !== null &&
-      // 1.15 = 1시간 15분 → Excel 시간 값 75/1440 ([h]:mm)
-      Math.abs(cellOf("Duration (h:mm)") - 75 / 1440) < 1e-9 &&
+      // 1.15 = 1시간 15분 → Excel 시간 값 75/1440 (셀 값 = 시간/24, 서식 [h]:mm)
+      Math.abs(toSerial(cellOf("Duration (h:mm)")) - 75 / 1440) < 1e-9 &&
+      widgetXlsxRow.getCell(xlsxCol("Duration (h:mm)")).numFmt === "[h]:mm" &&
       cellOf("Cost (KRW)") === 300 &&
       (cellOf("Cost (USD)") ?? "") === "" &&
       cellOf("Headcount") === 2 &&
       cellOf("Annual volume") === 7 &&
       cellOf("FTE") === 1.5,
     widgetXlsxRow
-      ? numericCols.map((c) => `${c}:${widgetXlsxRow.getCell(c).value}(${typeof widgetXlsxRow.getCell(c).value})`).join(" ")
+      ? numericCols.map((c) => `${c}:${toSerial(widgetXlsxRow.getCell(c).value)}(${typeof widgetXlsxRow.getCell(c).value})`).join(" ") +
+        ` numFmt=${widgetXlsxRow.getCell(xlsxCol("Duration (h:mm)")).numFmt}`
       : "row not found",
   );
   const urlCell = widgetXlsxRow?.getCell(xlsxCol("URL"));
@@ -365,7 +385,7 @@ try {
     JSON.stringify(urlCell?.value),
   );
 
-  // ── ⑥ [Task 3 이월] 디시전 노드 — 파라미터 3개 이상, 칩이 마름모 밖으로 넘치는지 실측 ──
+  // ── ⑥ 디시전 노드 — 파라미터 칩(3개 이상)은 마름모 상자(h-24) 아래 확장 블록에 그려져 마름모와 겹치지 않는다 ──
   const dSel = `.react-flow__node[data-id="${dId}"]`;
   await page.locator(dSel).scrollIntoViewIfNeeded();
   await page.waitForTimeout(200);
@@ -373,23 +393,17 @@ try {
   const dChipCount = await dChips.locator("span").count();
   check("decision node renders param chips (>=3 filled)", dChipCount >= 3, `count=${dChipCount}`);
   await page.locator(dSel).screenshot({ path: `${SHOTS}/06-decision-params.png` });
-  const diamondBox = await page.locator(`${dSel} .rotate-45`).boundingBox();
-  const contentBox = await page.locator(`${dSel} .max-w-20`).boundingBox();
-  if (diamondBox && contentBox) {
-    // 마름모(회전한 정사각형)의 대각선 길이 D = diamondBox.width(=height, 회전 후 AABB).
-    // 중심에 놓인 축정렬 박스(w×h)가 마름모 안에 완전히 들어가는 정확한 조건은 w+h <= D
-    // (경계식 |x|/(D/2)+|y|/(D/2)<=1에서 코너 (w/2,h/2) 대입 유도).
-    const D = diamondBox.width;
-    const sum = contentBox.width + contentBox.height;
-    const withinDiamond = sum <= D;
-    check(
-      "decision node param chips stay within the rhombus outline (Task 3 carryover)",
-      withinDiamond,
-      `diamond D=${D.toFixed(1)}px, content ${contentBox.width.toFixed(1)}x${contentBox.height.toFixed(1)} (sum=${sum.toFixed(1)}) - screenshot: ${SHOTS}/06-decision-params.png`,
-    );
-  } else {
-    check("decision node param chips stay within the rhombus outline (Task 3 carryover)", false, "could not measure boundingBox");
-  }
+  const inExtension = await page.locator(`${dSel} [data-id="node-below-extension"] div.flex.flex-wrap.gap-x-2`).count();
+  const diamondBox = await page.locator(`${dSel} [data-shell="decision"]`).evaluate((el) => {
+    const r = el.parentElement.getBoundingClientRect(); // 마름모를 담는 h-24 상자
+    return { bottom: r.bottom };
+  });
+  const chipsBox = await dChips.first().boundingBox();
+  check(
+    "decision node param chips sit below the rhombus box (node-below-extension)",
+    inExtension > 0 && chipsBox !== null && chipsBox.y >= diamondBox.bottom - 1,
+    `inExtension=${inExtension} chipsTop=${chipsBox?.y.toFixed(1)} diamondBottom=${diamondBox.bottom.toFixed(1)} - screenshot: ${SHOTS}/06-decision-params.png`,
+  );
 
   // ── ④ Map 2(Employee Onboarding, 서브프로세스 데모) Excel — 재귀 인라인·outlineLevel ──
   // 읽기 전용 검증만 — 이 맵은 변형하지 않는다(공유 데모 시드 보존).
@@ -420,8 +434,9 @@ try {
       let dataRows = 0;
       let maxOutline = 0;
       let sawSubprocessTitle = false;
+      const headerRowNo2 = findHeaderRow(sheet2);
       sheet2.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-        if (rowNumber <= 4) return; // 1=title 2=meta 3=blank 4=header
+        if (rowNumber <= headerRowNo2) return; // 맵 정보 행·머리글 위는 데이터 아님
         dataRows += 1;
         maxOutline = Math.max(maxOutline, row.outlineLevel ?? 0);
         const name = row.getCell(2).value;
