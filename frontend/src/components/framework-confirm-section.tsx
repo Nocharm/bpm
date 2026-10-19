@@ -41,6 +41,8 @@ export interface FrameworkConfirmSectionProps {
   onConfirmed: (result: FrameworkConfirmResult) => void; // 부모가 versions 갱신·토스트
   onError: (message: string) => void;
   onFocusNode?: (nodeId: string) => void; // 게이트 위반 노드로 이동(캔버스 아웃라인 유틸 재사용)
+  // 대기 중인 자동저장을 먼저 비운다 — 확정·확정 요청이 저장된 구본이 아니라 지금 화면을 대상으로 (리뷰 2026-10-19 E-11)
+  flushPendingSave: () => Promise<void>;
 }
 
 interface FwSnapshot {
@@ -116,6 +118,7 @@ function MajorImpactRows({
 
 export function FrameworkConfirmSection({
   mapId, canConfirm, canRequest, currentUser, versions, liveNodes, liveEdges, onConfirmed, onError, onFocusNode,
+  flushPendingSave,
 }: FrameworkConfirmSectionProps) {
   const { t } = useI18n();
   const [major, setMajor] = useState(false);
@@ -166,7 +169,8 @@ export function FrameworkConfirmSection({
 
   function submitRequest() {
     setRequestBusy(true);
-    createFwConfirmRequest(mapId, requestNote.trim())
+    flushPendingSave()
+      .then(() => createFwConfirmRequest(mapId, requestNote.trim()))
       .then((req) => {
         setPendingRequest(req);
         setRequestNote("");
@@ -208,7 +212,8 @@ export function FrameworkConfirmSection({
 
   function runConfirm(promoteMajor: boolean) {
     setBusy(true);
-    confirmFrameworkVersion(mapId, promoteMajor)
+    flushPendingSave()
+      .then(() => confirmFrameworkVersion(mapId, promoteMajor))
       .then((result) => {
         setMajor(false);
         setReadinessRefreshKey((k) => k + 1); // 확정 성공 — 게이트 체크리스트 재조회

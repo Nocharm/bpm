@@ -38,6 +38,7 @@ import { humanizeApiError } from "@/lib/api-errors";
 import { createLocalMessage, toChatMessage, toPayload, type ChatMessage } from "@/lib/chat-sessions";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { runGuardedNavigation } from "@/lib/navigation-guard";
 
 const MAX_INSTRUCTION_CHARS = 2000; // 백엔드 AiChatRequest.instruction max_length와 동일
 const RING_CAUTION = 0.75; // 입력 사용률 주의 임계
@@ -738,7 +739,7 @@ export function AiChatPanel({
             <button
               type="button"
               data-id="ai-open-map"
-              onClick={() => router.push(`/maps/${activeMeta.map_id}?aiChat=${activeMeta.id}`)}
+              onClick={() => runGuardedNavigation(() => router.push(`/maps/${activeMeta.map_id}?aiChat=${activeMeta.id}`))}
               className="shrink-0 rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus"
             >
               {t("ai.openMap")}

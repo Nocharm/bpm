@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-20 — 편집 유실 5단계: 시스템 리뷰 W-1·E-11 (dev)
+
+- 저장 안 된 편집(자동저장 2초 전·저장 실패)이 있으면 앱 안 이동을 확인창으로 붙잡는다(사용자 결정: 자동 저장 후 이동 대신 확인창, 저장하고 이동·저장하지 않고 이동·머무르기). `lib/navigation-guard.ts` 하나가 링크는 window 캡처로 가로채 고른 뒤 링크 자신의 동작을 다시 태우고(로고 전체 새로고침 등), 버튼 이동은 `runGuardedNavigation`으로 감싼다(에디터 4곳·상단 바 설정·로그아웃·알림·맵 전환·AI 챗·체계 탐색·피드백·체계 칩). 묻는 동안 자동저장을 멈추고 머무르면 다시 건다. 브라우저 뒤로 가기는 물을 수 없어 언마운트에서 바로 저장한다. L5 확정·확정 요청은 대기 중인 편집을 먼저 저장한다(`flushPendingSave`). `ConfirmDialog`에 셋째 버튼(`secondary`).
+- 수정 전 코드로 같은 백엔드에서 재현: 이름 변경 150ms 뒤 Notices 클릭 → PUT 0·제목 그대로, L5 확정 POST가 PUT보다 먼저 나가 v1.0이 옛 위치(120, 화면 192)로 확정(E-11 PLAUSIBLE → 확인). 수정 후 `scripts/pw-verify-leave-guard.mjs` 12/12(ko·en). vitest 1492(+8)·tsc·lint·COMPONENTS 최신. 매뉴얼 ko/en 7장·`backend/app/manual.md`·CLAUDE.md 반영.
+
 ## 2026-10-19 — 운영 postgres 전용 4단계: 시스템 리뷰 H-1~H-7·H-10 (dev)
 
 - 컬럼 형은 기동 시 모델 기준으로 넓힌다(`db._reconcile_column_types`, PG 전용·멱등): 시간대 없는 TIMESTAMP → TIMESTAMPTZ(USING 없이, 쓰기와 같은 세션 TimeZone으로 읽어 같은 절대 시각), VARCHAR → TEXT(`app_settings.value`가 JSON 목록을 담아 500이던 것). `_ADDED_COLUMNS` 시각 DDL도 TIMESTAMPTZ. 노드 제목·엣지 라벨·유저 그룹 이름은 컬럼 길이 200을 `max_length`(422)와 입력칸 `maxLength`로 막는다. 공지 수정·받은함 날짜 삭제 개수는 KST 날짜로 자른다(PG가 UTC `Z`로 응답해 저장마다 시작일이 하루 당겨졌다). compose 4서비스 `restart: unless-stopped`, backend `FORWARDED_ALLOW_IPS`=compose 서브넷(오른쪽부터 믿지 않는 첫 주소라 위조 불가). 복원 런북은 안전 덤프 → 빈 스키마 → `--exit-on-error --single-transaction`(덮어쓰기는 새 FK 테이블이 드랍을 막아 섞인 DB를 남겼다).

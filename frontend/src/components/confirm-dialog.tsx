@@ -66,6 +66,8 @@ interface ConfirmDialogProps {
   children?: ReactNode;
   // 호출 지점 식별용 data-id — 미지정 시 기본값 유지(기존 호출부 전부 무변경).
   dialogId?: string;
+  // cancel과 confirm 사이의 셋째 선택지(예: 저장하지 않고 이동). danger면 error 글자색.
+  secondary?: { label: string; onClick: () => void; danger?: boolean; disabled?: boolean };
 }
 
 export function ConfirmDialog({
@@ -84,6 +86,7 @@ export function ConfirmDialog({
   confirmDisabled = false,
   children,
   dialogId = "confirm-dialog",
+  secondary,
 }: ConfirmDialogProps) {
   const groups: ConfirmLine[][] = sections ?? (lines && lines.length > 0 ? [lines] : []);
   const confirmBtn = danger
@@ -98,7 +101,8 @@ export function ConfirmDialog({
     >
       <div
         data-id={dialogId}
-        className={`flex w-full max-w-sm flex-col gap-4 rounded-md p-6 border glass glass-dense ${
+        // 버튼 셋이면 한 줄에 들어가게 넓힌다(영어 라벨 기준)
+        className={`flex w-full ${secondary ? "max-w-md" : "max-w-sm"} flex-col gap-4 rounded-md p-6 border glass glass-dense ${
           isRich ? "items-center text-center" : ""
         }`}
       >
@@ -156,7 +160,7 @@ export function ConfirmDialog({
           />
         )}
         {children}
-        <div className={`flex w-full justify-end gap-2 ${isRich ? "" : ""}`}>
+        <div className={`flex w-full flex-wrap justify-end gap-2 ${isRich ? "" : ""}`}>
           {cancelLabel && (
             <button
               type="button"
@@ -165,6 +169,19 @@ export function ConfirmDialog({
               onClick={onClose}
             >
               {cancelLabel}
+            </button>
+          )}
+          {secondary && (
+            <button
+              type="button"
+              data-id="confirm-dialog-secondary"
+              className={`rounded-sm border border-hairline px-3 py-1.5 text-caption hover:bg-surface-alt disabled:opacity-40 ${
+                secondary.danger ? "text-error" : "text-ink"
+              }`}
+              disabled={secondary.disabled}
+              onClick={secondary.onClick}
+            >
+              {secondary.label}
             </button>
           )}
           <button

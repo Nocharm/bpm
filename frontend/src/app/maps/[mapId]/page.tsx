@@ -343,6 +343,7 @@ import { useMe } from "@/lib/me";
 import { draftSubmitNote } from "@/lib/submit-note-draft";
 import { useDirectoryDepartments, useDirectoryState } from "@/lib/directory";
 import { buildNodeRefCheck } from "@/lib/node-ref-warnings";
+import { runGuardedNavigation, setNavigationGuard } from "@/lib/navigation-guard";
 import { useClosingKeys } from "@/lib/use-closing-keys";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import {
@@ -2180,14 +2181,91 @@ function MapEditor({ mapId }: { mapId: number }) {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []);
 
+  // 저장 안 된 편집 — 더티이거나 자동저장 예약이 남아 있다(저장 중에 새 편집이 오면 응답이 더티를 내려도 타이머는 남는다).
+  // 읽기 전용이 된 뒤의 변경은 저장할 수 없으니 묻지 않는다(예약 발사 쪽 readOnlyRef 판정과 같다).
+  const hasUnsavedEdits = useCallback(
+    () => !readOnlyRef.current && (dirtyRef.current || autoSaveTimerRef.current !== null),
+    [],
+  );
+
+  // 대기 중인 편집을 지금 저장 — 확정·확정 요청이 저장된 구본이 아니라 지금 화면을 대상으로 삼게 (리뷰 2026-10-19 E-11)
+  const flushPendingSave = useCallback(async () => {
+    if (hasUnsavedEdits()) await saveCurrentScope();
+  }, [hasUnsavedEdits, saveCurrentScope]);
+
+  // 앱 안 이동 확인창 — 저장 안 된 편집이 있으면 링크·이동 버튼을 붙잡고 저장/버리기/머무르기를 묻는다 (리뷰 2026-10-19 W-1)
+  const [leavePrompt, setLeavePrompt] = useState<{
+    proceed: () => void;
+    saving: boolean;
+    resumeAutoSave: boolean; // 묻기 직전 자동저장이 예약돼 있었나 — 머무르면 다시 건다
+  } | null>(null);
+  useEffect(
+    () =>
+      setNavigationGuard(
+        (proceed) => {
+          if (!hasUnsavedEdits()) return false;
+          // 묻는 동안 자동저장을 멈춘다 — 답하기 전에 저장돼 버리면 "저장하지 않고 이동"이 거짓이 된다
+          const resumeAutoSave = autoSaveTimerRef.current !== null;
+          if (autoSaveTimerRef.current) {
+            clearTimeout(autoSaveTimerRef.current);
+            autoSaveTimerRef.current = null;
+            dirtyRef.current = true;
+          }
+          setLeavePrompt({ proceed, saving: false, resumeAutoSave });
+          return true;
+        },
+        (href) => router.push(href),
+      ),
+    [hasUnsavedEdits, router],
+  );
+
+  const saveCurrentScopeRef = useRef(saveCurrentScope);
+  useEffect(() => {
+    saveCurrentScopeRef.current = saveCurrentScope;
+  }, [saveCurrentScope]);
   useEffect(
     () => () => {
+      // 가드가 붙잡지 못한 이동(브라우저 뒤로·앞으로 가기)은 물을 수 없으니 남은 편집을 버리지 않고 바로 저장한다
+      if (hasUnsavedEdits()) void saveCurrentScopeRef.current().catch(() => undefined);
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current);
       }
     },
-    [],
+    [hasUnsavedEdits],
   );
+
+  const handleLeaveStay = () => {
+    if (!leavePrompt || leavePrompt.saving) return;
+    setLeavePrompt(null);
+    if (leavePrompt.resumeAutoSave) scheduleAutoSave();
+  };
+
+  const handleLeaveDiscard = () => {
+    if (!leavePrompt) return;
+    // 버리기로 했으니 예약과 더티를 지운다 — 언마운트 저장도 돌지 않게
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    dirtyRef.current = false;
+    setLeavePrompt(null);
+    leavePrompt.proceed();
+  };
+
+  const handleLeaveSave = async () => {
+    if (!leavePrompt) return;
+    setLeavePrompt({ ...leavePrompt, saving: true });
+    try {
+      await saveCurrentScope();
+    } catch (err) {
+      // 저장 실패면 이동하지 않는다 — 상단 저장 실패 배너와 토스트로 남기고 그 자리에 머문다
+      setLeavePrompt(null);
+      showToast(humanizeApiError(err, t), "error");
+      return;
+    }
+    setLeavePrompt(null);
+    leavePrompt.proceed();
+  };
 
   // 저장된 창 기하 복원 (클라이언트 전용)
   useEffect(() => {
@@ -9587,7 +9665,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           setAiMenuOpen(false);
                           // 어떤 경로로든 컨설턴트 진입 = 온보딩 목적 달성 — 말풍선 재노출 방지
                           dismissConsultOnboard();
-                          router.push(`/maps/${mapId}/consult?version=${versionId}`);
+                          runGuardedNavigation(() => router.push(`/maps/${mapId}/consult?version=${versionId}`));
                         }}
                         data-id="open-consultant"
                       >
@@ -9641,7 +9719,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         className="inline-flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-fine font-semibold text-on-accent hover:bg-accent-focus"
                         onClick={() => {
                           dismissConsultOnboard();
-                          router.push(`/maps/${mapId}/consult?version=${versionId}`);
+                          runGuardedNavigation(() => router.push(`/maps/${mapId}/consult?version=${versionId}`));
                         }}
                         data-id="consult-onboard-start"
                       >
@@ -11656,7 +11734,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 (version) => version.status === "published" || version.status === "confirmed",
                               )
                             }
-                            onClick={() => router.push(`/maps/${mapId}/compare`)}
+                            onClick={() => runGuardedNavigation(() => router.push(`/maps/${mapId}/compare`))}
                             aria-label={t("inspector.compareVersions")}
                           >
                             <GitCompare size={16} strokeWidth={1.5} />
@@ -11984,6 +12062,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           }}
                           onError={(message) => showToast(message, "error")}
                           onFocusNode={handleOutlineSelect}
+                          flushPendingSave={flushPendingSave}
                         />
                       </div>
                     )}
@@ -12084,7 +12163,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                         type="button"
                         data-id="approval-compare-cta"
                         onClick={() =>
-                          router.push(`/maps/${mapId}/compare?base=${latestPublishedBase.id}&target=${currentVersion.id}`)
+                          runGuardedNavigation(() =>
+                            router.push(`/maps/${mapId}/compare?base=${latestPublishedBase.id}&target=${currentVersion.id}`),
+                          )
                         }
                         className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption text-ink-secondary hover:bg-surface-alt"
                       >
@@ -12246,6 +12327,26 @@ function MapEditor({ mapId }: { mapId: number }) {
           onClose={() => router.replace("/")}
         />
       )}
+      {/* 앱 안 이동 확인 — 저장 안 된 편집이 있을 때만 (리뷰 2026-10-19 W-1) */}
+      {leavePrompt && (
+        <ConfirmDialog
+          dialogId="editor-leave-confirm"
+          icon={<AlertTriangle size={28} strokeWidth={1.5} />}
+          title={t("editor.leaveTitle")}
+          message={t("editor.leaveBody")}
+          cancelLabel={t("editor.leaveStay")}
+          secondary={{
+            label: t("editor.leaveDiscard"),
+            onClick: handleLeaveDiscard,
+            danger: true,
+            disabled: leavePrompt.saving,
+          }}
+          confirmLabel={leavePrompt.saving ? t("editor.saving") : t("editor.leaveSave")}
+          confirmDisabled={leavePrompt.saving}
+          onConfirm={() => void handleLeaveSave()}
+          onClose={handleLeaveStay}
+        />
+      )}
       {/* 펼침 레인 "링크맵 열기" 확인 — 에디터 이탈 시 미저장 내용 경고 (F6) */}
       {openMapPrompt && (
         <ConfirmDialog
@@ -12254,7 +12355,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           message={t("subprocess.openMapBody")}
           confirmLabel={t("common.confirm")}
           cancelLabel={t("common.cancel")}
-          onConfirm={() => router.push(`/maps/${openMapPrompt.mapId}`)}
+          onConfirm={() => {
+            const target = openMapPrompt.mapId;
+            setOpenMapPrompt(null);
+            runGuardedNavigation(() => router.push(`/maps/${target}`));
+          }}
           onClose={() => setOpenMapPrompt(null)}
         />
       )}

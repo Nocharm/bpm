@@ -38,6 +38,7 @@ import {
 import { useI18n } from "@/lib/i18n";
 import type { Lang, MessageKey } from "@/lib/i18n-messages";
 import { clearLdapToken } from "@/lib/ldap-session";
+import { runGuardedNavigation } from "@/lib/navigation-guard";
 import { FeedbackSidePanel } from "@/components/feedback-side-panel";
 import { InboxBadge } from "@/components/inbox-badge";
 import { NotificationBell } from "@/components/notification-bell";
@@ -373,7 +374,7 @@ export function TopNav() {
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
                   onClick={() => {
                     setOpen(false);
-                    router.push("/settings");
+                    runGuardedNavigation(() => router.push("/settings"));
                   }}
                 >
                   <Settings size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
@@ -453,7 +454,7 @@ export function TopNav() {
                   type="button"
                   data-id="nav-logout"
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
-                  onClick={() => void onLogout()}
+                  onClick={() => runGuardedNavigation(() => void onLogout())}
                 >
                   <LogOut size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                   {t("nav.logout")}

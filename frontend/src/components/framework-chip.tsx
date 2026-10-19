@@ -16,6 +16,7 @@ import {
   type MapSummary,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { runGuardedNavigation } from "@/lib/navigation-guard";
 
 // 위치(상단 코너 고정)와 스킨(반투명 카드)을 분리 — 노드 피크 팝오버가 같은 스킨을 재사용한다 (2026-08-30)
 const CHIP_SKIN = "rounded-sm border glass";
@@ -202,7 +203,7 @@ export function FrameworkChip({
                           if (targetId === null) return;
                           setFlyout(null);
                           if (onNavigate) onNavigate(targetId, cat.name);
-                          else router.push(`/maps/${targetId}`);
+                          else runGuardedNavigation(() => router.push(`/maps/${targetId}`));
                         }}
                       >
                         <Workflow size={12} strokeWidth={1.5} />
@@ -270,7 +271,7 @@ export function FrameworkChip({
                       onClick={() => {
                         setFlyout(null);
                         if (onNavigate) onNavigate(entry.id, entry.name);
-                        else router.push(`/maps/${entry.id}`);
+                        else runGuardedNavigation(() => router.push(`/maps/${entry.id}`));
                       }}
                       className={`w-full truncate rounded-sm px-1.5 py-1 text-left text-fine ${
                         isCurrent

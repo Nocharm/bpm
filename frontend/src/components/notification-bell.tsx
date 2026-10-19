@@ -10,6 +10,7 @@ import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import { formatNotification, getNotificationIcon } from "@/lib/notification-format";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
+import { runGuardedNavigation } from "@/lib/navigation-guard";
 
 const POLL_MS = 5000;
 
@@ -83,7 +84,7 @@ export function NotificationBell() {
       window.location.assign(`/inbox?notification=${id}`);
       return;
     }
-    router.push(`/inbox?notification=${id}`);
+    runGuardedNavigation(() => router.push(`/inbox?notification=${id}`));
   };
 
   return (

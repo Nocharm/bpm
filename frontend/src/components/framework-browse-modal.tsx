@@ -29,6 +29,7 @@ import {
   type FrameworkTreeState,
 } from "@/lib/framework-tree-state";
 import { useI18n } from "@/lib/i18n";
+import { runGuardedNavigation } from "@/lib/navigation-guard";
 
 export function FrameworkBrowseModal({
   chainCategoryId,
@@ -141,7 +142,7 @@ export function FrameworkBrowseModal({
 
   function goToMap(mapId: number) {
     onClose();
-    router.push(`/maps/${mapId}`);
+    runGuardedNavigation(() => router.push(`/maps/${mapId}`));
   }
 
   const renderMapRow = (row: MapSummary) => {

@@ -15,6 +15,7 @@ import { closesCycle } from "@/lib/subprocess-embed";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { VERSION_STATUS_LABEL } from "@/lib/version-status";
+import { runGuardedNavigation } from "@/lib/navigation-guard";
 
 interface MapNameDropdownProps {
   mapId: number;
@@ -218,7 +219,7 @@ export function MapNameDropdown({
                             // 편집 중이 아니면 잃을 변경이 없으니 즉시 이동, 편집 중이면 확인 모달
                             if (!isEditing) {
                               closeAll();
-                              router.push(`/maps/${m.id}`);
+                              runGuardedNavigation(() => router.push(`/maps/${m.id}`));
                               return;
                             }
                             setOpen(false);
@@ -284,7 +285,7 @@ export function MapNameDropdown({
             const target = pending.map.id;
             setPending(null);
             closeAll();
-            router.push(`/maps/${target}`);
+            runGuardedNavigation(() => router.push(`/maps/${target}`));
           }}
           onClose={() => setPending(null)}
         />

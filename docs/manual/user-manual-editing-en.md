@@ -198,7 +198,7 @@ You can link a map that is **not yet designated** as a placeholder first, and so
 ## 7. Saving and Validation
 
 - The editor **autosaves** about 2 seconds after you stop editing; the **Save** button shows Saving… / Saved / Save failed.
-- Leaving with unsaved edits shows a warning. Save first.
+- Going to another screen in the app while edits are still unsaved opens a dialog: **Save and leave**, **Leave without saving** or **Stay**. The browser back button cannot ask, so it saves right away; closing or reloading the tab shows the browser warning.
 - Saving is blocked until the **save checklist** passes:
   - exactly **one** start node
   - **one** primary end

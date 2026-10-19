@@ -18,6 +18,7 @@ import {
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { runGuardedNavigation } from "@/lib/navigation-guard";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 
 const KINDS: { value: FeedbackKind; labelKey: MessageKey }[] = [
@@ -80,7 +81,7 @@ export function FeedbackSidePanel({
   }, [open]);
 
   const openFeedback = (id: number) => {
-    router.push(`/feedback?feedback=${id}`);
+    runGuardedNavigation(() => router.push(`/feedback?feedback=${id}`));
     onClose();
   };
 
