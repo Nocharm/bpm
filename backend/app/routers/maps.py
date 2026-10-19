@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
@@ -107,9 +107,20 @@ async def _purge_expired(session: AsyncSession) -> None:
     ).all()
     if expired:
         await _delete_map_kb_chunks(session, [m.id for m in expired])
+        await _unlink_purged_canvases(session, [m.id for m in expired])
         for stale_map in expired:
             await session.delete(stale_map)
         await session.commit()
+
+
+async def _unlink_purged_canvases(session: AsyncSession, map_ids: list[int]) -> None:
+    """영구삭제되는 캔버스를 가리키는 L5 포인터를 비운다 — 옛 DB는 이 컬럼에 FK(SET NULL)가 없어 포인터가
+    남았고, 그 L5는 캔버스가 없는데도 "캔버스 있음"으로 삭제가 409로 막혔다 (리뷰 E-3)."""
+    await session.execute(
+        update(ProcessCategory)
+        .where(ProcessCategory.linkage_map_id.in_(map_ids))
+        .values(linkage_map_id=None)
+    )
 
 
 async def _assert_unique_name(
@@ -1780,7 +1791,9 @@ async def list_deleted_maps(
     is_admin = logic.is_sysadmin(user)
     query = select(ProcessMap).where(ProcessMap.deleted_at.is_not(None))
     if not is_admin:
-        query = query.where(ProcessMap.owner_id == user)
+        # 연계 캔버스는 역할이 카테고리 체인에서 파생돼 삭제·복구가 sysadmin뿐이다 — 만든 사람 휴지통에 보이면
+        # 복구 버튼이 403으로 끝났다 (리뷰 E-3)
+        query = query.where(ProcessMap.owner_id == user, ProcessMap.mode != "framework")
     rows = list((await session.scalars(query.order_by(ProcessMap.deleted_at.desc()))).all())
     for row in rows:
         row.my_role = "owner"  # 휴지통 표시용
@@ -1799,6 +1812,13 @@ async def restore_map(
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if found_map.mode == "framework" and await session.scalar(
+        select(ProcessCategory.id).where(ProcessCategory.linkage_map_id == map_id)
+    ) is None:
+        # 그 사이 L5가 새 캔버스를 만들었거나 L5가 지워졌다 — 되살리면 어느 L5에도 붙지 않는 고아 캔버스가 된다 (리뷰 E-3)
+        raise HTTPException(
+            status_code=409, detail="this canvas is no longer linked to its L5 - it cannot be restored"
+        )
     found_map.deleted_at = None
     await session.commit()
     await session.refresh(found_map)
@@ -1826,5 +1846,6 @@ async def purge_map(
         # 활성 맵 오삭제 방지 — 소프트삭제(휴지통) 상태만 영구삭제 허용
         raise HTTPException(status_code=409, detail="map is not in trash")
     await _delete_map_kb_chunks(session, [map_id])
+    await _unlink_purged_canvases(session, [map_id])
     await session.delete(found_map)
     await session.commit()

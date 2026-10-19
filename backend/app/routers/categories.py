@@ -1,5 +1,6 @@
 """컨설턴트 체계 카테고리 트리 — lazy 자식 조회 + 카테고리별 맵 페이지네이션 (design 2026-08-08)."""
 
+from collections import Counter
 from collections.abc import Sequence
 from uuid import uuid4
 
@@ -12,7 +13,6 @@ from app.auth import get_current_user, require_sysadmin
 from app.clock import now as now_kst
 from app.db import get_session
 from app.models import (
-    ApprovalRequest,
     CategoryPermission,
     Employee,
     MapApprover,
@@ -25,6 +25,7 @@ from app.models import (
     _now,
 )
 from app.framework_confirm import load_confirm_draft
+from app.framework_slots import load_pending_slot_sides
 from app.orgchart import load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.permissions import logic
 from app.permissions.access import (
@@ -72,6 +73,7 @@ from app.subprocess import (
     LINKAGE_Y_STEP,
     find_missing_l6_ids,
     grid_positions,
+    live_linkage_map_id,
     unique_linkage_name,
     validate_confirm_readiness,
     validate_confirm_readiness_batch,
@@ -461,21 +463,8 @@ async def _card_meta(session: AsyncSession, rows: Sequence[Row]) -> dict[int, di
                 )
             ).all()
         )
-    pending_by_cat: dict[int, int] = dict(
-        (
-            await session.execute(
-                select(ProcessMap.category_id, func.count())
-                .select_from(ApprovalRequest)
-                .join(ProcessMap, ProcessMap.id == ApprovalRequest.map_id)
-                .where(
-                    ApprovalRequest.kind == "fw_slot",
-                    ApprovalRequest.status == "pending",
-                    ProcessMap.deleted_at.is_(None),
-                    ProcessMap.category_id.in_([r.id for r in l5_rows]),
-                )
-                .group_by(ProcessMap.category_id)
-            )
-        ).all()
+    pending_by_cat = Counter(
+        cid for sides in await load_pending_slot_sides(session) for cid in sides
     )
     meta: dict[int, dict] = {}
     for r in rows:
@@ -513,7 +502,7 @@ async def list_category_nodes(
                 ProcessCategory.name,
                 ProcessCategory.level,
                 ProcessCategory.sort_order,
-                ProcessCategory.linkage_map_id,
+                live_linkage_map_id(),
                 ProcessCategory.admin_department,
             )
         )
@@ -575,7 +564,7 @@ async def get_framework_overview(
         await session.execute(
             select(
                 ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level,
-                ProcessCategory.name, ProcessCategory.linkage_map_id,
+                ProcessCategory.name, live_linkage_map_id(),
             )
         )
     ).all()
@@ -766,7 +755,7 @@ async def get_category_summary(
         await session.execute(
             select(
                 ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level,
-                ProcessCategory.name, ProcessCategory.linkage_map_id,
+                ProcessCategory.name, live_linkage_map_id(),
                 ProcessCategory.admin_department,
             )
         )
@@ -1111,7 +1100,7 @@ async def get_category_chain(
                 ProcessCategory.name,
                 ProcessCategory.level,
                 ProcessCategory.sort_order,
-                ProcessCategory.linkage_map_id,
+                live_linkage_map_id(),
                 ProcessCategory.admin_department,
             )
         )
@@ -1126,7 +1115,10 @@ async def get_category_chain(
 
     chain = []
     cursor: int | None = category_id
-    while cursor is not None:
+    # 방문한 id에서 멈춘다 — 부모 사이클이 DB에 남아 있어도 단일 워커가 무한 루프에 빠지지 않게 (리뷰 E-7)
+    seen: set[int] = set()
+    while cursor is not None and cursor in by_id and cursor not in seen:
+        seen.add(cursor)
         row = by_id[cursor]
         chain.append(row)
         cursor = row.parent_id
@@ -1342,6 +1334,7 @@ async def update_category(
             )
         category.admin_department = payload.admin_department
 
+    previous_name = category.name
     if payload.name is not None:
         category.name = payload.name
         # 캔버스 이름 동기 — 생성 시 자동 명명("{이름} 연계")과 동일 규칙 (design 2026-08-28 §9)
@@ -1353,9 +1346,19 @@ async def update_category(
                 )
 
     moved = False
+    final_parent_id = category.parent_id
     if "parent_id" in payload.model_fields_set:
         new_parent_id = payload.parent_id  # None=루트로 이동
-        wants_move = new_parent_id != category.parent_id
+        # 트리 전체를 잠그고 읽는다 — 반대 방향 이동 2건이 서로의 커밋 전 트리로 판정하면 부모 사이클이
+        # 생긴다. 뒤에 온 요청은 앞의 커밋을 본 트리로 다시 판정해 422가 된다(postgres 전용, sqlite는 무시) (리뷰 E-7).
+        rows = (
+            await session.execute(
+                select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level)
+                .with_for_update()
+            )
+        ).all()
+        by_id = {r.id: r for r in rows}
+        wants_move = new_parent_id != by_id[category_id].parent_id
         if not is_sysadmin and wants_move:
             if category_id in seeds:
                 raise HTTPException(
@@ -1363,12 +1366,6 @@ async def update_category(
                 )
             if new_parent_id not in admin_ids:
                 raise HTTPException(status_code=403, detail="outside your delegated subtree")
-        rows = (
-            await session.execute(
-                select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level)
-            )
-        ).all()
-        by_id = {r.id: r for r in rows}
         if new_parent_id is not None and new_parent_id not in by_id:
             raise HTTPException(
                 status_code=404, detail=f"category {new_parent_id} not found"
@@ -1427,6 +1424,29 @@ async def update_category(
                 level_by_id[nid] = level_by_id[by_id[nid].parent_id] + 1
                 next_frontier.extend(children_by_parent.get(nid, []))
             frontier = next_frontier
+        # 레벨이 바뀌는 카테고리가 맵(휴지통 포함)이나 연계 캔버스를 품고 있으면 막는다 — 슬롯·캔버스는 L5 전용이라
+        # 레벨이 바뀌면 캔버스 상태가 사라지고 L6 교체·삭제가 409로 묶인다 (리뷰 E-4)
+        relevelled = [nid for nid, lvl in level_by_id.items() if lvl != by_id[nid].level]
+        if relevelled:
+            bound = await session.scalar(
+                select(func.count())
+                .select_from(ProcessMap)
+                .where(ProcessMap.category_id.in_(relevelled))
+            ) or 0
+            bound += await session.scalar(
+                select(func.count())
+                .select_from(ProcessCategory)
+                .join(ProcessMap, ProcessMap.id == ProcessCategory.linkage_map_id)
+                .where(ProcessCategory.id.in_(relevelled))
+            ) or 0
+            if bound:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "this move changes category levels, but the moved categories hold maps or "
+                        "linkage canvases - move them to a parent at the same level"
+                    ),
+                )
         subtree_rows = (
             await session.scalars(
                 select(ProcessCategory).where(ProcessCategory.id.in_(level_by_id.keys()))
@@ -1436,7 +1456,22 @@ async def update_category(
             row_obj.level = level_by_id[row_obj.id]
 
         category.parent_id = new_parent_id
+        final_parent_id = new_parent_id
         moved = True
+
+    # 같은 부모 아래 같은 이름 금지 — 생성(create_category)과 같은 규칙을 개명·이동에도 (리뷰 E-4)
+    if (category.name != previous_name or moved) and final_parent_id is not None:
+        dup_name = await session.scalar(
+            select(ProcessCategory.id).where(
+                ProcessCategory.parent_id == final_parent_id,
+                ProcessCategory.name == category.name.strip(),
+                ProcessCategory.id != category_id,
+            )
+        )
+        if dup_name is not None:
+            raise HTTPException(
+                status_code=409, detail=f"name '{category.name.strip()}' already exists under this parent"
+            )
 
     if moved and payload.sort_order is None:
         # 이동 시 sort_order 미지정이면 새 형제 맨 뒤로 — 명시 전송값은 아래에서 덮어씀
@@ -1520,15 +1555,36 @@ async def delete_category(
         )
 
     # 연계 캔버스도 맵과 동일 취급 — 서브트리에 캔버스가 남아 있으면 삭제 불가 (design 2026-08-28 §9)
+    # 휴지통 캔버스도 맵처럼 막지만, 영구삭제로 없어진 캔버스를 가리키는 옛 포인터는 세지 않는다 (리뷰 E-3)
     canvas_count = await session.scalar(
         select(func.count())
         .select_from(ProcessCategory)
-        .where(ProcessCategory.id.in_(subtree_ids), ProcessCategory.linkage_map_id.is_not(None))
+        .join(ProcessMap, ProcessMap.id == ProcessCategory.linkage_map_id)
+        .where(ProcessCategory.id.in_(subtree_ids))
     )
     if canvas_count:
         raise HTTPException(
             status_code=409,
             detail=f"{canvas_count} linkage canvases exist in this subtree",
+        )
+
+    # 다른 캔버스의 플레이스홀더가 가리키면 막는다 — 지우면 그 캔버스 저장이 매번 422(없는 카테고리 참조)가 된다.
+    # 편집 가능한 버전만 본다(확정 스냅샷은 저장되지 않고 경로를 못 찾으면 비워 보여 준다) (리뷰 E-5)
+    placeholder_count = await session.scalar(
+        select(func.count())
+        .select_from(Node)
+        .join(MapVersion, MapVersion.id == Node.version_id)
+        .join(ProcessMap, ProcessMap.id == MapVersion.map_id)
+        .where(
+            Node.placeholder_category_id.in_(subtree_ids),
+            MapVersion.status.in_(workflow.EDITABLE_STATUSES),
+            ProcessMap.deleted_at.is_(None),
+        )
+    )
+    if placeholder_count:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{placeholder_count} canvas placeholders reference this subtree",
         )
 
     # 자식부터 명시적 벌크 DELETE(레벨 역순 배치) — ORM 개별 delete는 플러시 순서가 보장되지
@@ -1544,6 +1600,10 @@ async def delete_category(
     ids_by_level: dict[int, list[int]] = {}
     for cid, lvl in level_rows:
         ids_by_level.setdefault(lvl, []).append(cid)
+    # 권한 행은 FK CASCADE지만 sqlite는 FK를 강제하지 않아 고아가 남고 위임 범위 계산이 KeyError(500)가 됐다 (리뷰 E-5)
+    await session.execute(
+        delete(CategoryPermission).where(CategoryPermission.category_id.in_(subtree_ids))
+    )
     for lvl in sorted(ids_by_level, reverse=True):
         await session.execute(
             delete(ProcessCategory).where(ProcessCategory.id.in_(ids_by_level[lvl]))
@@ -1601,6 +1661,18 @@ async def open_linkage_map(
         # 생성 — 권한자만. 소프트삭제/영구삭제된 캔버스는 새로 만든다(포인터 덮어씀).
         if not is_admin:
             raise HTTPException(status_code=404, detail="no linkage canvas for this category")
+        # 카테고리 행을 잠그고 다시 본다 — 더블클릭·두 탭이 동시에 만들면 같은 이름 캔버스가 둘 생기고
+        # 하나는 고아가 된다. 뒤의 요청은 앞이 만든 캔버스를 돌려받는다(postgres 전용, sqlite는 무시) (리뷰 E-8)
+        category = await session.get(
+            ProcessCategory, category_id, with_for_update=True, populate_existing=True
+        )
+        made = (
+            await session.get(ProcessMap, category.linkage_map_id)
+            if category is not None and category.linkage_map_id is not None
+            else None
+        )
+        if made is not None and made.deleted_at is None:
+            return LinkageMapOut(map_id=made.id, added_count=0, missing_count=0)
         canvas = ProcessMap(
             name=await unique_linkage_name(session, category),
             created_by=user, owner_id=user, visibility="public", mode="framework",

@@ -491,6 +491,23 @@ async def remaining_sides(session: AsyncSession, req: ApprovalRequest) -> list[i
     return [int(c) for c in req.payload.get("sides", []) if str(c) not in approvals]
 
 
+async def load_pending_slot_sides(session: AsyncSession) -> list[list[int]]:
+    """대기 중 fw_slot 요청마다 아직 결정하지 않은 side(L5) 목록 — 홈 L5 배지·대시보드가 인박스 결정권
+    (remaining_sides)과 같은 기준으로 센다. 맵의 지금 L5로 세면 move의 도착 L5와 assign이 빠진다 (리뷰 E-9)."""
+    requests = (
+        await session.scalars(
+            select(ApprovalRequest)
+            .join(ProcessMap, ProcessMap.id == ApprovalRequest.map_id)
+            .where(
+                ApprovalRequest.kind == "fw_slot",
+                ApprovalRequest.status == "pending",
+                ProcessMap.deleted_at.is_(None),
+            )
+        )
+    ).all()
+    return [await remaining_sides(session, req) for req in requests]
+
+
 async def can_decide_slot_for_map(
     session: AsyncSession, user: str, found_map: ProcessMap
 ) -> bool:

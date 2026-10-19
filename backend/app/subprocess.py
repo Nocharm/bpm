@@ -54,6 +54,21 @@ def grid_positions(start_index: int, count: int, base_y: float) -> list[tuple[fl
     return out
 
 
+def live_linkage_map_id():
+    """L5의 살아 있는 캔버스 id(select 열, 라벨 linkage_map_id) — 휴지통에 갔거나 영구삭제로 없어진 캔버스는 NULL.
+
+    포인터는 그대로 두어 sysadmin이 휴지통에서 복구하면 그 L5로 돌아온다. 홈 열기 버튼·확정 집계·체계 개요가
+    삭제된 캔버스를 "있음/확정"으로 읽던 것을 한 식으로 막는다 (리뷰 2026-10-19 E-3).
+    """
+    return (
+        select(ProcessMap.id)
+        .where(ProcessMap.id == ProcessCategory.linkage_map_id, ProcessMap.deleted_at.is_(None))
+        .correlate(ProcessCategory)
+        .scalar_subquery()
+        .label("linkage_map_id")
+    )
+
+
 async def unique_linkage_name(
     session: AsyncSession, category: ProcessCategory, exclude_map_id: int | None = None
 ) -> str:

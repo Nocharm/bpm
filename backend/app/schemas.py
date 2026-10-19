@@ -1525,6 +1525,8 @@ class CheckoutOut(BaseModel):
     checked_out_at: datetime | None
     # 요청 사용자가 현재 잠금 소유자인지
     mine: bool
+    # L5 캔버스 확정 요청 대기 중이라 결정권자만 점유할 수 있다 — 클라이언트는 읽기 전용 + 대기 안내 (리뷰 E-1)
+    confirm_pending: bool = False
 
 
 class CheckoutTransferIn(BaseModel):

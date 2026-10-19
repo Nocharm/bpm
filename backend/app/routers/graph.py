@@ -367,6 +367,26 @@ async def replace_graph(
                     status_code=422,
                     detail=f"contained L6 nodes cannot be removed from the canvas: {missing}",
                 )
+            # 슬롯 교체로 은퇴한 맵을 새로 링크하면 막는다 — 후계가 이미 캔버스에 있으면 서버가 옛 노드를 지우고
+            # 엣지를 후계로 옮기는데, 점유자의 낡은 자동저장이 옛 노드·엣지를 그대로 되살렸다. 이미 저장된 링크는 둔다.
+            # 접두어는 FE isCanvasRepointedError가 새로고침 안내로 받는다 (리뷰 E-6)
+            new_linked = payload_linked - stored_linked
+            if new_linked:
+                retired = sorted(
+                    (
+                        await session.scalars(
+                            select(ProcessMap.id).where(
+                                ProcessMap.id.in_(new_linked),
+                                ProcessMap.retired_to_map_id.is_not(None),
+                            )
+                        )
+                    ).all()
+                )
+                if retired:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"retired L6 maps cannot be linked on the canvas: {retired}",
+                    )
 
     await _assert_new_links_allowed(session, version, payload.nodes, user, contained_ids)
 

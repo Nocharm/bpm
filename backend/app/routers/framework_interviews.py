@@ -74,7 +74,8 @@ async def _category_path_ids(db: AsyncSession, category_id: int) -> list[int]:
     """root→self id 체인 — 부모 포인터를 따라 올라간다(카테고리 깊이 최대 5)."""
     ids: list[int] = []
     current = await db.get(ProcessCategory, category_id)
-    while current is not None:
+    # 이미 지난 id에서 멈춘다 — 부모 사이클이 남아 있어도 무한 루프가 되지 않게 (리뷰 E-7)
+    while current is not None and current.id not in ids:
         ids.append(current.id)
         current = await db.get(ProcessCategory, current.parent_id) if current.parent_id else None
     ids.reverse()

@@ -724,6 +724,8 @@ export interface CheckoutState {
   checked_out_by: string | null;
   checked_out_at: string | null;
   mine: boolean;
+  // L5 캔버스 확정 요청 대기 중 — 결정권자만 점유할 수 있어 읽기 전용 (리뷰 E-1, 다른 응답은 생략)
+  confirm_pending?: boolean;
 }
 
 export function acquireCheckout(

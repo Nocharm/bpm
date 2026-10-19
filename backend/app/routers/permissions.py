@@ -659,7 +659,11 @@ async def decide_approval_request(
 
     게이트: 해당 요청 맵의 승인자 또는 sysadmin (경로가 request_id 라 런타임 판정).
     """
-    req = await session.get(ApprovalRequest, request_id)
+    # 요청 행을 잠그고 다시 읽는다 — fw_slot 양측 L5 관리자가 동시에 승인하면 둘 다 빈 approvals로 시작해
+    # 한쪽 승인이 덮여 요청이 영원히 pending으로 남았다(postgres 전용, sqlite는 무시) (리뷰 E-10)
+    req = await session.get(
+        ApprovalRequest, request_id, with_for_update=True, populate_existing=True
+    )
     if req is None:
         raise HTTPException(status_code=404, detail=f"approval request {request_id} not found")
     if req.kind in ("map_rename", "sp_designation"):

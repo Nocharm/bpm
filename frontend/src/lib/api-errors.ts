@@ -11,9 +11,13 @@ export const PERMISSION_PENDING_DETAIL_PREFIX = "your permission change is pendi
 // 슬롯 변경이 서버에서 이 캔버스를 재결착한 뒤, 옛 체크아웃을 들고 있던 편집자의 다음 PUT /graph가 막히는
 // 데드엔드 감지용 (backend app/routers/graph.py:314-317). page.tsx 저장 에러 경로에서 배너 대신 새로고침 토스트로 분기.
 export const CANVAS_REPOINTED_DETAIL_PREFIX = "contained L6 nodes cannot be removed from the canvas";
+// 후계가 이미 캔버스에 있던 슬롯 교체 뒤 낡은 저장이 은퇴한 맵을 되살리려 할 때 (같은 파일 graph.py, 리뷰 E-6)
+export const CANVAS_RETIRED_LINK_DETAIL_PREFIX = "retired L6 maps cannot be linked on the canvas";
 
 export function isCanvasRepointedError(err: unknown): boolean {
-  return err instanceof ApiError && err.status === 422 && getApiErrorDetail(err).startsWith(CANVAS_REPOINTED_DETAIL_PREFIX);
+  if (!(err instanceof ApiError) || err.status !== 422) return false;
+  const detail = getApiErrorDetail(err);
+  return detail.startsWith(CANVAS_REPOINTED_DETAIL_PREFIX) || detail.startsWith(CANVAS_RETIRED_LINK_DETAIL_PREFIX);
 }
 
 // 슬롯 변경 재시도 데드엔드 감지용 — 이 맵에 fw_slot 요청이 이미 대기 중이면 이 detail로 409

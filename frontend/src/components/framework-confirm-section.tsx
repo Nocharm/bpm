@@ -43,6 +43,8 @@ export interface FrameworkConfirmSectionProps {
   onFocusNode?: (nodeId: string) => void; // 게이트 위반 노드로 이동(캔버스 아웃라인 유틸 재사용)
   // 대기 중인 자동저장을 먼저 비운다 — 확정·확정 요청이 저장된 구본이 아니라 지금 화면을 대상으로 (리뷰 2026-10-19 E-11)
   flushPendingSave: () => Promise<void>;
+  // 확정 요청을 보내거나 철회한 뒤 — 부모가 점유 상태를 바로 다시 읽는다(요청 중엔 결정권자만 점유, 리뷰 E-1)
+  onRequestChanged?: () => void;
 }
 
 interface FwSnapshot {
@@ -119,6 +121,7 @@ function MajorImpactRows({
 export function FrameworkConfirmSection({
   mapId, canConfirm, canRequest, currentUser, versions, liveNodes, liveEdges, onConfirmed, onError, onFocusNode,
   flushPendingSave,
+  onRequestChanged,
 }: FrameworkConfirmSectionProps) {
   const { t } = useI18n();
   const [major, setMajor] = useState(false);
@@ -174,6 +177,7 @@ export function FrameworkConfirmSection({
       .then((req) => {
         setPendingRequest(req);
         setRequestNote("");
+        onRequestChanged?.();
       })
       .catch((err) => onError(humanizeApiError(err, t)))
       .finally(() => setRequestBusy(false));
@@ -184,7 +188,10 @@ export function FrameworkConfirmSection({
     setWithdrawBusy(true);
     withdrawFwConfirmRequest(mapId)
       .then(() => getPendingFwConfirmRequest(mapId))
-      .then((req) => setPendingRequest(req))
+      .then((req) => {
+        setPendingRequest(req);
+        onRequestChanged?.();
+      })
       .catch((err) => onError(humanizeApiError(err, t)))
       .finally(() => setWithdrawBusy(false));
   }

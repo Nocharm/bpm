@@ -750,14 +750,21 @@ export default function MapListPage() {
 
   // 연계 캔버스 열기 — 있으면 이동, 없으면 생성(권한자) 후 이동. Framework 트리의 Linkage 버튼과
   // 카테고리 요약 카드의 Open canvas 버튼이 이 핸들러를 공유한다.
+  // 만드는 중엔 다시 누르지 않는다 — 더블클릭이 같은 이름 캔버스 둘을 만들던 경로(서버도 잠금으로 막는다, 리뷰 E-8)
+  const openingLinkageRef = useRef(false);
   const handleOpenLinkage = (node: { id: number; linkage_map_id: number | null }) => {
     if (node.linkage_map_id !== null) {
       router.push(`/maps/${node.linkage_map_id}`);
       return;
     }
+    if (openingLinkageRef.current) return;
+    openingLinkageRef.current = true;
     void openLinkageMap(node.id)
       .then((r) => router.push(`/maps/${r.map_id}`))
-      .catch((err) => showToast(humanizeApiError(err, t), "error"));
+      .catch((err) => showToast(humanizeApiError(err, t), "error"))
+      .finally(() => {
+        openingLinkageRef.current = false;
+      });
   };
 
   // 빈 여백을 "직접" 누르면 선택 해제(맵·카테고리 모두) — 자식(카드·상세·버튼)에서 올라온 이벤트로는 풀지 않는다

@@ -1409,6 +1409,13 @@ function MapEditor({ mapId }: { mapId: number }) {
             title: t("editor.readonly.checkoutTitle", { name: checkoutHolderLabel }),
             desc: t("editor.readonly.checkoutDesc"),
           }
+        : checkout?.confirm_pending
+          ? {
+              tone: "accent",
+              icon: Hourglass,
+              title: t("editor.readonly.confirmPendingTitle"),
+              desc: t("editor.readonly.confirmPendingDesc"),
+            }
         : currentVersion?.status === "published"
           ? {
               tone: "accent",
@@ -1443,9 +1450,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     currentVersion?.status === "confirmed" &&
     latestConfirmed !== null &&
     currentVersion.id !== latestConfirmed.id;
+  // 확정 요청 대기 중이면 draft 배너 대신 읽기 전용 안내(Confirm requested)가 보이게 비켜 준다 (리뷰 E-1)
   const frameworkNotice: EditorNotice | null = !isFrameworkMap
     ? null
-    : currentVersion?.status === "draft" && checkoutHolder === null
+    : currentVersion?.status === "draft" && checkoutHolder === null && !checkout?.confirm_pending
       ? {
           tone: "warn",
           icon: PencilLine,
@@ -3200,6 +3208,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 게이트는 선택 버전의 status만 반응 — versions 배열 identity를 deps에 두면 목록 갱신마다
   // 인터벌이 재구독되며 acquireCheckout이 즉시 재호출된다(스팸).
   const selectedVersionStatus = versions.find((v) => v.id === versionId)?.status ?? null;
+  // 확정 요청·철회 직후 점유 상태를 바로 다시 본다 — 다음 폴(10초)까지 편집 가능/불가 표시가 어긋나지 않게 (리뷰 E-1)
+  const [checkoutPollKey, setCheckoutPollKey] = useState(0);
   // 폴 실패 처리 — t 최신값을 읽되 재구독을 유발하지 않는다. true 반환 = 영구 409(권한 pending)로 폴링 정지.
   const handleCheckoutPollError = useEffectEvent((err: unknown) => {
     setStatus(humanizeApiError(err, t));
@@ -3252,7 +3262,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       checkoutMineRef.current = false;
     };
-  }, [versionId, selectedVersionStatus, isEditorRole]);
+  }, [versionId, selectedVersionStatus, isEditorRole, checkoutPollKey]);
 
   const handleForceCheckout = useCallback(async () => {
     if (versionId === null) {
@@ -12063,6 +12073,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           onError={(message) => showToast(message, "error")}
                           onFocusNode={handleOutlineSelect}
                           flushPendingSave={flushPendingSave}
+                          onRequestChanged={() => setCheckoutPollKey((key) => key + 1)}
                         />
                       </div>
                     )}

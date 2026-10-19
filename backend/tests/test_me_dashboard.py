@@ -205,7 +205,8 @@ def test_framework_block_for_category_admin(client: TestClient, enforce: None) -
         async with SessionLocal() as session:
             session.add(ApprovalRequest(
                 map_id=l6_map_id, kind="fw_slot",
-                payload={"action": "unassign", "from_category_id": l5_canvas},
+                # 실제 요청과 같은 모양 — 배지는 결정할 side(sides) 기준으로 센다 (리뷰 E-9)
+                payload={"action": "unassign", "from_category_id": l5_canvas, "sides": [l5_canvas]},
                 requested_by=SYSADMIN, status="pending",
             ))
             await session.commit()

@@ -15,7 +15,12 @@ from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
 from app.kb import embed_client, indexing
 from app.orgchart import load_dept_index
-from app.permissions.access import get_effective_role, get_eligible_users
+from app.permissions.access import (
+    get_effective_role,
+    get_eligible_users,
+    get_framework_category_id,
+    is_direct_l5_admin,
+)
 from app.permissions.deps import require_map_role, require_version_map_role
 from app.permissions.logic import is_sysadmin
 from app.models import (
@@ -390,6 +395,16 @@ async def acquire_checkout(
             detail="your permission change is pending approval - cannot take checkout",
         )
 
+    if version.checked_out_by != user and await _is_waiting_for_confirm_decision(
+        session, version.map_id, user
+    ):
+        return CheckoutOut(
+            checked_out_by=version.checked_out_by,
+            checked_out_at=version.checked_out_at,
+            mine=False,
+            confirm_pending=True,
+        )
+
     now = now_kst()
     if is_locked_by_other(version, user, now):
         if not payload.force:
@@ -609,6 +624,25 @@ async def get_workflow_state(
         bundled_visibility=bundled_visibility,
         submitter_unavailable=submitter_unavailable,
     )
+
+
+async def _is_waiting_for_confirm_decision(session: AsyncSession, map_id: int, user: str) -> bool:
+    """L5 캔버스에 확정 요청이 대기 중이고 호출자가 결정권자(직속 L5 관리자·sysadmin)가 아닌가.
+
+    요청이 점유를 풀어도 열려 있는 요청자 에디터의 10초 폴링이 곧바로 되가져가, 결정권자의 승인·확정이
+    409로 막혔다. 대기 중에는 결정권자만 새로 점유할 수 있다(사용자 결정 2026-10-20, 리뷰 E-1).
+    """
+    request_payload = await session.scalar(
+        select(ApprovalRequest.payload).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "fw_confirm",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if request_payload is None or is_sysadmin(user):
+        return False
+    category_id = request_payload.get("category_id") or await get_framework_category_id(session, map_id)
+    return category_id is None or not await is_direct_l5_admin(session, user, category_id)
 
 
 async def _find_own_pending_downgrade(

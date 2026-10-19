@@ -26,8 +26,10 @@ from app.models import (
     ProcessMap,
     VersionEvent,
 )
+from app.framework_slots import load_pending_slot_sides
 from app.permissions.access import get_admin_scope, load_my_roles
 from app.routers.inbox import list_inbox_approvals
+from app.subprocess import live_linkage_map_id
 from app.schemas import (
     MeDashboardActivityOut,
     MeDashboardCategoryOut,
@@ -244,7 +246,7 @@ async def _load_framework(session: AsyncSession, user: str) -> list[MeDashboardC
         await session.execute(
             select(
                 ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level,
-                ProcessCategory.name, ProcessCategory.linkage_map_id,
+                ProcessCategory.name, live_linkage_map_id(),
             )
         )
     ).all()
@@ -276,23 +278,7 @@ async def _load_framework(session: AsyncSession, user: str) -> list[MeDashboardC
                 )
             ).all()
         )
-    slot_pending_by_cat: dict[int, int] = {
-        cid: cnt
-        for cid, cnt in (
-            await session.execute(
-                select(ProcessMap.category_id, func.count())
-                .select_from(ApprovalRequest)
-                .join(ProcessMap, ProcessMap.id == ApprovalRequest.map_id)
-                .where(
-                    ApprovalRequest.kind == "fw_slot",
-                    ApprovalRequest.status == "pending",
-                    ProcessMap.deleted_at.is_(None),
-                    ProcessMap.category_id.in_(all_ids),
-                )
-                .group_by(ProcessMap.category_id)
-            )
-        ).all()
-    }
+    pending_slot_sides = await load_pending_slot_sides(session)
 
     out: list[MeDashboardCategoryOut] = []
     for root, ids in subtree_by_root.items():
@@ -310,7 +296,8 @@ async def _load_framework(session: AsyncSession, user: str) -> list[MeDashboardC
                 linkage_map_id=lmid,
                 l5_count=len(l5_ids),
                 unconfirmed_count=unconfirmed,
-                slot_pending_count=sum(slot_pending_by_cat.get(cid, 0) for cid in ids),
+                # 결정할 side가 이 서브트리에 있는 요청 수 — 인박스와 같은 단위(요청 1건 = 1)
+                slot_pending_count=sum(1 for sides in pending_slot_sides if any(c in ids for c in sides)),
             )
         )
     return out

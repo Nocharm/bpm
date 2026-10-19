@@ -37,6 +37,15 @@ describe("isCanvasRepointedError", () => {
     expect(isCanvasRepointedError(err)).toBe(true);
   });
 
+  it("also detects the retired-map relink after a slot replace (E-6)", () => {
+    const err = new ApiError(
+      "API PUT /versions/1/graph failed: 422",
+      422,
+      JSON.stringify({ detail: "retired L6 maps cannot be linked on the canvas: [7]" }),
+    );
+    expect(isCanvasRepointedError(err)).toBe(true);
+  });
+
   it("rejects the same detail on a different status", () => {
     const err = new ApiError(
       "API PUT /versions/1/graph failed: 409",

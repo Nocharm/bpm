@@ -48,7 +48,8 @@ async def load_category_chain(db: AsyncSession, category_id: int) -> list[dict]:
     by_id = {row.id: row for row in rows}
     chain: list[ProcessCategory] = []
     current = by_id.get(category_id)
-    while current is not None:
+    # 이미 지난 카테고리에서 멈춘다 — 부모 사이클이 남아 있어도 무한 루프가 되지 않게 (리뷰 E-7)
+    while current is not None and current not in chain:
         chain.append(current)
         current = by_id.get(current.parent_id) if current.parent_id else None
     chain.reverse()
