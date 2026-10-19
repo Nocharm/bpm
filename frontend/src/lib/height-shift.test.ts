@@ -218,3 +218,32 @@ describe("buildHeightShiftField - 조건 캡션(위=시작·아래=종료, 높�
     expect(saved + (again.offsets.get("b") ?? 0)).toBeCloseTo(display, 4);
   });
 });
+
+describe("buildHeightShiftField - PNG 출력 정렬 유지 이동(shifts)", () => {
+  it("위로 올린 가운데 정렬 행이 위 노드와 겹치지 않게 행째 민다 - 행은 저장 좌표로 묶는다", () => {
+    // u 아래 a·b 가운데 정렬 행. 입출력 펼침으로 a 220·b 120이 되어 가운데를 지키려 각각 60·34 올라간다
+    const nodes = [
+      makeNode("u", 0, 0, { measuredH: 52 }),
+      makeNode("a", 0, 100, { measuredH: 220 }),
+      makeNode("b", 300, 124, { measuredH: 120 }),
+    ];
+    const shifts = new Map([
+      ["a", { dx: 0, dy: -60 }],
+      ["b", { dx: 0, dy: -34 }],
+    ]);
+    const field = buildHeightShiftField(nodes, undefined, shifts);
+    const topA = 100 - 60 + (field.offsets.get("a") ?? 0);
+    const topB = 124 - 34 + (field.offsets.get("b") ?? 0);
+    expect(topA).toBe(52 + 16);
+    // 행 동기화 — 가운데가 그대로 맞는다
+    expect(topA + 220 / 2).toBe(topB + 120 / 2);
+  });
+
+  it("아래로 옮긴 노드는 저장 간격 안쪽 아래 노드를 민다 - 행이 합쳐져 겹치지 않는다", () => {
+    // a가 줄어 가운데를 지키려 50 내려간다(저장 간격 30보다 큼)
+    const nodes = [makeNode("a", 0, 0, { measuredH: 52 }), makeNode("d", 0, 82, { measuredH: 52 })];
+    const field = buildHeightShiftField(nodes, undefined, new Map([["a", { dx: 0, dy: 50 }]]));
+    const bottomA = 50 + 52;
+    expect(82 + (field.offsets.get("d") ?? 0)).toBe(bottomA + 16);
+  });
+});

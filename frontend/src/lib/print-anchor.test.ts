@@ -30,6 +30,13 @@ describe("inferAlignAnchors", () => {
     const lone = inferAlignAnchors([rect("a", 0, 0, 150, 60), rect("b", 517, 333, 170, 90)]);
     expect(lone.get("a")).toEqual({ x: null, y: null });
   });
+
+  it("lets a same-size column neighbour outvote a far node that only shares the snapped left edge", () => {
+    // a·b는 같은 크기로 한 열, f는 멀리서 왼쪽 x만 우연히 같다(8px 격자 스냅)
+    const anchors = inferAlignAnchors([rect("a", 104, 0, 240, 60), rect("b", 104, 200, 240, 60), rect("f", 104, 900, 150, 60)]);
+    expect(anchors.get("b")?.x).toBe("center");
+    expect(anchors.get("f")?.x).toBe("start");
+  });
 });
 
 describe("getPrintShifts", () => {

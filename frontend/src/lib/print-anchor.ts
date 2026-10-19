@@ -32,9 +32,10 @@ const ALIGN_TOLERANCE = 1;
 // 이보다 작은 이동은 무시 — 출력에 보이지 않는 지터
 const MIN_SHIFT = 0.5;
 
-// 같은 크기로 같은 자리에 겹친 상대(시작·가운데·끝이 모두 맞음)는 의도를 알 수 없어 기본값을 쓴다 —
+// 같은 크기로 같은 자리에 겹친 상대(시작·가운데·끝이 모두 맞음)는 의도를 알 수 없어 기본값에 한 표를 준다 —
 // 가로는 가운데(위·아래 핸들이 노드 가운데라 세로 연결선이 곧게 남는다), 세로는 시작(좌우 핸들이 제목 줄 높이라 위가 고정이면
-// 가로 연결선이 곧게 남는다). 다른 노드와 맞닿은 기준이 없으면 옮기지 않는다
+// 가로 연결선이 곧게 남는다). 표로 세야 8px 격자 스냅으로 우연히 맞은 먼 노드가 바로 옆 열을 이기지 않는다.
+// 다른 노드와 맞닿은 기준이 없으면 옮기지 않는다
 const AMBIGUOUS_DEFAULT: Record<"x" | "y", AlignAnchor> = { x: "center", y: "start" };
 // 표가 같으면 이 순서로
 const TIE_ORDER: Record<"x" | "y", AlignAnchor[]> = {
@@ -47,19 +48,17 @@ function inferAxis(rect: AnchorRect, others: readonly AnchorRect[], axis: "x" | 
   const size = (r: AnchorRect) => (axis === "x" ? r.width : r.height);
   const near = (a: number, b: number) => Math.abs(a - b) <= ALIGN_TOLERANCE;
   const votes: Record<AlignAnchor, number> = { start: 0, center: 0, end: 0 };
-  let ambiguous = false;
   for (const other of others) {
     const start = near(pos(rect), pos(other));
     const center = near(pos(rect) + size(rect) / 2, pos(other) + size(other) / 2);
     const end = near(pos(rect) + size(rect), pos(other) + size(other));
-    if (start && center && end) ambiguous = true;
+    if (start && center && end) votes[AMBIGUOUS_DEFAULT[axis]] += 1;
     else if (center) votes.center += 1;
     else if (start) votes.start += 1;
     else if (end) votes.end += 1;
   }
   const best = TIE_ORDER[axis].reduce((a, b) => (votes[b] > votes[a] ? b : a));
-  if (votes[best] > 0) return best;
-  return ambiguous ? AMBIGUOUS_DEFAULT[axis] : null;
+  return votes[best] > 0 ? best : null;
 }
 
 /** 노드마다 가로·세로로 지킬 기준 — 캔버스 크기 기준으로 다른 노드와 맞닿은 시작·가운데·끝 중 가장 많은 쪽 */

@@ -7292,17 +7292,23 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 조건 캡션(노드 밖 위·아래)도 Conditions 토글을 따라 간격에 반영
   // 노드가 실제로 그리는 표시 정보 — PNG 출력 중엔 옵션 창 선택(printView), 평소엔 사용자 설정
   const nodeDisplayFields = printView?.displayFields ?? displayFields;
-  // 표시용 노드 — PNG 출력 중엔 정렬 유지 이동(printView.shifts)을 얹는다. 간격 보정·노드 표시·팬 레인·영역 박스가
+  // 표시용 노드 — PNG 출력 중엔 정렬 유지 이동(printView.shifts)을 얹는다. 노드 표시·팬 레인·영역 박스가
   // 같은 좌표를 봐야 연결선·영역이 옮긴 노드를 따라간다. 평소엔 nodes 그대로(같은 배열)
+  const printShifts = printView?.shifts ?? null;
   const layoutNodes = useMemo(
-    () => (printView?.shifts ? applyPrintShifts(nodes, printView.shifts) : nodes),
-    [nodes, printView],
+    () => (printShifts ? applyPrintShifts(nodes, printShifts) : nodes),
+    [nodes, printShifts],
   );
+  // 간격 보정은 저장 좌표(nodes)로 행을 묶고 이동은 따로 받는다 — 오프셋은 layoutNodes 위에 더할 양
   const heightField = useMemo(
     () =>
       dragFrozenField ??
-      buildHeightShiftField(layoutNodes, (node) => getConditionCaptionExtents(node, nodeDisplayFields)),
-    [dragFrozenField, layoutNodes, nodeDisplayFields],
+      buildHeightShiftField(
+        nodes,
+        (node) => getConditionCaptionExtents(node, nodeDisplayFields),
+        printShifts ?? undefined,
+      ),
+    [dragFrozenField, nodes, nodeDisplayFields, printShifts],
   );
   useEffect(() => {
     heightFieldRef.current = heightField;
