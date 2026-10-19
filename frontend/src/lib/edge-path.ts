@@ -42,6 +42,35 @@ export function applyPrintEdgeCorners<T extends { data?: Record<string, unknown>
   return edges.map((edge) => ({ ...edge, data: { ...edge.data, cornerRadius: PRINT_EDGE_CORNER_RADIUS } }));
 }
 
+/** 화면 꺾은선의 꺾임 반경 — RF smoothstep·우회 경로 기본값과 같다(옵션 창 미리보기가 화면 모양을 흉내 낼 때) */
+export const SCREEN_EDGE_CORNER_RADIUS = 5;
+
+/** 미리보기 팬 끝 원호 — 핸들(x, y)과 게이트(경로 첫·끝 점)를 반경 r 원호로 잇는다(lib/edge-fanout 모양). sweep은 SVG 방향 플래그 */
+export interface SampleFanArc {
+  x: number;
+  y: number;
+  r: number;
+  sweep: 0 | 1;
+}
+
+/** 미리보기 꺾은선 — 직각 꼭짓점들과 (팬이면) 양끝 원호 */
+export interface SampleStepPath {
+  points: { x: number; y: number }[];
+  head?: SampleFanArc;
+  tail?: SampleFanArc;
+}
+
+/** 옵션 창 미리보기용 꺾은선 — 직각 꼭짓점을 radius로 둥글리고, 팬 끝이면 핸들~게이트를 원호로 잇는다(PNG·비교 PNG 창 공유) */
+export function buildSampleStepPath({ points, head, tail }: SampleStepPath, radius: number): string {
+  const [inner] = buildRoundedOrthPath(points, [], undefined, undefined, radius);
+  let d = inner;
+  if (head) {
+    d = `M ${head.x},${head.y} A ${head.r} ${head.r} 0 0 ${head.sweep} ${points[0].x},${points[0].y}${inner.replace(/^M [^ ]+/, "")}`;
+  }
+  if (tail) d += ` A ${tail.r} ${tail.r} 0 0 ${tail.sweep} ${tail.x},${tail.y}`;
+  return d;
+}
+
 /** edge.data.cornerRadius 판별 — 엣지 컴포넌트가 unknown data에서 꺼낸다 */
 export function getEdgeCornerRadius(data: Record<string, unknown> | undefined): number | undefined {
   const value = data?.cornerRadius;

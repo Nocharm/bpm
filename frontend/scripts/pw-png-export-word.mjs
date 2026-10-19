@@ -249,7 +249,12 @@ await page.waitForTimeout(600);
 await openModal();
 await page.locator('[data-id="png-export-toggle-edge-fan"]').click();
 await page.locator('[data-id="png-export-layout-split"]').click();
-await page.waitForTimeout(500);
+await page.waitForTimeout(800);
+check(
+  "preview swaps fanned lanes for one trunk",
+  (await page.locator('[data-id^="png-export-preview-flat-"]').count()) === 2 &&
+    (await page.locator('[data-id^="png-export-preview-fan-"]').count()) === 0,
+);
 const splitSummary = (await page.locator('[data-id="png-export-split-summary"]').textContent()) ?? "";
 check("split summary counts pieces", /\d/.test(splitSummary), splitSummary.slice(0, 40));
 await modal.screenshot({ path: `${OUT}/png-export-modal-split.png` });

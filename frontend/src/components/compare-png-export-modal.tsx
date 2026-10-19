@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import { ListOrdered, PanelTop, X } from "lucide-react";
 
 import { EdgeFanIcon } from "@/components/edge-fan-icon";
+import { HoverTip } from "@/components/hover-tip";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { TOGGLE_ICONS, TOGGLE_LABEL_KEY } from "@/components/node-display-section";
 import { PngPrintPanel } from "@/components/png-print-panel";
@@ -24,6 +25,12 @@ import {
   type ComparePngExportOptions,
   type ComparePngFormat,
 } from "@/lib/compare-png-export";
+import {
+  buildSampleStepPath,
+  PRINT_EDGE_CORNER_RADIUS,
+  SCREEN_EDGE_CORNER_RADIUS,
+  type SampleStepPath,
+} from "@/lib/edge-path";
 import { getCompareDocumentChromePt, type CompareLegendStatus, type ExportFrame } from "@/lib/export";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -177,13 +184,15 @@ export function ComparePngExportModal({
                 />
                 {/* 연결선 펼침 — 문서용만(화면 그대로는 비교 화면 모습 그대로) */}
                 <ShimmerPresence show={isDocument} dataId="compare-png-edge-fan-wrap" className="relative rounded-full">
-                  <ToggleChip
-                    dataId="compare-png-toggle-edge-fan"
-                    icon={<EdgeFanIcon />}
-                    label={t("pngExport.edgeFan")}
-                    on={options.edgeFan}
-                    onToggle={() => update({ edgeFan: !options.edgeFan })}
-                  />
+                  <HoverTip tip={t("pngExport.edgeFanTip")} className="inline-flex">
+                    <ToggleChip
+                      dataId="compare-png-toggle-edge-fan"
+                      icon={<EdgeFanIcon />}
+                      label={t("pngExport.edgeFan")}
+                      on={options.edgeFan}
+                      onToggle={() => update({ edgeFan: !options.edgeFan })}
+                    />
+                  </HoverTip>
                 </ShimmerPresence>
               </div>
             </div>
@@ -306,6 +315,27 @@ const TITLE_ROW = 18;
 const LINE_ROW = 11;
 const CHANGED_X = 196;
 const CHANGED_W = 104;
+// 삭제 연결선 두 개(결제 검토 → 재고 재확인 → 끝)는 추가 연결선과 핸들을 함께 쓴다 — 연결선 펼침이 바꾸는 두 자리.
+// 펼침: 핸들에서 원호로 갈라지고 모인다(lib/edge-fanout) / 끔: 추가 연결선과 한 줄기로 겹쳐 나가 꺾이는 자리에서 갈라진다
+const REMOVED_Y = 105; // 삭제 노드(재고 재확인) 가운데 높이
+type Junction = "source" | "merge";
+const FAN_PATHS: Record<Junction, SampleStepPath> = {
+  source: {
+    head: { x: 300, y: LANE_Y, r: 14, sweep: 1 },
+    points: [{ x: 314, y: LANE_Y + 14 }, { x: 314, y: REMOVED_Y }, { x: 327, y: REMOVED_Y }],
+  },
+  merge: {
+    points: [{ x: 420, y: REMOVED_Y }, { x: 441, y: REMOVED_Y }, { x: 441, y: LANE_Y + 14 }],
+    tail: { x: 455, y: LANE_Y, r: 14, sweep: 1 },
+  },
+};
+// 끔 — 추가 연결선 위를 18px쯤 함께 달린 뒤 꺾인다(한 줄기로 겹쳐 보이는 구간이 차이)
+const FLAT_PATHS: Record<Junction, SampleStepPath> = {
+  source: { points: [{ x: 300, y: LANE_Y }, { x: 318, y: LANE_Y }, { x: 318, y: REMOVED_Y }, { x: 327, y: REMOVED_Y }] },
+  merge: { points: [{ x: 420, y: REMOVED_Y }, { x: 436, y: REMOVED_Y }, { x: 436, y: LANE_Y }, { x: 455, y: LANE_Y }] },
+};
+// 두 자리의 viewBox x 범위(겹쳐 그리는 svg 조각)
+const JUNCTION_X: Record<Junction, [number, number]> = { source: [296, 332], merge: [416, 460] };
 // 테마 전환 때 색이 부드럽게 넘어가도록(SVG 속성 대신 style이라 전이가 걸린다)
 const COLOR_TRANSITION = "fill 350ms var(--ease-smooth), stroke 350ms var(--ease-smooth)";
 
@@ -371,7 +401,10 @@ function ComparePngPreview({ options, displayFields, paletteKey, muteUnchanged, 
   const changedTop = LANE_Y - TITLE_ROW / 2 - PAD_Y - (hasGmp ? GMP_ROW : 0);
   const changedBottom = LANE_Y + TITLE_ROW / 2 + lineFields.length * LINE_ROW + PAD_Y;
   const viewH = Math.max(VIEW_H_MIN, changedBottom + (hasConditions ? 20 : 10));
-  const removedY = 92;
+  const removedY = REMOVED_Y - 13;
+  // 화면 그대로는 비교 화면처럼 늘 펼침, 문서용은 칩을 따른다. 꺾임 반경도 화면·출력 값(lib/edge-path)
+  const fanKey = !isDocument || options.edgeFan ? "fan" : "flat";
+  const cornerRadius = isDocument ? PRINT_EDGE_CORNER_RADIUS : SCREEN_EDGE_CORNER_RADIUS;
   const edge = (d: string, status: CompareLegendStatus) => {
     const stroke = status === "unchanged" ? tone.edge : DIFF_COLOR[status];
     return (
@@ -492,14 +525,37 @@ function ComparePngPreview({ options, displayFields, paletteKey, muteUnchanged, 
           {edge(`M174,${LANE_Y} L${CHANGED_X - 1},${LANE_Y}`, "unchanged")}
           {edge(`M${CHANGED_X + CHANGED_W},${LANE_Y} L327,${LANE_Y}`, "added")}
           {edge(`M420,${LANE_Y} L455,${LANE_Y}`, "added")}
-          {edge(`M${CHANGED_X + CHANGED_W},${LANE_Y + 6} L312,${LANE_Y + 6} L312,${removedY + 13} L327,${removedY + 13}`, "removed")}
-          {edge(`M420,${removedY + 13} L436,${removedY + 13} L436,${LANE_Y + 8} L455,${LANE_Y + 8}`, "removed")}
           {box(10, LANE_Y - 13, 54, 26, "Start", "unchanged", "term")}
           {box(84, LANE_Y - 17, 90, 34, t("comparePng.sampleReceive"), "unchanged", "task")}
           {box(328, LANE_Y - 17, 92, 34, t("comparePng.sampleApprove"), "added", "task")}
           {box(328, removedY, 92, 26, t("comparePng.sampleRecheck"), "removed", "task")}
           {box(456, LANE_Y - 13, 54, 26, "End", "unchanged", "term")}
         </svg>
+        {/* 연결선 펼침이 바꾸는 두 자리 — 펼침(원호) ↔ 끔(추가 연결선과 한 줄기)을 그 자리에서만 쉬머로 바꾼다 */}
+        {(["fan", "flat"] as const).flatMap((set) =>
+          (["source", "merge"] as const).map((spot) => {
+            const [x0, x1] = JUNCTION_X[spot];
+            const path = (set === "fan" ? FAN_PATHS : FLAT_PATHS)[spot];
+            return (
+              <ShimmerPresence
+                key={`${set}-${spot}`}
+                show={fanKey === set}
+                dataId={`compare-png-preview-${set}-${spot}`}
+                className="pointer-events-none absolute top-0 h-full"
+                style={{ left: `${(x0 / VIEW_W) * 100}%`, width: `${((x1 - x0) / VIEW_W) * 100}%` }}
+              >
+                <svg
+                  viewBox={`${x0} 0 ${x1 - x0} ${viewH}`}
+                  preserveAspectRatio="none"
+                  className="block h-full w-full overflow-visible"
+                  aria-hidden
+                >
+                  {edge(buildSampleStepPath(path, cornerRadius), "removed")}
+                </svg>
+              </ShimmerPresence>
+            );
+          }),
+        )}
         {/* 변경 노드(결제 검토) — HTML로 겹쳐 그려 표시 정보 줄마다 쉬머로 생기고 사라진다 */}
         <div
           data-id="compare-png-preview-node"

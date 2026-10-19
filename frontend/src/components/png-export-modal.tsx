@@ -18,6 +18,12 @@ import { resolveNodeStroke } from "@/components/process-node";
 import { ShimmerPresence } from "@/components/shimmer-presence";
 import { ToggleChip } from "@/components/toggle-chip";
 import {
+  buildSampleStepPath,
+  PRINT_EDGE_CORNER_RADIUS,
+  SCREEN_EDGE_CORNER_RADIUS,
+  type SampleStepPath,
+} from "@/lib/edge-path";
+import {
   CROSSING_STYLES,
   getPrintHeaderPt,
   loadPngExportOptions,
@@ -75,23 +81,34 @@ const VIEW_W = 520;
 const VIEW_H_MIN = 150; // 샘플 노드가 표시 정보로 길어지면 그만큼 늘어난다
 const PARALLEL_MARK_X = 204;
 const PARALLEL_MARK_Y = 60;
-// 병렬 두 갈래·합류의 세로 구간 x — 펼침을 켜면 원호 레인(lib/edge-fanout)이라 노드 쪽으로 붙는다
-const BRANCH_X = { fan: [208, 360], flat: [214, 356] } as const;
-// 갈래·합류 경로 — 펼침: 출발·도착 핸들에서 원호로 갈라지고 모인다 / 끔: 한 점에서 겹쳐 나가 꺾이는 지점에서 갈라진다
-const BRANCH_PATHS = {
-  fan: [
-    "M196,60 A12,12 0 0 0 208,48 L208,26 Q208,22 212,22 L231,22",
-    "M196,60 A12,12 0 0 1 208,72 L208,114 Q208,118 212,118 L231,118",
-    "M332,22 L356,22 Q360,22 360,26 L360,48 A12,12 0 0 0 372,60 L375,60",
-    "M332,118 L356,118 Q360,118 360,114 L360,72 A12,12 0 0 1 372,60 L375,60",
+// 병렬 두 갈래(접수 → 예산·업체)와 합류(→ 승인?) — 연결선 펼침이 바꾸는 두 자리.
+// 펼침: 출발·도착 핸들에서 반경이 다른 원호 레인으로 갈라지고 모인다(lib/edge-fanout) / 끔: 한 점에서 겹쳐 나가 꺾이는 자리에서
+// 갈라진다(한 줄기). 두 자리만 따로 겹쳐 그려 칩을 바꾸면 그 자리에서 쉬머로 바뀐다
+type Junction = "source" | "merge";
+const FAN_PATHS: Record<Junction, SampleStepPath[]> = {
+  source: [
+    { head: { x: 196, y: 60, r: 12, sweep: 0 }, points: [{ x: 208, y: 48 }, { x: 208, y: 22 }, { x: 231, y: 22 }] },
+    { head: { x: 196, y: 60, r: 24, sweep: 1 }, points: [{ x: 220, y: 84 }, { x: 220, y: 118 }, { x: 231, y: 118 }] },
   ],
-  flat: [
-    "M196,60 L214,60 L214,22 L231,22",
-    "M196,60 L214,60 L214,118 L231,118",
-    "M332,22 L356,22 L356,60 L375,60",
-    "M332,118 L356,118 L356,60 L375,60",
+  merge: [
+    { points: [{ x: 332, y: 22 }, { x: 363, y: 22 }, { x: 363, y: 48 }], tail: { x: 375, y: 60, r: 12, sweep: 0 } },
+    { points: [{ x: 332, y: 118 }, { x: 351, y: 118 }, { x: 351, y: 84 }], tail: { x: 375, y: 60, r: 24, sweep: 1 } },
   ],
-} as const;
+};
+const FLAT_PATHS: Record<Junction, SampleStepPath[]> = {
+  source: [
+    { points: [{ x: 196, y: 60 }, { x: 214, y: 60 }, { x: 214, y: 22 }, { x: 231, y: 22 }] },
+    { points: [{ x: 196, y: 60 }, { x: 214, y: 60 }, { x: 214, y: 118 }, { x: 231, y: 118 }] },
+  ],
+  merge: [
+    { points: [{ x: 332, y: 22 }, { x: 356, y: 22 }, { x: 356, y: 60 }, { x: 375, y: 60 }] },
+    { points: [{ x: 332, y: 118 }, { x: 356, y: 118 }, { x: 356, y: 60 }, { x: 375, y: 60 }] },
+  ],
+};
+// 두 자리의 viewBox x 범위(겹쳐 그리는 svg 조각)
+const JUNCTION_X: Record<Junction, [number, number]> = { source: [188, 238], merge: [326, 382] };
+// 되돌림 선이 지나는 아래 갈래·아래 합류의 세로 구간 x — 교차 표시 자리
+const LOWER_LANE_X = { fan: [220, 351], flat: [214, 356] } as const;
 const CROSSING_BOX = 16; // 교차 글리프 상자(viewBox 단위)
 
 // 교차 글리프 상자 — 미리보기 svg와 같은 비율로 늘어나도록 % 위치·크기
@@ -340,13 +357,15 @@ export function PngExportModal({ frame, measureSplit, canvasDisplayFields, onClo
                     on={options.showInfo}
                     onToggle={() => update({ showInfo: !options.showInfo })}
                   />
-                  <ToggleChip
-                    dataId="png-export-toggle-edge-fan"
-                    icon={<EdgeFanIcon />}
-                    label={t("pngExport.edgeFan")}
-                    on={options.edgeFan}
-                    onToggle={() => update({ edgeFan: !options.edgeFan })}
-                  />
+                  <HoverTip tip={t("pngExport.edgeFanTip")} className="inline-flex">
+                    <ToggleChip
+                      dataId="png-export-toggle-edge-fan"
+                      icon={<EdgeFanIcon />}
+                      label={t("pngExport.edgeFan")}
+                      on={options.edgeFan}
+                      onToggle={() => update({ edgeFan: !options.edgeFan })}
+                    />
+                  </HoverTip>
                   <div className="ml-auto inline-flex items-center gap-1.5">
                     <span className="text-fine text-ink-tertiary">{t("pngExport.crossing")}</span>
                     <div className="inline-flex items-center rounded-sm border border-hairline bg-surface-alt p-0.5">
@@ -477,6 +496,7 @@ const PAD_Y = 8;
 const GMP_ROW = 12;
 const TITLE_ROW = 18;
 const LINE_ROW = 11;
+const IO_BOX_ROW = 16; // 샘플 노드 입출력 상자 한 칸(상자 14 + 위 간격 2) — 캔버스처럼 사선 상자로
 const DEC_BOX_ROW = 17; // 분기 입출력 상자 한 칸(목록 한 줄 + 상자 여백)
 const LANE_Y = 96; // 되돌림 선 높이 — 교차 표시 자리의 y
 
@@ -488,8 +508,20 @@ function PngPreview({ options, displayFields }: { options: PngExportOptions; dis
   const edgeStyle: CSSProperties = { stroke: palette.edge, transition: COLOR_TRANSITION };
   // 화면 그대로는 캔버스처럼 늘 펼침, Word는 칩을 따른다
   const fanKey = !isWord || options.edgeFan ? "fan" : "flat";
-  // 되돌림 선(y LANE_Y)이 두 세로 갈래를 지나는 자리
-  const crossingPoints = BRANCH_X[fanKey].map((x) => [x, LANE_Y] as const);
+  // 꺾임 반경 — 화면은 캔버스 값, Word는 출력 값(lib/edge-path)
+  const cornerRadius = isWord ? PRINT_EDGE_CORNER_RADIUS : SCREEN_EDGE_CORNER_RADIUS;
+  const drawPath = (path: SampleStepPath, key: number) => (
+    <path
+      key={key}
+      d={buildSampleStepPath(path, cornerRadius)}
+      fill="none"
+      strokeWidth={1.25}
+      style={edgeStyle}
+      markerEnd="url(#png-preview-arrow)"
+    />
+  );
+  // 되돌림 선(y LANE_Y)이 아래 갈래·아래 합류를 지나는 자리
+  const crossingPoints = LOWER_LANE_X[fanKey].map((x) => [x, LANE_Y] as const);
   const meta = [
     `${t("export.infoOwningDept")} QA`,
     `${t("export.infoVersion")} v3`,
@@ -499,17 +531,24 @@ function PngPreview({ options, displayFields }: { options: PngExportOptions; dis
   const hasGmp = displayFields.includes("gmp");
   const hasConditions = displayFields.includes("conditions");
   const lineFields = SAMPLE_LINE_FIELDS.filter((field) => displayFields.includes(field));
+  const isIoField = (field: NodeDisplayToggle) => field === "input" || field === "output";
   const t1Top = TITLE_Y - TITLE_ROW / 2 - PAD_Y - (hasGmp ? GMP_ROW : 0);
-  const t1Bottom = TITLE_Y + TITLE_ROW / 2 + lineFields.length * LINE_ROW + PAD_Y;
+  const t1Bottom =
+    TITLE_Y +
+    TITLE_ROW / 2 +
+    lineFields.reduce((sum, field) => sum + (isIoField(field) ? IO_BOX_ROW : LINE_ROW), 0) +
+    PAD_Y;
   // 분기 노드 입출력 — 알약(접힘) 또는 목록(펼침), 판단 마름모 오른쪽 아래
   const decIo = (["input", "output"] as const).filter((side) => displayFields.includes(side));
   const decIoBottom = decIo.length === 0 ? 0 : options.expandIo ? 90 + decIo.length * (DEC_BOX_ROW + 2) : 104;
   const viewH = Math.max(VIEW_H_MIN, t1Bottom + (hasConditions ? 22 : 12), decIoBottom + 10);
   // 되돌림 선 — 노드가 짧으면 아래 변으로, 길어 선 높이를 덮으면 오른쪽 변으로 들어간다
-  const loopPath =
-    t1Bottom >= LANE_Y + 3
-      ? `M410,82 L410,${LANE_Y} L197,${LANE_Y}`
-      : `M410,82 L410,${LANE_Y} L180,${LANE_Y} L180,${t1Bottom + 1}`;
+  const loopPath: SampleStepPath = {
+    points:
+      t1Bottom >= LANE_Y + 3
+        ? [{ x: 410, y: 82 }, { x: 410, y: LANE_Y }, { x: 197, y: LANE_Y }]
+        : [{ x: 410, y: 82 }, { x: 410, y: LANE_Y }, { x: 180, y: LANE_Y }, { x: 180, y: t1Bottom + 1 }],
+  };
   const edgeLabel = (x: number, y: number, label: string) => {
     const width = label.length * 9 + 10;
     return (
@@ -587,12 +626,9 @@ function PngPreview({ options, displayFields }: { options: PngExportOptions; dis
       <div className="relative">
         <svg viewBox={`0 0 ${VIEW_W} ${viewH}`} className="block w-full" aria-hidden>
           <path d="M72,60 L99,60" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
-          {BRANCH_PATHS[fanKey].map((d) => (
-            <path key={d} d={d} fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
-          ))}
           <path d="M444,60 L465,60" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
-          {/* 되돌림 — 두 세로 갈래와 교차한다(교차 표시 차이를 보여 주는 자리) */}
-          <path d={loopPath} fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
+          {/* 되돌림 — 아래 갈래·아래 합류와 교차한다(교차 표시 차이를 보여 주는 자리) */}
+          {drawPath(loopPath, 0)}
           <defs>
             <marker id="png-preview-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
               <path d="M0,0 L10,5 L0,10 z" style={{ fill: palette.edge, transition: COLOR_TRANSITION }} />
@@ -614,6 +650,30 @@ function PngPreview({ options, displayFields }: { options: PngExportOptions; dis
           {edgeLabel(455, 47, t("pngExport.sampleYes"))}
           {edgeLabel(385, LANE_Y, t("pngExport.sampleNo"))}
         </svg>
+        {/* 연결선 펼침이 바꾸는 두 자리 — 펼침(원호 레인) ↔ 끔(한 줄기)을 그 자리에서만 쉬머로 바꾼다 */}
+        {(["fan", "flat"] as const).flatMap((set) =>
+          (["source", "merge"] as const).map((spot) => {
+            const [x0, x1] = JUNCTION_X[spot];
+            return (
+              <ShimmerPresence
+                key={`${set}-${spot}`}
+                show={fanKey === set}
+                dataId={`png-export-preview-${set}-${spot}`}
+                className="pointer-events-none absolute top-0 h-full"
+                style={{ left: `${(x0 / VIEW_W) * 100}%`, width: `${((x1 - x0) / VIEW_W) * 100}%` }}
+              >
+                <svg
+                  viewBox={`${x0} 0 ${x1 - x0} ${viewH}`}
+                  preserveAspectRatio="none"
+                  className="block h-full w-full overflow-visible"
+                  aria-hidden
+                >
+                  {(set === "fan" ? FAN_PATHS : FLAT_PATHS)[spot].map(drawPath)}
+                </svg>
+              </ShimmerPresence>
+            );
+          }),
+        )}
         {/* 샘플 노드(요청 접수) — HTML로 겹쳐 그려 표시 정보 줄마다 쉬머로 생기고 사라진다. 높이는 줄 수만큼 늘어난다 */}
         <div
           data-id="png-export-preview-node"
@@ -642,13 +702,19 @@ function PngPreview({ options, displayFields }: { options: PngExportOptions; dis
           {SAMPLE_LINE_FIELDS.map((field) => {
             const Icon = TOGGLE_ICONS[field];
             const labelKey = SAMPLE_LINE_KEY[field];
+            // 입력물·산출물은 캔버스 노드처럼 사선 상자(입력 왼쪽 위·출력 오른쪽 아래, globals.css .bpm-io-box)
+            const isIo = isIoField(field);
             return (
               <ShimmerPresence
                 key={field}
                 show={displayFields.includes(field)}
                 dataId={`png-export-preview-line-${field}`}
-                className="relative flex items-center gap-1 rounded-xs text-[8px]"
-                style={{ height: LINE_ROW, color: palette.sub }}
+                className={
+                  isIo
+                    ? `relative bpm-io-box bpm-io-box--${field} mt-0.5 flex items-center gap-1 px-1 text-[8px]`
+                    : "relative flex items-center gap-1 rounded-xs text-[8px]"
+                }
+                style={{ height: isIo ? IO_BOX_ROW - 2 : LINE_ROW, color: palette.sub }}
               >
                 <Icon size={8} strokeWidth={1.5} className="shrink-0" />
                 <span className="truncate">{labelKey ? t(labelKey) : ""}</span>

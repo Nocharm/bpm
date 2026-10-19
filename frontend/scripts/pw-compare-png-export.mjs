@@ -135,10 +135,16 @@ await openModal();
 await page.locator('[data-id="compare-png-toggle-info"]').click();
 await page.locator('[data-id="compare-png-toggle-legend"]').click();
 check("edge fan chip shows for document", await page.locator('[data-id="compare-png-toggle-edge-fan"]').isVisible());
+check("preview fans removed connectors by default", (await page.locator('[data-id^="compare-png-preview-fan-"]').count()) === 2);
 await page.locator('[data-id="compare-png-toggle-edge-fan"]').click();
 await page.locator('[data-id="png-export-print-width"]').fill("40");
 await page.locator('[data-id="png-export-layout-split"]').click();
-await page.waitForTimeout(500);
+await page.waitForTimeout(800);
+check(
+  "preview swaps fanned arcs for one trunk",
+  (await page.locator('[data-id^="compare-png-preview-flat-"]').count()) === 2 &&
+    (await page.locator('[data-id^="compare-png-preview-fan-"]').count()) === 0,
+);
 await modal.screenshot({ path: `${OUT}/compare-png-modal-split.png` });
 const zipDownload = page.waitForEvent("download", { timeout: 60_000 });
 await page.locator('[data-id="compare-png-download"]').click();

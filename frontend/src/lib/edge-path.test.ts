@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { toEdgeObstacle } from "@/lib/edge-detour";
 import {
   applyPrintEdgeCorners,
+  buildSampleStepPath,
   getEdgeCornerRadius,
   getEdgeObstacles,
   PRINT_EDGE_CORNER_RADIUS,
@@ -84,6 +85,20 @@ describe("resolveEdgePath - 꺾은선 체인", () => {
     expect(getEdgeCornerRadius(marked.data)).toBe(PRINT_EDGE_CORNER_RADIUS);
     expect(getEdgeCornerRadius({ cornerRadius: "2" })).toBeUndefined();
     expect(getEdgeCornerRadius(undefined)).toBeUndefined();
+  });
+
+  it("미리보기 꺾은선은 꼭짓점을 반경만큼 둥글리고, 팬 끝은 핸들과 게이트를 원호로 잇는다", () => {
+    const flat = buildSampleStepPath({ points: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 30 }] }, 2);
+    expect(flat).toBe("M 0,0 L 18,0 Q 20,0 20,2 L 20,30");
+    const fanned = buildSampleStepPath(
+      {
+        head: { x: 0, y: 0, r: 12, sweep: 1 },
+        points: [{ x: 12, y: 12 }, { x: 12, y: 40 }],
+        tail: { x: 30, y: 52, r: 6, sweep: 0 },
+      },
+      2,
+    );
+    expect(fanned).toBe("M 0,0 A 12 12 0 0 1 12,12 L 12,40 A 6 6 0 0 0 30,52");
   });
 
   it("양끝 노드는 장애물이 아니다 — 소스 id 장애물이 회랑을 덮어도 우회하지 않는다", () => {
