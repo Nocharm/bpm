@@ -87,3 +87,24 @@ describe("stripThousands", () => {
     expect(formatThousands(stripThousands("1,250,000"))).toBe("1,250,000");
   });
 });
+
+// 백엔드 tests/test_editor_followups.py NORMALIZATION_CASES와 같은 표 — 전각은 NFKC로 ASCII, 숫자는 ASCII만 (리뷰 F-9).
+// 프론트 normalizeNumericParam은 무효를 null로 돌려준다(서버는 "" 소거) — 같은 무효 판정
+const PARITY_CASES: [string, string | null, string | null][] = [
+  ["1.30", "1.30", "1.30"],
+  [" 1.30 ", "1.30", "1.30"],
+  ["１．３０", "1.30", "1.30"],
+  ["\ufeff2", "2", "2"],
+  ["\u00a03", "3", "3"],
+  ["\x1f1.3", null, null],
+  ["١٢", null, null],
+  ["0.75", "1.15", "0.75"],
+  ["1e3", null, null],
+];
+
+describe("normalization parity with the backend (F-9)", () => {
+  it.each(PARITY_CASES)("%j", (raw, duration, numeric) => {
+    expect(normalizeDuration(raw)).toBe(duration);
+    expect(normalizeNumericParam(raw)).toBe(numeric);
+  });
+});

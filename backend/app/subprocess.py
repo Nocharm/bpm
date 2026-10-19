@@ -356,7 +356,7 @@ async def get_subprocess_refs(
         visible = await load_my_roles(session, user, unlisted_maps)
         for mid in unlisted:
             if mid not in visible:
-                refs[mid] = SubprocessRefOut(designated=False, deleted=refs[mid].deleted)
+                refs[mid] = SubprocessRefOut(designated=False, deleted=refs[mid].deleted, hidden=True)
     return refs
 
 

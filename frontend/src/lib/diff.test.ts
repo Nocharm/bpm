@@ -169,3 +169,19 @@ describe("computeVersionDiff - 엣지 정체성(D4: SP 출구 끝 키만 내용)
     expect([...diff.rightEdgeStatus.keys()]).toEqual(["y2"]);
   });
 });
+
+describe("computeVersionDiff - 고정 버전(F-6)", () => {
+  const pair = (left: Partial<FlatNode>, right: Partial<FlatNode>) =>
+    computeVersionDiff(
+      { nodes: [{ ...FLAT, id: "n1", title: "Call", node_type: "subprocess", source_node_id: null, ...left }], edges: [] },
+      { nodes: [{ ...FLAT, id: "n2", title: "Call", node_type: "subprocess", source_node_id: "n1", ...right }], edges: [] },
+    ).entries.map((entry) => entry.changedFields);
+
+  it("counts a re-pin while pinned", () => {
+    expect(pair({ linked_version_id: 10 }, { linked_version_id: 11 })).toEqual([["linked_version"]]);
+  });
+
+  it("ignores the stored pin while following the latest published version", () => {
+    expect(pair({ follow_latest: true, linked_version_id: 10 }, { follow_latest: true, linked_version_id: 11 })).toEqual([]);
+  });
+});

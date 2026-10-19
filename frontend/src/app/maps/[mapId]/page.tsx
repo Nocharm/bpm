@@ -344,6 +344,7 @@ import { draftSubmitNote } from "@/lib/submit-note-draft";
 import { useDirectoryDepartments, useDirectoryState } from "@/lib/directory";
 import { buildNodeRefCheck } from "@/lib/node-ref-warnings";
 import { runGuardedNavigation, setNavigationGuard } from "@/lib/navigation-guard";
+import { listSaveBlockers } from "@/lib/save-blockers";
 import { useClosingKeys } from "@/lib/use-closing-keys";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import {
@@ -838,8 +839,8 @@ function buildExitEdge(edge: Edge): ExitConnectEdge {
 }
 
 // AI 노드 → GraphNode (graph 생성·ops add 공용). 미제공 attributes는 빈값 (D1)
-// 신규 노드라 보호할 기존 SP 지정값이 없다 — SP 게이트는 미적용(csv-import mergeNode의
-// existing===null 분기와 동일 전제). 통화 배타는 신규 여부와 무관해 그대로 적용.
+// 신규 SP도 상속 파라미터 5종은 비운다(csv-import mergeNode의 existing===null 분기와 같은 규칙, 리뷰 F-7).
+// 통화 배타는 신규 여부와 무관해 그대로 적용.
 function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined, catalogs: Catalogs): GraphNode {
   const attr = node.attributes;
   const num = (raw: string | null | undefined) => normalizeNumericParam(stripThousands(raw ?? "")) ?? "";
@@ -852,6 +853,8 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     node.node_type === "subprocess" && node.linked_map_id
       ? "subprocess"
       : coerceAiNewNodeType(node.node_type);
+  // SP는 회당 파라미터 5종을 링크 맵 지정값에서 상속 — 저장값을 따로 두지 않는다(서버 NodeIn과 같이, 리뷰 F-7)
+  const inherited = nodeType === "subprocess";
   return {
     id,
     title: node.title,
@@ -863,14 +866,14 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     department: attr?.department ?? "",
     system: sys.system,
     // 무효 duration은 ""로 — 프리뷰가 저장 결과(백엔드 소거)와 일치하게 (csv-import와 동일 규칙)
-    duration: normalizeDuration(attr?.duration ?? "") ?? "",
-    cost_krw: cost.cost_krw ?? "",
-    cost_usd: cost.cost_usd ?? "",
-    headcount: num(attr?.headcount),
+    duration: inherited ? "" : (normalizeDuration(attr?.duration ?? "") ?? ""),
+    cost_krw: inherited ? "" : (cost.cost_krw ?? ""),
+    cost_usd: inherited ? "" : (cost.cost_usd ?? ""),
+    headcount: inherited ? "" : num(attr?.headcount),
     annual_count: num(attr?.annual_count),
     fte: num(attr?.fte),
     // 무효 touch_time도 duration과 동일하게 "" (design 2026-08-19 §2)
-    touch_time: normalizeDuration(attr?.touch_time ?? "") ?? "",
+    touch_time: inherited ? "" : (normalizeDuration(attr?.touch_time ?? "") ?? ""),
     // 인터뷰 승격 텍스트 필드 — passthrough (csv-import buildGraphFromAiProposal과 대칭)
     input: attr?.input ?? "",
     output: attr?.output ?? "",
@@ -3359,13 +3362,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       return [];
     }
     const states = getSaveCheckStates(ns.map(buildCheckNode), edgesRef.current.map(buildCheckEdge));
-    const blockers: string[] = [];
-    // 연계 캔버스는 start·대표끝이 없는 게 정상 — 두 조건은 일반 맵에만 (2026-08-28 개선)
-    if (!isFrameworkMap && !states.start) blockers.push(t("save.checkOneStart"));
-    if (!isFrameworkMap && !states.primaryEnd) blockers.push(t("save.checkPrimaryEnd"));
-    if (!states.endUnique) blockers.push(t("save.checkUniqueEnd"));
-    if (!states.singleOutput) blockers.push(t("save.checkSingleOutput"));
-    return blockers;
+    return listSaveBlockers(states, isFrameworkMap, t);
   }, [t, isFrameworkMap]);
 
   const handleSave = useCallback(async () => {
@@ -8458,11 +8455,14 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 타이틀 더블클릭 → 이름 편집 진입 (이름 외 영역 더블클릭은 요약창)
   const startRename = useCallback(
     (id: string) => {
-      if (readOnly) {
+      if (readOnly || currentScopeIsReadOnlyRef.current) {
         return;
       }
-      // subprocess 타이틀은 링크된 맵 이름 고정 — 이름 편집 진입 차단 (F5)
-      if (nodesRef.current.find((node) => node.id === id)?.data.nodeType === "subprocess") {
+      // subprocess 타이틀은 링크된 맵 이름 고정 — 이름 편집 진입 차단 (F5).
+      // 펼친 하위프로세스의 읽기전용 자식은 메인 노드 목록에 없다 — 편집기가 열렸다가 Enter에 조용히 되돌아가고
+      // 무변경 저장이 한 번 나갔다 (리뷰 W-7)
+      const target = nodesRef.current.find((node) => node.id === id);
+      if (!target || target.data.nodeType === "subprocess") {
         return;
       }
       setSelectedId(id);
@@ -10789,7 +10789,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                   node.data.nodeType === "subprocess" ? (node.data.linkedMapId ?? null) : null
                 }
                 versionPickerSlot={
-                  node.data.nodeType === "subprocess" && node.data.linkedMapId != null ? (
+                  // 열람권 없는 링크 맵(locked)은 버전 목록을 못 읽는다 — 고를 것도 없이 403만 나갔다 (리뷰 W-5)
+                  node.data.nodeType === "subprocess" &&
+                  node.data.linkedMapId != null &&
+                  node.data.locked !== true &&
+                  summarySpRef?.hidden !== true ? (
                     <SubprocessVersionPicker
                       linkedMapId={node.data.linkedMapId}
                       linkedVersionId={node.data.linkedVersionId ?? null}
@@ -11419,7 +11423,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                       )}
                       {/* subprocess 노드 — 연결 버전 선택(최신 추종 토글 + 버전 고정 + 업데이트) */}
                       {selectedNode.data.nodeType === "subprocess" &&
-                        selectedNode.data.linkedMapId != null && (
+                        selectedNode.data.linkedMapId != null &&
+                        selectedNode.data.locked !== true &&
+                        selectedSpRef?.hidden !== true && (
                           <SubprocessVersionPicker
                             linkedMapId={selectedNode.data.linkedMapId}
                             linkedVersionId={selectedNode.data.linkedVersionId ?? null}
@@ -11432,10 +11438,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                           />
                         )}
                       {/* 미지정 링크 — 등록 요청 CTA/Requested 배지 (spec 2026-07-19). key로 링크 전환 시 리셋 */}
+                      {/* 열람권 없는 링크 맵엔 등록 요청을 보낼 수 없다(서버 viewer 게이트) — 버튼이 403 원문 토스트로 끝났다 (리뷰 W-5) */}
                       {selectedNode.data.nodeType === "subprocess" &&
                         selectedNode.data.linkedMapId != null &&
+                        selectedNode.data.locked !== true &&
                         selectedSpRef != null &&
-                        !selectedSpRef.designated && (
+                        !selectedSpRef.designated &&
+                        !selectedSpRef.hidden && (
                           <SubprocessRegistrationCta
                             key={selectedNode.data.linkedMapId}
                             linkedMapId={selectedNode.data.linkedMapId}
@@ -12059,6 +12068,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           versions={versions}
                           liveNodes={nodes}
                           liveEdges={edges}
+                          liveLineageById={liveLineageById}
                           onConfirmed={(result) => {
                             showToast(
                               result.pruned_labels.length > 0

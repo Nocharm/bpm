@@ -25,6 +25,7 @@ from app.app_settings import (
     get_systems,
     set_app_setting,
     set_managed_entries,
+    strip_lone_surrogates,
 )
 from app.auth import get_current_user, require_sysadmin
 from app.db import get_session
@@ -100,11 +101,13 @@ async def put_app_settings(
     """부분 upsert — 보존 상한·기능 팁(빈 목록이면 기본 복원)."""
     if payload.ai_chat_tips is not None:
         # 공백 팁 제거 + 200자 컷 — 빈 목록이 되면 get_ai_chat_tips가 기본 팁으로 폴백
-        tips = [tip.strip()[:200] for tip in payload.ai_chat_tips if tip.strip()]
+        tips = [strip_lone_surrogates(tip).strip()[:200] for tip in payload.ai_chat_tips if tip.strip()]
+        tips = [tip for tip in tips if tip]
         await set_app_setting(session, AI_CHAT_TIPS_KEY, json.dumps(tips), user)
     if payload.exposed_positions is not None:
         # 공백 제거만 — 빈 목록이 되어도 그대로 저장(get_exposed_positions가 기본값 폴백하지 않음)
-        positions = [p.strip() for p in payload.exposed_positions if p.strip()]
+        positions = [strip_lone_surrogates(p).strip() for p in payload.exposed_positions if p.strip()]
+        positions = [p for p in positions if p]
         await set_app_setting(session, EXPOSED_POSITIONS_KEY, json.dumps(positions), user)
     if payload.assignee_roles is not None:
         await set_managed_entries(

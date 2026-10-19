@@ -12,7 +12,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.duration import NUMERIC_RE, normalize_duration
+from app.duration import NUMERIC_RE, normalize_duration, normalize_numeric_param  # noqa: F401 -- NUMERIC_RE는 임포터가 여기서 가져간다
 
 
 def _assert_single_currency(krw: str, usd: str) -> None:
@@ -133,8 +133,7 @@ class SubprocessDesignationIn(BaseModel):
     @field_validator("cost_krw", "cost_usd", "headcount", "annual_count", "fte", mode="after")
     @classmethod
     def _normalize_numeric_params(cls, value: str) -> str:
-        text = value.strip()
-        return text if text == "" or NUMERIC_RE.fullmatch(text) else ""
+        return normalize_numeric_param(value)
 
     @field_validator("description", "input", "output", mode="after")
     @classmethod
@@ -1230,6 +1229,10 @@ class InterviewImportOut(BaseModel):
     governance: list[GovernanceDiffOut] = []
 
 
+# SP 노드가 링크 맵 지정값에서 상속하는 회당 파라미터 — FE `lib/params.ts` SP_PARAM_FIELDS와 같은 5종
+SP_INHERITED_PARAMS = ("duration", "touch_time", "cost_krw", "cost_usd", "headcount")
+
+
 class NodeIn(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -1303,8 +1306,9 @@ class NodeIn(BaseModel):
     @field_validator("parallel_outputs", mode="after")
     @classmethod
     def _dedupe_parallel_outputs(cls, value: list[str]) -> list[str]:
-        # 빈 키 제거·중복 제거(순서 유지) — 같은 출구를 두 번 켜도 한 번
-        return list(dict.fromkeys(key.strip() for key in value if key.strip()))
+        # 빈 키 제거·중복 제거(순서 유지) — 같은 출구를 두 번 켜도 한 번. 키는 다듬지 않는다: SP 끝 키는 끝 제목
+        # 원문이라, 앞뒤 공백이 있는 끝의 키만 잘라 내면 핸들과 어긋나 그 출구의 병렬이 저장마다 사라졌다 (리뷰 F-8)
+        return list(dict.fromkeys(key for key in value if key.strip()))
 
     @field_validator("assignee_role", mode="after")
     @classmethod
@@ -1331,8 +1335,7 @@ class NodeIn(BaseModel):
     @classmethod
     def _normalize_numeric_params(cls, value: str) -> str:
         # duration과 동일한 이유로 무효값은 "" 소거 (위 _normalize_duration 주석 참고)
-        text = value.strip()
-        return text if text == "" or NUMERIC_RE.fullmatch(text) else ""
+        return normalize_numeric_param(value)
 
     @field_validator("gmp", mode="after")
     @classmethod
@@ -1351,6 +1354,15 @@ class NodeIn(BaseModel):
     def _drop_label_without_url(self) -> "NodeIn":
         if not self.url.strip():
             self.url_label = ""
+        return self
+
+    @model_validator(mode="after")
+    def _clear_inherited_sp_params(self) -> "NodeIn":
+        # SP 노드의 회당 파라미터 5종은 링크 맵 지정값을 읽기전용으로 상속한다 — 화면은 상속값을 보여 주는데 AI 신규 SP
+        # 경로 등으로 저장값이 따로 쌓이면 CSV·비교·확정 서명이 다른 값을 봤다. 직접 편집은 annual_count·fte뿐 (리뷰 F-7)
+        if self.node_type == "subprocess":
+            for name in SP_INHERITED_PARAMS:
+                setattr(self, name, "")
         return self
 
     @model_validator(mode="after")
@@ -1417,6 +1429,8 @@ class SubprocessRefOut(BaseModel):
     name: str | None = None
     # 링크맵이 삭제(휴지통/영구)됨 — 스테일 링크 교체 CTA 게이트 (design §10.1 확장 2026-08-30)
     deleted: bool = False
+    # 호출자가 볼 수 없는 미지정 링크 맵이라 가렸다 — 등록 요청·버전 고정처럼 그 맵을 읽는 조작을 숨긴다 (리뷰 W-5)
+    hidden: bool = False
     # 이양 후계자 — 은퇴 체인을 살아있는 맵까지 추적한 결과(없으면 None). 교체 다이얼로그 추천 소스
     successor_map_id: int | None = None
     successor_name: str | None = None

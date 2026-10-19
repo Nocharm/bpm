@@ -1,6 +1,7 @@
 """앱 런타임 설정 헬퍼 — DB key-value(app_settings) 조회/저장. 재배포 없이 설정 화면에서 변경."""
 
 import json
+import re
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -67,7 +68,7 @@ def normalize_managed_list(values: list[object]) -> list[str]:
         value = raw.strip()[:MANAGED_ITEM_MAX_LEN]
         if not value:
             continue
-        key = value.casefold()
+        key = value.lower()
         if key in seen:
             continue
         seen.add(key)
@@ -96,8 +97,19 @@ async def set_managed_list(session: AsyncSession, key: str, values: list[str], u
     return cleaned
 
 
+_LONE_SURROGATE_RE = re.compile("[\ud800-\udfff]")
+
+
+def strip_lone_surrogates(text: str) -> str:
+    """고립 서러게이트(이모지 반쪽) 제거 — 프론트가 UTF-16 단위로 자른 값이 들어오면 저장·응답 직렬화가 500이었다 (리뷰 F-9).
+
+    파이썬 문자열에서 정상 이모지는 코드 포인트 하나라 이 범위에 걸리지 않는다.
+    """
+    return _LONE_SURROGATE_RE.sub("", text)
+
+
 def normalize_managed_entries(values: list[object]) -> list[dict[str, object]]:
-    """카탈로그 엔트리 정규화 — str은 별칭 없는 엔트리로 승격. 값·별칭 모두 trim·100자·casefold 중복 제거.
+    """카탈로그 엔트리 정규화 — str은 별칭 없는 엔트리로 승격. 값·별칭 모두 trim·100자·소문자 비교 중복 제거.
     불변식 "별칭 하나 → 정식 표기 하나": 값을 먼저 전부 확보하고, 별칭은 어떤 값(자기 포함)·앞선 별칭과
     겹치면 버린다(값이 별칭보다 우선). 항목당 별칭 20개 (design 2026-09-12 §1)."""
     taken: set[str] = set()
@@ -113,10 +125,10 @@ def normalize_managed_entries(values: list[object]) -> list[dict[str, object]]:
             continue
         if not isinstance(value, str):
             continue
-        value = value.strip()[:MANAGED_ITEM_MAX_LEN]
-        if not value or value.casefold() in taken:
+        value = strip_lone_surrogates(value).strip()[:MANAGED_ITEM_MAX_LEN]
+        if not value or value.lower() in taken:
             continue
-        taken.add(value.casefold())
+        taken.add(value.lower())
         staged.append((value, aliases))
     out: list[dict[str, object]] = []
     for value, aliases in staged:
@@ -124,10 +136,10 @@ def normalize_managed_entries(values: list[object]) -> list[dict[str, object]]:
         for alias in aliases:
             if not isinstance(alias, str):
                 continue
-            text = alias.strip()[:MANAGED_ITEM_MAX_LEN]
-            if not text or text.casefold() in taken:
+            text = strip_lone_surrogates(alias).strip()[:MANAGED_ITEM_MAX_LEN]
+            if not text or text.lower() in taken:
                 continue
-            taken.add(text.casefold())
+            taken.add(text.lower())
             cleaned.append(text)
             if len(cleaned) >= MANAGED_ALIASES_MAX:
                 break
@@ -136,18 +148,19 @@ def normalize_managed_entries(values: list[object]) -> list[dict[str, object]]:
 
 
 def normalize_to_catalog(value: str, entries: list[dict[str, object]]) -> str | None:
-    """trim 후 값·별칭 casefold 일치 → 정식 표기(value). 빈값·불일치는 None.
+    """trim 후 값·별칭 소문자 일치 → 정식 표기(value). 빈값·불일치는 None.
+    비교는 str.lower() — FE toLowerCase와 같다(casefold는 ß→ss 등에서 갈렸다, 리뷰 F-9).
     FE `normalizeToCatalog`(lib/catalogs.ts)와 동치 — 한쪽을 고치면 다른 쪽도 같이 옮긴다."""
-    key = value.strip().casefold()
+    key = value.strip().lower()
     if not key:
         return None
     for entry in entries:
         canonical = str(entry.get("value") or "")
         aliases = entry.get("aliases")
-        if canonical.casefold() == key:
+        if canonical.lower() == key:
             return canonical
         if isinstance(aliases, list) and any(
-            isinstance(alias, str) and alias.casefold() == key for alias in aliases
+            isinstance(alias, str) and alias.lower() == key for alias in aliases
         ):
             return canonical
     return None
@@ -213,7 +226,7 @@ def ensure_other_first(entries: list[dict[str, object]]) -> list[dict[str, objec
     other: dict[str, object] = {"value": OTHER_SYSTEM, "aliases": []}
     rest: list[dict[str, object]] = []
     for entry in entries:
-        if str(entry["value"]).casefold() == OTHER_SYSTEM.casefold():
+        if str(entry["value"]).lower() == OTHER_SYSTEM.lower():
             other = {"value": OTHER_SYSTEM, "aliases": entry["aliases"]}
         else:
             rest.append(entry)

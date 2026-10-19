@@ -203,7 +203,7 @@ You can link a map that is **not yet designated** as a placeholder first, and so
   - exactly **one** start node
   - **one** primary end
   - **no duplicate** end names
-  - **Splits use a decision or a parallel exit**: a node that splits without either fails (one next step per end on subprocesses, two or more on parallel exits, Decision and Start nodes exempt). Inserting may leave two for a moment; click the item to jump to the node. Autosave is not blocked; **Save** and submitting for approval are.
+  - **Splits use a decision or a parallel exit**: a node that splits without either fails (one next step per end on subprocesses, two or more on parallel exits, Decision and Start nodes exempt). Inserting may leave two for a moment; click the item to jump to the node. Autosave is not blocked; **Save** and submitting for approval are (Map settings submit and self-publish check the same list, and the server checks again on submit).
 - Editing is possible only while the version is a draft (#Draft / #Rejected) and you hold the **checkout**. If someone else is editing or an approval is in progress, the canvas locks read-only (see the Getting Around manual for versions and approval).
 - The checkout request/transfer UI lives in the **Checkout** card of the Approval tab's **Approval workflow** panel and is interactive **only on a draft**. A rejected version shows no checkout UI. **Withdraw** returns it to draft and hands the checkout back to you automatically.
 - While a change that lowers your own permission is pending approval, checkout and submitting for approval are refused ("Your permission change is still pending approval."). Once the request is decided, refresh or switch versions to continue.

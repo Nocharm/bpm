@@ -148,7 +148,7 @@ import {
   isEdgeFan,
   type FanNodeGeom,
 } from "@/lib/edge-fanout";
-import { alignBackbone, computeSpine, isBackEdge, pickHandleSide } from "@/lib/flow-layout";
+import { alignBackbone, computeSpine, pickEdgeHandleSides } from "@/lib/flow-layout";
 import { useI18n } from "@/lib/i18n";
 import { CheckInput } from "@/components/check-input";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
@@ -388,6 +388,7 @@ const displayFieldValue = (
   }
   if (field === "primary_end") return value === "true" ? t("field.primaryEnd") : "";
   if (field === "follow_latest") return t(value === "true" ? "compare.followLatestOn" : "compare.followLatestOff");
+  if (field === "linked_version") return value ? t("compare.versionRef", { id: value }) : "";
   // 병렬 출구 키 목록 — 일반 노드·SP 대표 끝의 "__primary__"는 사람이 읽는 이름으로
   if (field === "parallel") {
     return value
@@ -1288,29 +1289,30 @@ function ComparePane({
   const handleSides = useMemo(() => {
     const arcSide: HandleSide = flowDir === "LR" ? "bottom" : "right";
     const result = new Map<string, { source: HandleSide; target: HandleSide }>();
+    // 척추 지름길 판정용 — 드래그 위치를 반영한 배치(아래 laidNodes와 같은 산식, 선언 순서상 여기서 다시 만든다)
+    const placed = positioned.map((node) => {
+      const override = sessionPos.get(`${layoutKey}|${node.id}`);
+      return override ? { ...node, position: override } : node;
+    });
+    const renderW = (node: AppNode) =>
+      node.measured?.width ?? COMPARE_RENDER_W[node.data.nodeType] ?? nodeSizeOf(node.data.nodeType).w;
+    const renderH = (node: AppNode) => node.measured?.height ?? COMPARE_RENDER_H[node.data.nodeType] ?? 38;
     for (const edge of merged.edges) {
       const s = nodeCenters.get(edge.source);
       const t = nodeCenters.get(edge.target);
       const passthrough =
         edge.status === "removed" && keptKeys.has(edge.source) && keptKeys.has(edge.target);
-      // 흐름 역행 루프 판정·변 선택은 공용 lib(isBackEdge·pickHandleSide) — 에디터 자동정렬과 공유.
-      const back = !passthrough && !!s && !!t && isBackEdge(flowDir, s, t);
-      const sideFor = (
-        thisC: { cx: number; cy: number } | undefined,
-        otherC: { cx: number; cy: number } | undefined,
-        thisId: string,
-        otherId: string,
-      ): HandleSide => {
-        if (passthrough) return arcSide;
-        return pickHandleSide(flowDir, thisC, otherC, spineIds.has(thisId), spineIds.has(otherId), back);
-      };
-      result.set(edge.id, {
-        source: sideFor(s, t, edge.source, edge.target),
-        target: sideFor(t, s, edge.target, edge.source),
-      });
+      if (passthrough) {
+        result.set(edge.id, { source: arcSide, target: arcSide });
+        continue;
+      }
+      // 변 선택은 에디터 자동정렬과 같은 단일 판정(pickEdgeHandleSides) — 척추 노드를 건너뛰는 지름길(판단의 No → 끝)을
+      // 흐름측으로 그려 사이 노드를 관통하고 "No" 라벨이 가려지던 것을 우회 변으로 돌린다 (리뷰 W-2)
+      const sides = pickEdgeHandleSides(placed, flowDir, spineIds, edge, s, t, renderW, renderH);
+      result.set(edge.id, { source: sides.sourceSide, target: sides.targetSide });
     }
     return result;
-  }, [merged, keptKeys, nodeCenters, flowDir, spineIds]);
+  }, [merged, keptKeys, nodeCenters, flowDir, spineIds, positioned, sessionPos, layoutKey]);
 
   // 세션 드래그 위치 오버라이드 — 포커스와 무관(포커스는 flowNodes에서 해당 노드만 얕게 패치해 배치 산출물을 보존)
   const laidNodes = useMemo(
@@ -2921,7 +2923,7 @@ function ComparePane({
                     );
                   })()}
                   {/* 링크 정체성 — 확정 서명이 세는 필드라 바뀐 경우만 행으로 드러낸다(값 자체는 SP 노드가 보여 준다) */}
-                  {(["linked_map", "placeholder", "primary_end", "follow_latest"] as const).map((key) => {
+                  {(["linked_map", "placeholder", "primary_end", "follow_latest", "linked_version"] as const).map((key) => {
                     const change = selectedNode.fieldChanges.find((fc) => fc.field === key);
                     if (!change) return null;
                     return (

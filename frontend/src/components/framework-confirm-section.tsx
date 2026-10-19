@@ -38,6 +38,8 @@ export interface FrameworkConfirmSectionProps {
   versions: VersionSummary[]; // 스냅샷 라벨(vX.Y) 파싱 소스 — VersionDetail도 호환
   liveNodes: AppNode[];
   liveEdges: LiveEdgeShape[];
+  // 라이브 노드 → 계보 루트(source_node_id) — 스냅샷 쪽 번역과 대칭이어야 무변경이 "엣지 ±n"으로 보이지 않는다 (리뷰 F-5)
+  liveLineageById?: ReadonlyMap<string, string>;
   onConfirmed: (result: FrameworkConfirmResult) => void; // 부모가 versions 갱신·토스트
   onError: (message: string) => void;
   onFocusNode?: (nodeId: string) => void; // 게이트 위반 노드로 이동(캔버스 아웃라인 유틸 재사용)
@@ -119,7 +121,7 @@ function MajorImpactRows({
 }
 
 export function FrameworkConfirmSection({
-  mapId, canConfirm, canRequest, currentUser, versions, liveNodes, liveEdges, onConfirmed, onError, onFocusNode,
+  mapId, canConfirm, canRequest, currentUser, versions, liveNodes, liveEdges, liveLineageById, onConfirmed, onError, onFocusNode,
   flushPendingSave,
   onRequestChanged,
 }: FrameworkConfirmSectionProps) {
@@ -210,7 +212,7 @@ export function FrameworkConfirmSection({
     latest === null ? [] : [`v${latest.major}.0`, ...(latest.minor > 0 ? [latest.label] : [])];
 
   // 변경 요약 — 최신 스냅샷 기준, 공유 훅(비교 diff 재활용) (2026-08-30 #3 추출)
-  const summary = useChangeSummary(latest?.id ?? null, liveNodes, liveEdges);
+  const summary = useChangeSummary(latest?.id ?? null, liveNodes, liveEdges, liveLineageById);
 
   const hasChanges =
     latest === null || // 최초 확정 — 비교 기준 없음(항상 확정 가능)

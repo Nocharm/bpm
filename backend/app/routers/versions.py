@@ -54,6 +54,7 @@ from app.schemas import (
     VersionUpdate,
     WorkflowStateOut,
 )
+from app.subprocess import find_output_rule_violations
 
 router = APIRouter(
     prefix="/api", tags=["versions"], dependencies=[Depends(get_current_user)]
@@ -714,6 +715,18 @@ async def submit_version(
     if not approvers:
         raise HTTPException(
             status_code=409, detail="map has no approvers - assign approvers first"
+        )
+
+    # 출력 규칙(갈래는 판단 노드나 병렬 출구로) — 에디터 저장 체크리스트만 막고 서버는 보지 않아, 설정 패널의
+    # 제출·셀프 게시로 규칙을 어긴 맵이 게시됐다. L5 캔버스 확정 게이트 6과 같은 판정이다 (사용자 결정 2026-10-20, 리뷰 F-4)
+    violating = find_output_rule_violations(
+        list((await session.scalars(select(Node).where(Node.version_id == version_id))).all()),
+        list((await session.scalars(select(Edge).where(Edge.version_id == version_id))).all()),
+    )
+    if violating:
+        raise HTTPException(
+            status_code=422,
+            detail=f"splits need a decision node or a parallel exit: {len(violating)} nodes",
         )
 
     # 동봉 가시성 변경 처리

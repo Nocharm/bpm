@@ -16,6 +16,7 @@ import {
   dropUneditableParams,
   type ParamField,
   resolveCostFields,
+  SP_PARAM_FIELDS,
 } from "./params";
 import { isSubprocessEndHandle, isSubprocessInHandle } from "./subprocess-embed";
 
@@ -302,16 +303,27 @@ const mergeNode = (
   if (existing === null) {
     // 신규 노드도 flags를 자기 Input 줄 수에 정렬 — CSV가 초과 줄을 실어도 고아 값이 안 남게
     const system = resolveSystemFields(next.system, "", next.system_fallback ?? "", catalogs);
+    // 새 SP 노드도 상속 파라미터 5종은 받지 않는다 — 화면은 링크 맵 지정값을 보여 주는데 저장값이 따로 쌓여
+    // CSV·비교·확정 서명이 다른 값을 봤다. 서버 NodeIn도 같은 5종을 비운다 (리뷰 F-7)
+    const isNewSubprocess = next.node_type === "subprocess";
+    const { droppedFields } = dropUneditableParams(next.node_type, {
+      duration: next.duration,
+      touch_time: next.touch_time ?? "",
+      cost_krw: next.cost_krw ?? "",
+      cost_usd: next.cost_usd ?? "",
+      headcount: next.headcount ?? "",
+    });
     return {
       node: {
         ...next,
+        ...(isNewSubprocess ? Object.fromEntries(SP_PARAM_FIELDS.map((field) => [field, ""])) : {}),
         system: system.system,
         system_fallback: system.system_fallback,
         input_flags: alignFlagLines(next.input_flags ?? "", next.input ?? ""),
         input_forms: alignFlagLines(next.input_forms ?? "", next.input ?? ""),
         output_forms: alignFlagLines(next.output_forms ?? "", next.output ?? ""),
       },
-      droppedParamFields: [],
+      droppedParamFields: isNewSubprocess ? droppedFields : [],
       droppedTextFields: [],
       keptSystemNote: false,
     };

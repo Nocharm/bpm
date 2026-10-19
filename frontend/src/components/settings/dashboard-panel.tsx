@@ -68,6 +68,12 @@ export interface DashboardPanelProps {
   onToast?: (message: string) => void;
 }
 
+// 기간 안 누적 합 — "누적 성장" 그래프가 일별 건수를 그려 선이 내려가곤 했다 (리뷰 2026-10-19 W-8)
+function toRunningTotals(values: readonly number[]): number[] {
+  let total = 0;
+  return values.map((value) => (total += value));
+}
+
 export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
   const { t } = useI18n();
   const user = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
@@ -249,13 +255,13 @@ export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
                     {
                       label: t("dashboard.growthMaps"),
                       color: "var(--color-accent-sky)",
-                      values: points.map((point) => point.maps_created),
+                      values: toRunningTotals(points.map((point) => point.maps_created)),
                     },
                     {
                       // 보조 시리즈 — 하늘 위에서 ink 계열은 가라앉아 밝은 회백으로
                       label: t("dashboard.growthVersions"),
                       color: "color-mix(in srgb, var(--color-canvas) 55%, transparent)",
-                      values: points.map((point) => point.versions_created),
+                      values: toRunningTotals(points.map((point) => point.versions_created)),
                     },
                   ]}
                 />

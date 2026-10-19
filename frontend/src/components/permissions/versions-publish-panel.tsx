@@ -29,6 +29,7 @@ import type { VersionDetail, VersionEvent, VersionStatus, VersionSummary, Workfl
 import {
   approveVersion,
   getDirectory,
+  getGraph,
   getMap,
   getWorkflowState,
   publishVersion,
@@ -43,6 +44,7 @@ import { useMe } from "@/lib/me";
 import { formatVersionMarker } from "@/lib/version-name";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_TONE } from "@/lib/version-status";
 import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
+import { listGraphSaveBlockers } from "@/lib/save-blockers";
 import { draftSubmitNote } from "@/lib/submit-note-draft";
 import { PersonHoverCard } from "@/components/person-hover-card";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
@@ -530,13 +532,25 @@ function VersionRow({
             type="button"
             disabled={busy}
             className={`${btn} border-accent bg-surface text-accent hover:bg-accent-tint`}
-            onClick={(event) => {
+            onClick={async (event) => {
+              const at = { x: event.clientX, y: event.clientY };
+              // 에디터와 같은 저장 체크리스트를 먼저 — 여기 제출·셀프 게시가 이 검사를 건너뛰어 규칙을 어긴 맵이 게시됐다 (리뷰 F-4)
+              try {
+                const blockers = listGraphSaveBlockers(await getGraph(versionId), t);
+                if (blockers.length > 0) {
+                  onToast?.(`${t("save.blockedTitle")}: ${blockers.join(", ")}`, "error");
+                  return;
+                }
+              } catch (err) {
+                onToast?.(humanizeApiError(err, t), "error");
+                return;
+              }
               // 동봉 선택은 오픈 시점에 리셋 — dismiss 경로는 confirm과 달리 값을 지우지 않으므로,
               // 이전 취소된 선택이 다음 오픈에 미리 선택된 채로 남아 의도치 않은 동봉을 유발할 수 있다.
               setBundleValue(null);
               // 승인자가 본인 1인이면 클릭 지점에 셀프 게시 제안 — No/닫기는 기존 제출 플로우.
               if (isSoleSelfApprover(wf.approvers, currentUserId)) {
-                setSelfPublishAt({ x: event.clientX, y: event.clientY });
+                setSelfPublishAt(at);
                 return;
               }
               setTransitionComment("");

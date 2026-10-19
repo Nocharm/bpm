@@ -40,6 +40,7 @@ export type ChangedField =
   | "placeholder"
   | "primary_end"
   | "follow_latest"
+  | "linked_version"
   | "location";
 
 export interface NodeDiffEntry {
@@ -100,6 +101,8 @@ export const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
   ["placeholder_category_id", "placeholder"],
   ["is_primary_end", "primary_end"],
   ["follow_latest", "follow_latest"],
+  // 고정 버전 — 다시 고정만 바꿔도 변경이다(재핀만 한 캔버스가 409로 확정되지 않았다). 최신 추종 중엔 저장값을 쓰지 않아 세지 않는다 (리뷰 F-6)
+  ["linked_version_id", "linked_version"],
 ];
 
 /**
@@ -107,6 +110,7 @@ export const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
  * 없음(undefined)은 null로 접는다 — 선택 필드(placeholder_category_id 등)가 응답에 없을 때와 null을 같게.
  */
 export function getFieldValue(node: FlatNode, field: keyof FlatNode): unknown {
+  if (field === "linked_version_id") return node.follow_latest ? null : (node.linked_version_id ?? null);
   const value = node[field];
   return Array.isArray(value) ? [...value].sort().join(", ") : (value ?? null);
 }
@@ -142,6 +146,7 @@ export const FIELD_MSG: Record<ChangedField, MessageKey> = {
   placeholder: "field.placeholderSource",
   primary_end: "field.primaryEnd",
   follow_latest: "field.followLatest",
+  linked_version: "field.linkedVersion",
   location: "field.location",
 };
 

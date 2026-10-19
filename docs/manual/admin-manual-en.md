@@ -218,7 +218,7 @@ Live operational metrics from the database, at a glance:
 - **Operations**: counts of all maps, published, in-progress, and trash; open comments; unread notifications (yours); and checkout transfer requests.
 - **Version status**: the distribution of versions across draft, in-review, approved, published, and expired.
 - **Adoption by department**: the share of departments that own a map. The denominator (which departments count) is picked by the admin in the **Coverage** sidebar.
-- **Login & activity** and **Cumulative growth** (map/version creation over time): a period filter (**7 days** / **1 month** / **3 months** / **Custom**) adjusts the time series. Snapshot metrics ignore the period filter.
+- **Login & activity** and **Cumulative growth** (running total of maps and versions created in the selected period): a period filter (**7 days** / **1 month** / **3 months** / **Custom**) adjusts the time series. Snapshot metrics ignore the period filter.
 - **Recent version events** and **AI usage** (7-day / 30-day call counts, top maps).
 
 **Dashboard access** can be delegated by a sysadmin. Grant it from the **Access** sidebar on the right of the dashboard to people, departments, or user groups, and a non-admin with a grant can open the dashboard (sysadmins always can). With no grants, only sysadmins see it.

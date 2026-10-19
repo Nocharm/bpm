@@ -8,7 +8,9 @@ const ITEM_MAX_LEN = 100; // 서버 MANAGED_ITEM_MAX_LEN과 동일
 const ALIASES_MAX = 20; // 서버 MANAGED_ALIASES_MAX와 동일
 const ALIAS_SEPARATOR = "|";
 
-const clean = (raw: string): string => raw.trim().slice(0, ITEM_MAX_LEN);
+// 길이는 코드 포인트로 자른다 — UTF-16 단위로 자르면 이모지 반쪽(고립 서러게이트)이 남아 저장이 실패했고, 서버(파이썬 문자) 길이와도
+// 달랐다 (리뷰 F-9)
+const clean = (raw: string): string => Array.from(raw.trim()).slice(0, ITEM_MAX_LEN).join("");
 
 /** 값·별칭 전역 중복 제거 — 값을 먼저 전부 확보하고, 별칭은 어떤 값·앞선 별칭과 겹치면 버린다 */
 export function normalizeAliases(entries: readonly CatalogEntry[]): CatalogEntry[] {
@@ -16,16 +18,16 @@ export function normalizeAliases(entries: readonly CatalogEntry[]): CatalogEntry
   const staged: CatalogEntry[] = [];
   for (const entry of entries) {
     const value = clean(entry.value);
-    if (value === "" || taken.has(value.toLocaleLowerCase())) continue;
-    taken.add(value.toLocaleLowerCase());
+    if (value === "" || taken.has(value.toLowerCase())) continue;
+    taken.add(value.toLowerCase());
     staged.push({ value, aliases: entry.aliases });
   }
   return staged.map((entry) => {
     const aliases: string[] = [];
     for (const raw of entry.aliases) {
       const alias = clean(raw);
-      if (alias === "" || taken.has(alias.toLocaleLowerCase())) continue;
-      taken.add(alias.toLocaleLowerCase());
+      if (alias === "" || taken.has(alias.toLowerCase())) continue;
+      taken.add(alias.toLowerCase());
       aliases.push(alias);
       if (aliases.length >= ALIASES_MAX) break;
     }
@@ -43,7 +45,7 @@ export function parseCatalogCsv(text: string): CatalogEntry[] {
         .filter((alias) => alias !== ""),
     }))
     .filter((entry) => entry.value !== "");
-  if (entries.length > 0 && entries[0].value.toLocaleLowerCase() === "value") entries.shift();
+  if (entries.length > 0 && entries[0].value.toLowerCase() === "value") entries.shift();
   // merge (not normalizeAliases directly) so rows sharing a value union their aliases instead of the dup row being dropped whole
   return mergeCatalogEntries([], entries).next;
 }
@@ -53,20 +55,20 @@ export function mergeCatalogEntries(
   incoming: readonly CatalogEntry[],
 ): { next: CatalogEntry[]; added: number; duplicates: number; aliasesAdded: number } {
   const next = current.map((entry) => ({ value: entry.value, aliases: [...entry.aliases] }));
-  const byKey = new Map(next.map((entry) => [entry.value.toLocaleLowerCase(), entry]));
+  const byKey = new Map(next.map((entry) => [entry.value.toLowerCase(), entry]));
   let added = 0;
   let duplicates = 0;
   for (const raw of incoming) {
     const value = clean(raw.value);
     if (value === "") continue;
-    const existing = byKey.get(value.toLocaleLowerCase());
+    const existing = byKey.get(value.toLowerCase());
     if (existing) {
       duplicates += 1;
       existing.aliases.push(...raw.aliases);
       continue;
     }
     const entry = { value, aliases: [...raw.aliases] };
-    byKey.set(value.toLocaleLowerCase(), entry);
+    byKey.set(value.toLowerCase(), entry);
     next.push(entry);
     added += 1;
   }

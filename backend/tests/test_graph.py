@@ -902,13 +902,14 @@ def test_assignee_role_roundtrips_and_clears_when_omitted(client: TestClient) ->
     assert next(n for n in saved["nodes"] if n["title"] == "칭량")["assignee_role"] == ""
 
 
-def test_parallel_outputs_roundtrip_trims_and_dedupes(client: TestClient) -> None:
-    # 병렬 출구 키는 공백·빈 값 제거, 중복 1회로 저장되고, 미지정 노드는 빈 배열 (출력 규칙 2026-10-01)
+def test_parallel_outputs_roundtrip_drops_blanks_and_dedupes(client: TestClient) -> None:
+    # 병렬 출구 키는 빈 값 제거, 중복 1회로 저장되고, 미지정 노드는 빈 배열 (출력 규칙 2026-10-01).
+    # 키는 다듬지 않는다 — SP 끝 키는 끝 제목 원문이라 다듬으면 핸들과 어긋났다 (리뷰 2026-10-19 F-8)
     version_id = _create_version(client)
     graph = {
         "nodes": [
             {"id": "ps", "title": "시작", "node_type": "start"},
-            {"id": "pa", "title": "병렬 갈래", "parallel_outputs": [" __primary__ ", "__primary__", ""]},
+            {"id": "pa", "title": "병렬 갈래", "parallel_outputs": ["__primary__", "__primary__", "", "  "]},
             {"id": "pb", "title": "일반"},
         ],
         "edges": [],

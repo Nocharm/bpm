@@ -64,14 +64,15 @@ export function useCatalogs(): Catalogs {
   return data;
 }
 
-/** 값 또는 별칭이 대소문자 무시로 일치하는 항목 — 없으면 null */
+/** 값 또는 별칭이 대소문자 무시로 일치하는 항목 — 없으면 null.
+ *  비교는 로케일 무관 toLowerCase — 서버 app_settings의 str.lower()와 같다(종전 toLocaleLowerCase·casefold는 갈렸다, 리뷰 F-9) */
 export function findCatalogEntry(value: string, entries: readonly CatalogEntry[]): CatalogEntry | null {
-  const key = value.trim().toLocaleLowerCase();
+  const key = value.trim().toLowerCase();
   if (key === "") return null;
   return (
     entries.find(
       (entry) =>
-        entry.value.toLocaleLowerCase() === key || entry.aliases.some((alias) => alias.toLocaleLowerCase() === key),
+        entry.value.toLowerCase() === key || entry.aliases.some((alias) => alias.toLowerCase() === key),
     ) ?? null
   );
 }

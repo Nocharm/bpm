@@ -146,13 +146,15 @@ export default function SettingsPage() {
 
   // 토스트 상태 / Toast state.
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  function showToast(message: string, tone?: "error") {
+  // 참조를 고정한다 — 패널들이 이 함수를 effect deps에 넣어, 렌더마다 새 함수가 되면 모든 패널이 다시 불러왔다
+  // (첫 로드 GET 71건, 삭제 직후 404 → 토스트 → 리렌더 → 재조회 반복, 리뷰 W-3)
+  const showToast = useCallback((message: string, tone?: "error") => {
     // 읽기 전용(viewer 등)은 권한 로드 시 401/403 다발 — 예상된 접근 거부는 토스트 미노출 (B2).
     // 인간화 후 포맷('(HTTP 403)' 꼬리표)과 미스윕 원시 포맷('failed: 403') 둘 다 매칭.
     // ⚠️ 포맷 결합 주의: 매핑된 i18n 에러는 꼬리표가 없어 이 필터를 우회한다(api-errors.ts DETAIL_PREFIX_MAP 주석 참조). status 기반 전환은 후속 결정.
     if (/failed: 40[13]/.test(message) || /\(HTTP 40[13]\)$/.test(message)) return;
     setToasts((prev) => [{ id: genId(), message, tone }, ...prev]);
-  }
+  }, []);
   function dismissToast(id: string) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }

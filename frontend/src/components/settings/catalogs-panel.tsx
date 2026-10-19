@@ -74,8 +74,8 @@ function ManagedListCard({
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(values);
-  const isLocked = (value: string) => lockedValues.some((locked) => locked.toLocaleLowerCase() === value.toLocaleLowerCase());
-  const has = (value: string) => draft.some((item) => item.value.toLocaleLowerCase() === value.trim().toLocaleLowerCase());
+  const isLocked = (value: string) => lockedValues.some((locked) => locked.toLowerCase() === value.toLowerCase());
+  const has = (value: string) => draft.some((item) => item.value.toLowerCase() === value.trim().toLowerCase());
   const selectedEntry = selected !== null ? (draft.find((entry) => entry.value === selected) ?? null) : null;
   // 선택이 바뀔 때만 별칭 입력을 저장된 별칭으로 리셋 — resync와 같은 render-time 조정 패턴
   const [seenSelected, setSeenSelected] = useState(selected);
@@ -94,13 +94,13 @@ function ManagedListCard({
     const result = mergeCatalogEntries(draft, incoming);
     commitDraft(result.next);
     const after = result.next
-      .filter((entry) => draft.some((existing) => existing.value.toLocaleLowerCase() === entry.value.toLocaleLowerCase()))
+      .filter((entry) => draft.some((existing) => existing.value.toLowerCase() === entry.value.toLowerCase()))
       .reduce((sum, entry) => sum + entry.aliases.length, 0);
     const dropped = Math.max(0, before - after);
     return { ...result, dropped };
   };
   const selectMatch = (result: { next: CatalogEntry[] }, value: string) => {
-    const match = result.next.find((entry) => entry.value.toLocaleLowerCase() === value.toLocaleLowerCase());
+    const match = result.next.find((entry) => entry.value.toLowerCase() === value.toLowerCase());
     if (match) setSelected(match.value);
   };
   const handleAdd = () => {
@@ -147,10 +147,10 @@ function ManagedListCard({
     }
   };
   const candidates = available.filter((value) => !has(value));
-  const needle = filter.trim().toLocaleLowerCase();
+  const needle = filter.trim().toLowerCase();
   const filteredDraft = needle === ""
     ? draft
-    : draft.filter((entry) => entry.value.toLocaleLowerCase().includes(needle) || entry.aliases.some((alias) => alias.toLocaleLowerCase().includes(needle)));
+    : draft.filter((entry) => entry.value.toLowerCase().includes(needle) || entry.aliases.some((alias) => alias.toLowerCase().includes(needle)));
 
   return (
     <section

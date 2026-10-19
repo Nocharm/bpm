@@ -1,12 +1,18 @@
 // duration H.MM 표기 정규화 — 소수부 2자리는 "분"(십진수 아님). 설계 2026-07-11 §2.2.
 // 백엔드 app/duration.py와 케이스 동치를 유지할 것(경계 이중 방어).
 
-export const DURATION_PATTERN = /^\d+(\.\d{1,2})?$/;
-export const NUMERIC_PATTERN = /^\d+(\.\d+)?$/;
+export const DURATION_PATTERN = /^[0-9]+(\.[0-9]{1,2})?$/;
+export const NUMERIC_PATTERN = /^[0-9]+(\.[0-9]+)?$/;
+
+// NFKC(전각 숫자·마침표 → ASCII) 후 trim — 백엔드 duration._clean_number_text와 동치. 전각으로 친 값이 서버엔
+// 저장되는데 화면 합계에선 무효로 빠지던 어긋남을 막는다 (리뷰 2026-10-19 F-9)
+function cleanNumberText(raw: string): string {
+  return raw.normalize("NFKC").trim();
+}
 
 /** H.MM 정규화 — 유효하면 정규형("2"·"1.15"), 무효면 null. 빈 문자열은 "". */
 export function normalizeDuration(raw: string): string | null {
-  const text = raw.trim();
+  const text = cleanNumberText(raw);
   if (text === "") return "";
   if (!DURATION_PATTERN.test(text)) return null;
   const [intPart, fracPart = ""] = text.split(".");
@@ -20,7 +26,7 @@ export function normalizeDuration(raw: string): string | null {
 
 /** 일반 십진 파라미터(duration 외 — cost_krw·cost_usd·headcount·annual_count·fte) — 유효하면 트림 원문, 무효면 null. */
 export function normalizeNumericParam(raw: string): string | null {
-  const text = raw.trim();
+  const text = cleanNumberText(raw);
   if (text === "") return "";
   return NUMERIC_PATTERN.test(text) ? text : null;
 }

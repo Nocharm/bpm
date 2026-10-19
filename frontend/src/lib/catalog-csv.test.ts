@@ -46,3 +46,13 @@ describe("normalizeAliases", () => {
     ).toEqual([{ value: "Reviewer", aliases: ["검토자"] }, { value: "Approver", aliases: ["승인자"] }]);
   });
 });
+
+describe("parseCatalogCsv - 길이 자르기(F-9)", () => {
+  it("cuts by code point so an emoji is never split in half", () => {
+    const value = `${"가".repeat(99)}😀끝`;
+    const [entry] = parseCatalogCsv(`value,aliases\n${value},`);
+    expect(Array.from(entry.value)).toHaveLength(100);
+    expect(entry.value.endsWith("😀")).toBe(true);
+    expect(/[\ud800-\udbff](?![\udc00-\udfff])/.test(entry.value)).toBe(false);
+  });
+});

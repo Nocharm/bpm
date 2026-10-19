@@ -225,6 +225,8 @@ export interface SubprocessRef {
   name: string | null;
   // 링크맵 삭제됨 + 이양 후계자(살아있는 맵까지 추적) — 교체 CTA·추천 소스 (2026-08-30)
   deleted?: boolean;
+  // 볼 수 없는 미지정 링크 맵이라 서버가 가렸다 — 그 맵을 읽는 조작(등록 요청·버전 고정)을 숨긴다 (리뷰 W-5)
+  hidden?: boolean;
   successor_map_id?: number | null;
   successor_name?: string | null;
   // 살아 있지만 슬롯을 넘긴 맵 — 캔버스 stale 룩 + Replace CTA (spec 2026-09-06 §6.2)

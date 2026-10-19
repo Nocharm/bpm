@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-20 — 7b 편집·SP·비교 잔여: 시스템 리뷰 A-2·A-4·F-4~F-9·W-2·W-3·W-5·W-7·W-8 (dev)
+
+- 그래프 저장은 같은 노드·엣지·그룹 id 중복과 그룹 부모 사이클을 422로(엣지 중복은 유니크 위반 500이었다). 일반 맵 승인 요청은 서버가 출력 규칙을 다시 보고(사용자 결정 F-4=A, 기존 게시본은 그대로), 설정 버전 패널의 제출·셀프 게시도 에디터와 같은 체크리스트(`lib/save-blockers.ts`)를 거친다. L5 확정 변경 요약에 계보를 넘겨 임포트 캔버스의 무변경이 변경으로 보이던 것을 막고, 고정 버전은 고정 중일 때만 비교·확정 서명에 든다. SP 노드의 상속 파라미터 5종은 `NodeIn`이 비우고(AI 신규 SP 경로도), 병렬 출구 키는 다듬지 않는다(끝 제목 공백). 숫자 정규화는 NFKC+JS trim+ASCII 숫자로 FE·BE 동치, 카탈로그 비교는 lower/toLowerCase, 이름 자르기는 코드 포인트, 서버는 고립 서러게이트를 지운다. 비교 화면 변 선택은 자동정렬과 같은 `pickEdgeHandleSides`, 맵 설정 `showToast` 메모(패널 재조회 반복), 열람권 없는 SP(refs `hidden`)엔 등록 요청·버전 피커를 숨기고, 펼친 SP 자식은 F2로 이름 편집이 열리지 않으며, 대시보드 누적 그래프는 기간 누적 합.
+- 회귀 `test_editor_followups.py` 8(수정 전 8 실패) + 기존 병렬 키 다듬기 테스트를 새 규칙으로, vitest +15(정규화 표 FE·BE 짝·고정 버전 diff·저장 체크리스트·코드 포인트·신규 SP). 브라우저 `scripts/pw-verify-editor-followups.mjs`: 수정 전 프런트 0/5 → 수정 후 5/5(제출 체크리스트·비교 No 라벨·잠긴 SP·F2·L5 무변경). pytest 1803·ruff·py3.11·tsc·lint·vitest 1508·COMPONENTS 재생성. 매뉴얼 ko/en·`backend/app/manual.md`·CLAUDE.md 반영. F-3(대표 끝 삭제 시 자동 재지정)은 사용자 결정 대기.
+
 ## 2026-10-20 — 7a 권한·결재 잔여: 시스템 리뷰 C-6·C-7·E-12·B-9·B-10·B-11·W-4·W-6 (dev)
 
 - 로그인 제한은 AD bind 전에 시도를 센다(동시 요청이 bind로 새던 것). HR이 로컬 계정을 인수하면 로컬 sysadmin 부여를 DB·캐시에서 거둔다. 분류 권한자 교체는 허용 그대로, 빠진 사람에게 `fw_admin_removed` 알림(사용자 결정 E-12=B). AI 비교 요약 캐시는 제출 코멘트가 있을 때만 키에 넣고(기존 캐시 유지), 동시 최초 저장은 유니크 위반을 되돌려 먼저 들어간 행을 갱신한다. 버전 이름 바꾸기는 편집 가능 상태+점유자·오너·sysadmin만, 만료본 삭제 409(이벤트 cascade 유실). 받은함 승인 창에 동봉 공개 범위 줄, 승인자 피커는 빈 안내 문구(`PrincipalPicker emptyLabel`)·열 때 후보 다시 읽기(`onOpen`), 반려본 비점유자 안내는 회수 뒤 요청으로.

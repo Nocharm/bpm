@@ -757,6 +757,22 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     nodes, edges, groups: [{ id: "g1", parent_group_id: null, label: "Lane", color: "" }],
   });
 
+  it("does not store inherited params on a new subprocess node (F-7)", () => {
+    const outcome = buildGraphFromAiProposal(
+      {
+        nodes: [{ ...aiNode("sp", "견적 하위", "subprocess", { duration: "1.30", annual_count: "12" }), linked_map_id: 5 }],
+        edges: [],
+        groups: [],
+      },
+      { base: base([]) },
+    );
+    const sp = outcome.graph?.nodes.find((n) => n.title === "견적 하위");
+    expect(sp?.node_type).toBe("subprocess");
+    expect(sp?.duration).toBe("");
+    expect(sp?.annual_count).toBe("12");
+    expect(outcome.warnings.some((w) => w.message.includes("only accepts Annual_Count/FTE"))).toBe(true);
+  });
+
   it("reuses matched node id and preserves coords/color/group/assignee", () => {
     const existing = baseNode("n1", "견적 검토", { assignee_role: "Reviewer" });
     const outcome = buildGraphFromAiProposal(

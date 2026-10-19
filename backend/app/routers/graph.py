@@ -262,6 +262,16 @@ async def replace_graph(
             status_code=409, detail="must hold checkout to edit"
         )
 
+    # 같은 id가 두 번 오면 노드는 마지막 값이 조용히 이기고 엣지는 유니크 위반 500이었다 (리뷰 A-2·A-4)
+    for kind, ids in (
+        ("node", [n.id for n in payload.nodes]),
+        ("edge", [e.id for e in payload.edges]),
+        ("group", [g.id for g in payload.groups]),
+    ):
+        dupes = sorted(i for i, count in Counter(ids).items() if count > 1)
+        if dupes:
+            raise HTTPException(status_code=422, detail=f"duplicate {kind} ids: {dupes[:5]}")
+
     payload_ids = {n.id for n in payload.nodes}
     for edge in payload.edges:
         if edge.source_node_id not in payload_ids or edge.target_node_id not in payload_ids:
@@ -271,6 +281,20 @@ async def replace_graph(
             )
 
     payload_group_ids = {g.id for g in payload.groups}
+    # 그룹 부모가 서로를 가리키면(2-사이클 이상) 그대로 저장돼 화면의 중첩 계산이 끝나지 않는다 (리뷰 A-4)
+    parent_of = {
+        g.id: g.parent_group_id
+        for g in payload.groups
+        if g.parent_group_id in payload_group_ids and g.parent_group_id != g.id
+    }
+    for start in parent_of:
+        seen = {start}
+        cursor = parent_of.get(start)
+        while cursor is not None:
+            if cursor in seen:
+                raise HTTPException(status_code=422, detail=f"group parents form a cycle at {start}")
+            seen.add(cursor)
+            cursor = parent_of.get(cursor)
     for node in payload.nodes:
         for gid in node.group_ids:
             if gid not in payload_group_ids:

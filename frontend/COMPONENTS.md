@@ -136,7 +136,7 @@
 | `pulse-legend.tsx` | `PulseLegend` | 흐름 점 범례 | `components/node-display-float.tsx` |
 | `quick-connect-line.tsx` | `QuickConnectLine` | 빠른 연결 미리보기 | `app/maps/[mapId]/page.tsx` |
 | `role-chip.tsx` | `RoleChip` | 역할 칩 | `components/attribute-read-rows.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/role-tile.tsx`, `components/subprocess-preview-peek.tsx` |
-| `save-checklist.tsx` | `MapTitleChecklist` | 좌상단 맵 제목 칩 + 저장(그래프 검증) 조건 아코디언 | `app/maps/[mapId]/page.tsx` |
+| `save-checklist.tsx` | `MapTitleChecklist` | 좌상단 맵 제목 칩 + 저장(그래프 검증) 조건 아코디언 | `app/maps/[mapId]/page.tsx`, `lib/save-blockers.ts` |
 | `scope-preview.tsx` | `ScopePreview` | 비활성(조상) 창·요약 모달·라이브러리 피크·임포트 리포트가 공유하는 정적 프리뷰 | `app/maps/[mapId]/page.tsx`, `components/admin/import-report/map-preview.tsx`, `components/node-summary-modal.tsx`, `components/subprocess-preview-peek.tsx` |
 | `scope-window.tsx` | `ScopeWindow` | 떠있는 스코프 창 | `app/maps/[mapId]/page.tsx`, `components/framework-interview/relations-step.tsx` |
 | `search-box.tsx` | `SearchBox` | 공용 검색창 | `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/notices/page.tsx`, `app/page.tsx` |
