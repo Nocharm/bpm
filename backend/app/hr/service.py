@@ -17,7 +17,16 @@ from app.clock import now as now_kst
 from app.hr import client
 from app.hr.client import RawHrEmployee
 from app.hr.history import CHANGE_KINDS, Person, describe_person, is_mass_departure, record_hr_sync_run
-from app.models import Department, Employee, HrSyncRun, MapPermission, ProcessMap, UserGroupMember
+from app.models import (
+    Department,
+    Employee,
+    HrSyncRun,
+    LocalCredential,
+    MapPermission,
+    ProcessMap,
+    UserGroupMember,
+)
+from app.permissions import logic
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -144,6 +153,20 @@ class HrSyncSummary:
     changes: dict[str, list[Person]] = field(default_factory=dict, repr=False)
 
 
+async def _revoke_local_sysadmin(session: AsyncSession, login_id: str) -> None:
+    """HR이 같은 login_id의 로컬 계정을 인수하면 로컬 sysadmin 부여를 거둔다.
+
+    부여는 로컬(컨설턴트) 계정에 준 것인데, 인수 뒤 그 id로 들어오는 AD 사용자가 그대로 sysadmin이 됐다
+    (리뷰 2026-10-19 C-7). 메모리 캐시도 같이 내린다 — 트랜잭션이 되돌려져도 권한이 덜한 쪽으로 어긋난다.
+    """
+    credential = await session.get(LocalCredential, login_id)
+    if credential is None or not credential.is_sysadmin:
+        return
+    credential.is_sysadmin = False
+    logic.remove_granted_sysadmin(login_id)
+    logger.warning("hr takeover revoked local sysadmin login_id=%s", login_id)
+
+
 async def _upsert(session: AsyncSession, fields: HrEmployeeFields) -> tuple[Employee, str | None]:
     """HR 필드 upsert — (행, 이번 호출의 상태 전환). 전환은 created·deactivated·reactivated 또는 None.
 
@@ -155,6 +178,8 @@ async def _upsert(session: AsyncSession, fields: HrEmployeeFields) -> tuple[Empl
         emp = Employee(login_id=fields.login_id, source="hr")
         session.add(emp)
     was_active = bool(emp.active)
+    if emp.source == "local":
+        await _revoke_local_sysadmin(session, emp.login_id)
     emp.source = "hr"  # 레거시 'ad' 행도 HR 관리로 전환 (§5-1)
     emp.name = fields.name
     emp.role = fields.role

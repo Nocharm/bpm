@@ -49,6 +49,10 @@ interface PrincipalPickerProps {
   onSelect: (option: PrincipalOption, coords?: { x: number; y: number }) => void;
   /** `${principalType}:${principalId}` — 일치하는 옵션 행에 선택 효과(팝오버가 열린 동안 어떤 이름이 눌렸는지 표시). */
   highlightId?: string | null;
+  /** 드롭다운이 열릴 때 — 후보를 그때 다시 불러와야 하는 피커용(같은 화면에서 협업자를 추가한 뒤 등). */
+  onOpen?: () => void;
+  /** 후보가 하나도 없을 때 문구 — 미지정이면 "-" (승인자 피커는 다음 행동을 안내한다). */
+  emptyLabel?: string;
 }
 
 // 피커가 제안하는 후보 목록 / Build candidate list from seed data.
@@ -99,6 +103,8 @@ export function PrincipalPicker({
   pinnedIds,
   onSelect,
   highlightId,
+  onOpen,
+  emptyLabel,
 }: PrincipalPickerProps) {
   const { t, lang } = useI18n();
   const [query, setQuery] = useState("");
@@ -244,7 +250,10 @@ export function PrincipalPicker({
             setQuery(e.target.value);
             setActive(0);
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setOpen(true);
+            onOpen?.();
+          }}
           onBlur={() => {
             setOpen(false);
             setPlacement(null); // 다음 개방 때 옛 좌표로 한 프레임 그려지는 것 방지(effect는 페인트 후 실행)
@@ -389,7 +398,9 @@ export function PrincipalPicker({
           })}
           {hasMore && <div ref={sentinelRef} className="h-px shrink-0" />}
           {hits.length === 0 && (
-            <span className="px-3 py-2 text-caption text-ink-tertiary">-</span>
+            <span data-id="principal-picker-empty" className="px-3 py-2 text-caption text-ink-tertiary">
+              {emptyLabel ?? "-"}
+            </span>
           )}
         </div>,
         document.body,

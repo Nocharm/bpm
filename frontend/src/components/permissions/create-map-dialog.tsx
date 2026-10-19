@@ -1161,6 +1161,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, initialName, onCreate
             userDepartments={userDepartments}
             managersFirst
             pinnedIds={owningLeaderId ? new Set([owningLeaderId]) : undefined}
+            emptyLabel={t("perm.createDialog.approverPickerEmpty")}
             onSelect={(opt) => {
               if (opt.principalType === "user") handleAddApprover(opt.principalId, opt.displayName);
             }}

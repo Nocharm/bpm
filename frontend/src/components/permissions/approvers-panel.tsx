@@ -50,6 +50,12 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
       .catch(() => { /* picker falls back to empty */ });
     return () => { active = false; };
   }, [mapIdNum]);
+  // 피커를 열 때 후보를 다시 읽는다 — 같은 화면 협업자 패널에서 방금 추가한 사람이 새로고침 전까지 안 보였다 (리뷰 W-4)
+  const refreshEligible = () => {
+    void listEligibleApprovers(mapIdNum)
+      .then(setDirUsers)
+      .catch(() => { /* 기존 후보 유지 */ });
+  };
 
   // 표시명 해석 — mock 시드 사용, 미일치 시 id 폴백 / Resolve display name from mock seed.
   const userName = useCallback(
@@ -193,7 +199,7 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
 
       {/* 결재자 추가 — 소유자 + 승인 진행 중 아닐 때만 / Add form: owner and not under approval. */}
       {canEdit && (
-        <div className="mt-2 flex flex-col gap-2 border-t border-hairline pt-3">
+        <div data-id="approvers-add-form" className="mt-2 flex flex-col gap-2 border-t border-hairline pt-3">
           <p className="text-caption-strong text-ink">{t("perm.approversAdd")}</p>
           <PrincipalPicker
             users={pickerUsers}
@@ -202,6 +208,8 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
             excludeIds={new Set(approverIds)}
             userDepartments={userDepartments}
             managersFirst
+            onOpen={refreshEligible}
+            emptyLabel={t("perm.approverPickerEmpty")}
             onSelect={(opt: PrincipalOption) => {
               if (opt.principalType !== "user") return;
               void (async () => {

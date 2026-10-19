@@ -47,7 +47,7 @@ const KNOWN_TYPES = new Set([
   "map_copied", "map_retired", "feedback_reply", "feedback_status", "notice",
   "fw_confirm_requested", "fw_confirm_done", "fw_confirm_rejected",
   "fw_slot_requested", "fw_slot_applied", "fw_slot_rejected",
-  "fw_external_linked",
+  "fw_external_linked", "fw_admin_removed",
   "ref_fix_requested", "owner_assigned",
 ]);
 
@@ -85,6 +85,7 @@ export function getNotificationIcon(type: string): LucideIcon {
   if (type === "ref_fix_requested") return TriangleAlert;
   if (type === "owner_assigned") return Crown;
   if (type === "fw_external_linked") return Link2;
+  if (type === "fw_admin_removed") return ShieldCheck;
   if (type.startsWith("fw_slot")) return ArrowLeftRight;
   if (type.startsWith("fw_confirm")) return BadgeCheck;
   return Bell;

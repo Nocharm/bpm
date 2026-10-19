@@ -368,7 +368,7 @@
 | 파일 | 컴포넌트 | 역할 | 사용처 |
 |------|----------|------|--------|
 | `approve-confirm-dialog.tsx` | `ApproveConfirmDialog` | 승인 확인 다이얼로그 | `app/maps/[mapId]/page.tsx`, `components/permissions/versions-publish-panel.tsx` |
-| `approver-status-lines.tsx` | - | 승인자별 상태 라인 빌더 | `app/maps/[mapId]/page.tsx`, `components/permissions/versions-publish-panel.tsx`, `components/version/approve-confirm-dialog.tsx`, `components/version/reject-dialog.tsx`, `components/version/withdraw-confirm-dialog.tsx` |
+| `approver-status-lines.tsx` | - | 승인자별 상태 라인 빌더 | `app/inbox/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/permissions/versions-publish-panel.tsx`, `components/version/approve-confirm-dialog.tsx`, `components/version/reject-dialog.tsx`, `components/version/withdraw-confirm-dialog.tsx` |
 | `comment-history-modal.tsx` | `CommentHistoryModal` | 버전 코멘트 이력 모달 | `components/maps/version-timeline.tsx`, `components/permissions/versions-publish-panel.tsx` |
 | `publish-confirm-dialog.tsx` | `PublishConfirmDialog` | 게시 확인 다이얼로그 | `app/maps/[mapId]/page.tsx`, `components/permissions/versions-publish-panel.tsx` |
 | `reject-dialog.tsx` | `RejectDialog` | 반려 다이얼로그 | `app/maps/[mapId]/page.tsx`, `components/permissions/versions-publish-panel.tsx` |

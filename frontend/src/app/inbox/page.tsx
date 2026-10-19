@@ -69,6 +69,7 @@ import { useSlashFocus } from "@/lib/use-slash-focus";
 import { ActivityDigest } from "@/components/activity-digest";
 import { AutoHeight } from "@/components/auto-height";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
+import { buildBundledVisibilityLines } from "@/components/version/approver-status-lines";
 import {
   findLatestSubmitComment,
   RequesterCommentBanner,
@@ -1231,6 +1232,14 @@ function ApprovalDetail({
     };
   });
 
+  // 동봉 가시성 변경 — 에디터·설정 승인 모달과 같은 줄을 붙인다. 승인하면 함께 적용된다 (리뷰 B-9)
+  const bundledRequester = workflow?.bundled_visibility?.requested_by;
+  const bundledLines = buildBundledVisibilityLines(
+    workflow,
+    new Map(bundledRequester ? [[bundledRequester, resolveName(bundledRequester)]] : []),
+    t,
+  );
+
   const subtitle = `${approval.map_name}${approval.version_label ? ` · ${approval.version_label}` : ""}`;
 
   return (
@@ -1376,7 +1385,7 @@ function ApprovalDetail({
       <div className="mt-4 flex items-center gap-2">
         <button
           type="button"
-          data-id={isSpDesignation ? "inbox-sp-designate" : undefined}
+          data-id={isSpDesignation ? "inbox-sp-designate" : "inbox-approve"}
           onClick={() => {
             if (isSpDesignation) {
               if (spDetail !== null) onSpAccept?.(approval, spDetail);
@@ -1426,7 +1435,7 @@ function ApprovalDetail({
               <RequesterCommentBanner authorName={approval.requester} comment={submitComment} />
             ) : undefined
           }
-          lines={isVersion ? approverLines : undefined}
+          lines={isVersion ? [...approverLines, ...(bundledLines ?? [])] : undefined}
           confirmLabel={t("common.confirm")}
           cancelLabel={t("common.cancel")}
           onConfirm={() => {

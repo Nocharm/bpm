@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import ai_client, workflow
@@ -354,15 +355,17 @@ async def ai_compare_summary(
         raise HTTPException(status_code=404, detail=f"version {payload.target_version_id} not found")
 
     overrides = await get_prompt_overrides(session)
-    digest = compute_diff_hash(payload.diff, payload.lang, resolve_contract(overrides))
-    cached = await session.scalar(
-        select(AiCompareSummary).where(
-            AiCompareSummary.map_id == map_id,
-            AiCompareSummary.base_version_id == base.id,
-            AiCompareSummary.target_version_id == target.id,
-            AiCompareSummary.lang == payload.lang,
-        )
+    context = await _load_compare_context(session, map_id, base, target)
+    digest = compute_diff_hash(
+        payload.diff, payload.lang, resolve_contract(overrides), context.submit_note
     )
+    cache_key = (
+        AiCompareSummary.map_id == map_id,
+        AiCompareSummary.base_version_id == base.id,
+        AiCompareSummary.target_version_id == target.id,
+        AiCompareSummary.lang == payload.lang,
+    )
+    cached = await session.scalar(select(AiCompareSummary).where(*cache_key))
     if cached is not None and cached.diff_hash == digest and not payload.force:
         summary = CompareSummaryOut.model_validate(cached.content)
         summary.stats = payload.diff.totals
@@ -370,7 +373,6 @@ async def ai_compare_summary(
         summary.cached = True
         return summary
 
-    context = await _load_compare_context(session, map_id, base, target)
     messages = build_compare_summary_messages(payload.diff, context=context, lang=payload.lang, overrides=overrides)
     try:
         summary, usage = await _ask_and_validate(messages, None, schema=CompareSummaryOut)
@@ -396,28 +398,40 @@ async def ai_compare_summary(
         raise
     summary.has_submit_note = bool(context.submit_note)  # 캐시 내용에 포함 — 저장본도 같은 안내를 낸다
     content = summary.model_dump(mode="json", exclude={"stats", "generated_at", "cached"})
-    if cached is None:
-        cached = AiCompareSummary(
-            map_id=map_id, base_version_id=base.id, target_version_id=target.id, lang=payload.lang
+    # 같은 키의 첫 생성이 동시에 끝나면 둘째 INSERT가 유니크 위반(500)이었다 — 되돌리고 먼저 들어간 행을 갱신한다 (리뷰 B-10)
+    # 되돌리면 세션 객체가 만료돼 base·target 속성을 다시 읽을 수 없다 — id를 먼저 잡아 둔다
+    base_id, target_id = base.id, target.id
+    for attempt in (1, 2):
+        if attempt == 2:
+            cached = await session.scalar(select(AiCompareSummary).where(*cache_key))
+        if cached is None:
+            cached = AiCompareSummary(
+                map_id=map_id, base_version_id=base_id, target_version_id=target_id, lang=payload.lang
+            )
+            session.add(cached)
+        cached.diff_hash = digest
+        cached.content = content
+        cached.created_by = user
+        cached.created_at = now_kst()
+        session.add(
+            AiUsageEvent(
+                login_id=user,
+                map_id=map_id,
+                version_id=target_id,
+                model="",
+                kind="compare_summary",
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+                ok=True,
+            )
         )
-        session.add(cached)
-    cached.diff_hash = digest
-    cached.content = content
-    cached.created_by = user
-    cached.created_at = now_kst()
-    session.add(
-        AiUsageEvent(
-            login_id=user,
-            map_id=map_id,
-            version_id=target.id,
-            model="",
-            kind="compare_summary",
-            prompt_tokens=usage.prompt_tokens,
-            completion_tokens=usage.completion_tokens,
-            ok=True,
-        )
-    )
-    await session.commit()
+        try:
+            await session.commit()
+            break
+        except IntegrityError:
+            if attempt == 2:
+                raise
+            await session.rollback()
     await session.refresh(cached)  # DB가 돌려주는 시각 표현으로 통일 — 캐시 히트 응답과 같은 값
     summary.stats = payload.diff.totals
     summary.generated_at = cached.created_at

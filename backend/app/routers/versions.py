@@ -354,12 +354,29 @@ async def list_eligible_assignees(
 async def rename_version(
     version_id: int,
     payload: VersionUpdate,
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
     await _assert_not_framework(session, version.map_id)
+    # 게시·만료·결재 중 버전의 이름은 이력이다 — 점유하지 않은 editor가 바꿀 수 있었다. 편집 중인 버전만,
+    # 삭제와 같은 사람(점유자·오너·sysadmin)이 바꾼다. 화면도 점유자의 Draft에만 이름 바꾸기를 연다 (리뷰 B-11)
+    if not workflow.is_editable_status(version.status):
+        raise HTTPException(
+            status_code=409, detail=f"cannot rename a {version.status} version"
+        )
+    actor_role = await get_effective_role(session, user, version.map_id)
+    if not (version.checked_out_by == user or actor_role == "owner" or is_sysadmin(user)):
+        raise HTTPException(
+            status_code=403,
+            detail="only the checkout holder, map owner, or sysadmin can rename this version",
+        )
+    if is_locked_by_other(version, user, now_kst()):
+        raise HTTPException(
+            status_code=423, detail=f"version checked out by {version.checked_out_by}"
+        )
     version.label = payload.label
     await session.commit()
     await session.refresh(version)
@@ -501,7 +518,8 @@ async def delete_version(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
-    if version.status in (workflow.PENDING, workflow.PUBLISHED, workflow.CONFIRMED):
+    # 만료본은 지난 게시 이력이다 — 지우면 버전 이벤트가 cascade로 함께 사라졌다 (리뷰 B-11)
+    if version.status in (workflow.PENDING, workflow.PUBLISHED, workflow.CONFIRMED, workflow.EXPIRED):
         raise HTTPException(
             status_code=409, detail=f"cannot delete a {version.status} version"
         )

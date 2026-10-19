@@ -70,7 +70,6 @@ async def handle_login(
             )
 
     if not ok:
-        login_throttle.record_failure(throttle_key)
         # 실패는 login_records에 남기지 않는다 — 사용 현황 집계가 오염된다(설계 §4).
         logger.warning("login failed login_id=%s ip=%s", body.login_id, client_ip)
         raise HTTPException(status_code=401, detail="invalid credentials")

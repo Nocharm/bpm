@@ -111,11 +111,15 @@ def resolve_contract(overrides: Mapping[str, str] | None, key: str = "compare_su
     return (overrides or {}).get(key) or default
 
 
-def compute_diff_hash(diff: CompareDiffPayload, lang: str, contract: str) -> str:
-    """캐시 키 — diff 내용 + 언어 + 유효 프롬프트 계약. 셋 중 하나라도 바뀌면 재생성."""
+def compute_diff_hash(diff: CompareDiffPayload, lang: str, contract: str, submit_note: str = "") -> str:
+    """캐시 키 — diff 내용 + 언어 + 유효 프롬프트 계약 + 제출 코멘트. 하나라도 바뀌면 재생성.
+
+    제출 코멘트는 있을 때만 넣는다 — 재제출로 코멘트가 바뀌어도 옛 보고서를 돌려주던 것을 막되, 코멘트 없는
+    기존 캐시 해시는 그대로 두어 배포 직후 일괄 재생성이 없게 한다 (리뷰 B-10).
+    """
     canonical = json.dumps(diff.model_dump(), sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     digest = hashlib.sha256()
-    for part in (canonical, lang, contract):
+    for part in (canonical, lang, contract, *((submit_note,) if submit_note else ())):
         digest.update(part.encode("utf-8"))
         digest.update(b"\x00")
     return digest.hexdigest()

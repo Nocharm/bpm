@@ -25,7 +25,7 @@ from app.models import (
     _now,
 )
 from app.framework_confirm import load_confirm_draft
-from app.framework_slots import load_pending_slot_sides
+from app.framework_slots import category_path, load_pending_slot_sides
 from app.orgchart import load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.permissions import logic
 from app.permissions.access import (
@@ -1773,6 +1773,16 @@ async def set_category_permissions(
     if category is None:
         raise HTTPException(status_code=404, detail=f"category {category_id} not found")
     await _assert_can_manage_appointments(session, user, category)
+    previous_users = set(
+        (
+            await session.scalars(
+                select(CategoryPermission.principal_id).where(
+                    CategoryPermission.category_id == category_id,
+                    CategoryPermission.principal_type == "user",
+                )
+            )
+        ).all()
+    )
     await session.execute(
         delete(CategoryPermission).where(CategoryPermission.category_id == category_id)
     )
@@ -1787,6 +1797,23 @@ async def set_category_permissions(
                 category_id=category_id, principal_type=entry.principal_type,
                 principal_id=entry.principal_id, granted_by=user,
             )
+        )
+    # 빠진 권한자에게 알린다 — 상위 관리자가 L5 임명을 자기 자신으로 바꾸면 기존 관리자가 모른 채 빠졌다.
+    # 상위의 교체 자체는 허용(사용자 결정 2026-10-20, 리뷰 E-12). 그룹 행은 구성원이 많아 알리지 않는다.
+    kept_users = {e.principal_id for e in payload.permissions if e.principal_type == "user"}
+    removed = sorted(previous_users - kept_users - {user})
+    if removed:
+        actor_name = await workflow.get_display_name(session, user)
+        path = await category_path(session, category_id) or category.name
+        await workflow.create_notifications(
+            session,
+            removed,
+            type="fw_admin_removed",
+            message=f"{actor_name} removed you from the admins of '{path}'",
+            payload={
+                "actor": user, "actor_name": actor_name, "map_name": path, "from_name": path,
+                "category_id": category_id,
+            },
         )
     await session.commit()
     return await _load_category_permissions(session, category_id)

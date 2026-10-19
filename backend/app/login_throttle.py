@@ -13,20 +13,20 @@ _failures: dict[str, list[float]] = {}
 
 
 def check_and_count(key: str) -> bool:
-    """윈도 내 실패가 임계 미만이면 True. 호출 자체는 카운트하지 않는다."""
+    """윈도 내 시도가 임계 미만이면 이번 시도를 세고 True. 성공하면 reset이 지운다.
+
+    느린 AD bind 전에 센다 — 실패를 bind 뒤에만 세면 동시 요청 수십 건이 전부 검사를 통과해 AD bind로
+    중계돼, 막으려던 AD 계정 잠금을 오히려 키웠다 (리뷰 2026-10-19 C-6). 검사와 기록 사이에 await가 없어
+    단일 이벤트 루프에서 원자적이다.
+    """
     now = now_kst().timestamp()
     recent = [t for t in _failures.get(key, []) if now - t < WINDOW_SECONDS]
-    # recent가 비면 키를 남기지 않는다 — 안 그러면 무작위 loginId를 뿌리는 스캐너가
-    # dict를 무한히 키운다(딕셔너리는 프로세스 재시작 전까지 절대 안 줄어든다).
-    if recent:
+    if len(recent) >= MAX_ATTEMPTS:
         _failures[key] = recent
-    else:
-        _failures.pop(key, None)
-    return len(recent) < MAX_ATTEMPTS
-
-
-def record_failure(key: str) -> None:
-    _failures.setdefault(key, []).append(now_kst().timestamp())
+        return False
+    recent.append(now)
+    _failures[key] = recent
+    return True
 
 
 def reset(key: str) -> None:

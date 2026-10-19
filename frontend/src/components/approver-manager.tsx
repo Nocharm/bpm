@@ -138,6 +138,7 @@ export function ApproverManager({ mapId, visibility, onClose, onSaved }: Approve
           excludeIds={new Set(selected)}
           userDepartments={userDepartments}
           managersFirst
+          emptyLabel={t("perm.approverPickerEmpty")}
           onSelect={(opt) => {
             if (opt.principalType === "user") {
               setSelected((prev) =>

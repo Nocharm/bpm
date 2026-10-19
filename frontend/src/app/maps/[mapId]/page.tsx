@@ -1407,7 +1407,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             tone: "warn",
             icon: PencilLine,
             title: t("editor.readonly.checkoutTitle", { name: checkoutHolderLabel }),
-            desc: t("editor.readonly.checkoutDesc"),
+            // 반려본은 점유 요청을 받지 않는다(제출자가 Draft로 회수한 뒤) — 없는 버튼을 가리키지 않게 (리뷰 W-6)
+            desc:
+              currentVersion?.status === "rejected"
+                ? t("editor.readonly.checkoutRejectedDesc")
+                : t("editor.readonly.checkoutDesc"),
           }
         : checkout?.confirm_pending
           ? {
