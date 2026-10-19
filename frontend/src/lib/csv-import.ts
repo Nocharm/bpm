@@ -77,6 +77,8 @@ export interface CsvImportContext {
   // AI 제안 키가 기존 노드 id면 제목보다 먼저 그 노드로 잇는다 — 맵 인터뷰 작업본은 기존 노드를 id 키로 시드해,
   // 제목만 보면 이름을 바꾼 노드가 새 id가 되어 url·GMP·담당자·색·폼을 잃었다(시스템 리뷰 G-8). AI 제안 경로에만 쓴다
   matchKeysToBaseIds?: boolean;
+  // 파일이 UTF-8이 아니어서 EUC-KR로 읽었다(decodeCsvBufferDetailed) — 깨진 글자를 확인하라는 경고를 붙인다 (리뷰 D-8)
+  encodingFallback?: boolean;
 }
 
 // 25컬럼 스키마 — 열 정의 단일 소스는 lib/export-columns.ts CSV_COLUMNS(내보내기·템플릿·프롬프트 공용).
@@ -90,6 +92,9 @@ type HeaderColumn = CsvColumnKey;
 const MAX_DATA_ROWS = 500;
 // 백엔드 NodeIn 제약 미러. description·input/output·조건은 Text 컬럼(무상한)이라 제외한다.
 // gmp는 길이 대신 3값 검증(무효=경고 후 무시)이라 제외.
+// 시스템 미일치 원문 메모 상한 — 서버 NodeIn.system_fallback max_length와 같다
+const SYSTEM_MEMO_MAX_LEN = 200;
+
 const MAX_LEN: Record<
   Exclude<
     HeaderColumn,
@@ -134,12 +139,17 @@ type SpInheritedTextField = (typeof SP_INHERITED_TEXT_FIELDS)[number];
 type SpDroppedTextField = SpInheritedTextField | "input_flags" | "input_forms" | "output_forms" | "gmp";
 
 export function decodeCsvBuffer(buffer: ArrayBuffer): string {
+  return decodeCsvBufferDetailed(buffer).text;
+}
+
+/** UTF-8로 읽고, 아니면 EUC-KR로 — 바이트 하나만 어긋나도 파일 전체를 경고 없이 EUC-KR로 읽던 것을 fallback으로 알린다 (D-8). */
+export function decodeCsvBufferDetailed(buffer: ArrayBuffer): { text: string; fallback: boolean } {
   const bytes = new Uint8Array(buffer);
   try {
-    return stripBom(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    return { text: stripBom(new TextDecoder("utf-8", { fatal: true }).decode(bytes)), fallback: false };
   } catch {
     // 구형 Excel "CSV(쉼표로 분리)" — CP949 저장본 폴백
-    return stripBom(new TextDecoder("euc-kr").decode(bytes));
+    return { text: stripBom(new TextDecoder("euc-kr").decode(bytes)), fallback: true };
   }
 }
 
@@ -147,8 +157,16 @@ function stripBom(text: string): string {
   return text.startsWith("\uFEFF") ? text.slice(1) : text;
 }
 
+/** 닫히지 않은 따옴표 — 그 뒤 파일 전체가 한 셀로 읽혀 행이 사라지는데 오류가 0건이었다 (리뷰 2026-10-19 D-4). */
+export class CsvParseError extends Error {
+  constructor(readonly line: number) {
+    super(`Unclosed quote starting on line ${line} - close it or remove it; the rest of the file was read as one cell`);
+  }
+}
+
 /** RFC4180 파싱 — 따옴표 셀(쉼표·줄바꿈·"" 이스케이프)·CRLF. 전부 빈 행은 건너뛴다.
- *  내보내기의 수식 가드(`'=`·`'-` 등, csv.ts escapeCsvCell)는 셀마다 한 번 벗겨 원문으로 돌린다. */
+ *  내보내기의 수식 가드(`'=`·`'-` 등, csv.ts escapeCsvCell)는 셀마다 한 번 벗겨 원문으로 돌린다.
+ *  따옴표가 닫히지 않은 채 파일이 끝나면 CsvParseError(열린 줄 번호). */
 export function parseCsvRecords(text: string): CsvRecord[] {
   const records: CsvRecord[] = [];
   let cells: string[] = [];
@@ -156,6 +174,7 @@ export function parseCsvRecords(text: string): CsvRecord[] {
   let inQuotes = false;
   let line = 1;
   let recordLine = 1;
+  let quoteLine = 1;
   const endCell = () => {
     cells.push(unguardCsvCell(cell));
     cell = "";
@@ -175,12 +194,15 @@ export function parseCsvRecords(text: string): CsvRecord[] {
         i += 1;
       } else if (ch === '"') {
         inQuotes = false;
+      } else if (ch === "\r" && text[i + 1] === "\n") {
+        // 따옴표 셀 안 CRLF는 LF 하나로 — \r이 값에 남아 비교·표시가 어긋났다 (D-8)
       } else {
         if (ch === "\n") line += 1;
         cell += ch;
       }
     } else if (ch === '"') {
       inQuotes = true;
+      quoteLine = line;
     } else if (ch === ",") {
       endCell();
     } else if (ch === "\n") {
@@ -191,6 +213,7 @@ export function parseCsvRecords(text: string): CsvRecord[] {
       cell += ch;
     }
   }
+  if (inQuotes) throw new CsvParseError(quoteLine);
   endRecord();
   return records;
 }
@@ -582,7 +605,13 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     merge: emptyMerge(),
   });
 
-  const records = parseCsvRecords(text);
+  let records: CsvRecord[];
+  try {
+    records = parseCsvRecords(text);
+  } catch (err) {
+    if (err instanceof CsvParseError) return fail([{ line: err.line, message: err.message }]);
+    throw err;
+  }
   if (records.length === 0) {
     return fail([{ line: 1, message: "Empty file - header row required" }]);
   }
@@ -660,6 +689,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   }));
 
   const errors: CsvImportError[] = [];
+  const validationWarnings: CsvImportWarning[] = [];
   const names = new Set<string>();
   for (const row of rows) {
     if (row.name === "") {
@@ -671,15 +701,22 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       continue;
     }
     names.add(row.name);
-    for (const col of ["name", "role", "system", "duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label"] as const) {
+    for (const col of ["name", "role", "duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label"] as const) {
       if (row[col].length > MAX_LEN[col]) {
         errors.push({ line: row.line, message: `${col} exceeds ${MAX_LEN[col]} characters` });
       }
     }
+    // System 셀은 목록에 없는 값이면 Other + 원문 메모(최대 200자)로 저장된다 — 내보내기가 메모를 이 셀에 실어
+    // 101~200자 메모가 있는 맵은 왕복이 통째로 실패했다. 목록이 없으면(정규화 불가) 시스템 칸 100자 그대로 (리뷰 D-5)
+    const systemLimit = context?.catalogs ? SYSTEM_MEMO_MAX_LEN : MAX_LEN.system;
+    if (row.system.length > systemLimit) {
+      errors.push({ line: row.line, message: `system exceeds ${systemLimit} characters` });
+    }
+    // 저장은 http(s)가 아닌 링크도 받는다 — 가져오기만 막아 왕복이 실패했으니 경고로 낮춘다 (D-5)
     if (row.url !== "" && !/^https?:\/\//i.test(row.url)) {
-      errors.push({
+      validationWarnings.push({
         line: row.line,
-        message: `URL must start with http:// or https:// - "${row.url}"`,
+        message: `URL does not start with http:// or https:// - kept as is: "${row.url}"`,
       });
     }
     const durationNorm = normalizeDuration(row.duration);
@@ -733,6 +770,10 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
 
   // 담당자/부서 해석 — id→이름, 한글 부서명→정식명. 해석 후 길이를 재야 한다(id는 짧아도 이름은 길 수 있음)
   const warnings: CsvImportWarning[] = [];
+  if (context?.encodingFallback) {
+    warnings.push({ line: 0, message: "The file is not valid UTF-8 and was read as EUC-KR (CP949) - check for garbled text" });
+  }
+  warnings.push(...validationWarnings);
   // Parallel 셀 — Y/N(대소문자·yes/no·true/false·1/0 허용), 빈 칸은 유지. 그 외 값은 경고 후 무시 (출력 규칙 2026-10-01)
   const parallelOf = new Map<string, boolean>();
   for (const row of rows) {
@@ -789,9 +830,12 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   // 제목 중복 시 sort_order 최소가 이긴다(결정적) — 나머지는 removedNodes로 떨어진다.
   const reservedIds = new Set([baseStart?.id, baseEnd?.id].filter((id): id is string => id !== undefined));
   const byTitle = new Map<string, GraphNode>();
+  // 키는 다듬은 제목 — 셀은 trim해 읽는데 원문 제목으로 찾아, 앞뒤 공백(끝 줄바꿈 포함)이 있는 노드는 무변경 왕복이
+  // "삭제+신규"가 되어 좌표·색·그룹·IO 링크·계보를 잃었다 (리뷰 D-1)
   for (const node of [...baseNodes].sort((a, b) => a.sort_order - b.sort_order)) {
     if (reservedIds.has(node.id)) continue;
-    if (!byTitle.has(node.title)) byTitle.set(node.title, node);
+    const key = node.title.trim();
+    if (!byTitle.has(key)) byTitle.set(key, node);
   }
 
   const matchedIds = new Set<string>();
@@ -824,7 +868,10 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       // 동시 진행이라 병렬 출구를 켠 일반 노드. 링크된 SP는 mergeNode가 기존 타입을 지킨다.
       const inferredType =
         (nextsOf.get(row.name) ?? []).length >= 2 &&
-        !(parallelOf.get(row.name) ?? (existingRow?.parallel_outputs ?? []).includes("__primary__"))
+        // 빈 Parallel 칸은 기존 설정을 잇되, 판단 노드에 남은 병렬 플래그는 잇지 않는다 — 이으면 판단 노드가 병렬 일반 노드로
+        // 조용히 뒤집혔다(AI 머지가 decision으로 바꾸며 플래그를 남긴 경우, 리뷰 D-3)
+        !(parallelOf.get(row.name) ??
+          (existingRow?.node_type !== "decision" && (existingRow?.parallel_outputs ?? []).includes("__primary__")))
           ? "decision"
           : "process";
       const finalType = existingRow?.linked_map_id != null ? existingRow.node_type : inferredType;
@@ -836,12 +883,17 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       const { node, droppedParamFields, droppedTextFields, keptSystemNote } = mergeNode(existingRow, {
         ...NODE_DEFAULTS,
         id: idOf.get(row.name) as string,
-        title: row.name,
+        // 다듬어 보면 같은 제목이면 기존 원문을 지킨다 — 공백만 다른 제목 변경이 생기지 않게 (D-1)
+        title: existingRow !== null && existingRow.title.trim() === row.name ? existingRow.title : row.name,
         node_type: inferredType,
-        parallel_outputs: applyParallelFlag(
-          existingRow?.parallel_outputs,
-          parallelFlag === true && isParallelForbidden(finalType) ? undefined : parallelFlag,
-        ),
+        // 판단 노드엔 병렬 출구가 없다 — 남은 플래그를 비워 다음 왕복에서 뒤집히지 않게 (D-3)
+        parallel_outputs:
+          finalType === "decision"
+            ? []
+            : applyParallelFlag(
+                existingRow?.parallel_outputs,
+                parallelFlag === true && isParallelForbidden(finalType) ? undefined : parallelFlag,
+              ),
         description: row.description,
         assignee: resolved.get(row.name)?.assignee ?? "",
         // 역할 — 별칭→정식 표기, 미일치는 자유값 그대로 (commitRole)
@@ -940,8 +992,22 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   }
   // Start → 진입 엣지 없는 노드 전부. 전부 순환이면 첫 행(백엔드 "start 1개" 규칙 충족용 진입점)
   const roots = rows.filter((row) => !hasIncoming.has(row.name));
-  for (const row of roots.length > 0 ? roots : [rows[0]]) {
-    addEdge(startId, idOf.get(row.name) as string, "");
+  const computedStartTargets = (roots.length > 0 ? roots : [rows[0]]).map((row) => idOf.get(row.name) as string);
+  // 같은 맵 재가져오기는 기존 Start 연결을 지킨다 — CSV에는 Start 행이 없어 매번 다시 계산하면 재작업 루프가 있는 맵의
+  // 진짜 첫 단계가 Start에서 끊겼다. 남아 있는 기존 대상에 새로 생긴 진입점(들어오는 연결 없는 신규 행)만 더한다 (리뷰 D-2)
+  const rowIds = new Set(rows.map((row) => idOf.get(row.name) as string));
+  const keptStartTargets = baseStart
+    ? (context?.base?.edges ?? [])
+        .filter((edge) => edge.source_node_id === baseStart.id && rowIds.has(edge.target_node_id))
+        .map((edge) => edge.target_node_id)
+    : [];
+  const addedIdSet = new Set(addedNodeIds);
+  const startTargets =
+    keptStartTargets.length > 0
+      ? [...new Set([...keptStartTargets, ...computedStartTargets.filter((id) => addedIdSet.has(id))])]
+      : computedStartTargets;
+  for (const target of startTargets) {
+    addEdge(startId, target, "");
   }
   // 말단(Next 없음) → End. 말단이 없으면(전부 순환) End는 미연결로 남는다
   for (const row of rows) {
@@ -1174,10 +1240,14 @@ export function buildGraphFromAiProposal(
       sort_order: index,
       // 병렬 출구 플래그 — 생략이면 undefined(mergeNode가 기존 유지), true/false면 기본 출구 켬/끔.
       // 분기·끝·시작 노드에 켜는 요청은 무시(에디터 메뉴와 같은 금지). 분기·끝만 아래 경고, 시작은 기본 병렬이라 무경고
-      parallel_outputs: applyParallelFlag(
-        existing?.parallel_outputs,
-        attr?.parallel === true && isParallelForbidden(finalType) ? undefined : attr?.parallel,
-      ),
+      // 판단 노드로 바꾸면 남은 병렬 플래그를 비운다 — 남기면 CSV 왕복 뒤 병렬 일반 노드로 뒤집혔다 (D-3)
+      parallel_outputs:
+        finalType === "decision"
+          ? []
+          : applyParallelFlag(
+              existing?.parallel_outputs,
+              attr?.parallel === true && isParallelForbidden(finalType) ? undefined : attr?.parallel,
+            ),
     };
     if (attr?.parallel === true && isParallelWarned(finalType)) {
       warnings.push({ line: 0, message: `"${title}": parallel exits apply only to process nodes - ignored on a ${finalType} node` });

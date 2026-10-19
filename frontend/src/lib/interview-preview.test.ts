@@ -106,6 +106,24 @@ describe("buildPreviewGraph", () => {
     expect(graph?.nodes.find((n) => n.id === "a02f")).toMatchObject({ node_type: "decision", title: PREVIEW_LOOP_BRANCH_NAME });
   });
 
+  it("numbers the second loop branch node like the import adapter (D-7)", () => {
+    const graph = buildPreviewGraph({
+      actions: [action(1, "A"), action(2, "B"), action(3, "C"), action(4, "D")],
+      relations: {
+        edges: [
+          { src: 1, dst: 1, kind: "loop", condition: "재작업" },
+          { src: 1, dst: 2, kind: "seq" },
+          { src: 2, dst: 3, kind: "seq" },
+          { src: 3, dst: 2, kind: "loop", condition: "보완" },
+          { src: 3, dst: 4, kind: "seq" },
+        ],
+      },
+    });
+
+    const loops = graph!.nodes.filter((n) => n.node_type === "decision").map((n) => n.title);
+    expect(loops).toEqual([PREVIEW_LOOP_BRANCH_NAME, `${PREVIEW_LOOP_BRANCH_NAME} 2`]);
+  });
+
   it("names a plain fan-out branch node after its activity and leaves an all-parallel fan-out alone", () => {
     const plain = buildPreviewGraph({
       actions: [action(1, "A"), action(2, "B"), action(3, "C")],

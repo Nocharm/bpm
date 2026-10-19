@@ -107,7 +107,7 @@ def map_to_row(
     카탈로그 없이도 동작하는 Other 폴백 규칙.
     """
     # 지연 import — 스크립트 패키지
-    from scripts.consultant_interview import EXCEPTION_VARIANT_COLOR, FANOUT_BRANCH_SUFFIX, LOOP_BRANCH_NODE_NAME
+    from scripts.consultant_interview import EXCEPTION_VARIANT_COLOR, FANOUT_BRANCH_SUFFIX, is_loop_branch_title
 
     # 어댑터가 세운 ◇ — 자기 반복(반복 이름)과 팬아웃(유일한 선행 활동명 + " 결과", 2026-10-01). 행으로 되돌리지 않고 접는다
     title_by_id = {n.id: (n.title or "").strip() for n in nodes}
@@ -126,7 +126,7 @@ def map_to_row(
     synthetic = {
         n.id for n in nodes
         if n.node_type == "decision"
-        and ((n.title or "").strip() == LOOP_BRANCH_NODE_NAME or _is_fanout_branch(n))
+        and (is_loop_branch_title(n.title or "") or _is_fanout_branch(n))
     }
     activity = sorted(
         (n for n in nodes if n.node_type in ACTIVITY_TYPES and n.id not in synthetic),

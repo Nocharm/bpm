@@ -12,6 +12,12 @@ import { getPreviewNodeSize } from "./preview-geometry";
 
 export const PREVIEW_EXCEPTION_COLOR = "#c2849a"; // consultant_interview.EXCEPTION_VARIANT_COLOR 동치
 export const PREVIEW_LOOP_BRANCH_NAME = "반복 여부(자동 생성됨)"; // consultant_interview.LOOP_BRANCH_NODE_NAME 동치
+
+/** 한 맵의 index번째(1부터) 반복 ◇ 이름 — 두 번째부터 번호(consultant_interview.loop_branch_name 동치, 리뷰 D-7). */
+export function previewLoopBranchName(index: number): string {
+  return index <= 1 ? PREVIEW_LOOP_BRANCH_NAME : `${PREVIEW_LOOP_BRANCH_NAME} ${index}`;
+}
+
 export const PREVIEW_START_ID = "__start__";
 export const PREVIEW_END_ID = "__end__";
 
@@ -98,10 +104,12 @@ function buildFlowEdges(
     edges.push({ from: src.code, to: dst.code, label, kind: kind !== "loop" && dst.seq < src.seq ? "loop" : kind });
   }
   const loopNodes: { anchor: string; node: PreviewNode }[] = [];
+  let loopCount = 0;
   for (const { node, label } of selfSpecs) {
+    loopCount += 1;
     const branch: PreviewNode = {
       code: `${node.code}r`,
-      name: PREVIEW_LOOP_BRANCH_NAME,
+      name: previewLoopBranchName(loopCount),
       type: "decision",
       color: "",
       seq: node.seq,
@@ -131,9 +139,11 @@ function buildFlowEdges(
     const droppedParallel = group
       .filter((edge) => parallelPairs.has(`${edge.from}>${edge.to}`))
       .map((edge) => byCode.get(edge.to)?.name ?? edge.to);
+    const hasLoop = group.some((edge) => edge.kind === "loop");
+    if (hasLoop) loopCount += 1;
     const branch: PreviewNode = {
       code: `${srcCode}f`,
-      name: group.some((edge) => edge.kind === "loop") ? PREVIEW_LOOP_BRANCH_NAME : `${src.name} 결과`,
+      name: hasLoop ? previewLoopBranchName(loopCount) : `${src.name} 결과`,
       type: "decision",
       color: "",
       seq: src.seq,
@@ -336,6 +346,7 @@ export function buildL5PreviewGraph(file: unknown): VersionGraph | null {
   }
   const flow: PreviewEdge[] = [];
   const branches: { anchor: string; node: L5Node }[] = [];
+  let loopCount = 0;
   for (const node of ordered) {
     const outs = outgoing.get(node.code) ?? [];
     const allParallel = outs.length > 0 && outs.every((e) => gatewayOf.get(`${e.from}>${e.to}`) === "parallel");
@@ -344,9 +355,10 @@ export function buildL5PreviewGraph(file: unknown): VersionGraph | null {
       continue;
     }
     const loops = outs.some((e) => e.to === node.code || e.kind === "loop");
+    if (loops) loopCount += 1;
     const branch: L5Node = {
       code: `${node.code}__b`,
-      name: loops ? PREVIEW_LOOP_BRANCH_NAME : `${node.name} 결과`,
+      name: loops ? previewLoopBranchName(loopCount) : `${node.name} 결과`,
       type: "decision",
     };
     branches.push({ anchor: node.code, node: branch });

@@ -10,6 +10,7 @@ dry-run으로 고친 뒤 재실행하는 워크플로 전제). 미지 키는 war
 실전달물과 손타이핑 스키마의 차이를 dry-run 리포트가 흡수한다.
 """
 
+import re
 from dataclasses import dataclass, field
 
 from pydantic import ValidationError
@@ -65,6 +66,23 @@ _EXTERNAL_L5_KEYS = {"nodeCode", "label"}
 
 # self 루프에서 합성되는 분기 노드 고정 이름 — dry-run 노티와 L5 창작부(import_consultant)가 공유
 LOOP_BRANCH_NODE_NAME = "반복 여부(자동 생성됨)"
+_LOOP_BRANCH_RE = re.compile(rf"^{re.escape(LOOP_BRANCH_NODE_NAME)}(?: [0-9]+)?$")
+
+
+def loop_branch_name(index: int) -> str:
+    """한 맵의 index번째(1부터) 반복 ◇ 이름 — 두 번째부터 번호를 붙인다(사용자 결정 2026-10-20, 리뷰 D-7).
+
+    고정 이름만 쓰면 반복이 2곳 이상인 맵에 같은 제목이 생겨 CSV로 내보낸 뒤 다시 가져오기가 통째로 실패했다.
+    프론트 미리보기 lib/interview-preview.ts previewLoopBranchName과 같은 규칙.
+    """
+    return LOOP_BRANCH_NODE_NAME if index <= 1 else f"{LOOP_BRANCH_NODE_NAME} {index}"
+
+
+def is_loop_branch_title(title: str) -> bool:
+    """자동 생성 반복 ◇ 제목인가(번호 붙은 이름 포함) — 역변환(map_to_row)이 이 노드를 접는다."""
+    return bool(_LOOP_BRANCH_RE.match(title.strip()))
+
+
 # 팬아웃 ◇ 이름 접미 — "{활동명} 결과". L5 연계 캔버스 분기 노드와 같은 이름 규칙, 역변환이 이 이름으로 접는다
 FANOUT_BRANCH_SUFFIX = "결과"
 
@@ -472,11 +490,13 @@ def _build_flow_edges(
     # 택일은 분기 노드에서 갈라진다(L5 expand_linkage_branches와 같은 결정). A가 진출 이설로
     # 승격 근거를 잃으면 process로 되돌린다(원래 decision 액션은 유지).
     loop_nodes: list[tuple[str, CanonicalNode]] = []
+    loop_count = 0
     for src_node, loop_label in self_specs:
+        loop_count += 1
         branch = CanonicalNode(
             code=f"{src_node.code}r",
-            # 원본 이름을 붙이지 않는다 — 일괄 생성 티가 나는 고정 이름 (사용자 결정 2026-09-02)
-            name=LOOP_BRANCH_NODE_NAME,
+            # 원본 이름을 붙이지 않는다 — 일괄 생성 티가 나는 고정 이름 (사용자 결정 2026-09-02), 두 번째부터 번호(D-7)
+            name=loop_branch_name(loop_count),
             type="decision",
             seq=src_node.seq,
         )
@@ -512,9 +532,11 @@ def _build_flow_edges(
             by_code[edge.target].name if edge.target in by_code else edge.target
             for edge in group if (edge.source, edge.target) in parallel_pairs
         ]
+        if has_loop:
+            loop_count += 1
         branch = CanonicalNode(
             code=f"{src_code}f",
-            name=LOOP_BRANCH_NODE_NAME if has_loop else f"{src_node.name} {FANOUT_BRANCH_SUFFIX}"[:200],
+            name=loop_branch_name(loop_count) if has_loop else f"{src_node.name} {FANOUT_BRANCH_SUFFIX}"[:200],
             type="decision",
             seq=src_node.seq,
         )

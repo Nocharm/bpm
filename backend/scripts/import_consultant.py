@@ -74,7 +74,7 @@ from scripts.consultant_canonical import (
     CanonicalMap,
     CanonicalParams,
 )
-from scripts.consultant_interview import EXCEPTION_VARIANT_COLOR, LOOP_BRANCH_NODE_NAME
+from scripts.consultant_interview import EXCEPTION_VARIANT_COLOR, is_loop_branch_title, loop_branch_name
 from scripts.consultant_layout import (
     LINKAGE_ROW_STEP,
     LayoutNode,
@@ -2171,16 +2171,20 @@ async def apply_interview_linkage(
             report.add(code, "linkage",
                        f"placeholder for external task '{ext_title[c]}' @ {ext_l5_label[c]} (map not delivered yet)")
         offset += len(missing_placeholders)
+        # 반복 ◇는 캔버스 안에서 두 번째부터 번호 — 이미 있는 반복 ◇ 수 다음부터 잇는다 (사용자 결정 D-7)
+        loop_seq = sum(1 for n in existing if n.node_type == "decision" and is_loop_branch_title(n.title or ""))
         for j, key in enumerate(missing_branches):
             lineage = make_node_id(code, key)
             x, y = placed.get(key, grid[offset + j])
             src_code = branch_of[key]
-            # self 루프 유래((origin, src) ∈ back_pairs)는 원본 이름 없이 LOOP_BRANCH_NODE_NAME —
+            # self 루프 유래((origin, src) ∈ back_pairs)는 원본 이름 없이 loop_branch_name(두 번째부터 번호) —
             # 일괄 생성 티를 낸다(사용자 결정 2026-09-02). 팬아웃 유래는 기존 "{이름} 결과" 유지.
             is_loop_origin = (key, src_code) in back_pairs
+            if is_loop_origin:
+                loop_seq += 1
             node = Node(
                 id=uuid.uuid4().hex, version_id=draft.id, source_node_id=lineage,
-                title=LOOP_BRANCH_NODE_NAME if is_loop_origin
+                title=loop_branch_name(loop_seq) if is_loop_origin
                 else f"{map_names.get(map_ids.get(src_code, -1), src_code)} 결과",
                 node_type="decision",
                 pos_x=x, pos_y=y, sort_order=next_sort + offset + j,

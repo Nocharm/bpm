@@ -402,13 +402,16 @@ def _render_cell(value: object) -> object:
     return value
 
 
+_FORMULA_LEAD_RE = re.compile(r"'*[=+\-@\t\r]")
+
+
 def _escape_csv_cell(value: str) -> str:
     """CSV 셀 이스케이프 — FE `lib/csv.ts` escapeCsvCell과 동치(byte-for-byte) 유지 필수.
 
-    1) 수식 인젝션 가드: `=`/`+`/`-`/`@`/TAB/CR로 시작하면 `'` 1개 접두(Excel/Sheets가 수식으로 안 읽음).
+    1) 수식 인젝션 가드: `=`/`+`/`-`/`@`/TAB/CR로 시작하면(앞에 `'`가 몇 개 있어도) `'` 1개 접두(Excel/Sheets가 수식으로 안 읽음).
     2) 쉼표·따옴표·CR·LF 포함 시에만 `"..."` 인용, 내부 `"`는 `""`로 이중화.
     """
-    guarded = f"'{value}" if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
+    guarded = f"'{value}" if _FORMULA_LEAD_RE.match(value) else value
     if any(ch in guarded for ch in (",", '"', "\r", "\n")):
         return '"' + guarded.replace('"', '""') + '"'
     return guarded

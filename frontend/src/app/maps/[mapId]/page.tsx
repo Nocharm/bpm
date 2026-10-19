@@ -9833,8 +9833,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           onAlign={(axis) => applyNodesTransform((current) => alignSelected(current, axis))}
           onDistribute={(axis) => applyNodesTransform((current) => distributeSelected(current, axis))}
           manualUrl={manualUrl}
+          // L5 캔버스는 CSV로 다시 그릴 수 없다 — Start를 만들고 플레이스홀더를 일반 단계로 바꿔 저장이 늘 422였다 (리뷰 D-6)
           onImportCsv={
-            checkout?.mine && currentParentId === null && eligible !== null && previewSource === null
+            checkout?.mine && currentParentId === null && eligible !== null && previewSource === null && !isFrameworkMap
               ? () => setCsvImportOpen(true)
               : undefined
           }

@@ -2,9 +2,10 @@
 
 import { downloadBlob } from "@/lib/download-blob";
 
-// 수식으로 해석되는 첫 글자 — 스프레드시트가 셀을 수식으로 실행하지 않게 ' 접두(수식 인젝션 가드)
-const FORMULA_LEAD = /^[=+\-@\t\r]/;
-const GUARDED_LEAD = /^'[=+\-@\t\r]/;
+// 수식으로 해석되는 첫 글자 — 스프레드시트가 셀을 수식으로 실행하지 않게 ' 접두(수식 인젝션 가드).
+// 원문이 '로 시작해 수식 문자가 이어지는 값('=x)도 한 번 더 가드한다 — 안 하면 가져오기가 원문의 '를 가드로 알고 벗겨 냈다 (리뷰 D-8)
+const FORMULA_LEAD = /^'*[=+\-@\t\r]/;
+const GUARDED_LEAD = /^'+[=+\-@\t\r]/;
 
 // 셀 이스케이프 — 수식 인젝션 가드('=' 등 시작 셀은 ' 접두) 후, 쉼표/따옴표/개행 포함 시에만 인용
 export function escapeCsvCell(value: string): string {

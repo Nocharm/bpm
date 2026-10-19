@@ -1357,6 +1357,13 @@ class NodeIn(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _drop_parallel_on_decision(self) -> "NodeIn":
+        # 판단 노드엔 병렬 출구가 없다(출력 규칙 밖) — 남은 플래그가 CSV 왕복에서 판단을 병렬 일반 노드로 뒤집었다 (리뷰 D-3)
+        if self.node_type == "decision":
+            self.parallel_outputs = []
+        return self
+
+    @model_validator(mode="after")
     def _clear_inherited_sp_params(self) -> "NodeIn":
         # SP 노드의 회당 파라미터 5종은 링크 맵 지정값을 읽기전용으로 상속한다 — 화면은 상속값을 보여 주는데 AI 신규 SP
         # 경로 등으로 저장값이 따로 쌓이면 CSV·비교·확정 서명이 다른 값을 봤다. 직접 편집은 annual_count·fte뿐 (리뷰 F-7)

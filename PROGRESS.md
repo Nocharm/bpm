@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-20 — 7c CSV 데이터 왕복: 시스템 리뷰 D-1~D-8 (dev)
+
+- 같은 맵 재가져오기는 제목을 앞뒤 공백 없이 맞추되 원래 제목을 남기고, 기존 Start 연결을 유지한다(되돌아가기가 있는 맵은 행 순서만 바꿔도 Start가 옮겨 갔다). 판단 노드엔 병렬 출구를 두지 않고(`NodeIn`·CSV·AI 세 경로) 레거시 gateway 병렬 팬아웃은 CSV에도 Parallel=Y로 내보내 Excel과 맞춘다. 닫히지 않은 따옴표는 시작 줄을 알리는 오류(나머지 파일을 한 셀로 삼키던 것, 카탈로그 CSV 포함), 인용된 CRLF는 LF로, UTF-8이 아니어서 EUC-KR로 읽은 파일은 경고. 저장이 받는 값은 가져오기도 받는다(Other 메모 200자, http가 아닌 링크는 경고만, 열기는 여전히 http(s)만). `'=x` 같은 원문은 수식 가드를 한 번 더 붙여 왕복 보존(FE·관리자 CSV 동치). 이름 없는 단계·공백만 다른 같은 제목은 내보내기 경고. 자동 반복 ◇는 한 맵에서 두 번째부터 번호(사용자 결정 D-7=A, 어댑터·L5 창작부·역변환·미리보기 같은 규칙). L5 캔버스 에디터엔 CSV 가져오기를 열지 않는다.
+- 회귀 vitest +10(가져오기 6·내보내기 2·가드 1·미리보기 1, 수정 전 전부 실패) + 기존 3건을 새 규칙으로, `test_csv_roundtrip_followups.py` 5(수정 전 코드에서 판단 병렬 유지·같은 이름 ◇ 둘·가드 누락 재현). 브라우저 `scripts/pw-verify-csv-roundtrip-followups.mjs`: 수정 전 프런트 0/7 → 수정 후 7/7, 기존 `pw-verify-csv-import-merge.mjs` 31/31. pytest 1808·ruff·py3.11·tsc·lint·vitest 1523·COMPONENTS 최신. 매뉴얼 ko/en(편집·관리자)·`backend/app/manual.md`·CLAUDE.md 반영.
+
 ## 2026-10-20 — 7b 편집·SP·비교 잔여: 시스템 리뷰 A-2·A-4·F-4~F-9·W-2·W-3·W-5·W-7·W-8 (dev)
 
 - 그래프 저장은 같은 노드·엣지·그룹 id 중복과 그룹 부모 사이클을 422로(엣지 중복은 유니크 위반 500이었다). 일반 맵 승인 요청은 서버가 출력 규칙을 다시 보고(사용자 결정 F-4=A, 기존 게시본은 그대로), 설정 버전 패널의 제출·셀프 게시도 에디터와 같은 체크리스트(`lib/save-blockers.ts`)를 거친다. L5 확정 변경 요약에 계보를 넘겨 임포트 캔버스의 무변경이 변경으로 보이던 것을 막고, 고정 버전은 고정 중일 때만 비교·확정 서명에 든다. SP 노드의 상속 파라미터 5종은 `NodeIn`이 비우고(AI 신규 SP 경로도), 병렬 출구 키는 다듬지 않는다(끝 제목 공백). 숫자 정규화는 NFKC+JS trim+ASCII 숫자로 FE·BE 동치, 카탈로그 비교는 lower/toLowerCase, 이름 자르기는 코드 포인트, 서버는 고립 서러게이트를 지운다. 비교 화면 변 선택은 자동정렬과 같은 `pickEdgeHandleSides`, 맵 설정 `showToast` 메모(패널 재조회 반복), 열람권 없는 SP(refs `hidden`)엔 등록 요청·버전 피커를 숨기고, 펼친 SP 자식은 F2로 이름 편집이 열리지 않으며, 대시보드 누적 그래프는 기간 누적 합.

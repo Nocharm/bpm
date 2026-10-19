@@ -9,7 +9,7 @@ import { ClipboardPaste, Upload, X } from "lucide-react";
 
 import {
   buildGraphFromCsv,
-  decodeCsvBuffer,
+  decodeCsvBufferDetailed,
   stripCsvFences,
   type CsvImportContext,
   type CsvImportOutcome,
@@ -41,8 +41,8 @@ export function CsvImportSection({ outcome, fileName, onChange, context, manualU
     if (!file) return;
     setPasteOpen(false);
     setPasteText("");
-    const text = decodeCsvBuffer(await file.arrayBuffer());
-    onChange(buildGraphFromCsv(text, context), file.name);
+    const { text, fallback } = decodeCsvBufferDetailed(await file.arrayBuffer());
+    onChange(buildGraphFromCsv(text, { ...context, encodingFallback: fallback }), file.name);
   };
 
   const handlePasteText = (text: string) => {

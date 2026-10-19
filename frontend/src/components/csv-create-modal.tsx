@@ -12,7 +12,7 @@ import { ModalBackdrop } from "@/components/modal-backdrop";
 import { getDirectory, getMe } from "@/lib/api";
 import {
   buildGraphFromCsv,
-  decodeCsvBuffer,
+  decodeCsvBufferDetailed,
   toCsvDirectory,
   type CsvDirectory,
   type CsvImportOutcome,
@@ -64,8 +64,8 @@ export function CsvCreateModal({ onClose, onContinue }: Props) {
 
   const loadFile = async (file: File) => {
     if (directory === null) return;
-    const text = decodeCsvBuffer(await file.arrayBuffer());
-    setOutcome(buildGraphFromCsv(text, { directory, catalogs }));
+    const { text, fallback } = decodeCsvBufferDetailed(await file.arrayBuffer());
+    setOutcome(buildGraphFromCsv(text, { directory, catalogs, encodingFallback: fallback }));
     setFileName(file.name);
     setStep("pick");
   };

@@ -234,7 +234,7 @@ describe("buildCsvFromGraph - round trip", () => {
       groups: [],
     };
     const { warnings } = buildCsvFromGraph(graph);
-    expect(warnings.map((w) => w.message)).toEqual(["Start connections differ from computed roots - re-import will recompute them"]);
+    expect(warnings.map((w) => w.message)).toEqual(["Start connections differ from computed roots - a new map built from this file recomputes them"]);
   });
 
   it("숫자 파라미터 필드가 undefined일 때도 안전하게 빈 문자열로 직렬화된다", () => {
@@ -598,5 +598,31 @@ describe("buildCsvFromGraph - formula guard", () => {
     expect(warnings.map(({ kind, params }) => ({ kind, params }))).toEqual([
       { kind: "duplicateTitle", params: { title: "A", count: "2" } },
     ]);
+  });
+});
+
+describe("buildCsvFromGraph - 7c 왕복 잔여", () => {
+  it("marks a legacy all-parallel gateway fan-out as Parallel=Y like Excel (D-3)", () => {
+    const graph: Graph = {
+      nodes: [makeNode("s", "Start", "start", 0), makeNode("a", "접수", "process", 1), makeNode("b", "가", "process", 2), makeNode("c", "나", "process", 3), makeNode("e", "", "end", 4, { is_primary_end: true })],
+      edges: [
+        makeEdge("1", "s", "a"), makeEdge("2", "a", "b", "", { gateway: "parallel" }), makeEdge("3", "a", "c", "", { gateway: "parallel" }),
+        makeEdge("4", "b", "e"), makeEdge("5", "c", "e"),
+      ],
+      groups: [],
+    };
+    const { csv } = buildCsvFromGraph(graph);
+    expect(cellsByHeader(csv, "접수").Parallel).toBe("Y");
+  });
+
+  it("warns about unnamed steps and space-only duplicates (D-1·D-5)", () => {
+    const graph: Graph = {
+      nodes: [makeNode("s", "Start", "start", 0), makeNode("a", "검토", "process", 1), makeNode("b", "검토 ", "process", 2), makeNode("c", "", "process", 3), makeNode("e", "", "end", 4, { is_primary_end: true })],
+      edges: [makeEdge("1", "s", "a"), makeEdge("2", "a", "b"), makeEdge("3", "b", "c"), makeEdge("4", "c", "e")],
+      groups: [],
+    };
+    const kinds = buildCsvFromGraph(graph).warnings.map((w) => w.kind);
+    expect(kinds).toContain("untitledStep");
+    expect(kinds).toContain("duplicateTitle");
   });
 });

@@ -12,7 +12,7 @@ import { getAppSettings, getCatalogs, putAppSettings } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { mergeCatalogEntries, normalizeAliases, parseCatalogCsv } from "@/lib/catalog-csv";
 import { invalidateCatalogs, OTHER_SYSTEM } from "@/lib/catalogs";
-import { decodeCsvBuffer } from "@/lib/csv-import";
+import { CsvParseError, decodeCsvBuffer } from "@/lib/csv-import";
 import { useI18n } from "@/lib/i18n";
 
 interface Lists {
@@ -113,7 +113,18 @@ function ManagedListCard({
   };
   const handleFile = async (file: File) => {
     const text = decodeCsvBuffer(await file.arrayBuffer());
-    const { added, duplicates, aliasesAdded, dropped } = addValues(parseCatalogCsv(text));
+    let parsed: ReturnType<typeof parseCatalogCsv>;
+    try {
+      parsed = parseCatalogCsv(text);
+    } catch (err) {
+      // 닫히지 않은 따옴표 — 나머지가 한 셀로 읽혀 조용히 사라지던 것을 알린다 (리뷰 D-4)
+      if (err instanceof CsvParseError) {
+        setImportNote(t("catalog.importUnclosedQuote", { line: err.line }));
+        return;
+      }
+      throw err;
+    }
+    const { added, duplicates, aliasesAdded, dropped } = addValues(parsed);
     const base = t("catalog.importResult", { added, duplicates, aliases: aliasesAdded });
     setImportNote(dropped > 0 ? `${base} ${t("catalog.aliasesDropped", { count: dropped })}` : base);
   };

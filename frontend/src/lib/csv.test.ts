@@ -46,7 +46,13 @@ describe("unguardCsvCell", () => {
       expect(unguardCsvCell(escapeCsvCell(text))).toBe(text);
     }
     expect(unguardCsvCell("'일반")).toBe("'일반");
-    expect(unguardCsvCell("''=x")).toBe("''=x");
+    expect(unguardCsvCell("''=x")).toBe("'=x"); // 원문 '=x를 내보낸 셀 (D-8)
     expect(unguardCsvCell("3. 검토")).toBe("3. 검토");
+  });
+});
+
+describe("formula guard keeps a leading apostrophe (D-8)", () => {
+  it.each(["=SUM(A1)", "'=x", "''=x", "'abc", "-1", "plain"])("round-trips %j", (value) => {
+    expect(unguardCsvCell(escapeCsvCell(value).replace(/^"|"$/g, ""))).toBe(value);
   });
 });

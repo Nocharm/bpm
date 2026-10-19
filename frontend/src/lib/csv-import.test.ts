@@ -178,9 +178,10 @@ describe("buildGraphFromCsv - 검증 에러", () => {
   });
 
   it("URL 스킴·행 수 상한", () => {
-    expect(
-      buildGraphFromCsv(`${HEADER}\nA,,,ftp://x,`).errors[0].message,
-    ).toMatch(/http/);
+    // 저장 경계가 받는 값이라 경고만 — 열기는 link-preview가 http(s)로 막는다 (리뷰 D-5)
+    const ftp = buildGraphFromCsv(`${HEADER}\nA,,,ftp://x,`);
+    expect(ftp.errors).toEqual([]);
+    expect(ftp.warnings.some((w) => /http/.test(w.message))).toBe(true);
     const big = [HEADER, ...Array.from({ length: 501 }, (_, i) => `N${i},,,,`)].join("\n");
     expect(buildGraphFromCsv(big).errors[0].message).toMatch(/max 500/i);
   });
@@ -1715,5 +1716,74 @@ describe("docs/samples CSV", () => {
     expect(outcome.errors).toEqual([]);
     expect(parseCsvRecords(text)[0].cells.map((c) => c.toLowerCase())).toEqual([...HEADER_COLUMNS]);
     expect(outcome.graph!.nodes.some((n) => (n.parallel_outputs ?? []).includes("__primary__"))).toBe(true);
+  });
+});
+
+// ── 7c CSV 왕복 (리뷰 2026-10-19 D-1~D-8) ─────────────────────────────────
+describe("buildGraphFromCsv - 왕복 잔여(7c)", () => {
+  const node = (id: string, title: string, node_type = "process", over: Partial<GraphNode> = {}): GraphNode => ({
+    id, title, description: "", node_type, color: "", assignee: "", department: "", system: "", duration: "",
+    url: "", url_label: "", pos_x: 100, pos_y: 100, sort_order: 1, group_ids: [], linked_map_id: null,
+    follow_latest: false, linked_version_id: null, is_primary_end: node_type === "end", ...over,
+  });
+  const edge = (id: string, s: string, t: string, label = ""): GraphEdge => ({
+    id, source_node_id: s, target_node_id: t, label, source_side: "right", target_side: "left",
+    source_handle: null, target_handle: null, line_style: "",
+  });
+
+  it("matches a title with surrounding spaces and keeps its exact text (D-1)", () => {
+    const base: Graph = { nodes: [node("s", "Start", "start"), node("a", "검토 \n", "process", { color: "#123456" }), node("e", "", "end")], edges: [edge("1", "s", "a"), edge("2", "a", "e")], groups: [] };
+    const o = buildGraphFromCsv("Name,Next\n검토,\n", { base });
+    expect(o.errors).toEqual([]);
+    const merged = o.graph!.nodes.find((n) => n.id === "a");
+    expect(merged?.title).toBe("검토 \n");
+    expect(merged?.color).toBe("#123456");
+    expect(o.merge.removedNodes).toEqual([]);
+  });
+
+  it("keeps the existing Start connection on a same-map re-import with a rework loop (D-2)", () => {
+    const base: Graph = {
+      nodes: [node("s", "Start", "start"), node("a", "작성"), node("b", "검토"), node("e", "", "end")],
+      edges: [edge("1", "s", "a"), edge("2", "a", "b"), edge("3", "b", "a", "보완"), edge("4", "b", "e")],
+      groups: [],
+    };
+    // 행 순서를 뒤집어도(검토가 먼저) Start는 작성에 그대로 붙어야 한다
+    const o = buildGraphFromCsv("Name,Next\n검토,작성:보완;\n작성,검토\n", { base });
+    const fromStart = o.graph!.edges.filter((e) => e.source_node_id === "s").map((e) => e.target_node_id);
+    expect(fromStart).toEqual(["a"]);
+  });
+
+  it("does not let a decision's stale parallel flag flip it into a parallel step (D-3)", () => {
+    const base: Graph = {
+      nodes: [node("s", "Start", "start"), node("d", "판단", "decision", { parallel_outputs: ["__primary__"] }), node("x", "가"), node("y", "나"), node("e", "", "end")],
+      edges: [edge("1", "s", "d"), edge("2", "d", "x", "예"), edge("3", "d", "y", "아니오"), edge("4", "x", "e"), edge("5", "y", "e")],
+      groups: [],
+    };
+    const o = buildGraphFromCsv("Name,Next\n판단,가:예;나:아니오\n가,\n나,\n", { base });
+    const d = o.graph!.nodes.find((n) => n.id === "d");
+    expect(d?.node_type).toBe("decision");
+    expect(d?.parallel_outputs).toEqual([]);
+  });
+
+  it("reports an unclosed quote instead of swallowing the rest of the file (D-4)", () => {
+    const o = buildGraphFromCsv('Name,Description,Next\n검토,"끝나지 않은 설명,\n승인,,\n');
+    expect(o.graph).toBeNull();
+    expect(o.errors[0].message).toContain("Unclosed quote starting on line 2");
+  });
+
+  it("accepts what the save boundary accepts: long Other memos and non-http links (D-5)", () => {
+    const memo = "가".repeat(150);
+    const o = buildGraphFromCsv(`Name,System,URL,Next\n검토,${memo},www.example.com/sop,\n`, {
+      catalogs: { assignee_roles: [], systems: [{ value: "SAP", aliases: [] }, { value: "Other", aliases: [] }] },
+    });
+    expect(o.errors).toEqual([]);
+    expect(o.warnings.some((w) => w.message.includes("does not start with http"))).toBe(true);
+  });
+
+  it("drops the carriage return of a quoted CRLF and flags a non-UTF-8 file (D-8)", () => {
+    const records = parseCsvRecords('Name,Description\r\n검토,"첫 줄\r\n둘째 줄"\r\n');
+    expect(records[1].cells[1]).toBe("첫 줄\n둘째 줄");
+    const o = buildGraphFromCsv("Name,Next\n검토,\n", { encodingFallback: true });
+    expect(o.warnings.some((w) => w.message.includes("read as EUC-KR"))).toBe(true);
   });
 });

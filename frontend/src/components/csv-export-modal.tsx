@@ -38,6 +38,7 @@ const WARNING_KEY: Record<CsvExportWarningKind, MessageKey> = {
   nextTitleSeparator: "export.csvWarn.nextTitleSeparator",
   labelSemicolon: "export.csvWarn.labelSemicolon",
   decisionFewBranches: "export.csvWarn.decisionFewBranches",
+  untitledStep: "export.csvWarn.untitledStep",
   spParallelEnd: "export.csvWarn.spParallelEnd",
   startMismatch: "export.csvWarn.startMismatch",
 };

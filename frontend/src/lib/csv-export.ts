@@ -3,6 +3,7 @@
 import type { Graph, GraphEdge, GraphNode } from "./api";
 import { escapeCsvCell } from "./csv";
 import { CSV_COLUMNS, type CsvColumnKey, normalizeExportColumns } from "./export-columns";
+import { getOutputGroups } from "./output-rules";
 import { endKeyOfEdge, PRIMARY_END_HANDLE } from "./subprocess-embed";
 
 /** 내보내기 셀의 시스템 — Other면 원문 메모(있을 때)를 싣는다. 재임포트 commitSystem이 미일치→Other+같은 메모로 복원. */
@@ -98,6 +99,7 @@ export type CsvExportWarningKind =
   | "nextTitleSeparator" // 대상 제목에 ; 또는 :
   | "labelSemicolon" // 라벨에 ;
   | "decisionFewBranches" // 판단 노드 갈래 2개 미만
+  | "untitledStep" // 이름 없는 단계 — 가져오기는 Name이 필수
   | "spParallelEnd" // SP 끝별 병렬
   | "startMismatch"; // 시작 연결이 계산된 루트와 다름
 
@@ -145,17 +147,32 @@ export function buildCsvTable(graph: Graph): { rows: CsvRow[]; warnings: CsvExpo
     warnings.push(warn("secondaryEnd", { title: extraEnd.title }, `Secondary end node "${extraEnd.title}" is not expressible in CSV - skipped`));
   }
   const rowNodes = nodes.filter((n) => n.node_type !== "start" && n.node_type !== "end");
+  // 가져오기는 이름 셀을 다듬어 읽는다 — 공백만 다른 제목도 같은 이름으로 세고, 이름 없는 단계는 다시 가져올 수 없다 (D-1·D-5)
   const titles = new Map<string, number>();
-  for (const n of rowNodes) titles.set(n.title, (titles.get(n.title) ?? 0) + 1);
+  for (const n of rowNodes) titles.set(n.title.trim(), (titles.get(n.title.trim()) ?? 0) + 1);
+  const untitled = titles.get("") ?? 0;
+  if (untitled > 0) {
+    warnings.push(warn("untitledStep", { count: String(untitled) }, `${untitled} step(s) have no name - re-import needs a name on every row`));
+  }
   for (const [title, count] of titles) {
-    if (count > 1) {
+    if (title !== "" && count > 1) {
       warnings.push(warn("duplicateTitle", { title, count: String(count) }, `Duplicate title "${title}" - re-import will fail on this file`));
     }
   }
   const rowIds = new Set(rowNodes.map((n) => n.id));
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
-  const buildRow = (node: GraphNode): CsvRow => {
-    const outs = graph.edges.filter((e) => e.source_node_id === node.id);
+  const buildRow = (sourceNode: GraphNode): CsvRow => {
+    const outs = graph.edges.filter((e) => e.source_node_id === sourceNode.id);
+    // 레거시 임포트 팬아웃(갈래 전부 gateway=parallel, 속성 없음)도 병렬로 싣는다 — Excel(formatParallelCell)은 Y인데 CSV는
+    // 빈 칸이라 재가져오기가 판단 노드로 추론했다 (리뷰 D-3)
+    const legacyParallel = getOutputGroups(
+      { id: sourceNode.id, nodeType: sourceNode.node_type, parallelOutputs: sourceNode.parallel_outputs },
+      outs.map((e) => ({ source: e.source_node_id, sourceHandle: e.source_handle, gateway: e.gateway })),
+    ).some((group) => group.key === PRIMARY_END_HANDLE && group.parallel && group.count >= 2);
+    const node =
+      legacyParallel && !(sourceNode.parallel_outputs ?? []).includes(PRIMARY_END_HANDLE)
+        ? { ...sourceNode, parallel_outputs: [...(sourceNode.parallel_outputs ?? []), PRIMARY_END_HANDLE] }
+        : sourceNode;
     const parts: string[] = [];
     // 같은 대상은 한 번만 — SP의 두 끝이 같은 대상으로 가면 "T;T"가 되어 재임포트가 중복 대상 에러를 낸다
     const seenTargets = new Set<string>();
@@ -267,7 +284,7 @@ export function buildCsvTable(graph: Graph): { rows: CsvRow[]; warnings: CsvExpo
     );
     const roots = new Set(rowNodes.filter((n) => !incoming.has(n.id)).map((n) => n.id));
     const same = startTargets.size === roots.size && [...startTargets].every((id) => roots.has(id));
-    if (!same) warnings.push(warn("startMismatch", {}, "Start connections differ from computed roots - re-import will recompute them"));
+    if (!same) warnings.push(warn("startMismatch", {}, "Start connections differ from computed roots - a new map built from this file recomputes them"));
   }
   return { rows, warnings };
 }
