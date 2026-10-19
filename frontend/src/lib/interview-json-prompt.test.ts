@@ -4,7 +4,14 @@ import { buildInterviewJsonPromptText } from "./interview-json-prompt";
 
 describe("external AI prompt for interview JSON 0.5", () => {
   it("carries the schema skeleton, key rules and the target L5", () => {
-    const text = buildInterviewJsonPromptText({ code: "19-01-02-01-01", name: "정제수 일상 점검", path: ["EPCV", "Facility", "유틸리티 운전", "정제수 시스템 운전"] });
+    const text = buildInterviewJsonPromptText({
+      code: "19-01-02-01-01",
+      name: "정제수 일상 점검",
+      ancestors: [
+        { code: "19", name: "EPCV" }, { code: "19-01", name: "Facility" },
+        { code: "19-01-02", name: "유틸리티 운전" }, { code: "19-01-02-01", name: "정제수 시스템 운전" },
+      ],
+    });
     expect(text).toContain('"schema_version": "0.5-bpm-interface-draft"');
     expect(text).toContain("19-01-02-01-01");
     expect(text).toContain("EPCV > Facility > 유틸리티 운전 > 정제수 시스템 운전 > 정제수 일상 점검");
@@ -81,7 +88,7 @@ describe("external AI prompt for interview JSON 0.5", () => {
     const text = buildInterviewJsonPromptText({
       code: "19-01",
       name: "정제수 일상 점검",
-      path: ["EPCV"],
+      ancestors: [{ code: "19", name: "EPCV" }],
       existingL6: [{ code: "x-01", name: "접수" }],
     });
     expect(text).toContain("[이미 있는 L6]");
@@ -91,8 +98,28 @@ describe("external AI prompt for interview JSON 0.5", () => {
     expect(text).not.toContain("—");
   });
 
+  it("puts the real L1 to L5 codes into the skeleton so the external AI does not invent them", () => {
+    const ancestors = [
+      { code: "19", name: "EPCV" }, { code: "19-01", name: "Facility" },
+      { code: "19-01-02", name: "유틸리티 운전" }, { code: "19-01-02-01", name: "정제수 시스템 운전" },
+    ];
+    const text = buildInterviewJsonPromptText({ code: "19-01-02-01-01", name: "정제수 일상 점검", ancestors });
+    const skeleton: unknown = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+    const framework = typeof skeleton === "object" && skeleton !== null && "framework" in skeleton ? skeleton.framework : null;
+    const categories = typeof framework === "object" && framework !== null && "categories" in framework ? framework.categories : [];
+    expect(categories).toEqual([
+      { code: "19", name: "EPCV", level: 1, parent: null },
+      { code: "19-01", name: "Facility", level: 2, parent: "19" },
+      { code: "19-01-02", name: "유틸리티 운전", level: 3, parent: "19-01" },
+      { code: "19-01-02-01", name: "정제수 시스템 운전", level: 4, parent: "19-01-02" },
+      { code: "19-01-02-01-01", name: "정제수 일상 점검", level: 5, parent: "19-01-02-01" },
+    ]);
+    expect(text).toContain("골격에 적힌 값을 그대로 두세요");
+    expect(text).not.toContain("L1코드");
+  });
+
   it("omits the existing L6 clause when there is none", () => {
-    const text = buildInterviewJsonPromptText({ code: "19-01", name: "정제수 일상 점검", path: ["EPCV"] });
+    const text = buildInterviewJsonPromptText({ code: "19-01", name: "정제수 일상 점검", ancestors: [{ code: "19", name: "EPCV" }] });
     expect(text).not.toContain("[이미 있는 L6]");
     expect(text).not.toContain("같은 taskId로 rows에 넣으면 갱신되고 빼면 그대로 둔다");
   });

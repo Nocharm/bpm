@@ -42,6 +42,7 @@ from app.models import (
     InterviewSession,
     KbChunk,
     MapVersion,
+    Node,
     ProcessMap,
 )
 from app.permissions.access import assert_map_role, get_effective_role, get_eligible_users
@@ -242,6 +243,7 @@ async def _state_out(session: AsyncSession, interview: InterviewSession) -> Inte
         attachments=sorted(interview.attachments, key=lambda a: a.id),
         version_updated_at=version.updated_at if version else None,
         base_graph_updated_at=interview.base_graph_updated_at,
+        version_editable=version is not None and workflow.is_editable_status(version.status),
     )
 
 
@@ -1037,6 +1039,64 @@ async def revert_to_checkpoint(
         if cp.id >= target.id:
             await session.delete(cp)
     await session.commit()
+    loaded = await _get_owned_interview(session, interview_id, user)
+    return await _state_out(session, loaded)
+
+
+def _remap_working_keys(graph: dict | None, key_map: dict[str, str]) -> dict | None:
+    """작업본 키(시작 버전 노드 id)를 새 Draft의 같은 계보 노드 id로 — 짝이 없는 키(인터뷰가 만든 노드)는 그대로."""
+    if not graph or not key_map:
+        return graph
+    return {
+        **graph,
+        "nodes": [{**n, "key": key_map.get(n.get("key"), n.get("key"))} for n in graph.get("nodes", [])],
+        "edges": [
+            {**e, "source": key_map.get(e.get("source"), e.get("source")),
+             "target": key_map.get(e.get("target"), e.get("target"))}
+            for e in graph.get("edges", [])
+        ],
+    }
+
+
+@router.post("/interviews/{interview_id}/retarget", response_model=InterviewStateOut)
+@_locked_by_interview
+async def retarget_interview(
+    interview_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> InterviewStateOut:
+    """묶인 Draft가 게시돼 적용할 곳이 없으면 맵의 지금 Draft로 옮긴다 — 적용은 병합이라 확인창이 차이를 보여 준다.
+
+    인터뷰는 시작 버전에 묶여, 그 Draft가 게시되면 abandon만 남았다(시스템 리뷰 G-10). 편집 가능하면 그대로 둔다.
+    작업본·체크포인트 키는 새 Draft의 같은 계보 노드 id로 옮긴다.
+    """
+    interview = await _get_owned_interview(session, interview_id, user)
+    if interview.status != "active":
+        raise HTTPException(status_code=409, detail="interview is not active")
+    version = await session.get(MapVersion, interview.version_id)
+    if version is None or not workflow.is_editable_status(version.status):
+        draft = await session.scalar(
+            select(MapVersion)
+            .where(MapVersion.map_id == interview.map_id, MapVersion.status.in_(workflow.EDITABLE_STATUSES))
+            .order_by(MapVersion.id.desc())
+            .limit(1)
+        )
+        if draft is None:
+            raise HTTPException(status_code=409, detail="no draft to apply to - create a new version first")
+        # 새 Draft는 복제라 노드 id가 다르다 — 작업본 키를 계보로 옮겨야 적용 병합이 기존 노드를 키로 잇는다(G-8)
+        old_roots = {
+            n.id: n.source_node_id or n.id
+            for n in (await session.scalars(select(Node).where(Node.version_id == interview.version_id))).all()
+        }
+        new_by_root: dict[str, str] = {}
+        for n in (await session.scalars(select(Node).where(Node.version_id == draft.id))).all():
+            new_by_root.setdefault(n.source_node_id or n.id, n.id)
+        key_map = {old: new_by_root[root] for old, root in old_roots.items() if root in new_by_root}
+        interview.working_graph = _remap_working_keys(interview.working_graph, key_map)
+        for checkpoint in interview.checkpoints:
+            checkpoint.working_graph = _remap_working_keys(checkpoint.working_graph, key_map)
+        interview.version_id = draft.id
+        await session.commit()
     loaded = await _get_owned_interview(session, interview_id, user)
     return await _state_out(session, loaded)
 

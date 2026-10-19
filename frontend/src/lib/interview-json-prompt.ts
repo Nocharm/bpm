@@ -5,14 +5,26 @@
 export interface InterviewPromptTarget {
   code: string; // L5 nodeCode (process_categories.code)
   name: string;
-  path: string[]; // L1..L4 이름
+  // L1..L4 코드·이름 — 골격 framework.categories에 그대로 실린다. 코드를 주지 않으면 외부 AI가 지어내고,
+  // 임포트는 기존 L5를 그 가짜 상위로 옮기려는 파일을 거부한다(시스템 리뷰 G-2)
+  ancestors: { code: string; name: string }[];
   existingL6?: { code: string; name: string }[]; // 이미 등록된 L6 — 같은 taskId면 임포트가 갱신한다
 }
+
+interface SkeletonCategory {
+  code: string;
+  name: string;
+  level: number;
+  parent: string | null;
+}
+
+// 대상 L5가 없을 때의 자리표시 — 대상이 있으면 buildSkeleton이 실제 체인으로 바꾼다
+const PLACEHOLDER_CATEGORIES: SkeletonCategory[] = [{ code: "L1코드", name: "L1 이름", level: 1, parent: null }];
 
 const SKELETON = {
   schema_version: "0.5-bpm-interface-draft",
   labelSource: "human-confirmed",
-  framework: { categories: [{ code: "L1코드", name: "L1 이름", level: 1, parent: null }] },
+  framework: { categories: PLACEHOLDER_CATEGORIES },
   l5: { label: "L5 이름", nodeCode: "L5코드" },
   rows: [
     {
@@ -47,8 +59,23 @@ const SKELETON = {
   externalTasks: [],
 };
 
+// 대상 L5의 실제 체인으로 골격 framework.categories·l5를 채운다 — 대상이 없으면 자리표시 골격 그대로
+function buildSkeleton(target?: InterviewPromptTarget): typeof SKELETON {
+  if (!target) return SKELETON;
+  const chain = [...target.ancestors, { code: target.code, name: target.name }];
+  return {
+    ...SKELETON,
+    framework: {
+      categories: chain.map((c, index) => ({
+        code: c.code, name: c.name, level: index + 1, parent: index > 0 ? chain[index - 1].code : null,
+      })),
+    },
+    l5: { label: target.name, nodeCode: target.code },
+  };
+}
+
 export function buildInterviewJsonPromptText(target?: InterviewPromptTarget): string {
-  const pathLine = target ? [...target.path, target.name].join(" > ") : "(L5 경로를 여기에 적으세요)";
+  const pathLine = target ? [...target.ancestors.map((a) => a.name), target.name].join(" > ") : "(L5 경로를 여기에 적으세요)";
   const codeLine = target ? target.code : "(L5 코드를 여기에 적으세요)";
   const existing = target?.existingL6 ?? [];
   // 이미 등록된 L6는 taskId가 곧 갱신 키다 — 손댈 것만 rows에 담게 해 무변경 행의 재작성을 막는다.
@@ -70,8 +97,12 @@ export function buildInterviewJsonPromptText(target?: InterviewPromptTarget): st
     "[출력 형식, 반드시 지킬 것]",
     "- 다른 설명이나 코드블록 없이 JSON 객체 하나만 출력하세요.",
     '- schema_version은 정확히 "0.5-bpm-interface-draft".',
-    "- framework.categories는 L1부터 L5까지 코드, 이름, level, parent(상위 코드 또는 null).",
-    "- l5.nodeCode는 위 L5 코드, l5.label은 L5 이름.",
+    ...(target
+      ? ["- framework.categories와 l5는 골격에 적힌 값을 그대로 두세요. 코드, 이름, parent를 바꾸거나 새로 지어내면 임포트가 그 파일을 거부합니다."]
+      : [
+          "- framework.categories는 L1부터 L5까지 코드, 이름, level, parent(상위 코드 또는 null).",
+          "- l5.nodeCode는 위 L5 코드, l5.label은 L5 이름.",
+        ]),
     "",
     ...existingBlock,
     "[rows 규칙, L6 하나가 rows 원소 하나]",
@@ -93,6 +124,6 @@ export function buildInterviewJsonPromptText(target?: InterviewPromptTarget): st
     "- edges의 src/dst는 rows의 taskId. 다른 L5의 L6를 가리키려면 externalTasks에 refId, l5.nodeCode, l6를 선언하고 그 refId를 쓰세요.",
     "",
     "[골격, 값만 바꿔 채우세요]",
-    JSON.stringify(SKELETON, null, 2),
+    JSON.stringify(buildSkeleton(target), null, 2),
   ].join("\n");
 }

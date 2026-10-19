@@ -20,7 +20,7 @@ from app.framework_interview.ai import ask_schema
 from app.framework_interview.answers import fill_answers
 from app.framework_interview.assemble import (
     allocate_task_ids, assemble_document, finalize_row_output, load_category_chain,
-    load_existing_codes, validate_row,
+    load_existing_codes, refresh_stale_revise_tasks, validate_row,
 )
 from app.framework_interview.canvas import (
     collapse_canvas_to_relations, expand_relations_to_canvas, relayout_canvas, validate_canvas,
@@ -413,6 +413,13 @@ async def skip_task(
         raise HTTPException(status_code=409, detail="session is already applied")
     if task.status not in ("failed", "ready"):
         raise HTTPException(status_code=409, detail="only failed or ready tasks can be skipped")
+    if task.mode == "revise":
+        # 정정 카드의 건너뛰기 = 유지로 되돌리기 — 플레이스홀더로 바꾸면 기존 L6가 활동 1개짜리로 재게시되고
+        # SP 지정값이 지워진다(시스템 리뷰 G-4, 사용자 결정 2026-10-19)
+        await _switch_to_keep(db, row, task)
+        await db.commit()
+        runner.kick(row.id)
+        return await _out(db, row)
     card = next((c for c in row.plan or [] if c.get("task_id") == task.task_id), {})
     placeholder_row = {
         "l6": task.name,
@@ -438,20 +445,40 @@ async def skip_task(
     return await _out(db, row)
 
 
+def _set_card_mode(row: FrameworkInterviewSession, task: FrameworkInterviewTask, mode: str) -> None:
+    task.mode = mode
+    row.plan = [
+        {**card, "mode": mode} if card.get("existing_code") == task.task_id else card
+        for card in row.plan or []
+    ]
+
+
+async def _switch_to_keep(db: AsyncSession, row: FrameworkInterviewSession, task: FrameworkInterviewTask) -> None:
+    """정정 카드를 유지로 — 잠금 때 유지 카드를 만드는 규칙과 같다(현재 행은 조립 직전 현재 맵에서 다시 읽힌다)."""
+    chain = await load_category_chain(db, row.category_id)
+    l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]}
+    existing_row = existing_row_of(row.existing, task.task_id) or {}
+    _set_card_mode(row, task, "keep")
+    task.status = "drawn"
+    task.row = existing_row
+    task.issues = validate_row(chain, l5, {"taskId": task.task_id, **existing_row})
+    task.placeholder = False
+    task.questionnaire = None
+    task.answers = None
+    task.error = None
+    task.drawn_at = now_kst()
+
+
 def _switch_to_revise(row: FrameworkInterviewSession, task: FrameworkInterviewTask) -> None:
     """유지 카드를 정정으로 — 설문·답은 비우고 행·이슈는 남긴다(정정 설문이 오기 전 미리보기용).
 
     세션이 등록/연결 단계였다면 되돌린다 — 그 카드가 다시 그려진 뒤 다시 이어야 한다(relations 편집분은 유지).
     """
-    task.mode = "revise"
+    _set_card_mode(row, task, "revise")
     task.status = "pending"
     task.questionnaire = None
     task.answers = None
     task.error = None
-    row.plan = [
-        {**card, "mode": "revise"} if card.get("existing_code") == task.task_id else card
-        for card in row.plan or []
-    ]
     if row.status in ("ready", "linking"):
         row.status = "plan_locked"
         row.assembled = None
@@ -675,6 +702,13 @@ async def confirm_relations(
         payload.canvas if payload.canvas is not None
         else expand_relations_to_canvas(row.relations, _ordered_tasks(row))
     )
+    stale = await refresh_stale_revise_tasks(db, row)
+    if stale:
+        await db.commit()  # 연결 편집과 갈아 끼운 스냅샷·카드 이슈는 남긴다 — 다시 그린 뒤 그대로 확정한다
+        raise HTTPException(
+            status_code=409,
+            detail=f"map published again since the campaign started - reopen and redraw: {', '.join(stale)}",
+        )
     await assemble_document(db, row)
     row.status = "ready"
     await db.commit()
@@ -732,6 +766,10 @@ async def feedback_session(
             raise HTTPException(status_code=422, detail={
                 "errors": [i["message"] for i in issues if i["severity"] == "error"]})
         task.row, task.issues, task.drawn_at = new_row, issues, now_kst()
+        if task.mode == "keep":
+            # 유지 카드에 고쳐 달라고 하면 정정으로 — 유지로 두면 조립이 현재 맵 행으로 되돌려 고친 내용이 사라진다
+            # (시스템 리뷰 G-6, 사용자 결정 2026-10-19)
+            _set_card_mode(row, task, "revise")
         if row.status == "ready":
             # 행이 바뀌면 조립본이 낡는다 — reopen-relations와 같이 연결 단계로 되돌린다
             row.status = "linking"

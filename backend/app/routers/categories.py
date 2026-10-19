@@ -894,6 +894,7 @@ async def import_interview_delivery(
     from scripts.import_consultant import (
         apply_interview_linkage,
         apply_interview_notes,
+        find_delivery_conflicts,
         import_delivery,
     )
 
@@ -908,6 +909,11 @@ async def import_interview_delivery(
         result = convert_interview(file.content)
         issues = list(result.issues)
         ok = not result.has_error()
+        if ok:
+            # 기존 체계를 조용히 옮기는 파일은 통째로 제외 — 분류 재부모화·다른 L5 맵 (시스템 리뷰 G-2·G-5)
+            for severity, path, message in await find_delivery_conflicts(session, result.categories, result.maps):
+                issues.append(AdapterIssue(severity, path, message))
+                ok = ok and severity != "error"
         if ok:
             # 파일 간 중복 taskId = 같은 파일 재선택/재전달 겹침 신호 — 뒤 파일을 통째로 제외
             dupes = [m.code for m in result.maps if m.code in seen_task_codes]

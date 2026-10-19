@@ -73,6 +73,9 @@ export interface CsvImportContext {
   // 관리 목록(역할·시스템) — 역할 별칭→정식 표기, 시스템 미일치→Other+원문 메모(commitSystem). 없으면 정규화 없이 원문.
   // 순수 함수라 useCatalogs() 훅 값을 호출부가 넘긴다 (design 2026-09-12)
   catalogs?: Catalogs;
+  // AI 제안 키가 기존 노드 id면 제목보다 먼저 그 노드로 잇는다 — 맵 인터뷰 작업본은 기존 노드를 id 키로 시드해,
+  // 제목만 보면 이름을 바꾼 노드가 새 id가 되어 url·GMP·담당자·색·폼을 잃었다(시스템 리뷰 G-8). AI 제안 경로에만 쓴다
+  matchKeysToBaseIds?: boolean;
 }
 
 // 25컬럼 스키마 — 열 정의 단일 소스는 lib/export-columns.ts CSV_COLUMNS(내보내기·템플릿·프롬프트 공용).
@@ -1051,9 +1054,21 @@ export function buildGraphFromAiProposal(
   const addedNodeIds: string[] = [];
   const keyToId = new Map<string, string>(); // AI 임시키 → 최종 id (edges 재매핑용)
   const byId = new Map(baseNodes.map((node) => [node.id, node]));
+  // 키로 예약된 기존 노드 — 앞선 제안이 같은 제목으로 먼저 집어 가면 이름을 바꾼 원래 노드가 새 id로 밀린다
+  const keyClaims = new Set(context?.matchKeysToBaseIds ? proposal.nodes.map((node) => node.key).filter((key) => byId.has(key)) : []);
+  // 끝·시작 여부가 같을 때만 키로 잇는다 — 일반 제안이 끝 id를 가져가면 끝이 일반 노드로 바뀐다(아래 끝/일반 분리와 같은 이유)
+  const isSameRole = (base: GraphNode, node: AiNode) =>
+    (base.node_type === "end") === (node.node_type === "end") && (base.node_type === "start") === (node.node_type === "start");
   let startUsed = false;
   let endUsed = false;
   const resolveId = (node: AiNode): string => {
+    const keyed = keyClaims.has(node.key) ? byId.get(node.key) : undefined;
+    if (keyed && !matchedIds.has(keyed.id) && isSameRole(keyed, node)) {
+      matchedIds.add(keyed.id);
+      if (keyed.id === baseStart?.id) startUsed = true;
+      if (keyed.id === baseEnd?.id) endUsed = true;
+      return keyed.id;
+    }
     if (node.node_type === "start" && baseStart && !startUsed) {
       startUsed = true;
       matchedIds.add(baseStart.id);
@@ -1061,7 +1076,7 @@ export function buildGraphFromAiProposal(
     }
     if (node.node_type === "end") {
       const existing = byEndTitle.get(node.title);
-      if (existing && !matchedIds.has(existing.id)) {
+      if (existing && !matchedIds.has(existing.id) && !keyClaims.has(existing.id)) {
         if (existing.id === baseEnd?.id) endUsed = true;
         matchedIds.add(existing.id);
         return existing.id;
@@ -1075,7 +1090,7 @@ export function buildGraphFromAiProposal(
     } else {
       // 끝 노드는 end 제안만 잡는다(byTitle엔 끝이 없다) — 일반 제안이 끝 id를 가져가면 끝이 일반 노드로 바뀐다
       const existing = byTitle.get(node.title);
-      if (existing && !matchedIds.has(existing.id)) {
+      if (existing && !matchedIds.has(existing.id) && !keyClaims.has(existing.id)) {
         matchedIds.add(existing.id);
         return existing.id;
       }

@@ -1279,6 +1279,9 @@ def test_map_promoted_fields_land_and_gmp_review_survives(client) -> None:
 _ALWAYS_INHERITED_VALUES: dict[str, object] = {
     "gmp": "direct",
     "assignee_role": "검토자",
+    # 0.5 활동에 칸이 없는 부서·담당자 (시스템 리뷰 G-3)
+    "department": "품질팀",
+    "assignee": "hong.gd",
     "url": "https://sop.example/cal",
     "url_label": "SOP",
     "duration": "1.30",

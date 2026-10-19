@@ -199,9 +199,45 @@ async def _refresh_keep_rows(
     return dropped
 
 
+STALE_REVISE_MESSAGE = (
+    "map was published again after this campaign started - reopen this card to redraw it from the latest version"
+    " (캠페인 시작 뒤 맵이 다시 게시됨 - 카드를 다시 열어 최신본 기준으로 다시 그리세요)"
+)
+
+
+async def refresh_stale_revise_tasks(db: AsyncSession, session: FrameworkInterviewSession) -> list[str]:
+    """정정 카드의 기준 맵이 세션 시작 뒤 다시 게시됐으면 그 카드를 막는다 — 반환: 막힌 카드 이름(seq 순).
+
+    정정 행은 세션 시작 스냅샷으로 그려져, 그 사이 오너가 게시한 변경을 등록이 덮는다(시스템 리뷰 G-11).
+    막힌 카드의 스냅샷은 현재 맵으로 갈아 끼워 두어 다시 열면 최신본 기준으로 그린다.
+    스냅샷에 version_id가 없는 옛 세션은 판정하지 않는다.
+    """
+    revise = [t for t in session.tasks if t.mode == "revise" and t.status == "drawn"]
+    if not revise:
+        return []
+    snapshot = {item.get("code"): item for item in session.existing or []}
+    current = {item["code"]: item for item in await load_existing_l6(db, session.category_id)}
+    stale = [
+        task for task in revise
+        if (before := snapshot.get(task.task_id)) is not None and before.get("version_id") is not None
+        and (now := current.get(task.task_id)) is not None and now["version_id"] != before["version_id"]
+    ]
+    if not stale:
+        return []
+    codes = {task.task_id for task in stale}
+    session.existing = [
+        current[item["code"]] if item.get("code") in codes else item for item in session.existing or []
+    ]
+    for task in stale:
+        kept = [i for i in task.issues or [] if i.get("message") != STALE_REVISE_MESSAGE]
+        task.issues = [*kept, {"severity": "error", "path": f"rows[{task.seq - 1}]", "message": STALE_REVISE_MESSAGE}]
+    return [task.name for task in sorted(stale, key=lambda t: t.seq)]
+
+
 def _document_rows(tasks: list[FrameworkInterviewTask], dropped: set[int]) -> list[dict]:
+    # 유지 행은 keep 표시 — 역변환 행을 다시 지으면 사람이 붙인 메모·전달 칸 없는 값이 떨어지므로 임포터가 건너뛴다(P0-3)
     return [
-        {"taskId": task.task_id, **task.row}
+        {"taskId": task.task_id, **task.row, **({"keep": True} if task.mode == "keep" else {})}
         for task in sorted(tasks, key=lambda t: t.seq)
         if task.status == "drawn" and task.row and task.id not in dropped
     ]

@@ -2,10 +2,11 @@
 
 // 캠페인 L6 카드 패널 — 보드의 어느 행을 눌러도 그 카드를 상태별로 연다: 준비 중 링 · 설문 폼 · 제출 답+드로잉 링(경과 초) ·
 // 완성 행(답+흐름 미리보기+피드백 채팅) · 실패 재시도/건너뛰기. [닫기]는 자동 흐름으로 돌아간다 (spec 2026-09-23 §4.3 B9).
+// 정정 카드의 건너뛰기는 플레이스홀더가 아니라 "유지로 되돌리기"다 — 서버가 기존 L6를 그대로 둔다(시스템 리뷰 G-4).
 // 답 검토 단계에서 제출 코멘트(선택)를 받고, 문항 코멘트와 함께 서버로 보낸다(2026-09-28).
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, RotateCcw, SkipForward, X } from "lucide-react";
+import { Loader2, RotateCcw, SkipForward, Undo2, X } from "lucide-react";
 
 import {
   getApiErrorDetail, getFrameworkInterviewTask,
@@ -86,6 +87,7 @@ export function TaskPanel({ session, task, busy, workingSince = null, onSubmit, 
     [detail, task.task_id],
   );
   const answering = task.status === "ready" && questionnaire !== null;
+  const isRevise = task.mode === "revise";
 
   function handleReview() {
     if (!questionnaire) return;
@@ -116,9 +118,9 @@ export function TaskPanel({ session, task, busy, workingSince = null, onSubmit, 
         {answering && !reviewing && (
           <>
             {/* 이 단계는 지금 자세히 그릴 필요가 없을 때 — 설문·드로잉을 건너뛰고 활동 1개짜리 임시 행으로 등록(사용자 요청 2026-09-29) */}
-            <button type="button" className={SECONDARY} data-id="fw-consult-skip-now" disabled={busy} title={t("fwConsult.skipNowHint")} onClick={() => setConfirmSkip(true)}>
-              <SkipForward size={14} strokeWidth={1.5} />
-              {t("fwConsult.skipNow")}
+            <button type="button" className={SECONDARY} data-id="fw-consult-skip-now" disabled={busy} title={t(isRevise ? "fwConsult.keepInsteadHint" : "fwConsult.skipNowHint")} onClick={() => setConfirmSkip(true)}>
+              {isRevise ? <Undo2 size={14} strokeWidth={1.5} /> : <SkipForward size={14} strokeWidth={1.5} />}
+              {t(isRevise ? "fwConsult.keepInstead" : "fwConsult.skipNow")}
             </button>
             <AiButton variant="inline" data-id="fw-consult-fill-all" onClick={() => setAnswers(fillAllSuggested(questionnaire))}>
               {t("fwConsult.fillAll")}
@@ -211,6 +213,12 @@ export function TaskPanel({ session, task, busy, workingSince = null, onSubmit, 
               )}
             </div>
           )}
+          {/* 설문 없이 그려진 정정 = 유지 카드에 피드백을 보내 정정으로 바뀐 카드 — 고친 행이 등록된다고 알린다(G-6) */}
+          {isRevise && detail !== null && !questionnaire && (
+            <div className="rounded-md border border-hairline bg-surface-pearl px-3 py-2 text-caption text-ink-secondary" data-id="fw-consult-task-switched-note">
+              {t("fwConsult.switchedToRevise")}
+            </div>
+          )}
           {/* 임베드라 항상 펼쳐져 있다 — hideClose라 onClose는 호출되지 않는다(필수 prop이라 no-op) */}
           {previewSource && (
             <ImportMapPreview source={previewSource} scope="map" dataId="fw-consult-task-panel-canvas" onClose={() => undefined} hideClose />
@@ -235,9 +243,9 @@ export function TaskPanel({ session, task, busy, workingSince = null, onSubmit, 
       {confirmSkip && (
         <ConfirmDialog
           dialogId="fw-consult-skip-now-confirm"
-          title={t("fwConsult.skipNow")}
-          message={t("fwConsult.skipNowConfirm")}
-          confirmLabel={t("fwConsult.skipNow")}
+          title={t(isRevise ? "fwConsult.keepInstead" : "fwConsult.skipNow")}
+          message={t(isRevise ? "fwConsult.keepInsteadConfirm" : "fwConsult.skipNowConfirm")}
+          confirmLabel={t(isRevise ? "fwConsult.keepInstead" : "fwConsult.skipNow")}
           cancelLabel={t("common.cancel")}
           onConfirm={() => { setConfirmSkip(false); onSkip(task.id); }}
           onClose={() => setConfirmSkip(false)}
@@ -252,9 +260,9 @@ export function TaskPanel({ session, task, busy, workingSince = null, onSubmit, 
               <RotateCcw size={14} strokeWidth={1.5} />
               {t("fwConsult.retry")}
             </button>
-            <button type="button" className={SECONDARY} data-id="fw-consult-task-panel-skip" disabled={busy} title={t("fwConsult.skipHint")} onClick={() => onSkip(task.id)}>
-              <SkipForward size={14} strokeWidth={1.5} />
-              {t("fwConsult.skip")}
+            <button type="button" className={SECONDARY} data-id="fw-consult-task-panel-skip" disabled={busy} title={t(isRevise ? "fwConsult.keepInsteadHint" : "fwConsult.skipHint")} onClick={() => onSkip(task.id)}>
+              {isRevise ? <Undo2 size={14} strokeWidth={1.5} /> : <SkipForward size={14} strokeWidth={1.5} />}
+              {t(isRevise ? "fwConsult.keepInstead" : "fwConsult.skip")}
             </button>
           </div>
         </div>

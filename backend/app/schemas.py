@@ -2645,6 +2645,8 @@ class InterviewStateOut(BaseModel):
     # 충돌 경고 판정용 — 현재 draft updated_at vs 세션 시작 시점
     version_updated_at: datetime | None = None
     base_graph_updated_at: datetime | None = None
+    # 묶인 버전이 아직 편집 가능한지 — 그 Draft가 게시되면 적용 전에 retarget으로 지금 Draft로 옮긴다(G-10)
+    version_editable: bool = True
     # 턴 응답 전용 그리기 신호(비영속) — "multi" | "single" | None (speed redesign §4)
     draw_due: str | None = None
 

@@ -773,6 +773,34 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(outcome.merge.matchedCount).toBeGreaterThanOrEqual(1);
   });
 
+  it("keeps a renamed node by its base-id key when the caller asks for key matching (map interview, G-8)", () => {
+    const renamed = baseNode("n1", "견적 검토", { url: "https://sop.example/q", gmp: "direct" });
+    const other = baseNode("n2", "발주", { sort_order: 2 });
+    const proposal = { nodes: [aiNode("n2", "견적 검토"), aiNode("n1", "견적 1차 검토")], edges: [], groups: [] };
+
+    const keyed = buildGraphFromAiProposal(proposal, { base: base([renamed, other]), matchKeysToBaseIds: true });
+    const kept = keyed.graph?.nodes.find((n) => n.title === "견적 1차 검토");
+    expect(kept?.id).toBe("n1");
+    expect(kept?.url).toBe("https://sop.example/q");
+    expect(kept?.gmp).toBe("direct");
+    // 키가 먼저다 — n2 키 제안이 같은 제목으로 n1을 가져가지 않는다
+    expect(keyed.graph?.nodes.find((n) => n.title === "견적 검토")?.id).toBe("n2");
+    expect(keyed.merge.removedNodes).toEqual([]);
+
+    // 기본(에디터 AI 제안)은 제목 매칭 그대로
+    const titled = buildGraphFromAiProposal(proposal, { base: base([renamed, other]) });
+    expect(titled.graph?.nodes.find((n) => n.title === "견적 검토")?.id).toBe("n1");
+  });
+
+  it("does not let a key turn the base end into an ordinary node", () => {
+    const end = baseNode("e1", "완료", { node_type: "end", is_primary_end: true });
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("e1", "완료 처리", "process")], edges: [], groups: [] },
+      { base: base([end]), matchKeysToBaseIds: true },
+    );
+    expect(outcome.graph?.nodes.find((n) => n.title === "완료 처리")?.id).not.toBe("e1");
+  });
+
   it("applies the AI parallel flag to the node's main exit and keeps it when omitted", () => {
     const kept = baseNode("n1", "A", { parallel_outputs: ["__primary__"] });
     const off = baseNode("n2", "B", { sort_order: 2, parallel_outputs: ["__primary__"] });

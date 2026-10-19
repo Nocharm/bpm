@@ -2685,6 +2685,8 @@ export interface InterviewState {
   attachments: InterviewAttachment[];
   version_updated_at: string | null;
   base_graph_updated_at: string | null;
+  // 묶인 버전이 아직 편집 가능한지 — false면 적용 전에 retargetInterview로 맵의 지금 Draft로 옮긴다(G-10)
+  version_editable?: boolean;
   // 턴 응답 전용 그리기 신호(비영속) — multi/single은 draw 이벤트, params는 표 확정 모달 (speed redesign)
   draw_due?: "multi" | "single" | "params" | null;
 }
@@ -2758,6 +2760,11 @@ export function acceptSpSuggestion(id: number, messageId: number): Promise<Inter
 
 export function completeInterview(id: number): Promise<InterviewState> {
   return request<InterviewState>(`/interviews/${id}/complete`, { method: "POST" });
+}
+
+// 시작 Draft가 게시돼 적용할 곳이 없을 때 맵의 지금 Draft로 옮긴다 — 편집 가능하면 그대로 돌려준다
+export function retargetInterview(id: number): Promise<InterviewState> {
+  return request<InterviewState>(`/interviews/${id}/retarget`, { method: "POST" });
 }
 
 // ---------- 지식기반 라이브러리 (P2, sysadmin) ----------

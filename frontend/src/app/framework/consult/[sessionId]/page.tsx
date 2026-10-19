@@ -10,7 +10,7 @@ import { ArrowLeft, ExternalLink, FileText, Headset, Loader2 } from "lucide-reac
 
 import {
   abandonFrameworkInterview, confirmFrameworkRelations, generateFrameworkPlan, generateFrameworkRelations,
-  getApiErrorDetail, getFrameworkInterview, markFrameworkInterviewApplied, pauseFrameworkInterview,
+  getApiErrorDetail, getCategoryChain, getFrameworkInterview, markFrameworkInterviewApplied, pauseFrameworkInterview,
   deleteFrameworkAttachment, reopenFrameworkRelations, resumeFrameworkInterview, retryFrameworkTask,
   reviseFrameworkTask, saveFrameworkCanvas, saveFrameworkPlan, sendFrameworkFeedback, skipFrameworkTask,
   submitFrameworkAnswers, uploadFrameworkInterviewAttachment,
@@ -147,6 +147,23 @@ export default function FrameworkConsultPage() {
     getFrameworkInterview(sessionId).then(applySession).catch((err) => setError(getApiErrorDetail(err)));
   }, [sessionId, applySession]);
 
+  // 외부 AI 프롬프트 골격에 실을 실제 L1~L4 코드 — 없으면 외부 AI가 코드를 지어낸다(시스템 리뷰 G-2).
+  // 받기 전에는 복사 버튼을 막는다(자리표시 골격을 넘기면 같은 사고가 난다)
+  const categoryId = session?.category_id ?? null;
+  const [ancestors, setAncestors] = useState<{ id: number; items: { code: string; name: string }[] } | null>(null);
+  useEffect(() => {
+    if (categoryId === null) return undefined;
+    let alive = true;
+    getCategoryChain(categoryId)
+      .then((chain) => {
+        if (alive) setAncestors({ id: categoryId, items: chain.slice(0, -1).map((c) => ({ code: c.code, name: c.name })) });
+      })
+      .catch((err) => { if (alive) setError(getApiErrorDetail(err)); });
+    return () => {
+      alive = false;
+    };
+  }, [categoryId]);
+
   useEffect(() => {
     if (!session || !hasBackgroundWork(session)) return;
     let alive = true;
@@ -212,7 +229,10 @@ export default function FrameworkConsultPage() {
         <span className="text-body-strong">{session.category_name}</span>
         <span className="text-caption text-ink-muted">· {t("fwConsult.title")}</span>
         <span className="ml-auto text-caption text-ink-secondary" data-id="fw-consult-step-label">{stepLabel}</span>
-        <InterviewJsonPromptButton target={{ code: session.category_code, name: session.category_name, path: [], existingL6: session.existing.filter((e) => !e.frozen) }} />
+        <InterviewJsonPromptButton
+          target={ancestors?.id === session.category_id ? { code: session.category_code, name: session.category_name, ancestors: ancestors.items, existingL6: session.existing.filter((e) => !e.frozen) } : undefined}
+          disabled={ancestors?.id !== session.category_id}
+        />
         <button type="button" data-id="fw-consult-abandon" className="rounded-sm px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt" onClick={() => setConfirmAbandon(true)}>
           {t("fwConsult.abandon")}
         </button>

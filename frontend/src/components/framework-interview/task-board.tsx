@@ -5,7 +5,7 @@
 // 미리보기 눈 아이콘은 없다 — 완성 카드의 흐름은 패널 안에 펼쳐진다(2026-09-28). 연결·등록 단계에서 다른 카드를 보는 중이면
 // 맨 아래에 "흐름으로 돌아가기" 타일을 둔다(닫기 × 하나로는 길을 잃는다는 피드백).
 
-import { ArrowRightToLine, ExternalLink, Loader2, Pause, PencilLine, Play, RotateCcw, SkipForward } from "lucide-react";
+import { ArrowRightToLine, ExternalLink, Loader2, Pause, PencilLine, Play, RotateCcw, SkipForward, Undo2 } from "lucide-react";
 
 import type { FwInterviewSession, FwInterviewTask, FwTaskStatus } from "@/lib/api";
 import { deriveProgress, type FwStep } from "@/lib/framework-interview";
@@ -141,8 +141,9 @@ export function TaskBoard({
                 </button>
               )}
               {task.status === "failed" && onSkip && (
-                <button type="button" data-id={`fw-consult-task-skip-${task.id}`} className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt" title={`${t("fwConsult.skip")} · ${t("fwConsult.skipHint")}`} onClick={(e) => { e.stopPropagation(); onSkip(task.id); }}>
-                  <SkipForward size={14} strokeWidth={1.5} />
+                // 정정 카드는 플레이스홀더가 아니라 유지로 되돌린다(시스템 리뷰 G-4)
+                <button type="button" data-id={`fw-consult-task-skip-${task.id}`} className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt" title={task.mode === "revise" ? `${t("fwConsult.keepInstead")} · ${t("fwConsult.keepInsteadHint")}` : `${t("fwConsult.skip")} · ${t("fwConsult.skipHint")}`} onClick={(e) => { e.stopPropagation(); onSkip(task.id); }}>
+                  {task.mode === "revise" ? <Undo2 size={14} strokeWidth={1.5} /> : <SkipForward size={14} strokeWidth={1.5} />}
                 </button>
               )}
               {(task.mode === "keep" || task.mode === "revise") && (

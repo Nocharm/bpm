@@ -11,8 +11,8 @@ import { CheckCheck, MessageSquarePlus, PenLine, Table2, Undo2, Workflow, X } fr
 import "@xyflow/react/dist/style.css";
 
 import {
-  acceptSpSuggestion, completeInterview, getApiErrorDetail, getGraph, postInterviewRevert,
-  saveGraph, type ChoiceOption, type InterviewState, type WorkingGraph,
+  acceptSpSuggestion, completeInterview, getApiErrorDetail, getGraph, postInterviewRevert, retargetInterview,
+  saveGraph, type ChoiceOption, type Graph, type InterviewState, type WorkingGraph,
 } from "@/lib/api";
 import { INTERVIEW_STAGES, addedNodeKeys, getGraphSignature, layoutWorkingGraph, highlightConnectedEdges } from "@/lib/interview";
 import { PARAM_FIELDS, formatParamValue } from "@/lib/params";
@@ -317,6 +317,8 @@ export function InterviewPreview({
   const [applyOpen, setApplyOpen] = useState(false);
   const [applyBusy, setApplyBusy] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  // 확인창 전에 만든 병합 결과 — 지워질 노드를 보여 주고 확인한 그대로 저장한다(G-8). retargeted=시작 Draft가 게시돼 지금 Draft로 옮김(G-10)
+  const [pendingApply, setPendingApply] = useState<{ versionId: number; graph: Graph; removedTitles: string[]; retargeted: boolean } | null>(null);
 
   const graph = interview?.working_graph ?? null;
   // 이전 그래프 대비 신규 노드 하이라이트 — ref 대신 React 공식 "렌더 중 상태 조정" 패턴
@@ -333,31 +335,57 @@ export function InterviewPreview({
     interview?.base_graph_updated_at != null &&
     interview.version_updated_at !== interview.base_graph_updated_at;
 
-  async function handleApply() {
+  // 적용 준비 — 병합 결과를 먼저 만들어 확인창에 지워질 노드를 보여 준다(시스템 리뷰 G-8).
+  // 작업본 키는 기존 노드 id라 키로 먼저 이어 이름을 바꾼 노드도 값을 지킨다. 시작 Draft가 게시됐으면 지금 Draft로 옮긴다(G-10)
+  async function handlePrepareApply() {
     if (!interview || !graph) return;
     setApplyBusy(true);
     setApplyError(null);
     try {
-      const base = await getGraph(interview.version_id);
+      const target = interview.version_editable === false ? await retargetInterview(interview.id) : interview;
+      if (target !== interview) onUpdated(target);
+      // 옮기면 서버가 작업본 키를 새 Draft의 같은 계보 노드 id로 바꿔 준다 — 옮기기 전 작업본을 쓰면 키가 안 맞는다
+      const working = target.working_graph ?? graph;
+      const base = await getGraph(target.version_id);
       const outcome = buildGraphFromAiProposal(
-        { nodes: graph.nodes, edges: graph.edges, groups: graph.groups },
-        { base, catalogs },
+        { nodes: working.nodes, edges: working.edges, groups: working.groups },
+        { base, catalogs, matchKeysToBaseIds: true },
       );
-      const builtGraph = outcome.graph;
-      if (!builtGraph) {
+      if (!outcome.graph) {
         setApplyError(outcome.errors.map((e) => e.message).join(", ") || "Failed to build the graph.");
         return;
       }
-      await saveGraph(interview.version_id, builtGraph);
+      setPendingApply({
+        versionId: target.version_id,
+        graph: outcome.graph,
+        removedTitles: outcome.merge.removedNodes.map((node) => node.title || node.node_type),
+        retargeted: target.version_id !== interview.version_id,
+      });
+      setApplyOpen(true);
+    } catch (err) {
+      // 409 = 옮길 Draft가 없음 — 에디터에서 새 버전을 만든 뒤 다시
+      setApplyError(getApiErrorDetail(err) || "Failed to prepare the result. Create a new draft in the editor first.");
+    } finally {
+      setApplyBusy(false);
+    }
+  }
+
+  async function handleApply() {
+    if (!interview || !pendingApply) return;
+    setApplyBusy(true);
+    setApplyError(null);
+    try {
+      await saveGraph(pendingApply.versionId, pendingApply.graph);
       const done = await completeInterview(interview.id);
       onUpdated(done);
-      router.push(`/maps/${mapId}?version=${interview.version_id}`);
+      router.push(`/maps/${mapId}?version=${pendingApply.versionId}`);
     } catch (err) {
       // 423/409 = 점유 없음 — 에디터에서 checkout 후 재시도 안내
       setApplyError(getApiErrorDetail(err) || "Failed to apply. Check out the draft in the editor first.");
     } finally {
       setApplyBusy(false);
       setApplyOpen(false);
+      setPendingApply(null);
     }
   }
 
@@ -773,7 +801,7 @@ export function InterviewPreview({
             <button
               className="flex shrink-0 items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption-strong text-on-accent disabled:opacity-40"
               disabled={applyBusy || !graph || graph.nodes.length === 0}
-              onClick={() => setApplyOpen(true)}
+              onClick={() => void handlePrepareApply()}
               data-id="iv-apply"
             >
               <CheckCheck size={16} strokeWidth={1.5} />
@@ -782,24 +810,42 @@ export function InterviewPreview({
           ) : null}
         </div>
       </div>
-      {applyOpen ? (
+      {applyOpen && pendingApply ? (
         <ConfirmDialog
           title="Apply the interview result to the draft?"
           message={
-            (conflict
-              ? "Warning: the draft has been edited since this interview started. Applying will merge onto the latest draft."
-              : "The working map will be merged into the draft version.") +
+            (pendingApply.retargeted
+              ? "The draft this interview started on has been published. The result will be merged into the current draft."
+              : conflict
+                ? "Warning: the draft has been edited since this interview started. Applying will merge onto the latest draft."
+                : "The working map will be merged into the draft version.") +
             " This also finishes the interview session." // 상시 노출로 바뀐 뒤 멘탈 모델 명시 (T20)
           }
           confirmLabel={applyBusy ? "Applying…" : "Apply"}
           cancelLabel="Cancel"
-          danger={conflict}
+          danger={conflict || pendingApply.retargeted || pendingApply.removedTitles.length > 0}
           confirmDisabled={applyBusy}
           onConfirm={() => {
             void handleApply();
           }}
-          onClose={() => setApplyOpen(false)}
-        />
+          onClose={() => {
+            setApplyOpen(false);
+            setPendingApply(null);
+          }}
+        >
+          {pendingApply.removedTitles.length > 0 ? (
+            <div className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface-pearl px-3 py-2" data-id="iv-apply-removed">
+              <span className="text-caption text-ink-secondary">
+                {`${pendingApply.removedTitles.length} node(s) on the draft are not in the interview result and will be removed:`}
+              </span>
+              <ul className="max-h-32 overflow-y-auto text-caption text-ink">
+                {pendingApply.removedTitles.map((title, index) => (
+                  <li key={`${title}-${index}`} className="truncate">{title}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </ConfirmDialog>
       ) : null}
     </div>
   );

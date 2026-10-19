@@ -229,7 +229,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         const self = chain[chain.length - 1];
         setFetchedTarget({
           id: consultL5Id,
-          target: { code: self.code, name: self.name, path: chain.slice(0, -1).map((c) => c.name) },
+          target: { code: self.code, name: self.name, ancestors: chain.slice(0, -1).map((c) => ({ code: c.code, name: c.name })) },
         });
       })
       .catch(() => undefined);

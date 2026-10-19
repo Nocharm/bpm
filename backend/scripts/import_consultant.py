@@ -74,7 +74,7 @@ from scripts.consultant_canonical import (
     CanonicalMap,
     CanonicalParams,
 )
-from scripts.consultant_interview import LOOP_BRANCH_NODE_NAME
+from scripts.consultant_interview import EXCEPTION_VARIANT_COLOR, LOOP_BRANCH_NODE_NAME
 from scripts.consultant_layout import (
     LINKAGE_ROW_STEP,
     LayoutNode,
@@ -199,9 +199,14 @@ def link_matching_io(nodes: list[Node], edges: list[Edge], map_code: str) -> int
 # (승계가 서명 전에 돌아 `_graph_signature`의 title이 직전 값과 같아진다). 폼 두 필드는 줄 정렬 승계만 공유하고 성격이 다르다 —
 # input_forms는 검토 입력값이라 `_graph_signature` 밖, output_forms는 전달 필드(dataForm)라 서명 안이다(C40).
 # 아웃풋 텍스트가 그대로면 검토 입력값이 전달분을 이기는 기존 계약(2026-08-20)을 유지한다. group_ids는 그룹 행 복제·리맵이 필요해 `_inherit_prior_fields`가 따로 다룬다.
+# department·assignee는 0.5 활동에 칸이 없어 승계한다(재전달마다 지워지던 경로, 시스템 리뷰 G-3). "blank"=전달분이 비었을 때만 —
+# color는 예외 variant일 때만 전달되므로 빈 전달은 "주장 없음"이고 오너 색을 잇는다(예외 색 자체는 전달물이 주인이라 잇지 않는다).
 INHERITED_NODE_FIELDS: tuple[tuple[str, str | None], ...] = (
     ("gmp", None),
     ("assignee_role", None),
+    ("department", None),
+    ("assignee", None),
+    ("color", "blank"),
     ("url", None),
     ("url_label", None),
     ("duration", None),
@@ -263,6 +268,10 @@ def _inherit_prior_fields(
                 continue
             if guard == "nonlink" and node.linked_map_id is not None:
                 continue
+            if guard == "blank" and (
+                getattr(node, name) or (getattr(old, name) or "").lower() == EXCEPTION_VARIANT_COLOR
+            ):
+                continue
             if guard == "end" and (
                 node.node_type != "end" or old.node_type != "end" or _is_default_end_title(old.title)
             ):
@@ -307,6 +316,55 @@ def _inherit_prior_fields(
         if node.group_ids:
             node.group_ids = [id_map[g] for g in node.group_ids if g in id_map]
     return groups
+
+
+_ACTIVITY_NODE_TYPES = frozenset({"process", "decision"})
+
+
+def _match_prior_lineage(nodes: list[Node], prior_nodes: list[Node], map_code: str) -> None:
+    """재빌드 활동의 계보를 직전 게시본 활동에 다시 맞춘다 — 같은 제목 우선, 제목만 바뀐 것은 같은 자리.
+
+    빌더는 계보를 활동 seq(`a03`)에서 파생해, 재전달·정정이 활동을 끼우거나 빼면 승계·서명·비교가 한 칸씩 밀린
+    노드를 같은 노드로 본다(시스템 리뷰 P0-3). 같은 자리 짝은 유형이 같을 때만 잇는다. 짝이 없는 활동은 직전
+    게시본 어느 계보와도 겹치지 않는 키를 받아 새 활동이 된다(이름과 자리가 둘 다 바뀌면 값을 잇지 않는다).
+    `_inherit_prior_fields`·`link_matching_io`(IO 항목 id가 계보에서 파생)보다 먼저 돌아야 한다.
+    """
+    def _root(node: Node) -> str:
+        return node.source_node_id or node.id
+
+    new_acts = sorted((n for n in nodes if n.node_type in _ACTIVITY_NODE_TYPES), key=lambda n: n.sort_order or 0)
+    prior_acts = sorted(
+        (n for n in prior_nodes if n.node_type in _ACTIVITY_NODE_TYPES), key=lambda n: (n.sort_order or 0, n.id))
+    by_title: dict[str, list[Node]] = {}
+    for prior in prior_acts:
+        by_title.setdefault((prior.title or "").strip(), []).append(prior)
+    prior_by_root = {_root(p): p for p in prior_acts}
+
+    matched: dict[str, str] = {}  # 새 Node.id → 직전 계보
+    used: set[str] = set()
+    for node in new_acts:
+        candidates = [p for p in by_title.get((node.title or "").strip(), []) if p.id not in used]
+        if candidates:
+            matched[node.id] = _root(candidates[0])
+            used.add(candidates[0].id)
+    for node in new_acts:
+        prior = prior_by_root.get(_root(node))
+        if node.id not in matched and prior is not None and prior.id not in used and prior.node_type == node.node_type:
+            matched[node.id] = _root(prior)
+            used.add(prior.id)
+
+    reserved = {_root(p) for p in prior_nodes} | {_root(n) for n in nodes if n.node_type not in _ACTIVITY_NODE_TYPES}
+    reserved |= set(matched.values())
+    for node in new_acts:
+        if node.id in matched:
+            node.source_node_id = matched[node.id]
+            continue
+        key, suffix = _root(node), 1
+        while key in reserved:
+            suffix += 1
+            key = make_node_id(map_code, f"{_root(node)}#{suffix}")
+        node.source_node_id = key
+        reserved.add(key)
 
 
 def build_graph_rows(
@@ -448,6 +506,51 @@ def build_graph_rows(
             ),
         ))
     return nodes, edges, warnings
+
+
+async def find_delivery_conflicts(
+    session: AsyncSession, cats: list[CanonicalCategory], maps: list[CanonicalMap],
+) -> list[tuple[str, str, str]]:
+    """전달 파일 1건이 기존 체계를 조용히 옮기는지 — (severity, path, message) 목록. 임포트 전 파일 단위 검사.
+
+    체계 구조는 첫 임포트 뒤 앱이 주인이다. 외부 AI가 지어낸 L1~L4로 기존 분류를 다른 상위 아래로 옮기거나(G-2),
+    다른 L5 소속 맵의 taskId로 그 맵을 이 L5로 데려오면(G-5, 슬롯 거버넌스 우회) error — 이동은 업무 체계 화면에서 한다.
+    이름만 다르면 지금처럼 파일 이름을 적용하되 warning으로 드러낸다.
+    """
+    issues: list[tuple[str, str, str]] = []
+    rows = (await session.scalars(select(ProcessCategory))).all()
+    by_code = {row.code: row for row in rows}
+    code_of = {row.id: row.code for row in rows}
+    for cat in cats:
+        row = by_code.get(cat.code)
+        if row is None or cat.external:
+            continue
+        current_parent = code_of.get(row.parent_id) if row.parent_id else None
+        if current_parent != cat.parent:
+            issues.append((
+                "error", "framework.categories",
+                f"category {cat.code} would move under {cat.parent or '(top)'} (now under {current_parent or '(top)'})"
+                " - move it in the framework screen first (분류 이동은 업무 체계 화면에서 먼저)",
+            ))
+        elif (row.name or "") != cat.name:
+            issues.append((
+                "warning", "framework.categories",
+                f"category {cat.code} name {row.name!r} -> {cat.name!r} (분류 이름이 바뀜)",
+            ))
+    codes = [m.code for m in maps]
+    existing = (await session.scalars(
+        select(ProcessMap).where(ProcessMap.consultant_code.in_(codes)))).all() if codes else []
+    category_by_map = {m.code: m.category for m in maps}
+    for found in existing:
+        target = by_code.get(category_by_map.get(found.consultant_code or "", ""))
+        if found.category_id is not None and (target is None or found.category_id != target.id):
+            issues.append((
+                "error", "rows",
+                f"task {found.consultant_code} belongs to another L5 ({code_of.get(found.category_id, '?')})"
+                " - reference it from externalTasks or move it with slot approval first"
+                " (다른 L5 소속 맵 - 외부 참조로 쓰거나 슬롯 이동 승인을 먼저)",
+            ))
+    return issues
 
 
 async def upsert_categories(
@@ -813,8 +916,9 @@ def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
             # 끝 노드의 옛 기본 라벨("End")은 빈 제목과 같게 — 라벨만 다른 기존 맵에 새 버전을 만들지 않는다
             (n.source_node_id or n.id,
              "" if n.node_type == "end" and _is_default_end_title(n.title) else n.title,
+             # 부서·담당자는 0.5 활동에 칸이 없어 승계 필드다(G-3) — 색은 예외 variant로 전달돼 서명 안에 남는다
              n.node_type, n.description or "", n.color or "",
-             n.department or "", n.assignee or "", n.system or "", n.linked_map_id,
+             n.system or "", n.linked_map_id,
              # 연간 건수·FTE — 링크 노드는 전달 params라 진실, 그 외 노드는 서명 전에 승계돼 직전 값과 같다
              n.annual_count or "", n.fte or "", bool(n.is_primary_end),
              # 승격 필드 — 전달분이 진실이라 변경=새 버전(사용자 수기 편집도 재임포트가 덮음,
@@ -1327,6 +1431,12 @@ async def import_delivery(
             report.add(cmap.code, "error", f"unknown category {cmap.category}")
             category_errored.add(cmap.code)
             continue
+        if cmap.keep:
+            # 유지 행은 기존 맵을 그대로 둔다는 표시 — 거버넌스도 다시 읽지 않고, 없는 맵이면 만들지 않는다
+            if cmap.code not in existing:
+                report.add(cmap.code, "error", "keep row for a map that does not exist - skipped")
+                category_errored.add(cmap.code)
+            continue
         if cmap.code in existing:
             # 거버넌스 3필드는 체크한 것만 교체 — 오너 대기 예외 분기는 폐지 (spec 2026-09-03 §4)
             await _review_governance(
@@ -1416,6 +1526,10 @@ async def import_delivery(
     for index, cmap in enumerate(maps):
         if cmap.code in category_errored or cmap.code in trashed_in_delivery:
             continue
+        if cmap.keep:
+            # 역변환 행으로 다시 지으면 사람이 붙인 메모·전달 칸 없는 값이 떨어진다 — 유지는 아무것도 쓰지 않는다(P0-3)
+            report.add(cmap.code, "unchanged", "kept")
+            continue
         found_map = existing[cmap.code]
         params = normalized[cmap.code]
         nodes, edges, warnings = build_graph_rows(cmap, link_targets)
@@ -1433,6 +1547,7 @@ async def import_delivery(
             old_nodes = list((await session.scalars(select(Node).where(Node.version_id == latest.id))).all())
             old_edges = list((await session.scalars(select(Edge).where(Edge.version_id == latest.id))).all())
             old_groups = list((await session.scalars(select(Group).where(Group.version_id == latest.id))).all())
+        _match_prior_lineage(nodes, old_nodes, cmap.code)
 
         # DB-only 연계 대상(이번 전달분에 없어 canonical params가 빈 값으로 폴백)의 annual_count/fte를
         # 직전 게시본의 같은 연계 노드에서 이어받는다 — 안 그러면 부분 재전달마다 값이 초기화되고
@@ -1467,6 +1582,10 @@ async def import_delivery(
         if not sp_department:
             report.add(cmap.code, "warning", "sp_department empty")
         old_name = found_map.name
+        # 비용은 0.5 전달물에 칸이 없다 — 비어 오면 오너가 넣은 지정값을 지킨다(통화 배타라 둘을 한 쌍으로, G-3)
+        delivered_cost = bool(params.cost_krw or params.cost_usd)
+        cost_krw = params.cost_krw if delivered_cost else (found_map.sp_cost_krw or "")
+        cost_usd = params.cost_usd if delivered_cost else (found_map.sp_cost_usd or "")
         fields_changed = (
             found_map.name != cmap.name
             or found_map.category_id != category_ids[cmap.category]
@@ -1475,8 +1594,8 @@ async def import_delivery(
             or (found_map.sp_input or "") != params.input
             or (found_map.sp_output or "") != params.output
             or (found_map.sp_duration or "") != params.duration
-            or (found_map.sp_cost_krw or "") != params.cost_krw
-            or (found_map.sp_cost_usd or "") != params.cost_usd
+            or (found_map.sp_cost_krw or "") != cost_krw
+            or (found_map.sp_cost_usd or "") != cost_usd
             or (found_map.sp_headcount or "") != params.headcount
             # 담당자 참고치 — 맵 지정값에도 착지(연계 캔버스 SP 노드 채움과 별개) (design 2026-09-03 §4)
             or (found_map.sp_annual_count or "") != params.annual_count
@@ -1507,8 +1626,8 @@ async def import_delivery(
                 found_map.sp_designated_at = now_kst()
             found_map.sp_department = sp_department
             found_map.sp_duration = params.duration
-            found_map.sp_cost_krw = params.cost_krw
-            found_map.sp_cost_usd = params.cost_usd
+            found_map.sp_cost_krw = cost_krw
+            found_map.sp_cost_usd = cost_usd
             found_map.sp_headcount = params.headcount
             found_map.sp_annual_count = params.annual_count
             found_map.sp_fte = params.fte

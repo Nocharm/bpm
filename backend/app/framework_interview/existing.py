@@ -317,6 +317,8 @@ async def load_existing_l6(db: AsyncSession, category_id: int) -> list[dict]:
         item = {
             "map_id": m.id, "code": m.consultant_code, "name": m.name,
             "summary": (m.description or "").strip()[:SUMMARY_MAX],
+            # 스냅샷이 읽은 버전 — 정정 카드가 그 사이 다시 게시된 맵을 덮지 않게 등록 직전에 대조한다(G-11)
+            "version_id": version.id,
         }
         if any(n.node_type == FROZEN_NODE_TYPE for n in nodes):
             out.append({**item, "frozen": True, "activities": [], "row": None})

@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-19 — 임포트·AI 데이터 무결성 3단계: 시스템 리뷰 P0-3·G-2~G-8·G-10·G-11 (dev)
+
+- 재전달·정정의 활동 계보를 seq가 아니라 직전 게시본에 다시 맞춘다(`_match_prior_lineage`: 같은 제목 → 같은 자리·같은 유형, 나머지는 새 계보). 활동을 끼우거나 빼도 오너 값이 한 칸씩 밀리지 않는다. 캠페인 유지 카드 행은 `keep: true`로 조립돼 임포터가 그 맵의 그래프·지정값·거버넌스를 쓰지 않는다(역변환 왕복이 메모·칸 없는 값을 떨어뜨리던 경로). 0.5에 칸이 없는 활동 부서·담당자는 승계·서명 밖, 색은 전달분이 빌 때만 승계, 맵 SP 비용은 비어 오면 유지. 파일이 기존 분류를 다른 상위로 옮기거나 다른 L5 소속 맵의 taskId를 담으면 파일 단위 error(사용자 결정: 드라이런 오류, 이름만 다르면 warning), 외부 AI 프롬프트 골격에 실제 L1~L5 코드를 싣는다.
+- 캠페인: 정정 카드의 건너뛰기 = 유지로 되돌리기(사용자 결정, 플레이스홀더로 바꾸면 기존 L6가 활동 1개로 재게시됐다), 유지 카드 피드백 = 정정 자동 전환(사용자 결정, 패널 안내 한 줄), 세션 시작 뒤 다시 게시된 L6의 정정 카드는 연결 확정을 409로 막고 스냅샷을 최신본으로 갈아 끼운다(스냅샷에 `version_id`). AI content null은 빈 응답으로 받아 기존 무효 응답 처리(재시도·실패·사용량)를 탄다. 맵 인터뷰 적용은 작업본 키(기존 노드 id)로 먼저 이어 이름을 바꾼 노드의 값을 지키고, 확인창에 지워질 노드를 나열하며, 시작 Draft가 게시됐으면 `POST /interviews/{id}/retarget`이 지금 Draft로 옮기고 작업본·체크포인트 키를 같은 계보 id로 바꾼다.
+- 회귀 `tests/test_import_integrity.py` 17건(수정 전 HEAD 15건 실패, 나머지 2건은 이름만 바뀐 활동·예외 색 가드) + vitest 키 매칭 2·프롬프트 체인 1. pytest 1759·ruff·tsc·lint·vitest 1484·COMPONENTS 최신, 브라우저 임시 스모크 14/14(이 과정에서 retarget 뒤 옛 작업본으로 병합하던 FE 버그를 잡음). 매뉴얼 ko/en·`backend/app/manual.md`·`docs/samples/interview-json-0.5.md` §2-3·CLAUDE.md 승계 항목 반영.
+
 ## 2026-10-19 — 결재 무결성 2단계: 시스템 리뷰 B-1~B-8 (dev)
 
 - 정족수는 행 개수가 아니라 "지금 유효한 승인자 전원 ⊆ 승인 집합"(`workflow.is_fully_approved`)이다. approve·퇴사 재평가가 같이 쓰고, workflow GET의 `approvals`도 지금 승인자 것만 내보내 FE 진행 수가 따라온다. `version_approvals` (version_id, approver) 유니크를 걸었고, 기존 DB는 기동 시 중복 행을 지운 뒤 인덱스를 만든다(사용자 결정: 자동 정리, 지운 수는 경고 로그). 전이 5종은 버전 행을 `FOR UPDATE`(+populate_existing)로 다시 읽어 판정하고, 버전 생성·재게시·게시 채번은 맵 행을 잠근다(sqlite는 무시, 운영 PG 대상).

@@ -28,9 +28,11 @@ _TOP_KEYS = {
     "relations", "rows", "tasks", "summary", "openItems", "sideNotes",
     "externalTasks",
 }
+# keep = AI 캠페인 조립기(assemble._document_rows)가 유지 카드에만 다는 내부 표시 — 임포터가 그 맵을 건드리지 않는다.
+# 외부 AI 프롬프트에는 싣지 않는다(시스템 리뷰 P0-3)
 _ROW_KEYS = {
     "taskId", "unitId", "l6", "owner", "ownerRole", "approvers",
-    "department", "fields", "actions", "relations",
+    "department", "fields", "actions", "relations", "keep",
 }
 # done_criteria/done_criterial 이중 수용 — 손타이핑 전달 스펙의 표기 모호(실파일 대조 전)
 _FIELD_KEYS = {
@@ -913,6 +915,7 @@ def convert_interview(raw: object) -> AdapterResult:
                 code=task_id,
                 name=name,
                 category=l5_code,
+                keep=row.get("keep") is True,
                 owner=_clean(row.get("owner")) or None,
                 approvers=approvers,
                 department=_truncate(

@@ -144,7 +144,9 @@ async def call_ai(
             data = response.json()
     usage = data.get("usage") or {}
     return AiReply(
-        content=data["choices"][0]["message"]["content"],
+        # content null(사고만 하고 끝난 응답 등)은 빈 응답으로 — 호출부가 None.strip()으로 죽어 카드가 영구 대기에
+        # 빠지고 사용량도 안 남던 경로(시스템 리뷰 G-7). 빈 응답은 기존 무효 응답 처리를 그대로 탄다
+        content=data["choices"][0]["message"].get("content") or "",
         prompt_tokens=usage.get("prompt_tokens"),
         completion_tokens=usage.get("completion_tokens"),
     )
