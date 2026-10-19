@@ -193,7 +193,7 @@ def test_republish_expired_creates_draft(
 def test_republish_draft_exists_409(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """맵에 이미 draft가 있으면 republish → 409."""
+    """맵에 이미 draft가 있으면 republish → 409 (결재 중·반려본도 같다, test_approval_integrity)."""
     map_id, v1 = _create_map(client)
     _publish(client, monkeypatch, map_id, v1)  # v1 = published
 
@@ -203,7 +203,7 @@ def test_republish_draft_exists_409(
     # v1 (published) republish 시도 → 409
     resp = client.post(f"/api/versions/{v1}/republish")
     assert resp.status_code == 409, resp.text
-    assert "draft" in resp.json()["detail"]
+    assert "in progress" in resp.json()["detail"]
 
 
 def test_republish_no_editor_role_403(

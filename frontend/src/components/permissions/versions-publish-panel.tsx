@@ -62,6 +62,8 @@ interface VersionsPublishPanelProps {
   mapId: string;
   /** 현재 유저 ID — 워크플로의 approvers/submitted_by 와 비교해 버튼 게이팅 / Current user id for button gating. */
   currentUserId: string;
+  /** 시스템 관리자 — 제출자가 처리할 수 없는 승인본을 대신 게시·회수 / Sysadmin acts for an unavailable submitter. */
+  isSysadmin?: boolean;
   /** 상위에서 이미 fetch한 버전 목록 — 없으면 내부에서 fetch / Pre-fetched versions or fetch internally. */
   versions?: VersionSummary[];
   /** editor 이상 여부 / Whether current user has editor+ role. */
@@ -145,6 +147,7 @@ const StepLink = () => <span aria-hidden className="h-px w-3 shrink-0 bg-hairlin
 export function VersionsPublishPanel({
   mapId,
   currentUserId,
+  isSysadmin = false,
   versions: versionsProp,
   canEdit,
   visibility,
@@ -222,6 +225,7 @@ export function VersionsPublishPanel({
           label={version.label}
           versions={versions}
           currentUserId={currentUserId}
+          isSysadmin={isSysadmin}
           canEdit={canEdit}
           visibility={visibility}
           canBundle={canBundle}
@@ -247,6 +251,7 @@ interface VersionRowProps {
   label: string;
   versions: VersionSummary[];
   currentUserId: string;
+  isSysadmin: boolean;
   canEdit: boolean;
   visibility: "public" | "private";
   canBundle: boolean;
@@ -264,6 +269,7 @@ function VersionRow({
   label,
   versions,
   currentUserId,
+  isSysadmin,
   canEdit,
   visibility,
   canBundle,
@@ -353,7 +359,9 @@ function VersionRow({
 
   const status = wf.status;
   const isApprover = wf.approvers.includes(currentUserId);
-  const isSubmitter = wf.submitted_by === currentUserId;
+  // 게시·회수 — 제출자, 또는 제출자가 퇴사·권한 상실로 처리할 수 없을 때 sysadmin (BE 게이트와 일치, 리뷰 2026-10-19 B-4)
+  const canActForSubmitter =
+    wf.submitted_by === currentUserId || (isSysadmin && wf.submitter_unavailable === true);
   // 이번 사이클에 본인이 이미 승인했는지 / Whether this user already approved this cycle.
   const hasApproved = wf.approvals.includes(currentUserId);
   // 회수 모달 핸드오프용 제출자 — 제출 시 체크아웃이 해제돼 보유자가 늘 없으므로 제출자를 노출(에디터와 동일).
@@ -578,7 +586,7 @@ function VersionRow({
         )}
 
         {/* approved → 제출자: 게시 버튼 / submitter: publish button */}
-        {status === "approved" && isSubmitter && (
+        {status === "approved" && canActForSubmitter && (
           <button
             type="button"
             disabled={busy}
@@ -594,12 +602,12 @@ function VersionRow({
         )}
 
         {/* approved → 비제출자: 대기 표시 / non-submitter: waiting label */}
-        {status === "approved" && !isSubmitter && (
+        {status === "approved" && !canActForSubmitter && (
           <span className="text-center text-fine text-ink-tertiary">{t("perm.version.approvedWaiting")}</span>
         )}
 
         {/* pending/approved/rejected → 제출자: 회수(withdraw)로 draft 복귀 / submitter can withdraw back to draft */}
-        {(status === "pending" || status === "approved" || status === "rejected") && isSubmitter && (
+        {(status === "pending" || status === "approved" || status === "rejected") && canActForSubmitter && (
           <button
             type="button"
             disabled={busy}

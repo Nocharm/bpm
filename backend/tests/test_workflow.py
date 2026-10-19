@@ -421,12 +421,16 @@ def test_withdraw_owner_sysadmin_override(client: TestClient, _transfer_enforce:
 def test_withdraw_override_blocked_on_pending(
     client: TestClient, _transfer_enforce: None
 ) -> None:
-    """승인요청 단계(pending)에선 제출자만 회수 — 오너·sysadmin도 403(반려 상태에서만 오버라이드)."""
+    """승인요청 단계(pending)에선 재직 중인 제출자만 회수 — 오너·sysadmin도 403(반려 상태에서만 오버라이드).
+
+    제출자 퇴사 시 sysadmin 대신 회수는 test_approval_integrity.py (리뷰 2026-10-19 B-4).
+    """
     _map_id, version_id = _seed_with_grants(
         [("sub.u", "editor"), ("owner.u", "owner")],
         status="pending",
         submitted_by="sub.u",
     )
+    _seed_active_employee("sub.u")
     _act_as("owner.u")
     assert client.post(f"/api/versions/{version_id}/withdraw").status_code == 403
     _act_as(_TRANSFER_SYSADMIN)
@@ -497,6 +501,18 @@ def _transfer_enforce(client: TestClient) -> Iterator[None]:
 def _act_as(user: str) -> None:
     """이후 요청의 인증 사용자를 user로 고정 (JWT 검증 우회)."""
     _app.dependency_overrides[_auth_mod.get_current_user] = lambda: user
+
+
+def _seed_active_employee(login_id: str) -> None:
+    """재직 중 직원 행 시드 — 행이 없으면 퇴사자로 본다(load_active_approvers와 같은 규칙)."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            if await session.get(Employee, login_id) is None:
+                session.add(Employee(login_id=login_id, name=login_id, source="local", active=True))
+            await session.commit()
+
+    asyncio.run(_run())
 
 
 def _seed_with_grants(

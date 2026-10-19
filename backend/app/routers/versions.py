@@ -22,6 +22,7 @@ from app.models import (
     ApprovalRequest,
     CheckoutRequest,
     Edge,
+    Employee,
     Group,
     MapPermission,
     MapVersion,
@@ -61,6 +62,69 @@ async def _assert_not_framework(session: AsyncSession, map_id: int) -> None:
         raise HTTPException(
             status_code=422, detail="framework maps use the confirm workflow"
         )
+
+
+# 편집권 역할 — 제출·게시·회수와 점유는 이 역할이 남아 있어야 한다 (리뷰 2026-10-19 B-6)
+EDIT_ROLES = ("owner", "editor")
+
+
+async def _lock_workflow_version(session: AsyncSession, version_id: int) -> MapVersion:
+    """전이 대상 버전을 행 잠금으로 다시 읽고 맵 상태를 확인한다 (리뷰 2026-10-19 B-2·B-8).
+
+    동시 전이(approve∥reject 등)는 잠금 뒤 최신 상태로 다시 판정해 한쪽만 통과한다.
+    populate_existing: 잠금 전에 올라온 identity map 사본을 잠금 시점 행으로 덮는다.
+    휴지통 맵은 열면 404라 전이도 404. sqlite는 FOR UPDATE를 무시한다(운영 postgres 대상).
+    """
+    version = await session.get(
+        MapVersion, version_id, with_for_update=True, populate_existing=True
+    )
+    if version is None:
+        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    found_map = await session.get(ProcessMap, version.map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {version.map_id} not found")
+    if found_map.mode == "framework":
+        raise HTTPException(
+            status_code=422, detail="framework maps use the confirm workflow"
+        )
+    return version
+
+
+async def _lock_map(session: AsyncSession, map_id: int) -> ProcessMap | None:
+    """맵 행 잠금 — 버전 생성·재게시·게시 채번을 맵 단위로 줄 세운다 (리뷰 2026-10-19 B-2)."""
+    return await session.get(
+        ProcessMap, map_id, with_for_update=True, populate_existing=True
+    )
+
+
+async def _is_submitter_unavailable(session: AsyncSession, version: MapVersion) -> bool:
+    """제출자가 더 이상 게시·회수할 수 없는지 — 퇴사(활성 직원 아님) 또는 편집권 상실 (B-4·B-6)."""
+    submitter = version.submitted_by
+    if submitter is None:
+        return True
+    employee = await session.get(Employee, submitter)
+    if employee is None or not employee.active:
+        return True
+    return await get_effective_role(session, submitter, version.map_id) not in EDIT_ROLES
+
+
+async def _assert_can_act_as_submitter(
+    session: AsyncSession, version: MapVersion, user: str, action: str
+) -> None:
+    """승인 단계 게시·회수 권한 — 편집권이 남은 제출자, 또는 제출자가 처리할 수 없을 때 sysadmin.
+
+    sysadmin 대신 처리는 사용자 결정(2026-10-19 B-4) — 제출자 퇴사로 승인본이 영구히 묶이지 않게.
+    """
+    if version.submitted_by == user and (
+        await get_effective_role(session, user, version.map_id) in EDIT_ROLES
+    ):
+        return
+    if is_sysadmin(user) and await _is_submitter_unavailable(session, version):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail=f"only the submitter can {action} (system admin once the submitter has left)",
+    )
 
 
 async def clone_graph(
@@ -185,7 +249,8 @@ async def create_version(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
-    found_map = await session.get(ProcessMap, map_id)
+    # 맵 행 잠금 — 동시 생성 2건이 둘 다 "최신=게시본"을 보고 Draft 2개를 만들지 않게 (B-2)
+    found_map = await _lock_map(session, map_id)
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     if found_map.mode == "framework":
@@ -456,7 +521,7 @@ async def delete_version(
 
     # 동봉 가시성 요청 스윕 — 버전이 사라지면 결정할 주체가 없어 pending 이 영구 박제된다
     # (dedupe 가드가 이후 단독 요청까지 막음). 버전 withdraw 스윕과 동일하게 unstamped.
-    bundled = await _find_bundled_visibility(session, version_id)
+    bundled = await workflow.find_bundled_visibility(session, version_id)
     if bundled is not None:
         bundled.status = "withdrawn"
 
@@ -477,14 +542,12 @@ async def get_workflow_state(
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
     approvers = await workflow.load_active_approvers(session, version.map_id)
-    approvals = list(
-        (
-            await session.scalars(
-                select(VersionApproval.approver).where(
-                    VersionApproval.version_id == version_id
-                )
-            )
-        ).all()
+    # 지금 승인자의 승인만 — 퇴사·교체된 승인자의 옛 승인을 FE 진행 수에서 뺀다 (B-3)
+    approval_set = await workflow.load_approval_set(session, version_id)
+    approvals = [approver for approver in approvers if approver in approval_set]
+    submitter_unavailable = (
+        version.status in (workflow.PENDING, workflow.APPROVED)
+        and await _is_submitter_unavailable(session, version)
     )
     now = now_kst()
     active = is_checkout_active(version, now)
@@ -519,7 +582,7 @@ async def get_workflow_state(
             .order_by(VersionEvent.id.desc())
             .limit(1)
         )
-    bundled = await _find_bundled_visibility(session, version_id)
+    bundled = await workflow.find_bundled_visibility(session, version_id)
     bundled_visibility = (
         BundledVisibilityOut(
             from_visibility=bundled.payload.get("from_visibility"),
@@ -544,21 +607,7 @@ async def get_workflow_state(
         pending_checkout_request=pending_outs[-1] if pending_outs else None,
         pending_checkout_requests=pending_outs,
         bundled_visibility=bundled_visibility,
-    )
-
-
-async def _find_bundled_visibility(
-    session: AsyncSession, version_id: int
-) -> ApprovalRequest | None:
-    """이 버전에 동봉된 pending 가시성 요청 — payload.version_id 연계 (governance A)."""
-    rows = await session.scalars(
-        select(ApprovalRequest).where(
-            ApprovalRequest.kind == "visibility_change",
-            ApprovalRequest.status == "pending",
-        )
-    )
-    return next(
-        (r for r in rows.all() if r.payload.get("version_id") == version_id), None
+        submitter_unavailable=submitter_unavailable,
     )
 
 
@@ -592,10 +641,7 @@ async def submit_version(
 ) -> MapVersion:
     """Draft/Rejected → Pending. 체크아웃 보유자만. 승인 tally 리셋 + 승인자 전원 알림.
     선택: 가시성 변경을 버전 결정에 동봉 (approval_requests 생성)."""
-    version = await session.get(MapVersion, version_id)
-    if version is None:
-        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
-    await _assert_not_framework(session, version.map_id)
+    version = await _lock_workflow_version(session, version_id)
     if not workflow.is_editable_status(version.status):
         raise HTTPException(
             status_code=409, detail=f"cannot submit from status {version.status}"
@@ -603,6 +649,9 @@ async def submit_version(
     now = now_kst()
     if not (is_checkout_active(version, now) and version.checked_out_by == user):
         raise HTTPException(status_code=403, detail="only the checkout holder can submit")
+    # 점유는 남았지만 편집권을 잃은 사용자(제거된 협업자)는 제출하지 못한다 (B-6)
+    if await get_effective_role(session, user, version.map_id) not in EDIT_ROLES:
+        raise HTTPException(status_code=403, detail="editor or owner required to submit")
     if await _find_own_pending_downgrade(session, version.map_id, user) is not None:
         raise HTTPException(
             status_code=409,
@@ -711,10 +760,7 @@ async def approve_version(
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
     """지정 승인자의 승인 1건 기록. 전원 승인되면 Pending → Approved 자동 전이."""
-    version = await session.get(MapVersion, version_id)
-    if version is None:
-        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
-    await _assert_not_framework(session, version.map_id)
+    version = await _lock_workflow_version(session, version_id)
     if version.status != workflow.PENDING:
         raise HTTPException(
             status_code=409, detail=f"cannot approve from status {version.status}"
@@ -725,29 +771,19 @@ async def approve_version(
             status_code=403, detail="only a designated approver can approve"
         )
 
-    existing = await session.scalar(
-        select(VersionApproval).where(
-            VersionApproval.version_id == version_id,
-            VersionApproval.approver == user,
-        )
-    )
+    approvals = await workflow.load_approval_set(session, version_id)
     # 동일 승인자의 재승인은 no-op — 이번 요청의 코멘트는 의도적으로 버려진다.
     # UI는 !hasApproved로 재승인 버튼을 가리므로 이 경로는 API 직접 호출로만 도달.
-    if existing is None:
+    if user not in approvals:
         session.add(VersionApproval(version_id=version_id, approver=user))
-        await session.flush()
+        approvals.add(user)
         record_version_event(
             session, version_id, "approved", user,
             note=payload.comment if payload is not None else None,
         )
 
-    approved_count = await session.scalar(
-        select(func.count())
-        .select_from(VersionApproval)
-        .where(VersionApproval.version_id == version_id)
-    )
     # 승인자 목록은 현재 시점 기준 — 제출 후 승인자가 추가되면 재승인이 필요해 Approved로 안 넘어감
-    if approved_count is not None and approved_count >= len(approvers):
+    if workflow.is_fully_approved(approvers, approvals):
         version.status = workflow.APPROVED
         if version.submitted_by:
             map_name = await workflow.get_map_name(session, version.map_id)
@@ -776,10 +812,7 @@ async def reject_version(
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
     """지정 승인자 1인의 반려 — 사유 필수. Pending → Rejected, submitter 알림."""
-    version = await session.get(MapVersion, version_id)
-    if version is None:
-        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
-    await _assert_not_framework(session, version.map_id)
+    version = await _lock_workflow_version(session, version_id)
     if version.status != workflow.PENDING:
         raise HTTPException(
             status_code=409, detail=f"cannot reject from status {version.status}"
@@ -821,7 +854,7 @@ async def reject_version(
         )
 
     # 동봉 가시성 변경 거절
-    bundled = await _find_bundled_visibility(session, version_id)
+    bundled = await workflow.find_bundled_visibility(session, version_id)
     if bundled is not None:
         bundled.status = "rejected"
         bundled.decided_by = user
@@ -849,17 +882,15 @@ async def publish_version(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
-    """Approved → Published. submitter만. 같은 맵의 기존 Published는 Expired(terminal)로 전환."""
-    version = await session.get(MapVersion, version_id)
-    if version is None:
-        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
-    await _assert_not_framework(session, version.map_id)
+    """Approved → Published. submitter(퇴사 시 sysadmin). 같은 맵의 기존 Published는 Expired(terminal)로 전환."""
+    version = await _lock_workflow_version(session, version_id)
     if version.status != workflow.APPROVED:
         raise HTTPException(
             status_code=409, detail=f"cannot publish from status {version.status}"
         )
-    if version.submitted_by != user:
-        raise HTTPException(status_code=403, detail="only the submitter can publish")
+    await _assert_can_act_as_submitter(session, version, user, "publish")
+    # 맵 잠금 — 다른 승인본의 동시 게시와 채번·직전 게시본 만료가 겹치지 않게 (B-2)
+    await _lock_map(session, version.map_id)
 
     # 채번 — 이 맵의 기존 version_number 최댓값 + 1 (없으면 1부터)
     max_num = await session.scalar(
@@ -882,7 +913,7 @@ async def publish_version(
         record_version_event(session, prior.id, "expired", user)
 
     # 동봉 가시성 변경 적용 — 단독 승인과 동일 적용기 재사용(viewer 스윕·삭제맵 멱등 포함).
-    bundled = await _find_bundled_visibility(session, version_id)
+    bundled = await workflow.find_bundled_visibility(session, version_id)
     if bundled is not None:
         # 함수-로컬 import: permissions 모듈이 versions 를 import 하지 않는지 먼저 확인 —
         # 순환이 없으면 모듈 상단 import 로 승격해도 된다(주석 유지).
@@ -964,16 +995,21 @@ async def republish_version(
             detail=f"cannot republish a {source.status} version",
         )
 
-    existing_draft = await session.scalar(
-        select(MapVersion)
+    # 진행 중 버전은 맵당 1개 — Draft만 보면 결재 중·반려본 옆에 Draft가 또 생긴다 (B-7).
+    # 맵 잠금으로 동시 재게시·버전 생성과 줄을 세운다 (B-2).
+    await _lock_map(session, source.map_id)
+    in_progress = await session.scalar(
+        select(MapVersion.id)
         .where(
             MapVersion.map_id == source.map_id,
-            MapVersion.status == workflow.DRAFT,
+            MapVersion.status.in_(workflow.IN_PROGRESS_STATUSES),
         )
         .limit(1)
     )
-    if existing_draft is not None:
-        raise HTTPException(status_code=409, detail="a draft already exists for this map")
+    if in_progress is not None:
+        raise HTTPException(
+            status_code=409, detail="a version is already in progress for this map"
+        )
 
     new_version = MapVersion(
         map_id=source.map_id,
@@ -999,28 +1035,24 @@ async def withdraw_version(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MapVersion:
-    """Pending/Approved/Rejected → Draft. pending/approved는 submitter만·rejected는 +오너·sysadmin. 회수자에게 체크아웃 재부여."""
-    version = await session.get(MapVersion, version_id)
-    if version is None:
-        raise HTTPException(status_code=404, detail=f"version {version_id} not found")
-    await _assert_not_framework(session, version.map_id)
+    """Pending/Approved/Rejected → Draft. pending/approved는 submitter(퇴사 시 sysadmin)·rejected는 +오너·sysadmin. 회수자에게 체크아웃 재부여."""
+    version = await _lock_workflow_version(session, version_id)
     if version.status not in (workflow.PENDING, workflow.APPROVED, workflow.REJECTED):
         raise HTTPException(
             status_code=409, detail=f"cannot withdraw from status {version.status}"
         )
-    # 회수 권한 — 승인요청 단계(pending/approved)는 제출자만. 반려(rejected)는 제출자 부재 대비
-    # 오너·sysadmin도 허용(transfer/decide와 권한 일관).
-    is_withdraw_submitter = version.submitted_by == user
+    # 회수 권한 — 승인요청 단계(pending/approved)는 편집권이 남은 제출자(처리할 수 없으면 sysadmin).
+    # 반려(rejected)는 제출자 부재 대비 오너·sysadmin도 허용(transfer/decide와 권한 일관).
     if version.status == workflow.REJECTED:
         actor_role = await get_effective_role(session, user, version.map_id)
-        can_withdraw = is_withdraw_submitter or actor_role == "owner" or is_sysadmin(user)
+        is_withdraw_submitter = version.submitted_by == user and actor_role in EDIT_ROLES
+        if not (is_withdraw_submitter or actor_role == "owner" or is_sysadmin(user)):
+            raise HTTPException(
+                status_code=403,
+                detail="only the submitter, map owner, or sysadmin can withdraw a rejected version",
+            )
     else:
-        can_withdraw = is_withdraw_submitter
-    if not can_withdraw:
-        raise HTTPException(
-            status_code=403,
-            detail="only the submitter can withdraw (owner/sysadmin only on a rejected version)",
-        )
+        await _assert_can_act_as_submitter(session, version, user, "withdraw")
 
     # 회수 조건부 트랙킹 — 현재 승인요청 사이클의 승인 수로 판정(submit이 매 제출마다 리셋).
     approval_count = await session.scalar(
@@ -1033,7 +1065,7 @@ async def withdraw_version(
     was_rejected = version.status == workflow.REJECTED
 
     # 동봉 가시성 변경 회수
-    bundled = await _find_bundled_visibility(session, version_id)
+    bundled = await workflow.find_bundled_visibility(session, version_id)
     if bundled is not None:
         bundled.status = "withdrawn"
 

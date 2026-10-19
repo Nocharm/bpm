@@ -239,7 +239,7 @@ Deleting a map or group is a **soft delete**. It moves to the trash and is perma
 Everything in the user manual's workflow section applies, plus:
 
 - **Force checkout**: take an active editing lock when the holder is unavailable. Use it sparingly; the previous holder loses unsaved work context. Checkouts never expire on their own (they change only by transfer, an approved request, or force checkout), so this is how you reclaim an absent holder's lock.
-- **Decide anywhere**: as effective owner you can submit and publish on any map, and decide checkout requests and transfers. **Withdraw** is the exception: Pending and Approved versions can be withdrawn only by the **submitter**; only a Rejected version can be withdrawn by the map owner or a sysadmin.
+- **Decide anywhere**: as effective owner you can submit and publish on any map, and decide checkout requests and transfers. **Withdraw** is the exception: Pending and Approved versions can be withdrawn only by the **submitter**; only a Rejected version can be withdrawn by the map owner or a sysadmin. One exception: when the submitter has left the company or lost edit access to the map, a sysadmin can publish or withdraw that Pending or Approved version instead (the Publish and Withdraw buttons appear in the approval panel).
 - **Approver reassignment**: when a map has no active approver (e.g. the only approver left the company), use the forced-reassign flow in Map Settings → Approvers to appoint new ones.
 - Remember the publish rule: publishing a version marks the previously published one #Expired, a terminal state that cannot re-enter approval. Use **Republish** to start a new cycle from it.
 

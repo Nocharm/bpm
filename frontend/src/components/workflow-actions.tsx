@@ -11,8 +11,9 @@ interface WorkflowActionsProps {
   workflow: WorkflowState | null;
   isCheckoutHolder: boolean;
   isApprover: boolean;
-  isSubmitter: boolean;
-  // 회수 가능 — 제출자 또는 오너·sysadmin(백엔드 withdraw 오버라이드와 일치). 게시는 제출자 전용이라 별도.
+  // 게시 가능 — 제출자, 또는 제출자가 퇴사·권한 상실로 처리할 수 없을 때 sysadmin(백엔드 publish 게이트와 일치).
+  canPublish: boolean;
+  // 회수 가능 — 제출자 또는 오너·sysadmin(백엔드 withdraw 오버라이드와 일치). 게시 조건과 달라 별도.
   canWithdraw: boolean;
   hasApproved: boolean;
   // 클릭 지점 전달 — 셀프 게시 팝오버를 마우스 근처에 띄우기 위함.
@@ -28,7 +29,7 @@ export function WorkflowActions({
   workflow,
   isCheckoutHolder,
   isApprover,
-  isSubmitter,
+  canPublish,
   canWithdraw,
   hasApproved,
   onSubmit,
@@ -94,7 +95,7 @@ export function WorkflowActions({
         </>
       )}
 
-      {status === "approved" && isSubmitter && (
+      {status === "approved" && canPublish && (
         <button type="button" className={actionBtn} onClick={onPublish}>
           {t("wf.publish")}
         </button>

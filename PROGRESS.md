@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-19 — 결재 무결성 2단계: 시스템 리뷰 B-1~B-8 (dev)
+
+- 정족수는 행 개수가 아니라 "지금 유효한 승인자 전원 ⊆ 승인 집합"(`workflow.is_fully_approved`)이다. approve·퇴사 재평가가 같이 쓰고, workflow GET의 `approvals`도 지금 승인자 것만 내보내 FE 진행 수가 따라온다. `version_approvals` (version_id, approver) 유니크를 걸었고, 기존 DB는 기동 시 중복 행을 지운 뒤 인덱스를 만든다(사용자 결정: 자동 정리, 지운 수는 경고 로그). 전이 5종은 버전 행을 `FOR UPDATE`(+populate_existing)로 다시 읽어 판정하고, 버전 생성·재게시·게시 채번은 맵 행을 잠근다(sqlite는 무시, 운영 PG 대상).
+- 제출자가 퇴사했거나 편집권을 잃으면 sysadmin이 대신 게시·회수한다(사용자 결정, `submitter_unavailable`가 에디터·설정 버전 카드 버튼을 연다). 제출·게시·회수는 편집권이 남은 사람만 할 수 있다. 권한 변경을 적용한 직후 편집권을 잃은 점유자의 체크아웃을 푼다. 승인자 전원 퇴사로 취소될 때 동봉 가시성 요청도 같이 거둔다. 재게시는 진행 중 버전(Draft·결재 중·승인·반려)이 하나라도 있으면 409이고, FE 버튼도 같은 조건이다. 휴지통 맵의 전이는 404이고 인박스에서도 빠진다. 제출된 버전의 점유 요청은 인박스·큐에서 빠진다(행은 남아 Draft로 돌아오면 다시 결정). 인박스 처리 실패는 토스트로 알린다(종전엔 조용히 묻힘).
+- 회귀 `tests/test_approval_integrity.py` 14건(수정 전 HEAD에서 13건 실패). B-2는 일회용 postgres:16에서 리뷰어 동시 요청 7종을 돌려 수정 전 5~6/6 → 수정 후 0/10, 5xx 없음. 기동 정리도 PG에서 확인(중복 2행 삭제·유니크 인덱스). pytest 1740·ruff·tsc·lint·vitest 1481, 브라우저 임시 스모크 9/9(오너는 버튼 없음·sysadmin 대신 게시·인박스 실패 토스트). 매뉴얼 ko/en·`backend/app/manual.md`에 대신 처리·재게시 조건 반영.
+
 ## 2026-10-19 — 보안 경계 1단계: 시스템 리뷰 P0-1·P0-2·F-2·C-2·C-4·C-3·E-2·G-9·H-8 (dev)
 
 - 시스템 리뷰(`docs/qa/2026-10-19-system-review.md`, main 미커밋) 권장 순서 1단계. 공통 원인은 "id 소속 미검증"과 "읽기 가드가 그래프 GET에만 있음" — 그래프 PUT은 다른 버전의 node·group·edge id를 409로 거부하고 삭제를 버전으로 한정, 새 subprocess 링크는 지정 맵·열람 가능 맵·캔버스 소속 L6만, 새 핀은 링크 맵 버전만(기존 링크·핀은 grandfather), `resolved?pinned=`는 남의 버전이면 404. refs는 볼 수 없는 미지정 링크 맵을 가린다(`get_subprocess_refs`·`_load_graph`가 user 필수 인자). framework draft 룰은 version·comment 게이트(deps)로 옮겨 AI 챗·코멘트도 막는다.

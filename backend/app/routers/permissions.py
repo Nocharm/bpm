@@ -123,6 +123,24 @@ async def _assert_user_not_in_workflow(
         )
 
 
+async def _release_checkouts_without_edit_role(session: AsyncSession, map_id: int) -> None:
+    """편집권을 잃은 점유자의 체크아웃 해제 — 권한 변경 적용 직후 호출 (리뷰 2026-10-19 B-6).
+
+    점유는 시간으로 풀리지 않아(app/checkout.py) 제거된 협업자가 쥔 Draft는 sysadmin 강제 인수 말고는
+    풀 길이 없었다. 그룹 grant 변경도 같은 판정으로 덮는다(대상 유저를 따로 풀지 않고 보유자를 재평가).
+    """
+    held = await session.scalars(
+        select(MapVersion).where(
+            MapVersion.map_id == map_id, MapVersion.checked_out_by.is_not(None)
+        )
+    )
+    for version in held.all():
+        role = await get_effective_role(session, version.checked_out_by, map_id)
+        if role not in ("owner", "editor"):
+            version.checked_out_by = None
+            version.checked_out_at = None
+
+
 # ── A. Collaborators ──────────────────────────────────────────
 
 
@@ -293,6 +311,7 @@ async def update_permission(
         return {"pending": True, "approval_request": _serialize_request(req)}
     await _supersede_pending_downgrades(session, map_id, permission_id, actor=user)
     grant.role = new_role
+    await _release_checkouts_without_edit_role(session, map_id)
     await session.commit()
     await session.refresh(grant)
     return {"pending": False, "permission": PermissionOut.model_validate(grant).model_dump()}
@@ -350,6 +369,7 @@ async def delete_permission(
         return {"pending": True, "approval_request": _serialize_request(req)}
     await _supersede_pending_downgrades(session, map_id, permission_id, actor=user)
     await session.delete(grant)
+    await _release_checkouts_without_edit_role(session, map_id)
     await session.commit()
     return {"pending": False, "deleted": True}
 
@@ -747,6 +767,8 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
             await session.delete(grant)
         else:
             grant.role = to_role
+        # 요청~적용 사이에 이전·요청 승인으로 점유를 받은 경우까지 정리한다 (B-6)
+        await _release_checkouts_without_edit_role(session, req.map_id)
     elif req.kind == "visibility_change":
         found_map = await session.get(ProcessMap, req.map_id)
         if found_map is not None and found_map.deleted_at is None:

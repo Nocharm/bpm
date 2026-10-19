@@ -228,6 +228,25 @@ def _enforce_interview_seq_unique(conn: Connection) -> None:
     ))
 
 
+def _enforce_version_approval_unique(conn: Connection) -> None:
+    """version_approvals (version_id, approver) 유니크 보강 — 같은 승인자의 중복 행을 먼저 지운다
+    (리뷰 2026-10-19 B-1, 사용자 결정: 기동 시 자동 정리). 최저 id 1건만 남긴다 — 승인 여부만
+    의미가 있어 어느 행을 남겨도 판정은 같다."""
+    inspector = inspect(conn)
+    if "version_approvals" not in inspector.get_table_names():
+        return
+    removed = conn.execute(text(
+        "DELETE FROM version_approvals WHERE id NOT IN "
+        "(SELECT MIN(id) FROM version_approvals GROUP BY version_id, approver)"
+    )).rowcount
+    if removed:
+        logger.warning("removed %d duplicate version_approvals rows", removed)
+    conn.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_version_approvals_version_approver "
+        "ON version_approvals (version_id, approver)"
+    ))
+
+
 def _sweep_orphan_kb_chunks(conn: Connection) -> None:
     """삭제(소프트/영구)된 맵의 KB 청크 잔재 정리 — 훅 추가 이전 데이터 소급 (hardening T16).
 
@@ -327,6 +346,7 @@ async def init_models() -> None:
     # 오염시키고, 스키마 보강 실패가 서비스 전체 기동을 막아선 안 된다(락이 1차 방어라 축소 동작 가능).
     for step in (
         _enforce_interview_seq_unique,
+        _enforce_version_approval_unique,
         _sweep_orphan_kb_chunks,
         _widen_interview_message_kind,
         _relax_employees_email_not_null,

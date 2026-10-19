@@ -47,6 +47,8 @@ async def list_inbox_approvals(
             MapApprover.user_id == user,
             MapVersion.status == workflow.PENDING,
             MapVersion.id.notin_(already),
+            # 휴지통 맵은 열면 404·전이도 404 — 결정할 수 없는 항목을 큐에 두지 않는다 (B-8)
+            ProcessMap.deleted_at.is_(None),
         )
     )
     for ver, pm in (await session.execute(ver_q)).all():
@@ -69,11 +71,16 @@ async def list_inbox_approvals(
         )
 
     # 2) 점유권 이전 요청 — 내가 현 점유자·오너, 또는 sysadmin (checkout 큐와 동일 게이트)
+    # decide는 Draft에서만 된다 — 제출된 버전·휴지통 맵의 요청은 결정할 수 없어 뺀다 (B-8)
     co_q = (
         select(CheckoutRequest, MapVersion, ProcessMap)
         .join(MapVersion, CheckoutRequest.version_id == MapVersion.id)
         .join(ProcessMap, MapVersion.map_id == ProcessMap.id)
-        .where(CheckoutRequest.status == "pending")
+        .where(
+            CheckoutRequest.status == "pending",
+            MapVersion.status == workflow.DRAFT,
+            ProcessMap.deleted_at.is_(None),
+        )
     )
     if not sysadmin:
         holder_version_ids = select(MapVersion.id).where(MapVersion.checked_out_by == user)

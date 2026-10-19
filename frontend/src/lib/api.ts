@@ -863,6 +863,8 @@ export interface WorkflowState {
   pending_checkout_requests?: PendingCheckoutRequest[];
   // 이 버전과 함께 결정될 pending 가시성 변경(제출 시 번들) — R3 UI 대상, 타입만 선반영
   bundled_visibility?: { from_visibility: string; to_visibility: string; requested_by: string } | null;
+  // 승인 단계 제출자가 퇴사·편집권 상실로 처리할 수 없음 — sysadmin 대신 게시·회수 노출 (리뷰 2026-10-19 B-4)
+  submitter_unavailable?: boolean;
 }
 
 export interface Me {

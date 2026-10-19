@@ -487,6 +487,10 @@ class VersionApproval(Base):
     """현재 제출 사이클의 승인 집계 — 재제출 시 해당 version 행 전체 삭제(리셋)."""
 
     __tablename__ = "version_approvals"
+    # 승인자당 1행 — 동시 approve 2건이 2표로 세지던 구멍 (리뷰 2026-10-19 B-1). 기존 DB는 db.py가 보강
+    __table_args__ = (
+        Index("uq_version_approvals_version_approver", "version_id", "approver", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     version_id: Mapped[int] = mapped_column(

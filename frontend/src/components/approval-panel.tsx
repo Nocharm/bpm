@@ -21,7 +21,8 @@ interface ApprovalPanelProps {
   workflow: WorkflowState | null;
   isCheckoutHolder: boolean;
   isApprover: boolean;
-  isSubmitter: boolean;
+  // 게시 가능 — 제출자 또는 처리할 수 없는 제출자를 대신하는 sysadmin (WorkflowActions로 전달).
+  canPublish: boolean;
   // 회수 가능 — 제출자 또는 오너·sysadmin(백엔드 withdraw 오버라이드와 일치).
   canWithdraw: boolean;
   hasApproved: boolean;
@@ -74,7 +75,7 @@ export function ApprovalPanel({
   workflow,
   isCheckoutHolder,
   isApprover,
-  isSubmitter,
+  canPublish,
   canWithdraw,
   hasApproved,
   canManageApprovers,
@@ -374,7 +375,7 @@ export function ApprovalPanel({
         workflow={workflow}
         isCheckoutHolder={isCheckoutHolder}
         isApprover={isApprover}
-        isSubmitter={isSubmitter}
+        canPublish={canPublish}
         canWithdraw={canWithdraw}
         hasApproved={hasApproved}
         onSubmit={onSubmit}

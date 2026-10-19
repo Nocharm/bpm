@@ -257,11 +257,16 @@ async def list_pending_checkout_requests(
     그 외: 내가 현재 점유자인 버전, 또는 내가 오너인 맵의 버전에 걸린 요청만.
     map_id: 특정 맵의 요청만 필터링 (per-map 설정 패널용, 생략 시 전체).
     """
+    # 인박스 2번 블록과 같은 조건 — decide가 되는 Draft·살아 있는 맵의 요청만 (B-8)
     base_q = (
         select(CheckoutRequest, MapVersion, ProcessMap)
         .join(MapVersion, CheckoutRequest.version_id == MapVersion.id)
         .join(ProcessMap, MapVersion.map_id == ProcessMap.id)
-        .where(CheckoutRequest.status == "pending")
+        .where(
+            CheckoutRequest.status == "pending",
+            MapVersion.status == workflow.DRAFT,
+            ProcessMap.deleted_at.is_(None),
+        )
     )
 
     if map_id is not None:

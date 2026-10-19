@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import now as now_kst
 from app.models import (
+    ApprovalRequest,
     Employee,
     MapApprover,
     MapPermission,
@@ -25,6 +26,8 @@ EXPIRED = "expired"  # terminal — 후속 게시로 대체된 published 버전
 
 # 편집·체크아웃 가능한 상태 — 검토중/확정 버전은 읽기 전용
 EDITABLE_STATUSES = frozenset({DRAFT, REJECTED})
+# 진행 중 버전 — 맵당 1개 불변식의 대상(게시·만료·확정 전 단계) (리뷰 2026-10-19 B-7)
+IN_PROGRESS_STATUSES = frozenset({DRAFT, PENDING, APPROVED, REJECTED})
 
 
 def is_editable_status(status: str) -> bool:
@@ -107,6 +110,38 @@ async def load_active_approvers(session: AsyncSession, map_id: int) -> list[str]
     return list(rows.all())
 
 
+def is_fully_approved(approvers: list[str], approvals: set[str]) -> bool:
+    """정족수 판정 — 지금 유효한 승인자 전원이 승인 집합에 있는지 (리뷰 2026-10-19 B-1·B-3).
+
+    행 개수로 세면 같은 승인자의 중복 행이나 퇴사·교체된 승인자의 옛 승인이 표로 들어간다.
+    approve·퇴사 재평가가 이 한 판정을 공유한다(FE는 workflow GET이 걸러 준 approvals를 쓴다).
+    """
+    return bool(approvers) and all(approver in approvals for approver in approvers)
+
+
+async def load_approval_set(session: AsyncSession, version_id: int) -> set[str]:
+    """이번 제출 사이클에 승인한 사람 집합 — 퇴사·교체된 승인자 포함(판정은 is_fully_approved)."""
+    rows = await session.scalars(
+        select(VersionApproval.approver).where(VersionApproval.version_id == version_id)
+    )
+    return set(rows.all())
+
+
+async def find_bundled_visibility(
+    session: AsyncSession, version_id: int
+) -> ApprovalRequest | None:
+    """이 버전에 동봉된 pending 가시성 요청 — payload.version_id 연계 (governance A)."""
+    rows = await session.scalars(
+        select(ApprovalRequest).where(
+            ApprovalRequest.kind == "visibility_change",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    return next(
+        (r for r in rows.all() if r.payload.get("version_id") == version_id), None
+    )
+
+
 async def reconcile_departures(session: AsyncSession, departed: set[str]) -> None:
     """AD 프룬 직후 정리 — 퇴사자 점유 해제 + 퇴사 승인자가 걸린 pending 재평가.
 
@@ -145,15 +180,7 @@ async def reconcile_departures(session: AsyncSession, departed: set[str]) -> Non
     ).all()
     for version in pendings:
         active = await load_active_approvers(session, version.map_id)
-        approvals = set(
-            (
-                await session.scalars(
-                    select(VersionApproval.approver).where(
-                        VersionApproval.version_id == version.id
-                    )
-                )
-            ).all()
-        )
+        approvals = await load_approval_set(session, version.id)
         found_map = await session.get(ProcessMap, version.map_id)
         submitter = version.submitted_by
         if not active:
@@ -168,6 +195,11 @@ async def reconcile_departures(session: AsyncSession, departed: set[str]) -> Non
                 session, version.id, "withdrawn", "system",
                 note="approval cancelled - approver(s) departed",
             )
+            # 동봉 가시성 요청도 함께 거둔다 — 남기면 동봉 없이 재제출한 게시가 이를 적용한다
+            # (리뷰 2026-10-19 B-5, withdraw_version 스윕과 같은 unstamped withdrawn)
+            bundled = await find_bundled_visibility(session, version.id)
+            if bundled is not None:
+                bundled.status = "withdrawn"
             recipients = [
                 r
                 for r in dict.fromkeys([found_map.owner_id if found_map else None, submitter])
@@ -184,7 +216,7 @@ async def reconcile_departures(session: AsyncSession, departed: set[str]) -> Non
                 payload={"map_name": map_name, "version_label": version.label,
                          "version_number": version.version_number},
             )
-        elif all(approver in approvals for approver in active):
+        elif is_fully_approved(active, approvals):
             # 퇴사자가 마지막 미승인자였음 — 남은 전원 기승인이므로 즉시 전이
             version.status = APPROVED
             if submitter:

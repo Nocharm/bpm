@@ -1488,6 +1488,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       : "ownerOnly";
   const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
   const isSubmitter = username !== null && currentVersion?.submitted_by === username;
+  // 승인 단계 게시·회수 — 제출자, 또는 제출자가 퇴사·권한 상실로 처리할 수 없을 때 sysadmin (BE 게이트와 일치, 리뷰 2026-10-19 B-4)
+  const canActForSubmitter = isSubmitter || (isSysadmin && workflow?.submitter_unavailable === true);
   // 내 결재 대기 버전 — 이 맵의 pending 버전 중 내가 승인자이고 아직 결재하지 않은 것. 다른 버전을 열었을 때
   // 배너 링크·승인 탭 오버레이로 안내하고, 진입 시엔 그 버전으로 착지한다 (2026-09-18).
   const pendingVersion = isFrameworkMap ? null : (versions.find((v) => v.status === "pending") ?? null);
@@ -1504,9 +1506,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   const pendingVersionLabel = pendingVersion
     ? `${formatVersionMarker(pendingVersion, versions)} · ${pendingVersion.label}`
     : "";
-  // 회수 — 승인요청 단계(pending/approved)는 제출자만, 반려(rejected)는 +오너·sysadmin(백엔드 게이트와 일치).
+  // 회수 — 승인요청 단계(pending/approved)는 제출자(처리 불가 시 sysadmin), 반려(rejected)는 +오너·sysadmin(백엔드 게이트와 일치).
   const canWithdraw =
-    isSubmitter || (currentVersion?.status === "rejected" && (myRole === "owner" || isSysadmin));
+    canActForSubmitter || (currentVersion?.status === "rejected" && (myRole === "owner" || isSysadmin));
   const hasApproved = username !== null && (workflow?.approvals ?? []).includes(username);
   // 승인 진행 중 — 어떤 버전이든 pending/approved면 승인자 목록 변경 금지(tally 깨짐 방지, 백엔드 409와 일치).
   const approvalInFlight = versions.some(
@@ -1527,6 +1529,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     currentVersion?.status === "draft";
   const isEditorRole = myRole === "owner" || myRole === "editor" || isSysadmin;
   const hasDraft = versions.some((v) => v.status === "draft");
+  // 진행 중 버전(Draft·결재 중·승인·반려) — 맵당 1개라 있으면 재게시하지 않는다 (BE 409와 일치, 리뷰 2026-10-19 B-7)
+  const hasInProgressVersion = versions.some(
+    (v) => v.status === "draft" || v.status === "pending" || v.status === "approved" || v.status === "rejected",
+  );
 
   const reactFlow = useReactFlow();
   // RF 내부 스토어 핸들 — 일반 드래그 동결(#R2)의 프레임당 라이브 좌표 echo용. controlled 모드에서
@@ -11743,8 +11749,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </>
                         )}
 
-                        {/* editor + expired + draft 없음: 재게시. L5는 게시 워크플로 대상 아님 */}
-                        {isEditorRole && !isFrameworkMap && currentVersion?.status === "expired" && !hasDraft && (
+                        {/* editor + expired + 진행 중 버전 없음: 재게시. L5는 게시 워크플로 대상 아님 */}
+                        {isEditorRole && !isFrameworkMap && currentVersion?.status === "expired" && !hasInProgressVersion && (
                           <Tooltip label={t("approval.checkoutRepublish")}>
                             <button
                               type="button"
@@ -12039,7 +12045,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 events={currentVersion.events}
                                 isCheckoutHolder={checkout?.mine ?? false}
                                 isApprover={isApprover}
-                                isSubmitter={isSubmitter}
+                                canPublish={canActForSubmitter}
                                 canWithdraw={canWithdraw}
                                 hasApproved={hasApproved}
                                 // 서버 게이트와 같은 기준(현재 owner 역할) — 오너 미상 맵의 isMapOwner=true로 버튼만 열리면 403 (리뷰 2026-10-19 C-3)

@@ -661,6 +661,8 @@ class WorkflowStateOut(BaseModel):
     pending_checkout_requests: list[PendingCheckoutRequestOut] = []
     # 이 버전에 동봉된 가시성 변경 요약 — 승인자 모달 공개용 (R2)
     bundled_visibility: BundledVisibilityOut | None = None
+    # 승인 단계 제출자가 퇴사·편집권 상실로 처리할 수 없음 — sysadmin 대신 게시·회수 노출 (B-4)
+    submitter_unavailable: bool = False
 
 
 class SubmitIn(BaseModel):

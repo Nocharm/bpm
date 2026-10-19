@@ -343,22 +343,23 @@ export default function InboxPage() {
     if (approvalBusy) return;
     setApprovalBusy(true);
     try {
-      if (a.kind === "version_approval") {
-        if (approve) await approveVersion(a.id);
-        else await rejectVersion(a.id, reason.trim());
-      } else if (a.kind === "checkout_transfer") {
-        await decideCheckoutRequest(a.id, approve);
-      } else {
-        try {
+      try {
+        if (a.kind === "version_approval") {
+          if (approve) await approveVersion(a.id);
+          else await rejectVersion(a.id, reason.trim());
+        } else if (a.kind === "checkout_transfer") {
+          await decideCheckoutRequest(a.id, approve);
+        } else {
           await decideApprovalRequest(a.id, approve ? "approve" : "reject", approve ? undefined : reason.trim() || undefined);
           if (a.title === "map_rename")
             pushToast(t(approve ? "inbox.toast.renameApproved" : "inbox.toast.renameRejected"));
           if (a.title === "sp_designation" && !approve)
             pushToast(t("inbox.toast.spRejected"));
-        } catch (err) {
-          // 승인 시점 이름 선점 409 등 — 백엔드 detail 노출
-          pushToast(getApiErrorDetail(err));
         }
+      } catch (err) {
+        // 승인 시점 이름 선점 409, 그사이 처리된 버전·요청 등 — 백엔드 detail을 알리고 큐는 다시 읽는다
+        // (종전엔 버전·점유 항목 실패가 조용히 묻혔다, 리뷰 2026-10-19 B-8)
+        pushToast(getApiErrorDetail(err));
       }
       const next = await listInboxApprovals();
       setApprovals(next);

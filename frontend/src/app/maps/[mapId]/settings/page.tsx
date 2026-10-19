@@ -516,6 +516,7 @@ export default function SettingsPage() {
                     <VersionsPublishPanel
                       mapId={mapIdStr}
                       currentUserId={currentMockUser.id}
+                      isSysadmin={currentMockUser.isSysadmin}
                       canEdit={canEdit}
                       visibility={visibility}
                       canBundle={isOwner}
