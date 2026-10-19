@@ -116,9 +116,12 @@ export interface NodeActions {
   // PNG 출력 중 — 입출력 목록을 줄 수 제한 없이 펼치고, 분기 노드 IO 아일랜드도 목록으로 편다(옵션 창 선택).
   // 미지정=false(평소·비교·프리뷰)
   printIoExpanded?: boolean;
-  // PNG 문서용 출력 중(편집 화면 Word·비교 문서용) — 편집 신호(경고 아이콘·시작/끝 칩 아이콘·외부 L6 홈 색)를
-  // 문서 톤으로 바꾼다. 미지정=false
+  // PNG 문서용 출력 중(편집 화면 Word·비교 문서용) — 편집 신호(경고 아이콘·시작/끝 칩 아이콘·외부 L6 홈 색·하위프로세스
+  // 상태 배너)를 문서 톤으로 바꾸거나 뺀다. 미지정=false
   printDocument?: boolean;
+  // PNG 출력 중(형식 무관) — 화면 전용 상태 표시(하위프로세스 "최신본 따르는 중")를 뺀다. 캡처 순간이 아니라 출력 보기에서
+  // 빼야 정렬 유지(lib/print-anchor)가 출력 크기로 잰다. 미지정=false
+  printing?: boolean;
 }
 
 // IO 체크리스트 3단계(#2): collapsed=0줄(헤더만) · capped=3.5줄+오버플로 히든 · all=전부

@@ -1025,6 +1025,7 @@ function ComparePane({
       ...COMPARE_NODE_ACTIONS,
       displayFields: viewDisplayFields,
       printDocument: exportPrint?.document != null,
+      printing: exportPrint !== null,
     }),
     [viewDisplayFields, exportPrint],
   );

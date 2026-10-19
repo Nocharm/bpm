@@ -299,11 +299,13 @@ import { humanizeApiError, isCanvasRepointedError, PERMISSION_PENDING_DETAIL_PRE
 import { buildDownloadName } from "@/lib/download-name";
 import {
   exportCanvasPng,
+  getWordExportClasses,
   loadPngExportOptions,
   measureExportFrame,
   type PaperOrientation,
   type PngExportOptions,
 } from "@/lib/export";
+import { applyPrintShifts, getAnchorRects, getPrintShifts, type PrintShift } from "@/lib/print-anchor";
 import { measureSplitSource } from "@/lib/print-split";
 import { buildExcelMeta, buildExcelModel } from "@/lib/excel-export";
 import { buildWbsModel } from "@/lib/excel-wbs";
@@ -477,6 +479,8 @@ const CHECKOUT_POLL_MS = 10_000; // 점유 상태 재조회 주기(요청 승인
 const COMMENT_POLL_MS = 5_000; // 코멘트 "실시간" 폴링 주기 (spec §7 Phase C)
 // PNG 출력 보기 적용 뒤 대기 — 노드 재실측 + height-shift 간격 트윈·분기 IO 아일랜드 펼침(450ms)이 끝나는 시간
 const PRINT_VIEW_SETTLE_MS = 600;
+// 정렬 유지 이동 뒤 대기 — 옮긴 좌표로 간격 보정(height-shift 350ms 트윈)이 다시 자리 잡는 시간
+const PRINT_SHIFT_SETTLE_MS = 450;
 const A4_GUIDE_STORAGE_KEY = "bpm.a4Guide";
 
 const SEARCH_RESULT_LIMIT = 20; // 검색 드롭다운 최대 표시 수
@@ -1177,10 +1181,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [pngExportOpen, setPngExportOpen] = useState(false);
   // PNG 출력 중에만 캔버스에 덮어쓰는 보기 — 옵션 창에서 고른 표시 정보·입출력 펼침, Word 문서용이면 document
   // (연결선 펼침 여부 — 꺾임을 각지게 하고 노드의 편집 신호를 문서 톤으로). null=평소(사용자 표시 정보)
+  // shifts — 출력 크기에서 캔버스 정렬(가운데·끝 맞춤)을 지키는 표시 이동량(lib/print-anchor). 저장 좌표는 그대로
   const [printView, setPrintView] = useState<{
     displayFields: NodeDisplayToggle[];
     expandIo: boolean;
     document: { fan: boolean } | null;
+    shifts: ReadonlyMap<string, PrintShift> | null;
   } | null>(null);
   // A4 가이드(캔버스 경계선) — 개인 보기 설정, localStorage `bpm.a4Guide`. 처음엔 꺼짐·PNG 창에서 마지막 고른 용지
   const [a4Guide, setA4Guide] = useState<{ on: boolean; paper: PaperOrientation }>({ on: false, paper: "portrait" });
@@ -6276,13 +6282,30 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
 
   const handleExportPng = useCallback(async (exportOptions: PngExportOptions, exportFields: NodeDisplayToggle[]) => {
+    // 정렬 기준 — 지금 캔버스에 보이는 크기(저장 좌표 + 실측). 출력 크기가 달라져도 이 정렬을 지킨다(lib/print-anchor).
+    // 인라인 펼침 중엔 합성 좌표가 표시를 맡아 건너뛴다
+    const alignReference = expandedInline.size > 0 ? [] : getAnchorRects(nodesRef.current);
+    // Word 문서용이면 테마 클래스를 지금 붙인다 — Arial로 바뀐 노드 폭까지 재고 나서 정렬을 맞춘다(캡처가 끝나면 뗀다)
+    const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
+    const wordClasses = exportOptions.theme === "word" ? getWordExportClasses(exportOptions.wordStyle) : [];
+    viewport?.classList.add(...wordClasses);
     // 고른 표시 정보·입출력 펼침을 캔버스에 잠시 적용 — 노드 실측과 간격 보정(height-shift 트윈)이 자리 잡은 뒤 찍는다
     setPrintView({
       displayFields: exportFields,
       expandIo: exportOptions.expandIo,
       document: exportOptions.theme === "word" ? { fan: exportOptions.edgeFan } : null,
+      shifts: null,
     });
     await new Promise<void>((resolve) => window.setTimeout(resolve, PRINT_VIEW_SETTLE_MS));
+    // 출력 크기로 다시 잰 뒤 캔버스 정렬이 깨진 노드만 표시 좌표로 옮기고, 간격 보정이 다시 자리 잡기를 기다린다
+    const printShifts = getPrintShifts(
+      alignReference,
+      new Map(getAnchorRects(nodesRef.current).map((rect) => [rect.id, rect] as const)),
+    );
+    if (printShifts.size > 0) {
+      setPrintView((prev) => (prev ? { ...prev, shifts: printShifts } : prev));
+      await new Promise<void>((resolve) => window.setTimeout(resolve, PRINT_SHIFT_SETTLE_MS));
+    }
     // 선택 링·IO 상세·흐름 강조는 React 상태(selected 플래그·selectedId)가 그린다 — 캡처 전에 선택을
     // 비우고 한 프레임 기다려 평상시 모습으로 찍은 뒤 원래 선택을 복원한다(사용자 요청 2026-09-18).
     const prevSelectedId = selectedId;
@@ -6315,11 +6338,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       // getNodesBounds는 전달받은 좌표 그대로 프레임을 잡는데, 캡처 대상(.react-flow__viewport)은
       // height-shift로 밀린 *표시* 위치를 그린다 — 저장 좌표(nodesRef)로 프레임을 잡으면 밀려난
       // 하단 노드가 잘린다(I1/I2 PNG export). 여기서만 오프셋을 더해 표시 위치로 맞춘다(저장 좌표는 불변).
+      // 정렬 유지 이동(printShifts)도 표시 위치라 같이 더한다
       const offsets = renderYOffsetsRef.current;
+      const layoutNodes = applyPrintShifts(nodesRef.current, printShifts);
       const exportNodes =
         offsets.size === 0
-          ? nodesRef.current
-          : nodesRef.current.map((node) => {
+          ? layoutNodes
+          : layoutNodes.map((node) => {
               const yOff = offsets.get(node.id);
               return yOff
                 ? { ...node, position: { x: node.position.x, y: node.position.y + yOff } }
@@ -6367,6 +6392,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     } catch (err) {
       setStatus(humanizeApiError(err, t));
     } finally {
+      viewport?.classList.remove(...wordClasses);
       setPrintView(null);
       if (hadSelection) {
         setSelectedId(prevSelectedId);
@@ -6375,6 +6401,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
     }
   }, [
+    expandedInline,
     buildExportFileName,
     t,
     versions,
@@ -7265,11 +7292,17 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 조건 캡션(노드 밖 위·아래)도 Conditions 토글을 따라 간격에 반영
   // 노드가 실제로 그리는 표시 정보 — PNG 출력 중엔 옵션 창 선택(printView), 평소엔 사용자 설정
   const nodeDisplayFields = printView?.displayFields ?? displayFields;
+  // 표시용 노드 — PNG 출력 중엔 정렬 유지 이동(printView.shifts)을 얹는다. 간격 보정·노드 표시·팬 레인·영역 박스가
+  // 같은 좌표를 봐야 연결선·영역이 옮긴 노드를 따라간다. 평소엔 nodes 그대로(같은 배열)
+  const layoutNodes = useMemo(
+    () => (printView?.shifts ? applyPrintShifts(nodes, printView.shifts) : nodes),
+    [nodes, printView],
+  );
   const heightField = useMemo(
     () =>
       dragFrozenField ??
-      buildHeightShiftField(nodes, (node) => getConditionCaptionExtents(node, nodeDisplayFields)),
-    [dragFrozenField, nodes, nodeDisplayFields],
+      buildHeightShiftField(layoutNodes, (node) => getConditionCaptionExtents(node, nodeDisplayFields)),
+    [dragFrozenField, layoutNodes, nodeDisplayFields],
   );
   useEffect(() => {
     heightFieldRef.current = heightField;
@@ -7833,8 +7866,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [eligible, directoryReady, directoryUsers, directoryDepts]);
 
   const displayNodes = useMemo(() => {
-    // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드를 기준으로 코멘트 수 주입
-    const base = inlineComposition ? inlineComposition.nodes : nodes;
+    // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드(출력 중이면 정렬 유지 이동 포함)를 기준으로 코멘트 수 주입
+    const base = inlineComposition ? inlineComposition.nodes : layoutNodes;
     // Ctrl+드래그 중인 원본 id — 끌리는 실제 노드는 반투명 사본으로 표시(커서를 따라오는 건 사본).
     // 진짜 원본 그래픽은 아래 ghostNodes가 원위치에 솔리드로 렌더하고, 엣지도 그 고스트로 앵커된다(styledEdges).
     const ctrlGhostIdSet = ctrlDragActive ? new Set(ctrlDragGhosts.map((g) => g.id)) : null;
@@ -7943,7 +7976,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       : [];
     return [...mapped, ...ancestorContextNodes, ...ghostNodes];
   }, [
-    nodes,
+    layoutNodes,
     childNodes,
     inlineComposition,
     unresolvedCounts,
@@ -8057,7 +8090,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     // 트윈 중간값(renderYOffsets)이 아니라 목표 오프셋(yOffsets)을 쓴다 — 350ms 트윈 동안 rAF마다 전 엣지를
     // 다시 스타일링하고 레인이 중간에 뒤집히지 않게(정지 상태에선 두 값이 같아 표시는 동일).
     const fanGeom = buildFanGeom(
-      inlineComposition ? inlineComposition.nodes : shiftNodesByDisplayY(nodes, yOffsets),
+      inlineComposition ? inlineComposition.nodes : shiftNodesByDisplayY(layoutNodes, yOffsets),
     );
     if (ctrlGhostIds) {
       for (const ghost of ctrlDragGhosts) {
@@ -8170,7 +8203,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ),
     );
     return finishEdges([...currentStyled, ...childStyled, ...gatewayStyled]);
-  }, [edges, nodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, yOffsets, edgeCarry, printView]);
+  }, [edges, nodes, layoutNodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, yOffsets, edgeCarry, printView]);
   // 흐름 점 범례(우하단 노드 표시 정보 카드) — 펄스가 붙은 엣지가 하나라도 있을 때만
   const hasFlowPulse = styledEdges.some((edge) => isEdgePulse(edge.data?.pulse));
 
@@ -8474,6 +8507,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       displayFields: nodeDisplayFields,
       printIoExpanded: printView?.expandIo ?? false,
       printDocument: printView?.document != null,
+      printing: printView !== null,
       editingNodeId,
       onStartRename: startRename,
       onRename: renameNode,
@@ -10326,7 +10360,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         {expandedInline.size === 0 && (
                           <GroupBoxLayer
                             groups={groups}
-                            nodes={nodes}
+                            nodes={layoutNodes}
                             yOffsets={renderYOffsets}
                             renderBox={(box, targeted) => (
                               <>
