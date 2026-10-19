@@ -883,7 +883,8 @@ def test_decide_non_approver_403(client: TestClient, enforce: None) -> None:
 
 def test_approvers_assigned_by_set(client: TestClient, enforce: None) -> None:
     """PUT /approvers 가 assigned_by 를 호출자로 기록한다."""
-    map_id = seed_map()  # created_by=None → 누구나 관리 허용(기존 게이트 유지)
+    # 승인자 변경은 현재 오너만 — created_by=None 개방 규칙은 폐기(리뷰 2026-10-19 C-3)
+    map_id = seed_map(grants=[("user", "manager.u", "owner")])
     act_as("manager.u")
     r = client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["a1", "a2"]})
     assert r.status_code == 200

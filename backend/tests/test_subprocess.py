@@ -41,14 +41,20 @@ def _new_version(client: TestClient, name: str = "p") -> int:
     return version_id
 
 
+def _make_ids(version_id: int, *names: str) -> list[str]:
+    """node·edge id는 전역 PK(다른 버전 소유 id는 PUT 409) — version_id를 접미사로 섞어 테스트 간 충돌 방지."""
+    return [f"{name}-{version_id}" for name in names]
+
+
 def test_rejects_two_starts(client: TestClient) -> None:
     vid = _new_version(client)
+    s1, s2 = _make_ids(vid, "s1", "s2")
     r = client.put(
         f"/api/versions/{vid}/graph",
         json={
             "nodes": [
-                {"id": "s1", "node_type": "start"},
-                {"id": "s2", "node_type": "start"},
+                {"id": s1, "node_type": "start"},
+                {"id": s2, "node_type": "start"},
             ],
             "edges": [],
         },
@@ -59,13 +65,14 @@ def test_rejects_two_starts(client: TestClient) -> None:
 
 def test_rejects_duplicate_end_names(client: TestClient) -> None:
     vid = _new_version(client)
+    s, e1, e2 = _make_ids(vid, "s", "e1", "e2")
     r = client.put(
         f"/api/versions/{vid}/graph",
         json={
             "nodes": [
-                {"id": "s", "node_type": "start"},
-                {"id": "e1", "title": "종료", "node_type": "end"},
-                {"id": "e2", "title": "종료", "node_type": "end"},
+                {"id": s, "node_type": "start"},
+                {"id": e1, "title": "종료", "node_type": "end"},
+                {"id": e2, "title": "종료", "node_type": "end"},
             ],
             "edges": [],
         },
@@ -76,13 +83,14 @@ def test_rejects_duplicate_end_names(client: TestClient) -> None:
 
 def test_accepts_valid_process(client: TestClient) -> None:
     vid = _new_version(client)
+    s, e1, e2 = _make_ids(vid, "s", "e1", "e2")
     r = client.put(
         f"/api/versions/{vid}/graph",
         json={
             "nodes": [
-                {"id": "s", "node_type": "start"},
-                {"id": "e1", "title": "승인", "node_type": "end", "is_primary_end": True},
-                {"id": "e2", "title": "반려", "node_type": "end"},
+                {"id": s, "node_type": "start"},
+                {"id": e1, "title": "승인", "node_type": "end", "is_primary_end": True},
+                {"id": e2, "title": "반려", "node_type": "end"},
             ],
             "edges": [],
         },
@@ -101,21 +109,23 @@ def _map_and_version(client: TestClient, name: str) -> tuple[int, int]:
 def test_rejects_indirect_cycle(client: TestClient) -> None:
     a_id, a_vid = _map_and_version(client, "cycle-A")
     b_id, b_vid = _map_and_version(client, "cycle-B")
+    a_s, a_sub, a_e = _make_ids(a_vid, "s", "sub", "e")
+    b_s, b_sub, b_e = _make_ids(b_vid, "s", "sub", "e")
     # B → A (saved first, valid)
     client.put(f"/api/versions/{b_vid}/graph", json={
         "nodes": [
-            {"id": "s", "node_type": "start"},
-            {"id": "sub", "node_type": "subprocess", "linked_map_id": a_id},
-            {"id": "e", "node_type": "end", "is_primary_end": True},
+            {"id": b_s, "node_type": "start"},
+            {"id": b_sub, "node_type": "subprocess", "linked_map_id": a_id},
+            {"id": b_e, "node_type": "end", "is_primary_end": True},
         ],
         "edges": [],
     })
     # A → B now forms A→B→A → must be rejected
     r = client.put(f"/api/versions/{a_vid}/graph", json={
         "nodes": [
-            {"id": "s", "node_type": "start"},
-            {"id": "sub", "node_type": "subprocess", "linked_map_id": b_id},
-            {"id": "e", "node_type": "end", "is_primary_end": True},
+            {"id": a_s, "node_type": "start"},
+            {"id": a_sub, "node_type": "subprocess", "linked_map_id": b_id},
+            {"id": a_e, "node_type": "end", "is_primary_end": True},
         ],
         "edges": [],
     })
@@ -125,13 +135,14 @@ def test_rejects_indirect_cycle(client: TestClient) -> None:
 
 def test_rejects_self_reference(client: TestClient) -> None:
     map_id, vid = _map_and_version(client, "selfref")
+    s, sub, e = _make_ids(vid, "s", "sub", "e")
     r = client.put(
         f"/api/versions/{vid}/graph",
         json={
             "nodes": [
-                {"id": "s", "node_type": "start"},
-                {"id": "sub", "node_type": "subprocess", "linked_map_id": map_id},
-                {"id": "e", "node_type": "end", "is_primary_end": True},
+                {"id": s, "node_type": "start"},
+                {"id": sub, "node_type": "subprocess", "linked_map_id": map_id},
+                {"id": e, "node_type": "end", "is_primary_end": True},
             ],
             "edges": [],
         },
@@ -159,10 +170,11 @@ def test_resolved_returns_pinned_graph(
 ) -> None:
     # 지정 게이트(2026-07-06) — resolved는 지정된 맵만 허용하므로 게시+지정 후 pinned 해석 검증
     map_id, vid = _map_and_version(client, "lib-target")
+    s = f"s-{vid}"  # node id는 전역 PK — 버전별 고유
     client.post(f"/api/versions/{vid}/checkout", json={})
     client.put(
         f"/api/versions/{vid}/graph",
-        json={"nodes": [{"id": "s", "node_type": "start"}], "edges": []},
+        json={"nodes": [{"id": s, "node_type": "start"}], "edges": []},
     )
     client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["boss"]})
     client.post(f"/api/versions/{vid}/submit")
@@ -176,7 +188,7 @@ def test_resolved_returns_pinned_graph(
         params={"follow_latest": "false", "pinned": vid},
     )
     assert r.status_code == 200
-    assert [n["id"] for n in r.json()["nodes"]] == ["s"]
+    assert [n["id"] for n in r.json()["nodes"]] == [s]
 
 
 def _make_map(client: TestClient, name: str) -> dict:
@@ -211,11 +223,12 @@ def test_library_list_includes_published_and_refs(
     b = _make_map(client, name="lib-B-ref")
     b_map_id = b["id"]
     b_ver = b["versions"][0]["id"]
+    s, sub = _make_ids(b_ver, "s", "sub")
     client.post(f"/api/versions/{b_ver}/checkout", json={})  # PUT /graph는 체크아웃 필요
     client.put(f"/api/versions/{b_ver}/graph", json={
         "nodes": [
-            {"id": "s", "node_type": "start", "title": "S"},
-            {"id": "sub", "node_type": "subprocess", "title": "call A",
+            {"id": s, "node_type": "start", "title": "S"},
+            {"id": sub, "node_type": "subprocess", "title": "call A",
              "linked_map_id": a["map_id"]},
         ],
         "edges": [],
@@ -242,25 +255,26 @@ def test_clone_preserves_subprocess_fields(client: TestClient) -> None:
     """버전 복제 시 subprocess 링크 필드·is_primary_end·엣지 핸들이 유지돼야 한다."""
     src_map_id, src_vid = _map_and_version(client, "clone-src")
     linked_map_id, _ = _map_and_version(client, "clone-linked")
+    s, sub, e, edge1 = _make_ids(src_vid, "s", "sub", "e", "edge1")
 
     # Source graph: subprocess node with link fields + end with is_primary_end + branch edge
     r = client.put(f"/api/versions/{src_vid}/graph", json={
         "nodes": [
-            {"id": "s", "node_type": "start"},
+            {"id": s, "node_type": "start"},
             {
-                "id": "sub",
+                "id": sub,
                 "node_type": "subprocess",
                 "linked_map_id": linked_map_id,
                 "linked_version_id": None,
                 "follow_latest": True,
             },
-            {"id": "e", "title": "완료", "node_type": "end", "is_primary_end": True},
+            {"id": e, "title": "완료", "node_type": "end", "is_primary_end": True},
         ],
         "edges": [
             {
-                "id": "edge1",
-                "source_node_id": "s",
-                "target_node_id": "sub",
+                "id": edge1,
+                "source_node_id": s,
+                "target_node_id": sub,
                 "source_handle": "bottom-handle",
                 "target_handle": "top-handle",
                 "line_style": "straight",
@@ -303,13 +317,14 @@ def test_clone_preserves_subprocess_fields(client: TestClient) -> None:
 def test_primary_end_defaults_to_first(client: TestClient) -> None:
     """끝 노드가 있고 is_primary_end 미지정 시 sort_order 최소 끝이 기본 대표가 돼야 한다."""
     vid = _new_version(client, "default-primary")
+    s, e1, e2 = _make_ids(vid, "s", "e1", "e2")
     r = client.put(f"/api/versions/{vid}/graph", json={
         "nodes": [
-            {"id": "s", "node_type": "start"},
+            {"id": s, "node_type": "start"},
             # sort_order 2 — listed first in payload but higher sort_order
-            {"id": "e2", "title": "반려", "node_type": "end", "sort_order": 2},
+            {"id": e2, "title": "반려", "node_type": "end", "sort_order": 2},
             # sort_order 1 — smallest, should become primary
-            {"id": "e1", "title": "승인", "node_type": "end", "sort_order": 1},
+            {"id": e1, "title": "승인", "node_type": "end", "sort_order": 1},
         ],
         "edges": [],
     })
@@ -319,21 +334,22 @@ def test_primary_end_defaults_to_first(client: TestClient) -> None:
     ends = {n["id"]: n for n in g["nodes"] if n["node_type"] == "end"}
     primaries = [n for n in ends.values() if n["is_primary_end"]]
     assert len(primaries) == 1, f"Expected exactly 1 primary end, got: {primaries}"
-    assert primaries[0]["id"] == "e1", (
+    assert primaries[0]["id"] == e1, (
         f"Expected e1 (sort_order=1) to be primary, got: {primaries[0]}"
     )
     # e2 must NOT be primary
-    assert ends["e2"]["is_primary_end"] is False
+    assert ends[e2]["is_primary_end"] is False
 
 
 def test_rejects_multiple_primaries(client: TestClient) -> None:
     """既存 동작 확인 — 대표 끝이 2개 이상이면 422 반환."""
     vid = _new_version(client, "multi-primary")
+    s, e1, e2 = _make_ids(vid, "s", "e1", "e2")
     r = client.put(f"/api/versions/{vid}/graph", json={
         "nodes": [
-            {"id": "s", "node_type": "start"},
-            {"id": "e1", "title": "승인", "node_type": "end", "is_primary_end": True},
-            {"id": "e2", "title": "반려", "node_type": "end", "is_primary_end": True},
+            {"id": s, "node_type": "start"},
+            {"id": e1, "title": "승인", "node_type": "end", "is_primary_end": True},
+            {"id": e2, "title": "반려", "node_type": "end", "is_primary_end": True},
         ],
         "edges": [],
     })

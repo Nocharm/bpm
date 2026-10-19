@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-19 — 보안 경계 1단계: 시스템 리뷰 P0-1·P0-2·F-2·C-2·C-4·C-3·E-2·G-9·H-8 (dev)
+
+- 시스템 리뷰(`docs/qa/2026-10-19-system-review.md`, main 미커밋) 권장 순서 1단계. 공통 원인은 "id 소속 미검증"과 "읽기 가드가 그래프 GET에만 있음" — 그래프 PUT은 다른 버전의 node·group·edge id를 409로 거부하고 삭제를 버전으로 한정, 새 subprocess 링크는 지정 맵·열람 가능 맵·캔버스 소속 L6만, 새 핀은 링크 맵 버전만(기존 링크·핀은 grandfather), `resolved?pinned=`는 남의 버전이면 404. refs는 볼 수 없는 미지정 링크 맵을 가린다(`get_subprocess_refs`·`_load_graph`가 user 필수 인자). framework draft 룰은 version·comment 게이트(deps)로 옮겨 AI 챗·코멘트도 막는다.
+- 코멘트 목록·워크플로·승인자 목록에 viewer 게이트, 승인자 변경은 현재 owner 역할(오너 미상 맵의 "누구나 관리" 개방 폐기, 에디터 버튼도 `myRole` 기준), 열람권을 잃은 맵의 AI 챗 기록은 목록에서 빼고 읽기 404, 관리자 테이블·CSV의 `password_hash`는 `[redacted]`이고 검색 대상에서도 뺀다. 사용자 결정: 공개 맵 Draft의 비협업자 열람은 현행 유지.
+- 회귀 `tests/test_security_boundary.py`(리뷰 재현 시나리오 15) + E-2 캔버스 테스트 1. 기존 테스트 다수가 고정 id("n1" 등)를 버전 간 재사용해 우연히 하이재킹에 기대고 있었다 — `f"{name}-{version_id}"`로 정리했고, 없는 맵(999)에 새로 링크하던 4건은 실제 맵을 만들어 링크한다(새 링크는 부재·권한 부족을 같은 422로 거절 — 존재 오라클 방지). pytest 1726·ruff·tsc·lint·vitest 1481, 브라우저 `pw-verify-sp-ends` 23/23 + 승인자 버튼 임시 스모크 3/3.
+
 ## 2026-10-19 — PNG 문서용 출력 다듬기: 나눠 싣기·인쇄 크기 고정 머리 블록·연결선 펼침 선택·입출력 사선 상자 (dev)
 
 - 워스트케이스 실출력(긴 LR 맵이 A4 폭에 띠처럼 줄어 노드 1.7~3pt, 머리 블록·범례도 같이 줄어듦)을 목업으로 보이고 사용자 확인 뒤 진행. 머리 블록·범례·연결 기호는 pt 고정 합성(`getPrintHeaderPt`, 제목 11·메타 7.5pt), 나눠 싣기(`lib/print-split`: 노드·라벨·영역 제목은 자르지 않고 빈 칸 후보 DP로 조각 수 최소→교차·영역·폭 고르기, 노드 글자 7pt 한도, 조각 위아래 내용만 남김, 잘린 연결선 양쪽 같은 문자, 같은 dpi 조각을 jszip(exceljs가 이미 끌어오던 3.10.1, 직접 의존으로) 무압축 ZIP 하나로)를 편집 Word·비교 문서용이 공유(`downloadDocumentFigure`). 옵션 창 칩 "연결선 펼침"(기본 켬, 끄면 팬 레인 없이 한 점에서)·인쇄 패널 "나눠 싣기"(조각 수는 창을 연 순간 화면 측정이라 "약 N조각" — 실제 출력은 문서 글꼴로 다시 재 하나쯤 다를 수 있다).

@@ -444,7 +444,7 @@ async def create_or_resume_interview(
 
     # 기존 draft 내용을 작업본으로 시드 — 프리뷰가 처음부터 현재 맵을 보여주고,
     # 드래프터도 백지가 아닌 기존 구조 위에서 시작한다 (실사용 피드백 2026-07-27)
-    seed = _seed_working_graph(await _load_graph(session, payload.version_id))
+    seed = _seed_working_graph(await _load_graph(session, payload.version_id, user))
     has_existing = _has_user_content(seed)
 
     interview = InterviewSession(
@@ -543,7 +543,7 @@ async def post_turn(
     if interview.working_graph and interview.working_graph.get("nodes"):
         graph_summary = format_graph_compact(interview.working_graph)
     else:
-        graph_summary = _graph_summary(await _load_graph(session, interview.version_id))
+        graph_summary = _graph_summary(await _load_graph(session, interview.version_id, user))
     found_map = await session.get(ProcessMap, interview.map_id)
     kb_block, kb_failed = await _kb_reference_block(
         session, interview, found_map.name if found_map else "", payload.content or ""

@@ -24,7 +24,7 @@ from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
 from app.models import Comment, Edge, Group, MapVersion, Node, ProcessCategory, ProcessMap
 from app.permissions import logic
-from app.permissions.access import is_category_admin
+from app.permissions.access import get_effective_role
 from app.permissions.deps import require_version_map_role
 from app.schemas import (
     EdgeIn,
@@ -49,7 +49,8 @@ def _node_group_ids(node: Node) -> list[str]:
     return [node.group_id] if node.group_id else []
 
 
-async def _load_graph(session: AsyncSession, version_id: int) -> GraphOut:
+async def _load_graph(session: AsyncSession, version_id: int, user: str) -> GraphOut:
+    """버전 그래프 + subprocess refs. refs는 user가 볼 수 없는 미지정 링크 맵을 가린다."""
     node_rows = (
         await session.scalars(
             select(Node).where(Node.version_id == version_id).order_by(Node.sort_order)
@@ -75,7 +76,7 @@ async def _load_graph(session: AsyncSession, version_id: int) -> GraphOut:
     ).all()
     groups = [GroupIn.model_validate(g) for g in group_rows]
     # subprocess 링크 대상 지정 정보 동봉 — 에디터 그래프·임베드 resolved 공통 (spec 2026-07-06)
-    refs = await get_subprocess_refs(session, nodes)
+    refs = await get_subprocess_refs(session, nodes, user)
     # 플레이스홀더 출처 L5 경로 주입 — 에디터 출처 배지 소스 (design 2026-08-28 §10.1)
     nodes = _apply_placeholder_paths(
         nodes, await get_placeholder_category_paths(session, nodes)
@@ -112,35 +113,73 @@ async def _get_version_or_404(session: AsyncSession, version_id: int) -> MapVers
     return version
 
 
-async def _assert_framework_draft_visible(
-    session: AsyncSession, version: MapVersion, user: str
-) -> None:
-    """framework 라이브 draft 그래프는 sysadmin·자기/조상 카테고리 권한자만 (룰 재정립 2026-09-02).
+async def _find_foreign_ids(
+    session: AsyncSession, model: type[Node] | type[Group] | type[Edge], ids: set[str], version_id: int
+) -> list[str]:
+    """ids 중 다른 버전 소속 행 — 전역 PK라 upsert가 남의 버전 행을 이 버전으로 끌고 온다 (리뷰 2026-10-19 P0-1)."""
+    if not ids:
+        return []
+    rows = await session.scalars(
+        select(model.id).where(
+            model.id.in_(ids),
+            or_(model.version_id != version_id, model.version_id.is_(None)),
+        )
+    )
+    return sorted(rows.all())
 
-    maps.get_map의 versions 필터와 짝 — 상세에서 감춰도 그래프 직접 조회로 새면 무의미하다.
-    스냅샷(confirmed)·일반 맵은 무관.
+
+async def _assert_new_links_allowed(
+    session: AsyncSession,
+    version: MapVersion,
+    nodes: list[NodeIn],
+    user: str,
+    contained_map_ids: set[int],
+) -> None:
+    """새로 생긴 subprocess 링크·핀만 검사한다 (리뷰 2026-10-19 F-2·P0-2).
+
+    링크 대상: 실존 + (지정·미삭제 = 라이브러리 공개 | 호출자 viewer 이상 | 이 캔버스의 소속 L6).
+    핀: 고정 버전이 링크 대상 맵의 버전이어야. 이미 저장된 링크·핀은 grandfather — 매 PUT마다
+    걸리면 그 맵이 영구히 저장 불가가 된다(링크 유일성 가드와 같은 이유).
     """
-    if version.status != workflow.DRAFT:
-        return
-    parent_map = await session.get(ProcessMap, version.map_id)
-    if parent_map is None or parent_map.mode != "framework":
-        return
-    if logic.is_sysadmin(user):
-        return
-    linkage_cat_id = await session.scalar(
-        select(ProcessCategory.id).where(ProcessCategory.linkage_map_id == version.map_id)
-    )
-    if linkage_cat_id is not None and await is_category_admin(session, user, linkage_cat_id):
-        return
-    raise HTTPException(
-        status_code=403, detail="framework draft is visible to framework admins only"
-    )
+    stored = (
+        await session.execute(
+            select(Node.linked_map_id, Node.linked_version_id).where(
+                Node.version_id == version.id,
+                Node.node_type == "subprocess",
+                Node.linked_map_id.is_not(None),
+            )
+        )
+    ).all()
+    stored_maps = {mid for mid, _ in stored}
+    stored_pins = {(mid, vid) for mid, vid in stored if vid is not None}
+    sp_nodes = [n for n in nodes if n.node_type == "subprocess" and n.linked_map_id is not None]
+    new_map_ids = {n.linked_map_id for n in sp_nodes} - stored_maps - contained_map_ids
+    for mid in sorted(new_map_ids):
+        target = await session.get(ProcessMap, mid)
+        if target is not None and target.sp_designated_at is not None and target.deleted_at is None:
+            continue
+        # 부재와 권한 부족을 같은 응답으로 — 다르면 비공개 맵의 존재를 캐는 오라클이 된다
+        if target is None or logic.role_rank(
+            await get_effective_role(session, user, mid)
+        ) < logic.role_rank("viewer"):
+            raise HTTPException(status_code=422, detail=f"linked map {mid} is not accessible")
+    new_pins = {
+        (n.linked_map_id, n.linked_version_id)
+        for n in sp_nodes
+        if n.linked_version_id is not None
+    } - stored_pins
+    for mid, vid in sorted(new_pins):
+        pinned = await session.get(MapVersion, vid)
+        if pinned is None or pinned.map_id != mid:
+            raise HTTPException(
+                status_code=422, detail=f"linked_version_id {vid} is not a version of map {mid}"
+            )
 
 
 @router.get(
     "/{version_id}/graph/all",
     response_model=VersionGraphOut,
-    # 읽기 viewer 게이트 — AI 챗 게이트와 짝(우회로 차단) (design 2026-07-10)
+    # 읽기 viewer 게이트(framework draft 룰 포함) — AI 챗 게이트와 짝(우회로 차단) (design 2026-07-10)
     dependencies=[Depends(require_version_map_role("viewer"))],
 )
 async def get_full_graph(
@@ -149,8 +188,7 @@ async def get_full_graph(
     user: str = Depends(get_current_user),
 ) -> VersionGraphOut:
     """버전 전체 노드/엣지 — 노드 검색·버전 diff 용 (spec §7 Phase B)."""
-    version = await _get_version_or_404(session, version_id)
-    await _assert_framework_draft_visible(session, version, user)
+    await _get_version_or_404(session, version_id)
     node_rows = (
         await session.scalars(
             select(Node).where(Node.version_id == version_id).order_by(Node.sort_order)
@@ -173,7 +211,7 @@ async def get_full_graph(
         nodes=nodes,
         edges=[EdgeIn.model_validate(e) for e in edge_rows],
         # 에디터가 실제로 로드하는 루트 그래프 — 지정 정보 동봉 (spec 2026-07-06)
-        subprocess_refs=await get_subprocess_refs(session, nodes),
+        subprocess_refs=await get_subprocess_refs(session, nodes, user),
     )
 
 
@@ -187,9 +225,8 @@ async def get_graph(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
 ) -> GraphOut:
-    version = await _get_version_or_404(session, version_id)
-    await _assert_framework_draft_visible(session, version, user)
-    return await _load_graph(session, version_id)
+    await _get_version_or_404(session, version_id)
+    return await _load_graph(session, version_id, user)
 
 
 @router.put(
@@ -242,6 +279,20 @@ async def replace_graph(
                     detail=f"node {node.id} references a group not in the payload",
                 )
 
+    # 소속 검증 — 다른 버전의 node·group·edge id는 거부. 정상 경로(복제·CSV/AI·붙여넣기·임포트)는
+    # 항상 새 id를 발급하므로 여기 걸리는 건 조작된 요청뿐이다 (리뷰 2026-10-19 P0-1).
+    for model, ids in (
+        (Node, payload_ids),
+        (Group, payload_group_ids),
+        (Edge, {e.id for e in payload.edges}),
+    ):
+        foreign = await _find_foreign_ids(session, model, ids, version_id)
+        if foreign:
+            raise HTTPException(
+                status_code=409,
+                detail=f"{model.__tablename__} ids belong to another version: {foreign[:5]}",
+            )
+
     # 플레이스홀더 출처 카테고리 실존 검증 — 노드 FK 부재 관례라 앱 경계에서 (design 2026-08-28 §10.1)
     ph_cat_ids = {
         n.placeholder_category_id
@@ -274,6 +325,7 @@ async def replace_graph(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    contained_ids: set[int] = set()
     if is_framework_canvas:
         # 소속 L6 삭제 금지 — 이미 저장돼 있던 소속 L6 노드가 payload에서 사라지면 422.
         # 신규 소속 L6 미반영은 허용(열 때 자동 보강 담당) (2026-08-28 개선).
@@ -315,6 +367,8 @@ async def replace_graph(
                     status_code=422,
                     detail=f"contained L6 nodes cannot be removed from the canvas: {missing}",
                 )
+
+    await _assert_new_links_allowed(session, version, payload.nodes, user, contained_ids)
 
     try:
         await assert_no_cycle(session, version_id, payload.nodes)
@@ -362,22 +416,30 @@ async def replace_graph(
     )
     removed = existing_ids - payload_ids
     if removed:
+        # 삭제는 이 버전 행으로 한정 — node_id만으로 지우면 남의 버전 엣지·코멘트까지 지운다 (P0-1)
         await session.execute(
             delete(Edge).where(
+                Edge.version_id == version_id,
                 or_(
                     Edge.source_node_id.in_(removed),
                     Edge.target_node_id.in_(removed),
-                )
+                ),
             )
         )
         # 삭제 노드의 코멘트 정리 — sqlite는 FK pragma 비활성이라 명시적으로 수행
-        await session.execute(delete(Comment).where(Comment.node_id.in_(removed)))
+        await session.execute(
+            delete(Comment).where(
+                Comment.version_id == version_id, Comment.node_id.in_(removed)
+            )
+        )
         await session.execute(delete(Node).where(Node.id.in_(removed)))
 
     # 남은 노드들의 엣지를 비우고 payload로 재삽입
     if existing_ids:
         await session.execute(
-            delete(Edge).where(Edge.source_node_id.in_(existing_ids))
+            delete(Edge).where(
+                Edge.version_id == version_id, Edge.source_node_id.in_(existing_ids)
+            )
         )
 
     # 그룹도 버전 단위 교체
@@ -470,4 +532,4 @@ async def replace_graph(
 
     version.updated_at = now  # 그래프 내용 갱신도 버전 갱신 시각에 반영 — 인터뷰 충돌 경고의 신호원 (final review C1)
     await session.commit()
-    return await _load_graph(session, version_id)
+    return await _load_graph(session, version_id, user)

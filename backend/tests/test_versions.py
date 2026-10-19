@@ -18,6 +18,11 @@ def _create_map(client: TestClient) -> dict:
     return client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": f"version map {_map_seq}"}).json()
 
 
+def _make_ids(version_id: int, *names: str) -> list[str]:
+    """node·group id는 전역 PK(다른 버전 소유 id는 PUT 409) — version_id를 접미사로 섞어 테스트 간 충돌 방지."""
+    return [f"{name}-{version_id}" for name in names]
+
+
 def _approve_version(version_id: int) -> None:
     """'draft 1개 제한' 가드 해소용 — 아래 _set_version_status 로 위임."""
     _set_version_status(version_id, "approved")
@@ -94,21 +99,22 @@ def test_create_plain_version(client: TestClient) -> None:
 def test_create_version_clones_graph(client: TestClient) -> None:
     created = _create_map(client)
     source_version = created["versions"][0]["id"]
+    s, p, c = _make_ids(source_version, "s", "p", "c")
     # 평면 그래프를 source 버전에 저장 — PUT /graph는 체크아웃 보유자만
     client.post(f"/api/versions/{source_version}/checkout", json={})
     client.put(
         f"/api/versions/{source_version}/graph",
         json={
             "nodes": [
-                {"id": "s", "title": "시작", "node_type": "start"},
+                {"id": s, "title": "시작", "node_type": "start"},
                 {
-                    "id": "p", "title": "발주",
+                    "id": p, "title": "발주",
                     "input": "PR\n견적", "input_forms": "document",
                     "output": "발주서", "output_ids": "itm_c1",
                     "parallel_outputs": ["__primary__"],
                 },
                 {
-                    "id": "c", "title": "승인",
+                    "id": c, "title": "승인",
                     "input": "발주서", "input_links": "itm_c1", "input_flags": "optional",
                 },
             ],
@@ -126,8 +132,8 @@ def test_create_version_clones_graph(client: TestClient) -> None:
     # 구조는 같지만 노드 ID는 새로 발급 (원본과 충돌하지 않음)
     assert len(cloned_graph["nodes"]) == 3
     cloned_ids = {n["id"] for n in cloned_graph["nodes"]}
-    assert "p" not in cloned_ids
-    assert "c" not in cloned_ids
+    assert p not in cloned_ids
+    assert c not in cloned_ids
     # IO 항목별 데이터 폼도 클론에 보존 (2026-08-20)
     cloned_p = next(n for n in cloned_graph["nodes"] if n["title"] == "발주")
     assert cloned_p["input"] == "PR\n견적" and cloned_p["input_forms"] == "document"
@@ -143,16 +149,17 @@ def test_create_version_clones_graph(client: TestClient) -> None:
 def test_clone_preserves_groups_and_membership(client: TestClient) -> None:
     created = _create_map(client)
     source_version = created["versions"][0]["id"]
+    s, n1, g1 = _make_ids(source_version, "s", "n1", "g1")
     client.post(f"/api/versions/{source_version}/checkout", json={})
     client.put(
         f"/api/versions/{source_version}/graph",
         json={
             "nodes": [
-                {"id": "s", "node_type": "start"},
-                {"id": "n1", "title": "A", "group_ids": ["g1"]},
+                {"id": s, "node_type": "start"},
+                {"id": n1, "title": "A", "group_ids": [g1]},
             ],
             "edges": [],
-            "groups": [{"id": "g1", "label": "영업팀", "color": "#6a41ff"}],
+            "groups": [{"id": g1, "label": "영업팀", "color": "#6a41ff"}],
         },
     )
     _set_version_status(source_version, "published")  # 게시 → 클론용 새 버전 허용
@@ -166,19 +173,20 @@ def test_clone_preserves_groups_and_membership(client: TestClient) -> None:
     # 그룹은 새 ID로 복제되고, 멤버 노드의 group_ids도 복제된 그룹을 가리킴
     assert len(top["groups"]) == 1
     cloned_group_id = top["groups"][0]["id"]
-    assert cloned_group_id != "g1"
+    assert cloned_group_id != g1
     assert top["groups"][0]["label"] == "영업팀"
-    n1 = next(n for n in top["nodes"] if n["title"] == "A")
-    assert n1["group_ids"] == [cloned_group_id]
+    member = next(n for n in top["nodes"] if n["title"] == "A")
+    assert member["group_ids"] == [cloned_group_id]
 
 
 def test_clone_records_source_lineage(client: TestClient) -> None:
     created = _create_map(client)
     source_version = created["versions"][0]["id"]
+    orig = f"orig-{source_version}"  # node id는 전역 PK — 버전별 고유
     client.post(f"/api/versions/{source_version}/checkout", json={})
     client.put(
         f"/api/versions/{source_version}/graph",
-        json={"nodes": [{"id": "orig", "title": "원본", "node_type": "start"}], "edges": []},
+        json={"nodes": [{"id": orig, "title": "원본", "node_type": "start"}], "edges": []},
     )
     _set_version_status(source_version, "published")  # 게시 → clone1 생성 허용
 
@@ -195,17 +203,18 @@ def test_clone_records_source_lineage(client: TestClient) -> None:
     clone2_nodes = client.get(f"/api/versions/{clone2['id']}/graph/all").json()["nodes"]
 
     # 1차 복제는 원본을, 복제의 복제도 같은 계보 루트(원본)를 가리킨다
-    assert clone1_nodes[0]["source_node_id"] == "orig"
-    assert clone2_nodes[0]["source_node_id"] == "orig"
+    assert clone1_nodes[0]["source_node_id"] == orig
+    assert clone2_nodes[0]["source_node_id"] == orig
 
 
 def test_clone_leaves_source_untouched(client: TestClient) -> None:
     created = _create_map(client)
     source_version = created["versions"][0]["id"]
+    p = f"p-{source_version}"  # node id는 전역 PK — 버전별 고유
     client.post(f"/api/versions/{source_version}/checkout", json={})
     client.put(
         f"/api/versions/{source_version}/graph",
-        json={"nodes": [{"id": "p", "title": "발주", "node_type": "start"}], "edges": []},
+        json={"nodes": [{"id": p, "title": "발주", "node_type": "start"}], "edges": []},
     )
     _set_version_status(source_version, "published")  # 게시 → 클론용 새 버전 허용
 
@@ -215,7 +224,7 @@ def test_clone_leaves_source_untouched(client: TestClient) -> None:
     )
     source_graph = client.get(f"/api/versions/{source_version}/graph").json()
 
-    assert [n["id"] for n in source_graph["nodes"]] == ["p"]
+    assert [n["id"] for n in source_graph["nodes"]] == [p]
 
 
 def test_rename_version(client: TestClient) -> None:
@@ -252,11 +261,12 @@ def test_cannot_delete_last_version(client: TestClient) -> None:
 def test_copy_map_from_published(client: TestClient) -> None:
     created = _create_map(client)
     src_version = created["versions"][0]["id"]
+    s, p = _make_ids(src_version, "s", "p")
     client.post(f"/api/versions/{src_version}/checkout", json={})
     client.put(
         f"/api/versions/{src_version}/graph",
         json={
-            "nodes": [{"id": "s", "node_type": "start"}, {"id": "p", "title": "발주"}],
+            "nodes": [{"id": s, "node_type": "start"}, {"id": p, "title": "발주"}],
             "edges": [],
         },
     )
@@ -283,13 +293,14 @@ def test_copy_map_without_approved_409(client: TestClient) -> None:
 def test_new_version_clone_preserves_url(client: TestClient) -> None:
     created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "url clone map"}).json()
     v1 = created["versions"][0]["id"]
+    n0, n1 = _make_ids(v1, "n0", "n1")
     client.post(f"/api/versions/{v1}/checkout", json={})
     client.put(
         f"/api/versions/{v1}/graph",
         json={
             "nodes": [
-                {"id": "n0", "title": "시작", "node_type": "start"},
-                {"id": "n1", "title": "계약", "url": "https://contract.example.com"},
+                {"id": n0, "title": "시작", "node_type": "start"},
+                {"id": n1, "title": "계약", "url": "https://contract.example.com"},
             ],
             "edges": [],
         },

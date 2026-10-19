@@ -15,7 +15,11 @@ from app.auth import get_current_user
 from app.db import get_session
 from app.models import Comment, MapApprover, MapVersion, UserGroupManager
 from app.permissions import logic
-from app.permissions.access import assert_map_role, can_view_dashboard_db
+from app.permissions.access import (
+    assert_framework_draft_visible,
+    assert_map_role,
+    can_view_dashboard_db,
+)
 
 Dep = Callable[..., Coroutine[Any, Any, None]]
 
@@ -81,7 +85,7 @@ def require_map_role(min_role: str) -> Dep:
 
 
 def require_version_map_role(min_role: str) -> Dep:
-    """경로의 version_id 가 속한 맵에 대해 min_role 이상을 요구한다."""
+    """경로의 version_id 가 속한 맵에 대해 min_role 이상 + framework draft 열람 룰을 요구한다."""
 
     async def dep(
         version_id: int,
@@ -92,12 +96,13 @@ def require_version_map_role(min_role: str) -> Dep:
         if version is None:
             raise HTTPException(status_code=404, detail=f"version {version_id} not found")
         await assert_map_role(session, user, version.map_id, min_role)
+        await assert_framework_draft_visible(session, version, user)
 
     return dep
 
 
 def require_comment_map_role(min_role: str) -> Dep:
-    """경로의 comment_id → version → 맵에 대해 min_role 이상을 요구한다."""
+    """경로의 comment_id → version → 맵에 대해 min_role 이상 + framework draft 열람 룰을 요구한다."""
 
     async def dep(
         comment_id: int,
@@ -111,6 +116,7 @@ def require_comment_map_role(min_role: str) -> Dep:
         if version is None:
             raise HTTPException(status_code=404, detail="comment's version not found")
         await assert_map_role(session, user, version.map_id, min_role)
+        await assert_framework_draft_visible(session, version, user)
 
     return dep
 

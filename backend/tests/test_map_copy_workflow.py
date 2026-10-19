@@ -179,6 +179,7 @@ class TestRetireSource:
             refs = await get_subprocess_refs(
                 session,
                 [NodeIn(id="t-stale-node", title="x", node_type="subprocess", linked_map_id=map_id)],
+                OWNER,  # 휴지통 맵을 볼 수 있는 호출자 — 볼 수 없으면 refs가 가려진다(F-2)
             )
             assert refs[map_id].deleted is True
             assert refs[map_id].successor_map_id == new_id

@@ -10,11 +10,12 @@ import re
 import sqlite3
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from collections.abc import Mapping
 from typing import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import String, Text, and_, asc, cast, delete, desc, func, or_, select
+from sqlalchemy import ColumnElement, String, Table, Text, and_, asc, cast, delete, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
@@ -65,6 +66,30 @@ MAX_PAGE_SIZE = 200
 
 # CSV 내보내기 배치 크기 — 전체를 리스트로 모으지 않고 이 단위로 fetch/yield (메모리 바운드).
 EXPORT_BATCH_SIZE = 500
+
+# 값 대신 표식만 내보낼 비밀 컬럼 — 테이블 뷰어·CSV·검색(q) 공통. sysadmin 전용 화면이어도
+# "비밀번호 해시는 응답에 싣지 않는다" 불변식을 지킨다 (리뷰 2026-10-19 H-8).
+REDACTED_COLUMNS: dict[str, frozenset[str]] = {"local_credentials": frozenset({"password_hash"})}
+REDACTED_MARK = "[redacted]"
+
+
+def _build_row(table_name: str, row: Mapping[str, object], columns: list[str]) -> dict[str, object]:
+    """화면·CSV 공용 행 렌더 — 비밀 컬럼은 표식으로 바꾼다."""
+    hidden = REDACTED_COLUMNS.get(table_name, frozenset())
+    return {c: REDACTED_MARK if c in hidden else _render_cell(row[c]) for c in columns}
+
+
+def _build_filter(table: Table, q: str | None) -> ColumnElement[bool] | None:
+    """문자열 컬럼 ILIKE(OR) 필터 — 비밀 컬럼은 검색 대상에서 빼 값 추측(오라클)을 막는다."""
+    if not q:
+        return None
+    hidden = REDACTED_COLUMNS.get(table.name, frozenset())
+    text_cols = [
+        c for c in table.columns if isinstance(c.type, (String, Text)) and c.name not in hidden
+    ]
+    if not text_cols:
+        return None
+    return or_(*[cast(c, String).ilike(f"%{q}%") for c in text_cols])
 
 
 @router.get("/users", response_model=AdminDirectoryOut)
@@ -313,11 +338,7 @@ async def read_table(
     columns = [c.name for c in table.columns]
 
     # 필터 — 문자열 컬럼에 대해서만 ILIKE(OR). q는 바인드 파라미터 / text-column ILIKE, q is bound.
-    where = None
-    if q:
-        text_cols = [c for c in table.columns if isinstance(c.type, (String, Text))]
-        if text_cols:
-            where = or_(*[cast(c, String).ilike(f"%{q}%") for c in text_cols])
+    where = _build_filter(table, q)
 
     count_stmt = select(func.count()).select_from(table)
     if where is not None:
@@ -336,7 +357,7 @@ async def read_table(
     stmt = stmt.limit(size).offset((page - 1) * size)
 
     result = (await session.execute(stmt)).mappings().all()
-    rows = [{k: _render_cell(v) for k, v in row.items()} for row in result]
+    rows = [_build_row(name, row, columns) for row in result]
     return TableDataOut(columns=columns, rows=rows, total=total, page=page, size=size)
 
 
@@ -401,11 +422,7 @@ async def export_table_csv(
     columns = [c.name for c in table.columns]
 
     # 필터 — 문자열 컬럼에 대해서만 ILIKE(OR). q는 바인드 파라미터 / text-column ILIKE, q is bound.
-    where = None
-    if q:
-        text_cols = [c for c in table.columns if isinstance(c.type, (String, Text))]
-        if text_cols:
-            where = or_(*[cast(c, String).ilike(f"%{q}%") for c in text_cols])
+    where = _build_filter(table, q)
 
     stmt = select(table)
     if where is not None:
@@ -430,7 +447,7 @@ async def export_table_csv(
             if not batch:
                 break
             for row in batch:
-                yield _build_csv_row([_render_cell(row[c]) for c in columns])
+                yield _build_csv_row(list(_build_row(name, row, columns).values()))
             if len(batch) < EXPORT_BATCH_SIZE:
                 break
             offset += EXPORT_BATCH_SIZE

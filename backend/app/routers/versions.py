@@ -464,7 +464,12 @@ async def delete_version(
     await session.commit()
 
 
-@router.get("/versions/{version_id}/workflow", response_model=WorkflowStateOut)
+@router.get(
+    "/versions/{version_id}/workflow",
+    response_model=WorkflowStateOut,
+    # 상태·반려 사유·승인자·점유자 — 맵 열람권과 같은 viewer 게이트 (리뷰 2026-10-19 C-4)
+    dependencies=[Depends(require_version_map_role("viewer"))],
+)
 async def get_workflow_state(
     version_id: int, session: AsyncSession = Depends(get_session)
 ) -> WorkflowStateOut:

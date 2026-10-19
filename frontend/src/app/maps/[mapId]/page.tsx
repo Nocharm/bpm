@@ -12042,7 +12042,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 isSubmitter={isSubmitter}
                                 canWithdraw={canWithdraw}
                                 hasApproved={hasApproved}
-                                canManageApprovers={(isMapOwner || isSysadmin) && !approvalInFlight}
+                                // 서버 게이트와 같은 기준(현재 owner 역할) — 오너 미상 맵의 isMapOwner=true로 버튼만 열리면 403 (리뷰 2026-10-19 C-3)
+                                canManageApprovers={(myRole === "owner" || isSysadmin) && !approvalInFlight}
                                 onSubmit={(at) => void handleSubmitForApproval(at)}
                                 onApprove={() => {
                                   setTransitionComment("");

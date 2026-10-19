@@ -227,7 +227,7 @@ async def ai_chat(
         and is_checkout_active(version, now)
         and version.checked_out_by == user
     )
-    current = await _load_graph(session, version_id)
+    current = await _load_graph(session, version_id, user)
     manual_text = select_manual_sections(
         await _load_manual_text(session), payload.instruction, _MANUAL_SELECT_BUDGET
     )

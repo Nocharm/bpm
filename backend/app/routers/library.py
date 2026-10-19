@@ -213,7 +213,8 @@ async def resolved_graph(
     role = await get_effective_role(session, user, map_id)
     if role_rank(role) < role_rank("viewer"):
         return GraphOut(nodes=[], edges=[], locked=True)
+    # 고정 버전이 이 맵 소속이 아니면 None → 404 (resolve_linked_version, 리뷰 2026-10-19 P0-2)
     version_id = await resolve_linked_version(session, map_id, follow_latest, pinned)
     if version_id is None:
         raise HTTPException(status_code=404, detail="해석할 버전이 없습니다.")
-    return await _load_graph(session, version_id)
+    return await _load_graph(session, version_id, user)

@@ -1190,6 +1190,41 @@ def test_framework_draft_visible_only_to_chain_admins(client: TestClient, enforc
     assert body["can_view_draft"] is True and "draft" in [v["status"] for v in body["versions"]]
 
 
+def test_framework_draft_rule_covers_ai_chat_and_comments(client: TestClient, enforce: None) -> None:
+    """draft 열람 룰은 그래프 GET뿐 아니라 AI 챗·코멘트 경로에도 걸린다 (리뷰 2026-10-19 E-2).
+
+    종전엔 비권한 뷰어가 draft 그래프는 403인데 AI 챗으로 draft 노드 제목을 프롬프트에 싣고,
+    draft 코멘트를 읽고 쓸 수 있었다.
+    """
+    import asyncio
+
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion
+
+    l5 = _seed_category(client, "FWC-DV2-L5", "드래프트 옆문 L5", level=5)
+    map_id = _seed_canvas_map(client, l5, "드래프트 옆문 캔버스")
+
+    async def _draft_id() -> int:
+        async with SessionLocal() as session:
+            return await session.scalar(
+                select(MapVersion.id).where(MapVersion.map_id == map_id, MapVersion.status == "draft")
+            )
+
+    draft_id = asyncio.run(_draft_id())
+
+    act_as("fwc.dvpleb2")  # public 캔버스 뷰어 — draft 열람 불가
+    assert client.post(f"/api/versions/{draft_id}/ai/chat", json={"instruction": "요약"}).status_code == 403
+    assert client.get(f"/api/versions/{draft_id}/comments").status_code == 403
+    assert client.post(
+        f"/api/versions/{draft_id}/comments", json={"node_id": "any", "body": "x"}
+    ).status_code == 403
+
+    act_as(SYSADMIN)
+    assert client.get(f"/api/versions/{draft_id}/comments").status_code == 200
+
+
 def _make_node(node_id: str, assignee_role: str) -> Node:
     """시그니처 비교용 최소 Node — id 외 나머지는 두 인스턴스 간 동일하게 고정."""
     return Node(

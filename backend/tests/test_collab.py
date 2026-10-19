@@ -21,13 +21,16 @@ def _create_version(client: TestClient) -> int:
     return created["versions"][0]["id"]
 
 
-def _put_single_node(client: TestClient, version_id: int) -> None:
+def _put_single_node(client: TestClient, version_id: int) -> str:
+    """결재 노드 하나를 저장하고 그 id를 돌려준다 — node id는 전역 PK라 version_id를 섞는다."""
+    node_id = f"n1-{version_id}"
     # PUT /graph는 체크아웃 보유자만 — 노드 시드도 체크아웃 후 저장
     client.post(f"/api/versions/{version_id}/checkout", json={})
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "s1", "node_type": "start"}, {"id": "n1", "title": "결재"}], "edges": []},
+        json={"nodes": [{"id": f"s1-{version_id}", "node_type": "start"}, {"id": node_id, "title": "결재"}], "edges": []},
     )
+    return node_id
 
 
 # ── 체크아웃 ──────────────────────────────────────────────
@@ -137,11 +140,11 @@ def test_delete_version_rejected_while_locked_by_other(
 
 def test_comment_create_and_list(client: TestClient) -> None:
     version_id = _create_version(client)
-    _put_single_node(client, version_id)
+    node_id = _put_single_node(client, version_id)
 
     created = client.post(
         f"/api/versions/{version_id}/comments",
-        json={"node_id": "n1", "body": "검토 필요"},
+        json={"node_id": node_id, "body": "검토 필요"},
     )
     listed = client.get(f"/api/versions/{version_id}/comments").json()
 
@@ -164,10 +167,10 @@ def test_comment_on_unknown_node_404(client: TestClient) -> None:
 
 def test_comment_resolve_toggle(client: TestClient) -> None:
     version_id = _create_version(client)
-    _put_single_node(client, version_id)
+    node_id = _put_single_node(client, version_id)
     comment = client.post(
         f"/api/versions/{version_id}/comments",
-        json={"node_id": "n1", "body": "확인"},
+        json={"node_id": node_id, "body": "확인"},
     ).json()
 
     resolved = client.patch(
@@ -181,10 +184,10 @@ def test_comment_delete_author_only(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     version_id = _create_version(client)
-    _put_single_node(client, version_id)
+    node_id = _put_single_node(client, version_id)
     comment = client.post(
         f"/api/versions/{version_id}/comments",
-        json={"node_id": "n1", "body": "내 코멘트"},
+        json={"node_id": node_id, "body": "내 코멘트"},
     ).json()
 
     monkeypatch.setattr(settings, "dev_user", "reviewer")
@@ -198,10 +201,10 @@ def test_comment_delete_author_only(
 
 def test_deleting_node_removes_its_comments(client: TestClient) -> None:
     version_id = _create_version(client)
-    _put_single_node(client, version_id)
+    node_id = _put_single_node(client, version_id)
     client.post(
         f"/api/versions/{version_id}/comments",
-        json={"node_id": "n1", "body": "남는지 확인"},
+        json={"node_id": node_id, "body": "남는지 확인"},
     )
 
     # 노드 제거 → 코멘트도 함께 정리

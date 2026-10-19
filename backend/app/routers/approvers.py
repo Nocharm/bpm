@@ -1,4 +1,4 @@
-"""맵별 지정 승인자 관리 — 조회는 누구나, 변경은 맵 소유자·sysadmin만 (design 2026-06-14)."""
+"""맵별 지정 승인자 관리 — 조회는 맵 viewer 이상, 변경은 현재 오너·sysadmin만 (design 2026-06-14)."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
@@ -8,7 +8,8 @@ from app import workflow
 from app.auth import get_current_user
 from app.db import get_session
 from app.models import MapApprover, MapVersion, ProcessMap
-from app.permissions.logic import is_sysadmin
+from app.permissions.access import get_effective_role
+from app.permissions.deps import require_map_role
 from app.schemas import ApproversUpdate
 
 router = APIRouter(
@@ -16,7 +17,12 @@ router = APIRouter(
 )
 
 
-@router.get("/{map_id}/approvers", response_model=list[str])
+@router.get(
+    "/{map_id}/approvers",
+    response_model=list[str],
+    # 비공개 맵의 승인자 명단 — 맵 열람권과 같은 viewer 게이트 (리뷰 2026-10-19 C-4)
+    dependencies=[Depends(require_map_role("viewer"))],
+)
 async def list_approvers(
     map_id: int, session: AsyncSession = Depends(get_session)
 ) -> list[str]:
@@ -47,13 +53,10 @@ async def set_approvers(
         raise HTTPException(
             status_code=422, detail="framework maps use the confirm workflow"
         )
-    # 소유자 미상(created_by=None, seed/legacy 맵)은 잠그지 않고 개방 — 누구나 관리 허용.
-    # 오너 외 sysadmin도 허용(세팅은 sysadmin=owner로 UI 개방 → 백엔드도 일치).
-    if (
-        found_map.created_by is not None
-        and found_map.created_by != user
-        and not is_sysadmin(user)
-    ):
+    # 현재 유효 역할 owner만(sysadmin은 effective_role에서 owner). created_by 기준이면 소유자 미상
+    # 맵은 누구나 자기를 승인자로 넣어 열람권을 얻고, 오너 이전 뒤엔 원작성자만 바꿀 수 있었다
+    # (리뷰 2026-10-19 C-3).
+    if await get_effective_role(session, user, map_id) != "owner":
         raise HTTPException(
             status_code=403, detail="only the map owner or sysadmin can set approvers"
         )

@@ -9,6 +9,8 @@ from app.auth import get_current_user
 from app.chat_history import parse_proposal_payload, prune_expired_chat_sessions
 from app.db import get_session
 from app.models import AiChatMessage, AiChatSession, ProcessMap
+from app.permissions.access import get_effective_role, load_my_roles
+from app.permissions.logic import role_rank
 from app.schemas import AiChatMessageOut, AiChatMessagesOut, AiChatSessionOut, AiChatSessionsOut
 
 router = APIRouter(prefix="/api", tags=["ai-chat-sessions"], dependencies=[Depends(get_current_user)])
@@ -22,6 +24,13 @@ async def _get_owned_session(
     if row is None or row.login_id != user:
         raise HTTPException(status_code=404, detail=f"chat session {session_id} not found")
     return row
+
+
+async def _assert_map_still_visible(session: AsyncSession, row: AiChatSession, user: str) -> None:
+    """맵 열람권을 잃은 세션은 읽기도 404 — 기록에 맵 이름·그래프 제안이 실려 있다 (리뷰 2026-10-19 G-9)."""
+    role = await get_effective_role(session, user, row.map_id)
+    if role_rank(role) < role_rank("viewer"):
+        raise HTTPException(status_code=404, detail=f"chat session {row.id} not found")
 
 
 @router.get("/ai/chat-sessions", response_model=AiChatSessionsOut)
@@ -49,6 +58,16 @@ async def list_chat_sessions(
     if map_id is not None:
         stmt = stmt.where(AiChatSession.map_id == map_id)
     rows = (await session.execute(stmt)).all()
+    # 열람권을 잃은 맵의 세션은 목록에서 뺀다 (G-9). 기록은 지우지 않아 권한이 돌아오면 다시 보인다.
+    session_maps = list(
+        (
+            await session.scalars(
+                select(ProcessMap).where(ProcessMap.id.in_({row.map_id for row, _, _ in rows}))
+            )
+        ).all()
+    )
+    visible = await load_my_roles(session, user, session_maps)
+    rows = [r for r in rows if r[0].map_id in visible]
     return AiChatSessionsOut(
         sessions=[
             AiChatSessionOut(
@@ -73,7 +92,7 @@ async def list_chat_messages(
     session: AsyncSession = Depends(get_session),
 ) -> AiChatMessagesOut:
     """최근부터 역방향 커서 페이징 — before=<message_id>보다 오래된 limit개를 오름차순으로."""
-    await _get_owned_session(session, session_id, user)
+    await _assert_map_still_visible(session, await _get_owned_session(session, session_id, user), user)
     stmt = select(AiChatMessage).where(AiChatMessage.session_id == session_id)
     if before is not None:
         stmt = stmt.where(AiChatMessage.id < before)

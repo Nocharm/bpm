@@ -33,7 +33,12 @@ async def _get_comment_or_404(session: AsyncSession, comment_id: int) -> Comment
     return comment
 
 
-@router.get("/versions/{version_id}/comments", response_model=list[CommentOut])
+@router.get(
+    "/versions/{version_id}/comments",
+    response_model=list[CommentOut],
+    # 쓰기와 같은 viewer 게이트 — 없으면 비공개 맵 코멘트·node id가 샌다 (리뷰 2026-10-19 C-2)
+    dependencies=[Depends(require_version_map_role("viewer"))],
+)
 async def list_comments(
     version_id: int,
     session: AsyncSession = Depends(get_session),

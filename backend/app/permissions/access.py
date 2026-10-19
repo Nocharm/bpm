@@ -10,12 +10,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
+from app import workflow
 from app.models import (
     CategoryPermission,
     DashboardPermission,
     Employee,
     MapApprover,
     MapPermission,
+    MapVersion,
     ProcessCategory,
     ProcessMap,
     UserGroup,
@@ -412,6 +414,31 @@ async def assert_map_role(
     role = await get_effective_role(session, login_id, map_id)
     if logic.role_rank(role) < logic.role_rank(min_role):
         raise HTTPException(status_code=403, detail="insufficient permission")
+
+
+async def assert_framework_draft_visible(
+    session: AsyncSession, version: MapVersion, login_id: str
+) -> None:
+    """framework 라이브 draft는 sysadmin·자기/조상 카테고리 권한자만 (룰 재정립 2026-09-02).
+
+    version_id·comment_id 게이트(deps)가 함께 부른다 — 그래프 GET에만 두면 AI 챗·코멘트로 샌다
+    (시스템 리뷰 2026-10-19 E-2). maps.get_map의 versions 필터와 짝. 스냅샷(confirmed)·일반 맵은 무관.
+    """
+    if version.status != workflow.DRAFT:
+        return
+    parent_map = await session.get(ProcessMap, version.map_id)
+    if parent_map is None or parent_map.mode != "framework":
+        return
+    if logic.is_sysadmin(login_id):
+        return
+    linkage_cat_id = await session.scalar(
+        select(ProcessCategory.id).where(ProcessCategory.linkage_map_id == version.map_id)
+    )
+    if linkage_cat_id is not None and await is_category_admin(session, login_id, linkage_cat_id):
+        return
+    raise HTTPException(
+        status_code=403, detail="framework draft is visible to framework admins only"
+    )
 
 
 async def get_eligible_users(session: AsyncSession, map_id: int) -> list[Employee]:

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
 from app.models import Edge, FrameworkSlotEvent, MapVersion, Node, ProcessCategory, ProcessMap
-from app.permissions.access import get_framework_category_id
+from app.permissions.access import get_framework_category_id, load_my_roles
 from app.schemas import NodeIn, SubprocessRefOut
 
 
@@ -124,9 +124,14 @@ async def resolve_linked_version(
     follow_latest: bool,
     pinned_version_id: int | None,
 ) -> int | None:
-    """렌더할 버전 id 결정 — follow_latest면 최신 발행본, 아니면 고정. (spec §5)"""
+    """렌더할 버전 id 결정 — follow_latest면 최신 발행본, 아니면 고정. (spec §5)
+
+    고정 버전이 map_id 소속이 아니면 None — 권한은 map_id로 판정하므로 남의 버전을 꺼내 주면
+    비공개 그래프가 샌다 (리뷰 2026-10-19 P0-2).
+    """
     if not follow_latest and pinned_version_id is not None:
-        return pinned_version_id
+        pinned = await session.get(MapVersion, pinned_version_id)
+        return pinned_version_id if pinned is not None and pinned.map_id == map_id else None
     published = await session.scalar(
         select(MapVersion.id)
         .where(MapVersion.map_id == map_id, MapVersion.status == "published")
@@ -142,11 +147,13 @@ async def resolve_linked_version(
 
 
 async def get_subprocess_refs(
-    session: AsyncSession, nodes: list[NodeIn]
+    session: AsyncSession, nodes: list[NodeIn], user: str
 ) -> dict[int, SubprocessRefOut]:
     """그래프 내 subprocess 노드들의 링크 대상 지정 정보 — 라이브 참조 (spec 2026-07-06).
 
     soft-delete·영구삭제된 맵은 designated=False 취급 → 프론트가 경고+잠금 렌더.
+    미지정(또는 삭제) 링크 맵을 user가 볼 수 없으면 이름·어트리뷰트를 비운다 — 라이브러리 마스킹과
+    같은 규칙(지정 맵은 공개 라이브러리) (리뷰 2026-10-19 F-2). 프론트는 노드 제목으로 폴백한다.
     """
     targets = {
         n.linked_map_id for n in nodes if n.node_type == "subprocess" and n.linked_map_id
@@ -326,6 +333,15 @@ async def get_subprocess_refs(
                 seen_change.add(mid)
                 refs[mid].slot_changed_at = at
                 refs[mid].slot_changed_action = action
+    unlisted = [mid for mid, ref in refs.items() if not ref.designated and ref.name is not None]
+    if unlisted:
+        unlisted_maps = list(
+            (await session.scalars(select(ProcessMap).where(ProcessMap.id.in_(unlisted)))).all()
+        )
+        visible = await load_my_roles(session, user, unlisted_maps)
+        for mid in unlisted:
+            if mid not in visible:
+                refs[mid] = SubprocessRefOut(designated=False, deleted=refs[mid].deleted)
     return refs
 
 

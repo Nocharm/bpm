@@ -141,14 +141,14 @@ def test_list_maps_includes_card_metrics(client: TestClient) -> None:
     """목록은 카드 집계(전체 버전 수·라이브 노드 수·소유자명)를 동봉 (H5b)."""
     created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "카드집계"}).json()
     vid = created["versions"][0]["id"]
-    # 노드 2개 저장 — 라이브(published) 없으면 최신 버전 기준 폴백
+    # 노드 2개 저장 — 라이브(published) 없으면 최신 버전 기준 폴백. node id는 전역 PK라 vid를 섞는다
     client.post(f"/api/versions/{vid}/checkout", json={})
     save = client.put(
         f"/api/versions/{vid}/graph",
         json={
             "nodes": [
-                {"id": "s", "title": "Start", "node_type": "start"},
-                {"id": "a", "title": "A"},
+                {"id": f"s-{vid}", "title": "Start", "node_type": "start"},
+                {"id": f"a-{vid}", "title": "A"},
             ],
             "edges": [],
         },
@@ -167,9 +167,10 @@ def test_list_maps_includes_stale_ref_count(client: TestClient) -> None:
     created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "stale"}).json()
     vid = created["versions"][0]["id"]
     client.post(f"/api/versions/{vid}/checkout", json={})
+    # node id는 전역 PK — 다른 테스트와 충돌하지 않게 vid를 섞는다
     save = client.put(f"/api/versions/{vid}/graph", json={"nodes": [
-        {"id": "s", "title": "Start", "node_type": "start"},
-        {"id": "a", "title": "A", "department": "Old Team", "assignee": "Gone Person, Minjae Lee"},
+        {"id": f"s-{vid}", "title": "Start", "node_type": "start"},
+        {"id": f"a-{vid}", "title": "A", "department": "Old Team", "assignee": "Gone Person, Minjae Lee"},
     ], "edges": []})
     assert save.status_code == 200, save.text
     rows = {m["id"]: m for m in client.get("/api/maps").json()}

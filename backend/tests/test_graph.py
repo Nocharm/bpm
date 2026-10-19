@@ -33,6 +33,18 @@ def _create_version(client: TestClient) -> int:
     return version_id
 
 
+def _create_link_target(client: TestClient) -> int:
+    """subprocess 링크 대상 맵 id — 새 링크는 실존(+접근 가능) 맵이어야 저장된다 (리뷰 2026-10-19 P0-2)."""
+    global _graph_seq
+    _graph_seq += 1
+    return client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": f"graph link target {_graph_seq}"}).json()["id"]
+
+
+def _make_ids(version_id: int, *names: str) -> list[str]:
+    """node·group·edge id는 전역 PK(다른 버전 소유 id는 PUT 409) — version_id를 접미사로 섞어 테스트 간 충돌 방지."""
+    return [f"{name}-{version_id}" for name in names]
+
+
 def test_new_map_version_seeds_start_end(client: TestClient) -> None:
     # 새 맵의 초기 버전은 Start·End 노드로 시작한다(빈 캔버스 아님). 엣지·그룹은 없음.
     version_id = _create_version(client)
@@ -50,13 +62,14 @@ def test_new_map_version_seeds_start_end(client: TestClient) -> None:
 
 def test_replace_graph_roundtrips(client: TestClient) -> None:
     version_id = _create_version(client)
+    n1, n2, e1 = _make_ids(version_id, "n1", "n2", "e1")
     graph = {
         "nodes": [
-            {"id": "n1", "title": "시작", "node_type": "start", "pos_x": 0, "pos_y": 0, "sort_order": 0},
-            {"id": "n2", "title": "검토", "pos_x": 200, "pos_y": 0, "sort_order": 1},
+            {"id": n1, "title": "시작", "node_type": "start", "pos_x": 0, "pos_y": 0, "sort_order": 0},
+            {"id": n2, "title": "검토", "pos_x": 200, "pos_y": 0, "sort_order": 1},
         ],
         "edges": [
-            {"id": "e1", "source_node_id": "n1", "target_node_id": "n2", "label": ""}
+            {"id": e1, "source_node_id": n1, "target_node_id": n2, "label": ""}
         ],
     }
 
@@ -65,32 +78,34 @@ def test_replace_graph_roundtrips(client: TestClient) -> None:
 
     assert put_response.status_code == 200
     saved = get_response.json()
-    assert {n["id"] for n in saved["nodes"]} == {"n1", "n2"}
-    assert saved["edges"][0]["source_node_id"] == "n1"
+    assert {n["id"] for n in saved["nodes"]} == {n1, n2}
+    assert saved["edges"][0]["source_node_id"] == n1
 
 
 def test_replace_graph_overwrites_previous(client: TestClient) -> None:
     version_id = _create_version(client)
+    a, b = _make_ids(version_id, "a", "b")
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "a", "title": "A", "node_type": "start"}], "edges": []},
+        json={"nodes": [{"id": a, "title": "A", "node_type": "start"}], "edges": []},
     )
 
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "b", "title": "B", "node_type": "start"}], "edges": []},
+        json={"nodes": [{"id": b, "title": "B", "node_type": "start"}], "edges": []},
     )
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
-    assert [n["id"] for n in saved["nodes"]] == ["b"]
+    assert [n["id"] for n in saved["nodes"]] == [b]
 
 
 def test_node_type_and_color_roundtrip(client: TestClient) -> None:
     version_id = _create_version(client)
+    n0, n1 = _make_ids(version_id, "n0", "n1")
     graph = {
         "nodes": [
-            {"id": "n0", "title": "시작", "node_type": "start"},
-            {"id": "n1", "title": "분기", "node_type": "decision", "color": "#3b82f6"},
+            {"id": n0, "title": "시작", "node_type": "start"},
+            {"id": n1, "title": "분기", "node_type": "decision", "color": "#3b82f6"},
         ],
         "edges": [],
     }
@@ -98,18 +113,19 @@ def test_node_type_and_color_roundtrip(client: TestClient) -> None:
     client.put(f"/api/versions/{version_id}/graph", json=graph)
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
-    n1 = next(n for n in saved["nodes"] if n["id"] == "n1")
-    assert n1["node_type"] == "decision"
-    assert n1["color"] == "#3b82f6"
+    decision = next(n for n in saved["nodes"] if n["id"] == n1)
+    assert decision["node_type"] == "decision"
+    assert decision["color"] == "#3b82f6"
 
 
 def test_bpm_attributes_roundtrip(client: TestClient) -> None:
     version_id = _create_version(client)
+    n0, n1 = _make_ids(version_id, "n0", "n1")
     graph = {
         "nodes": [
-            {"id": "n0", "title": "시작", "node_type": "start"},
+            {"id": n0, "title": "시작", "node_type": "start"},
             {
-                "id": "n1",
+                "id": n1,
                 "title": "발주",
                 "assignee": "김담당",
                 "department": "구매팀",
@@ -123,7 +139,7 @@ def test_bpm_attributes_roundtrip(client: TestClient) -> None:
     client.put(f"/api/versions/{version_id}/graph", json=graph)
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
-    node = next(n for n in saved["nodes"] if n["id"] == "n1")
+    node = next(n for n in saved["nodes"] if n["id"] == n1)
     assert node["assignee"] == "김담당"
     assert node["department"] == "구매팀"
     assert node["system"] == "ERP"
@@ -133,13 +149,14 @@ def test_bpm_attributes_roundtrip(client: TestClient) -> None:
 
 def test_full_graph_returns_all_nodes(client: TestClient) -> None:
     version_id = _create_version(client)
+    s, p, c = _make_ids(version_id, "s", "p", "c")
     client.put(
         f"/api/versions/{version_id}/graph",
         json={
             "nodes": [
-                {"id": "s", "title": "시작", "node_type": "start"},
-                {"id": "p", "title": "발주"},
-                {"id": "c", "title": "승인"},
+                {"id": s, "title": "시작", "node_type": "start"},
+                {"id": p, "title": "발주"},
+                {"id": c, "title": "승인"},
             ],
             "edges": [],
         },
@@ -148,8 +165,8 @@ def test_full_graph_returns_all_nodes(client: TestClient) -> None:
     full = client.get(f"/api/versions/{version_id}/graph/all").json()
 
     by_id = {n["id"]: n for n in full["nodes"]}
-    assert set(by_id) == {"s", "p", "c"}
-    assert by_id["p"]["source_node_id"] is None
+    assert set(by_id) == {s, p, c}
+    assert by_id[p]["source_node_id"] is None
 
 
 def test_invalid_color_rejected(client: TestClient) -> None:
@@ -187,13 +204,14 @@ def test_graph_for_missing_version_404(client: TestClient) -> None:
 
 def test_all_nodes_coexist_in_flat_graph(client: TestClient) -> None:
     version_id = _create_version(client)
+    s, p, c = _make_ids(version_id, "s", "p", "c")
     client.put(
         f"/api/versions/{version_id}/graph",
         json={
             "nodes": [
-                {"id": "s", "title": "시작", "node_type": "start"},
-                {"id": "p", "title": "발주"},
-                {"id": "c", "title": "승인요청"},
+                {"id": s, "title": "시작", "node_type": "start"},
+                {"id": p, "title": "발주"},
+                {"id": c, "title": "승인요청"},
             ],
             "edges": [],
         },
@@ -201,15 +219,16 @@ def test_all_nodes_coexist_in_flat_graph(client: TestClient) -> None:
 
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
-    assert {n["id"] for n in saved["nodes"]} == {"s", "p", "c"}
+    assert {n["id"] for n in saved["nodes"]} == {s, p, c}
 
 
 def test_removing_nodes_cleans_up(client: TestClient) -> None:
     version_id = _create_version(client)
+    s, p, c = _make_ids(version_id, "s", "p", "c")
     # start node required for non-empty graph to pass validation
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "s", "node_type": "start"}, {"id": "p", "title": "p"}, {"id": "c", "title": "c"}], "edges": []},
+        json={"nodes": [{"id": s, "node_type": "start"}, {"id": p, "title": "p"}, {"id": c, "title": "c"}], "edges": []},
     )
 
     # 노드 제거 → 이후 조회에서 사라져야 함 (빈 그래프는 start 불필요)
@@ -235,16 +254,17 @@ def test_put_missing_version_404(client: TestClient) -> None:
 
 def test_group_roundtrips_with_membership(client: TestClient) -> None:
     version_id = _create_version(client)
+    s, n1, n2, g1, g2 = _make_ids(version_id, "s", "n1", "n2", "g1", "g2")
     graph = {
         "nodes": [
-            {"id": "s", "title": "시작", "node_type": "start"},
-            {"id": "n1", "title": "A", "group_ids": ["g1"]},
-            {"id": "n2", "title": "B", "group_ids": ["g1", "g2"]},
+            {"id": s, "title": "시작", "node_type": "start"},
+            {"id": n1, "title": "A", "group_ids": [g1]},
+            {"id": n2, "title": "B", "group_ids": [g1, g2]},
         ],
         "edges": [],
         "groups": [
-            {"id": "g1", "label": "영업팀", "color": "#6a41ff"},
-            {"id": "g2", "label": "프로젝트", "color": ""},
+            {"id": g1, "label": "영업팀", "color": "#6a41ff"},
+            {"id": g2, "label": "프로젝트", "color": ""},
         ],
     }
 
@@ -253,43 +273,46 @@ def test_group_roundtrips_with_membership(client: TestClient) -> None:
 
     assert put_response.status_code == 200
     groups_by_id = {g["id"]: g for g in saved["groups"]}
-    assert groups_by_id["g1"] == {
-        "id": "g1",
+    assert groups_by_id[g1] == {
+        "id": g1,
         "parent_group_id": None,
         "label": "영업팀",
         "color": "#6a41ff",
     }
     # 다중 그룹(태그) 멤버십 왕복
     nodes_by_id = {n["id"]: n for n in saved["nodes"]}
-    assert nodes_by_id["n1"]["group_ids"] == ["g1"]
-    assert nodes_by_id["n2"]["group_ids"] == ["g1", "g2"]
+    assert nodes_by_id[n1]["group_ids"] == [g1]
+    assert nodes_by_id[n2]["group_ids"] == [g1, g2]
 
 
 def test_nested_groups_roundtrip_and_sanitize(client: TestClient) -> None:
     """중첩 그룹(parent_group_id) 왕복 + 고아/자기참조 상위는 None으로 정리."""
     version_id = _create_version(client)
+    s, n1, parent, child, selfref, orphan = _make_ids(
+        version_id, "s", "n1", "parent", "child", "selfref", "orphan"
+    )
     graph = {
         "nodes": [
-            {"id": "s", "title": "시작", "node_type": "start"},
-            {"id": "n1", "title": "A", "group_ids": ["child"]},
+            {"id": s, "title": "시작", "node_type": "start"},
+            {"id": n1, "title": "A", "group_ids": [child]},
         ],
         "edges": [],
         "groups": [
-            {"id": "parent", "label": "부서", "color": ""},
-            {"id": "child", "parent_group_id": "parent", "label": "하위팀", "color": ""},
+            {"id": parent, "label": "부서", "color": ""},
+            {"id": child, "parent_group_id": parent, "label": "하위팀", "color": ""},
             # 자기참조 + 고아 상위 — 둘 다 None으로 정리되어야 함
-            {"id": "selfref", "parent_group_id": "selfref", "label": "", "color": ""},
-            {"id": "orphan", "parent_group_id": "ghost", "label": "", "color": ""},
+            {"id": selfref, "parent_group_id": selfref, "label": "", "color": ""},
+            {"id": orphan, "parent_group_id": "ghost", "label": "", "color": ""},
         ],
     }
 
     assert client.put(f"/api/versions/{version_id}/graph", json=graph).status_code == 200
     saved = {g["id"]: g for g in client.get(f"/api/versions/{version_id}/graph").json()["groups"]}
 
-    assert saved["child"]["parent_group_id"] == "parent"
-    assert saved["parent"]["parent_group_id"] is None
-    assert saved["selfref"]["parent_group_id"] is None
-    assert saved["orphan"]["parent_group_id"] is None
+    assert saved[child]["parent_group_id"] == parent
+    assert saved[parent]["parent_group_id"] is None
+    assert saved[selfref]["parent_group_id"] is None
+    assert saved[orphan]["parent_group_id"] is None
 
 
 def test_node_referencing_unknown_group_rejected(client: TestClient) -> None:
@@ -429,60 +452,64 @@ def test_edge_line_style_invalid_rejected(client: TestClient) -> None:
 
 def test_removed_group_is_cleaned(client: TestClient) -> None:
     version_id = _create_version(client)
+    s, n1, g1 = _make_ids(version_id, "s", "n1", "g1")
     client.put(
         f"/api/versions/{version_id}/graph",
         json={
             "nodes": [
-                {"id": "s", "node_type": "start"},
-                {"id": "n1", "group_ids": ["g1"]},
+                {"id": s, "node_type": "start"},
+                {"id": n1, "group_ids": [g1]},
             ],
             "edges": [],
-            "groups": [{"id": "g1", "label": "팀", "color": ""}],
+            "groups": [{"id": g1, "label": "팀", "color": ""}],
         },
     )
     # 그룹 해제 — group_ids 비움 + groups 비움
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "s", "node_type": "start"}, {"id": "n1"}], "edges": [], "groups": []},
+        json={"nodes": [{"id": s, "node_type": "start"}, {"id": n1}], "edges": [], "groups": []},
     )
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
     assert saved["groups"] == []
-    assert next(n for n in saved["nodes"] if n["id"] == "n1")["group_ids"] == []
+    assert next(n for n in saved["nodes"] if n["id"] == n1)["group_ids"] == []
 
 
 def test_graph_is_flat_per_version(client: TestClient) -> None:
     version_id = _create_version(client)
+    s, a, b, c = _make_ids(version_id, "s", "a", "b", "c")
     # 예전엔 parent 스코프로 분리됐던 노드들이 이제 한 평면에 공존
     client.put(
         f"/api/versions/{version_id}/graph",
-        json={"nodes": [{"id": "s", "node_type": "start"}, {"id": "a"}, {"id": "b"}, {"id": "c"}], "edges": []},
+        json={"nodes": [{"id": s, "node_type": "start"}, {"id": a}, {"id": b}, {"id": c}], "edges": []},
     )
     saved = client.get(f"/api/versions/{version_id}/graph").json()
-    assert {n["id"] for n in saved["nodes"]} == {"s", "a", "b", "c"}
+    assert {n["id"] for n in saved["nodes"]} == {s, a, b, c}
     assert all("has_children" not in n for n in saved["nodes"])  # 계층 개념 제거
 
 
 def test_subprocess_and_handle_fields_roundtrip(client: TestClient) -> None:
     version_id = _create_version(client)
+    target_map_id = _create_link_target(client)
+    s, sub_id, e, x1 = _make_ids(version_id, "s", "sub", "e", "x1")
     graph = {
         "nodes": [
-            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {"id": s, "title": "시작", "node_type": "start", "sort_order": 0},
             {
-                "id": "sub",
+                "id": sub_id,
                 "title": "결재",
                 "node_type": "subprocess",
-                "linked_map_id": 999,
+                "linked_map_id": target_map_id,
                 "follow_latest": True,
                 "sort_order": 1,
             },
-            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 2},
+            {"id": e, "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 2},
         ],
         "edges": [
             {
-                "id": "x1",
-                "source_node_id": "sub",
-                "target_node_id": "e",
+                "id": x1,
+                "source_node_id": sub_id,
+                "target_node_id": e,
                 "source_handle": "__primary__",
             }
         ],
@@ -490,11 +517,11 @@ def test_subprocess_and_handle_fields_roundtrip(client: TestClient) -> None:
     client.put(f"/api/versions/{version_id}/graph", json=graph)
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
-    sub = next(n for n in saved["nodes"] if n["id"] == "sub")
+    sub = next(n for n in saved["nodes"] if n["id"] == sub_id)
     assert sub["node_type"] == "subprocess"
-    assert sub["linked_map_id"] == 999
+    assert sub["linked_map_id"] == target_map_id
     assert sub["follow_latest"] is True
-    end = next(n for n in saved["nodes"] if n["id"] == "e")
+    end = next(n for n in saved["nodes"] if n["id"] == e)
     assert end["is_primary_end"] is True
     assert saved["edges"][0]["source_handle"] == "__primary__"
 
@@ -502,33 +529,36 @@ def test_subprocess_and_handle_fields_roundtrip(client: TestClient) -> None:
 def test_subprocess_follow_latest_defaults_on(client: TestClient) -> None:
     """follow_latest 생략 시 기본 True(최신본 추종)로 저장된다."""
     version_id = _create_version(client)
+    target_map_id = _create_link_target(client)
+    s, sub_id, e = _make_ids(version_id, "s", "sub", "e")
     graph = {
         "nodes": [
-            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {"id": s, "title": "시작", "node_type": "start", "sort_order": 0},
             {
-                "id": "sub",
+                "id": sub_id,
                 "title": "결재",
                 "node_type": "subprocess",
-                "linked_map_id": 999,
+                "linked_map_id": target_map_id,
                 # follow_latest 생략 — 기본값 검증
                 "sort_order": 1,
             },
-            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 2},
+            {"id": e, "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 2},
         ],
         "edges": [],
     }
     client.put(f"/api/versions/{version_id}/graph", json=graph)
     saved = client.get(f"/api/versions/{version_id}/graph").json()
-    sub = next(n for n in saved["nodes"] if n["id"] == "sub")
+    sub = next(n for n in saved["nodes"] if n["id"] == sub_id)
     assert sub["follow_latest"] is True
 
 
 def test_node_url_roundtrip(client: TestClient) -> None:
     version_id = _create_version(client)
+    n0, n1 = _make_ids(version_id, "n0", "n1")
     graph = {
         "nodes": [
-            {"id": "n0", "title": "시작", "node_type": "start"},
-            {"id": "n1", "title": "계약", "url": "https://contract.example.com/doc/1"},
+            {"id": n0, "title": "시작", "node_type": "start"},
+            {"id": n1, "title": "계약", "url": "https://contract.example.com/doc/1"},
         ],
         "edges": [],
     }
@@ -536,17 +566,17 @@ def test_node_url_roundtrip(client: TestClient) -> None:
     client.put(f"/api/versions/{version_id}/graph", json=graph)
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
-    node = next(n for n in saved["nodes"] if n["id"] == "n1")
+    node = next(n for n in saved["nodes"] if n["id"] == n1)
     assert node["url"] == "https://contract.example.com/doc/1"
     # 미지정 노드는 빈 문자열 기본값
-    start = next(n for n in saved["nodes"] if n["id"] == "n0")
+    start = next(n for n in saved["nodes"] if n["id"] == n0)
     assert start["url"] == ""
 
     # 두 번째 PUT은 기존 노드 갱신(upsert existing 분기) 경로를 지난다
     graph["nodes"][1]["url"] = "https://updated.example.com"
     client.put(f"/api/versions/{version_id}/graph", json=graph)
     saved = client.get(f"/api/versions/{version_id}/graph").json()
-    node = next(n for n in saved["nodes"] if n["id"] == "n1")
+    node = next(n for n in saved["nodes"] if n["id"] == n1)
     assert node["url"] == "https://updated.example.com"
 
 
@@ -566,33 +596,34 @@ def test_node_url_too_long_rejected(client: TestClient) -> None:
 
 def test_node_url_label_roundtrip_and_cascade(client: TestClient) -> None:
     version_id = _create_version(client)
+    n0, n1, n2 = _make_ids(version_id, "n0", "n1", "n2")
     graph = {
         "nodes": [
-            {"id": "n0", "title": "시작", "node_type": "start"},
+            {"id": n0, "title": "시작", "node_type": "start"},
             {
-                "id": "n1",
+                "id": n1,
                 "title": "계약",
                 "url": "https://contract.example.com/doc/1",
                 "url_label": "계약서",
             },
             # url 없이 라벨만 — 서버 validator가 라벨을 소거해야 한다(캐스케이드)
-            {"id": "n2", "title": "고아라벨", "url_label": "orphan"},
+            {"id": n2, "title": "고아라벨", "url_label": "orphan"},
         ],
         "edges": [],
     }
     client.put(f"/api/versions/{version_id}/graph", json=graph)
     saved = client.get(f"/api/versions/{version_id}/graph").json()
 
-    node = next(n for n in saved["nodes"] if n["id"] == "n1")
+    node = next(n for n in saved["nodes"] if n["id"] == n1)
     assert node["url_label"] == "계약서"
-    orphan = next(n for n in saved["nodes"] if n["id"] == "n2")
+    orphan = next(n for n in saved["nodes"] if n["id"] == n2)
     assert orphan["url_label"] == ""
 
     # url을 지우면 라벨도 함께 소거된다
     graph["nodes"][1]["url"] = ""
     client.put(f"/api/versions/{version_id}/graph", json=graph)
     saved = client.get(f"/api/versions/{version_id}/graph").json()
-    node = next(n for n in saved["nodes"] if n["id"] == "n1")
+    node = next(n for n in saved["nodes"] if n["id"] == n1)
     assert node["url"] == ""
     assert node["url_label"] == ""
 
@@ -612,24 +643,26 @@ def test_node_url_label_too_long_rejected(client: TestClient) -> None:
 def test_graph_rejects_duplicate_subprocess_link(client: TestClient) -> None:
     # 같은 링크 대상 맵을 두 노드가 동시에 지정하면 저장 거부 — 링크 유일성 (design 2026-07-16)
     version_id = _create_version(client)
+    target_map_id = _create_link_target(client)
+    s, sub1, sub2, e = _make_ids(version_id, "s", "sub1", "sub2", "e")
     graph = {
         "nodes": [
-            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {"id": s, "title": "시작", "node_type": "start", "sort_order": 0},
             {
-                "id": "sub1",
+                "id": sub1,
                 "title": "결재1",
                 "node_type": "subprocess",
-                "linked_map_id": 999,
+                "linked_map_id": target_map_id,
                 "sort_order": 1,
             },
             {
-                "id": "sub2",
+                "id": sub2,
                 "title": "결재2",
                 "node_type": "subprocess",
-                "linked_map_id": 999,
+                "linked_map_id": target_map_id,
                 "sort_order": 2,
             },
-            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 3},
+            {"id": e, "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 3},
         ],
         "edges": [],
     }
@@ -641,24 +674,26 @@ def test_graph_rejects_duplicate_subprocess_link(client: TestClient) -> None:
 def test_graph_allows_distinct_subprocess_links(client: TestClient) -> None:
     # 대조: 서로 다른 대상 맵을 링크하면 정상 저장된다
     version_id = _create_version(client)
+    target_a, target_b = _create_link_target(client), _create_link_target(client)
+    s, sub1, sub2, e = _make_ids(version_id, "s", "sub1", "sub2", "e")
     graph = {
         "nodes": [
-            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {"id": s, "title": "시작", "node_type": "start", "sort_order": 0},
             {
-                "id": "sub1",
+                "id": sub1,
                 "title": "결재1",
                 "node_type": "subprocess",
-                "linked_map_id": 999,
+                "linked_map_id": target_a,
                 "sort_order": 1,
             },
             {
-                "id": "sub2",
+                "id": sub2,
                 "title": "결재2",
                 "node_type": "subprocess",
-                "linked_map_id": 1000,
+                "linked_map_id": target_b,
                 "sort_order": 2,
             },
-            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 3},
+            {"id": e, "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 3},
         ],
         "edges": [],
     }
@@ -671,7 +706,7 @@ def test_graph_grandfathers_preexisting_duplicate_subprocess_link(client: TestCl
     # 매 autosave마다 422로 막혀 사실상 읽기전용이 된다 (design 2026-07-17).
     version_id = _create_version(client)
     # node id는 전역 PK — 테스트 간 충돌 방지로 version_id를 접미사에 섞는다
-    sub1, sub2 = f"sub1-{version_id}", f"sub2-{version_id}"
+    s, sub1, sub2, e = _make_ids(version_id, "s", "sub1", "sub2", "e")
     _seed_nodes(
         Node(id=sub1, version_id=version_id, title="결재1", node_type="subprocess", linked_map_id=999, sort_order=1),
         Node(id=sub2, version_id=version_id, title="결재2", node_type="subprocess", linked_map_id=999, sort_order=2),
@@ -679,10 +714,10 @@ def test_graph_grandfathers_preexisting_duplicate_subprocess_link(client: TestCl
 
     graph = {
         "nodes": [
-            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {"id": s, "title": "시작", "node_type": "start", "sort_order": 0},
             {"id": sub1, "title": "결재1", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 1},
             {"id": sub2, "title": "결재2", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 2},
-            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 3},
+            {"id": e, "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 3},
         ],
         "edges": [],
     }
@@ -693,17 +728,17 @@ def test_graph_grandfathers_preexisting_duplicate_subprocess_link(client: TestCl
 def test_graph_blocks_newly_introduced_duplicate_subprocess_link(client: TestClient) -> None:
     # 대조: 기존엔 링크가 1개뿐이었는데 이번 PUT에서 2번째를 새로 추가하면 여전히 거부된다.
     version_id = _create_version(client)
-    sub1, sub2 = f"sub1-{version_id}", f"sub2-{version_id}"
+    s, sub1, sub2, e = _make_ids(version_id, "s", "sub1", "sub2", "e")
     _seed_nodes(
         Node(id=sub1, version_id=version_id, title="결재1", node_type="subprocess", linked_map_id=999, sort_order=1),
     )
 
     graph = {
         "nodes": [
-            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {"id": s, "title": "시작", "node_type": "start", "sort_order": 0},
             {"id": sub1, "title": "결재1", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 1},
             {"id": sub2, "title": "결재2", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 2},
-            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 3},
+            {"id": e, "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 3},
         ],
         "edges": [],
     }
@@ -716,7 +751,7 @@ def test_graph_blocks_duplicate_increase_on_already_grandfathered_target(client:
     # 대조: grandfather된 대상(기존 2개 저장)에 새 중복을 하나 더 얹으면(2 -> 3) 여전히 거부된다.
     # count <= 1 임계값이면 이미 깨진 대상은 한 번 grandfather된 뒤 영원히 통과해버리는 구멍이 있었다.
     version_id = _create_version(client)
-    sub1, sub2 = f"sub1-{version_id}", f"sub2-{version_id}"
+    s, sub1, sub2, e = _make_ids(version_id, "s", "sub1", "sub2", "e")
     _seed_nodes(
         Node(id=sub1, version_id=version_id, title="결재1", node_type="subprocess", linked_map_id=999, sort_order=1),
         Node(id=sub2, version_id=version_id, title="결재2", node_type="subprocess", linked_map_id=999, sort_order=2),
@@ -725,11 +760,11 @@ def test_graph_blocks_duplicate_increase_on_already_grandfathered_target(client:
 
     graph = {
         "nodes": [
-            {"id": "s", "title": "시작", "node_type": "start", "sort_order": 0},
+            {"id": s, "title": "시작", "node_type": "start", "sort_order": 0},
             {"id": sub1, "title": "결재1", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 1},
             {"id": sub2, "title": "결재2", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 2},
             {"id": sub3, "title": "결재3", "node_type": "subprocess", "linked_map_id": 999, "sort_order": 3},
-            {"id": "e", "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 4},
+            {"id": e, "title": "끝", "node_type": "end", "is_primary_end": True, "sort_order": 4},
         ],
         "edges": [],
     }
@@ -741,11 +776,12 @@ def test_graph_blocks_duplicate_increase_on_already_grandfathered_target(client:
 def test_node_promoted_fields_roundtrip_and_touch_time_normalized(client: TestClient) -> None:
     """인터뷰 승격 필드 왕복 + touch_time H.MM 정규화 (design 2026-08-19 §1.1·§2)."""
     version_id = _create_version(client)
+    n0, n1, n2 = _make_ids(version_id, "n0", "n1", "n2")
     graph = {
         "nodes": [
-            {"id": "n0", "title": "시작", "node_type": "start"},
+            {"id": n0, "title": "시작", "node_type": "start"},
             {
-                "id": "n1", "title": "작업지시 확인",
+                "id": n1, "title": "작업지시 확인",
                 "input": "그 주 작업지시\n표준기 목록",  # 개행 구분 복수
                 "output": "측정 범위",
                 "start_condition": "주기 도래",
@@ -753,38 +789,39 @@ def test_node_promoted_fields_roundtrip_and_touch_time_normalized(client: TestCl
                 "system_fallback": "EAM(구모델)",
                 "touch_time": "1.75",  # 75분 이월 → 2.15
             },
-            {"id": "n2", "title": "무효 터치타임", "touch_time": "한시간쯤"},
+            {"id": n2, "title": "무효 터치타임", "touch_time": "한시간쯤"},
         ],
         "edges": [],
     }
     res = client.put(f"/api/versions/{version_id}/graph", json=graph)
     assert res.status_code == 200
     saved = client.get(f"/api/versions/{version_id}/graph").json()
-    n1 = next(n for n in saved["nodes"] if n["id"] == "n1")
-    assert n1["input"] == "그 주 작업지시\n표준기 목록"
-    assert n1["output"] == "측정 범위"
-    assert n1["start_condition"] == "주기 도래" and n1["end_condition"] == "목록 확정"
-    assert "data_form" not in n1  # 노드 레벨 자료 형식 컬럼 폐기 (2026-09-03)
-    assert n1["system_fallback"] == "EAM(구모델)"
-    assert n1["touch_time"] == "2.15"
+    promoted = next(n for n in saved["nodes"] if n["id"] == n1)
+    assert promoted["input"] == "그 주 작업지시\n표준기 목록"
+    assert promoted["output"] == "측정 범위"
+    assert promoted["start_condition"] == "주기 도래" and promoted["end_condition"] == "목록 확정"
+    assert "data_form" not in promoted  # 노드 레벨 자료 형식 컬럼 폐기 (2026-09-03)
+    assert promoted["system_fallback"] == "EAM(구모델)"
+    assert promoted["touch_time"] == "2.15"
     # 무효 자유텍스트는 duration과 동일하게 경계에서 "" 소거(422 아님)
-    n2 = next(n for n in saved["nodes"] if n["id"] == "n2")
-    assert n2["touch_time"] == ""
+    invalid = next(n for n in saved["nodes"] if n["id"] == n2)
+    assert invalid["touch_time"] == ""
 
 
 def test_node_io_link_columns_roundtrip(client: TestClient) -> None:
     """IO 링크 컬럼 왕복 — 줄 정렬 유지, 후행 공백 줄 소거 (io-linking design §3)."""
     version_id = _create_version(client)
+    n0, n1, n2 = _make_ids(version_id, "n0", "n1", "n2")
     graph = {
         "nodes": [
-            {"id": "n0", "title": "시작", "node_type": "start"},
+            {"id": n0, "title": "시작", "node_type": "start"},
             {
-                "id": "n1", "title": "원본",
+                "id": n1, "title": "원본",
                 "output": "회의록\n견적서",
                 "output_ids": "itm_a1\n",  # 첫 항목만 원본 — 후행 빈 줄 소거 기대
             },
             {
-                "id": "n2", "title": "미러",
+                "id": n2, "title": "미러",
                 "input": "회의록",
                 "input_links": "itm_a1",
                 "input_flags": "optional",
@@ -795,21 +832,22 @@ def test_node_io_link_columns_roundtrip(client: TestClient) -> None:
     res = client.put(f"/api/versions/{version_id}/graph", json=graph)
     assert res.status_code == 200
     saved = client.get(f"/api/versions/{version_id}/graph").json()
-    n1 = next(n for n in saved["nodes"] if n["id"] == "n1")
-    n2 = next(n for n in saved["nodes"] if n["id"] == "n2")
-    assert n1["output_ids"] == "itm_a1"
-    assert n2["input_links"] == "itm_a1"
-    assert n2["input_flags"] == "optional"
+    origin = next(n for n in saved["nodes"] if n["id"] == n1)
+    mirror = next(n for n in saved["nodes"] if n["id"] == n2)
+    assert origin["output_ids"] == "itm_a1"
+    assert mirror["input_links"] == "itm_a1"
+    assert mirror["input_flags"] == "optional"
 
 
 def test_node_io_item_forms_roundtrip(client: TestClient) -> None:
     """IO 항목별 데이터 폼 — input/output 줄과 1:1 정렬 왕복, 후행 공백 줄만 소거 (2026-08-20)."""
     version_id = _create_version(client)
+    n0, n1 = _make_ids(version_id, "n0", "n1")
     graph = {
         "nodes": [
-            {"id": "n0", "title": "시작", "node_type": "start"},
+            {"id": n0, "title": "시작", "node_type": "start"},
             {
-                "id": "n1", "title": "작업지시 확인",
+                "id": n1, "title": "작업지시 확인",
                 "input": "그 주 작업지시\n표준기 목록",
                 # 두 번째 항목은 미지정(빈 줄) — 정렬 보존을 위해 유지돼야 한다
                 "input_forms": "document\n",
@@ -822,28 +860,29 @@ def test_node_io_item_forms_roundtrip(client: TestClient) -> None:
     res = client.put(f"/api/versions/{version_id}/graph", json=graph)
     assert res.status_code == 200
     saved = client.get(f"/api/versions/{version_id}/graph").json()
-    n1 = next(n for n in saved["nodes"] if n["id"] == "n1")
+    node = next(n for n in saved["nodes"] if n["id"] == n1)
     # 후행 빈 줄은 소거 — 항목보다 짧은 forms는 이후 줄 미지정으로 해석
-    assert n1["input_forms"] == "document"
-    assert n1["output_forms"] == "structured"
+    assert node["input_forms"] == "document"
+    assert node["output_forms"] == "structured"
 
 
 def test_node_gmp_roundtrip_and_invalid_scrubbed(client: TestClient) -> None:
     """활동별 GMP — 3값 왕복, 무효값은 경계에서 "" 소거 (design 2026-08-20)."""
     version_id = _create_version(client)
+    n0, n1, n2 = _make_ids(version_id, "n0", "n1", "n2")
     graph = {
         "nodes": [
-            {"id": "n0", "title": "시작", "node_type": "start"},
-            {"id": "n1", "title": "분류됨", "gmp": "direct"},
-            {"id": "n2", "title": "무효값", "gmp": "sometimes"},
+            {"id": n0, "title": "시작", "node_type": "start"},
+            {"id": n1, "title": "분류됨", "gmp": "direct"},
+            {"id": n2, "title": "무효값", "gmp": "sometimes"},
         ],
         "edges": [],
     }
     res = client.put(f"/api/versions/{version_id}/graph", json=graph)
     assert res.status_code == 200
     saved = client.get(f"/api/versions/{version_id}/graph").json()
-    assert next(n for n in saved["nodes"] if n["id"] == "n1")["gmp"] == "direct"
-    assert next(n for n in saved["nodes"] if n["id"] == "n2")["gmp"] == ""
+    assert next(n for n in saved["nodes"] if n["id"] == n1)["gmp"] == "direct"
+    assert next(n for n in saved["nodes"] if n["id"] == n2)["gmp"] == ""
 
 
 def test_assignee_role_roundtrips_and_clears_when_omitted(client: TestClient) -> None:
