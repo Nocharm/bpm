@@ -35,6 +35,7 @@ export function EdgeLabelEditor({
       defaultValue={initial}
       placeholder={placeholder}
       rows={1}
+      maxLength={200}
       // nodrag — 입력 중 React Flow가 패닝/노드 드래그하지 않게.
       // 빈 라벨도 입력 모드임이 또렷하도록: 굵은 accent ring + accent 캐럿 + placeholder (#1)
       className="nodrag absolute z-[1120] -translate-x-1/2 -translate-y-1/2 resize-none overflow-hidden rounded-sm border border-accent bg-surface px-2 py-1 text-center text-caption text-ink caret-accent shadow-lg outline-none ring-2 ring-accent/40 placeholder:text-ink-tertiary"

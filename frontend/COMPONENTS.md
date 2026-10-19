@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 306개 · 2026-10-19 기준
+총 307개 · 2026-10-19 기준
 
 ## components/
 
@@ -186,6 +186,7 @@
 | `framework-overview.tsx` | `FrameworkOverview` | 설정 Framework 탭 | `components/admin/framework-panel.tsx` |
 | `framework-panel.tsx` | `FrameworkPanel` | 설정 Framework 탭 | `app/settings/page.tsx` |
 | `fw-level-actions.tsx` | `FwLevelActions` | 관리 패널 레벨별 타일 액션 | `components/admin/framework-panel.tsx` |
+| `hr-sync-history.tsx` | `HrSyncHistory` | HR 전체 동기화 회차 이력 | `components/admin/batch-runs-panel.tsx` |
 | `interview-flow-guide.tsx` | `InterviewFlowGuide` | 인터뷰 JSON 왕복 안내 그림 | `components/admin/framework-panel.tsx` |
 | `local-account-table.tsx` | `LocalAccountTable` | 로컬 계정(외부 컨설턴트) 관리 | `app/settings/page.tsx` |
 | `notification-purge-modal.tsx` | `NotificationPurgeModal` | 알림 기간 퍼지 모달 | `components/admin/table-viewer.tsx` |

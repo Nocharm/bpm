@@ -171,6 +171,7 @@ export function GroupActions({
             type="text"
             autoFocus
             value={renameValue}
+            maxLength={200}
             onChange={(e) => setRenameValue(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") void handleRename();

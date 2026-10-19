@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-19 — 운영 postgres 전용 4단계: 시스템 리뷰 H-1~H-7·H-10 (dev)
+
+- 컬럼 형은 기동 시 모델 기준으로 넓힌다(`db._reconcile_column_types`, PG 전용·멱등): 시간대 없는 TIMESTAMP → TIMESTAMPTZ(USING 없이, 쓰기와 같은 세션 TimeZone으로 읽어 같은 절대 시각), VARCHAR → TEXT(`app_settings.value`가 JSON 목록을 담아 500이던 것). `_ADDED_COLUMNS` 시각 DDL도 TIMESTAMPTZ. 노드 제목·엣지 라벨·유저 그룹 이름은 컬럼 길이 200을 `max_length`(422)와 입력칸 `maxLength`로 막는다. 공지 수정·받은함 날짜 삭제 개수는 KST 날짜로 자른다(PG가 UTC `Z`로 응답해 저장마다 시작일이 하루 당겨졌다). compose 4서비스 `restart: unless-stopped`, backend `FORWARDED_ALLOW_IPS`=compose 서브넷(오른쪽부터 믿지 않는 첫 주소라 위조 불가). 복원 런북은 안전 덤프 → 빈 스키마 → `--exit-on-error --single-transaction`(덮어쓰기는 새 FK 테이블이 드랍을 막아 섞인 DB를 남겼다).
+- HR 대량 퇴직은 동기화를 멈추지 않고 회차 이력으로 남긴다(사용자 결정 2026-10-19, `hr_sync_runs` 최근 200회·Batch jobs HR 카드 이력·펼치면 신규·퇴직·재입사·삭제·중복 ID 명단, 퇴직+삭제 ≥ 관리 인원 5%·10명이면 Mass departure). 피드 판정: status 대소문자 무시, orgLevels 누락은 기존 조직 유지, 중복 loginId는 재직 행 우선.
+- 회귀 `test_hr_sync_history.py` 11·`test_postgres_schema_guards.py` 6. 일회용 postgres:16에서 수정 전 코드로 재현 → 수정 후 확인(카탈로그 500→200, 201자 제목 500→422, 시각 naive→같은 시각 aware·재기동 무변경, 런북 섞인 DB exit 1 → 덤프와 동일 exit 0·읽기전용 권한 유지·깨진 덤프는 무기록), uvicorn 미들웨어로 위조 XFF 무시 확인. pytest 1776·ruff·py3.11 컴파일·tsc·lint·vitest 1484·COMPONENTS 최신, PG 백엔드 브라우저 임시 스모크 10/10. 매뉴얼 ko/en·`docs/deploy/backup.md`·`deploy.md`·CLAUDE.md 반영.
+
 ## 2026-10-19 — 임포트·AI 데이터 무결성 3단계: 시스템 리뷰 P0-3·G-2~G-8·G-10·G-11 (dev)
 
 - 재전달·정정의 활동 계보를 seq가 아니라 직전 게시본에 다시 맞춘다(`_match_prior_lineage`: 같은 제목 → 같은 자리·같은 유형, 나머지는 새 계보). 활동을 끼우거나 빼도 오너 값이 한 칸씩 밀리지 않는다. 캠페인 유지 카드 행은 `keep: true`로 조립돼 임포터가 그 맵의 그래프·지정값·거버넌스를 쓰지 않는다(역변환 왕복이 메모·칸 없는 값을 떨어뜨리던 경로). 0.5에 칸이 없는 활동 부서·담당자는 승계·서명 밖, 색은 전달분이 빌 때만 승계, 맵 SP 비용은 비어 오면 유지. 파일이 기존 분류를 다른 상위로 옮기거나 다른 L5 소속 맵의 taskId를 담으면 파일 단위 error(사용자 결정: 드라이런 오류, 이름만 다르면 warning), 외부 AI 프롬프트 골격에 실제 L1~L5 코드를 싣는다.

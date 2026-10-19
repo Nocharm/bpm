@@ -47,7 +47,7 @@ All admin surfaces live under **Settings**. The left rail shows extra categories
 | **Local Accounts** | Settings → Directory | ldap auth mode only. Local login accounts for external consultants (see section 7) |
 | **Framework** | Settings → Framework | Work-framework category management (Manage / Status views), admin appointment, interview JSON import. Pilot stage (see section 13). Delegated category admins get the same screen scoped to their subtree |
 | **Tables** | Settings → Database | Read-only DB browser (incl. login records), server-side CSV export |
-| **Batch jobs** | Settings → Database | Latest run status (success/failure) of DB backups and HR sync, **Backup now** and backup-file download |
+| **Batch jobs** | Settings → Database | Latest run status (success/failure) of DB backups and HR sync, **Backup now** and backup-file download, HR sync run history (who changed) |
 | **Approval Queue** | Settings → Approvals | Cross-map pending requests |
 | **Dashboard** | Settings → Analytics | Operational metrics from the live database. Access can be delegated to others (see section 8) |
 | **Groups** | Settings → Groups | Approve group requests, see all groups |
@@ -132,7 +132,8 @@ Each entry shows the requester and context; decide with Approve / Reject (this q
 - **Full sync**: run it manually with the sync button on the Employees tab (still labeled **Sync all from AD**). While running, the button shows a spinner with **Syncing…** and stays disabled until the sync and the follow-up list reload finish. On completion a scanned · upserted · deactivated · deleted · skipped summary is shown. Consecutive runs are throttled to one per 5 minutes.
 - **Automatic sync**: a built-in scheduler repeats the full sync every `HR_SYNC_INTERVAL_HOURS` (default 24 hours, 0 = off). Independently, each user is single-synced once per day on login.
 - **Departures**: people reported inactive by HR are not deleted; they are marked **active=false** (status: inactive) and automatically excluded from pickers and the directory.
-- **Sync safeguards**: ① **Dry-run preview**: `POST /api/employees/sync-preview` (sysadmin API) returns the would-be upsert/deactivate/delete counts and sample lists without touching the DB. Check it before the first migration or a large reorg. ② **Deletion-ratio cap**: if a single sync would delete more than `HR_SYNC_DELETE_CAP_PCT` (default 20%) of the managed rows, the whole sync aborts.
+- **Sync safeguards**: ① **Dry-run preview**: `POST /api/employees/sync-preview` (sysadmin API) returns the would-be upsert/deactivate/delete counts and sample lists without touching the DB. Check it before the first migration or a large reorg. ② **Deletion-ratio cap**: if a single sync would delete more than `HR_SYNC_DELETE_CAP_PCT` (default 20%) of the managed rows, the whole sync aborts. ③ **A mass departure is recorded, not blocked**: when deactivations (deletions included) reach 5% of the managed people and at least 10, the sync still finishes and the run is flagged **Mass departure** in the Batch jobs history, where you can see exactly who was deactivated.
+- **Feed rules**: status is case-insensitive (`Active` still means active). A row without `orgLevels` keeps the person's existing org and department. When a loginId appears twice, the active row wins and the ID is listed under duplicate IDs in the run history.
 - Korean names and Korean departments are now filled directly by the HR webhook, so the old import tools (Korean name import, department info import) have been removed. The email field was also removed from the model. The directory stores no email addresses.
 - Assignee pickers in the editor resolve against this directory. A stale directory means missing people in pickers.
 - **CSV export**: the **Export CSV** button on the Employees and Departments tables downloads all rows with the same columns as the screen. Files are Excel-compatible (BOM included) with a formula-injection guard.
@@ -199,6 +200,7 @@ Shows the latest attempts of the **DB backup** and the **HR (people) sync**, per
 
 - **Backup now (on demand)**: the **Backup now** button on the DB backup card makes a backup outside the daily schedule. In production (postgres) the backend drops a request file that the sidecar picks up within seconds to run `pg_dump`, so after the "Backup requested" notice, re-check the list a moment later; local sqlite copies immediately.
 - **Backup files and download**: the same card lists the backup files in `${BACKUP_DIR}`, and each can be **downloaded** for an off-server copy (sysadmin only).
+- **HR sync history**: below the HR card, every full sync run is listed newest first (latest 30 shown, 200 kept). Each run shows how many people were scanned and how many were new, left, rejoined, removed or duplicated; expand a run to see each person's name, ID and department. Mass-departure runs carry a **Mass departure** badge. People deactivated by a feed accident come back on the next good sync, but approvals cancelled and checkouts released in between do not, so use this list to find who needs follow-up.
 
 ### Daily Automatic DB Backup (production server)
 
@@ -385,6 +387,7 @@ Fill an L5 through a conversation with AI instead of a document (sysadmin only).
 | `N8N_POSITION_URL` | backend `.env` | EDW department-head position webhook (empty disables position collection) |
 | `HR_SYNC_INTERVAL_HOURS` | backend `.env` | Built-in HR sync scheduler interval (hours). Default 24, 0 = off. Keep it at 0 for the first migration and raise it after the preview and a manual sync check out |
 | `HR_SYNC_DELETE_CAP_PCT` | backend `.env` | Full-sync deletion cap (% of managed rows). Default 20, 0 = guard off |
+| `FORWARDED_ALLOW_IPS` | `.env` (compose) | Proxy range whose X-Forwarded-For the backend trusts. Empty uses the compose network subnet (`172.36.0.0/16`). If wrong, login records and login throttling see the nginx address |
 | `AI_BASE_URL` | backend `.env` | AI server URL (OpenAI-compatible). The in-house GPU is `https://gpu02.sbiologics.com/v1` |
 | `AI_MODEL` | backend `.env` | Default model id. After the SGLang move this is **just `glm-5.2`** (the old `-think` / `-high` / `-nothink` aliases are gone) |
 | `AI_MAX_TOKENS` | backend `.env` | Response token cap, thinking tokens included. Default 8000. **Too low and replies come back empty** |

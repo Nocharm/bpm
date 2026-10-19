@@ -29,6 +29,7 @@ from app.models import (
     Employee,
     FeedbackNote,
     FeedbackNoteRevision,
+    HrSyncRun,
     Notification,
 )
 from app.orgchart import (
@@ -46,6 +47,8 @@ from app.schemas import (
     BatchRunOut,
     AdminDirectoryOut,
     AdminUserOut,
+    HrSyncRunDetailOut,
+    HrSyncRunOut,
     NotificationBulkDeleteOut,
     NotificationPurgeGroupOut,
     NotificationPurgeIn,
@@ -212,6 +215,37 @@ async def list_batch_runs(
     _require_sysadmin(login_id)
     rows = (await session.execute(select(BatchJobRun))).scalars().all()
     return list(rows)
+
+
+# HR 동기화 이력 목록 크기 — 탭에는 최근 회차만 보인다(보존은 hr.history.HR_SYNC_HISTORY_KEEP)
+HR_SYNC_HISTORY_PAGE = 30
+
+
+@router.get("/hr-sync-runs", response_model=list[HrSyncRunOut])
+async def list_hr_sync_runs(
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[HrSyncRun]:
+    """sysadmin 전용 — HR 전체 동기화 최근 회차 요약(최신순). 바뀐 사람 목록은 회차 상세에서."""
+    _require_sysadmin(login_id)
+    rows = await session.scalars(
+        select(HrSyncRun).order_by(HrSyncRun.id.desc()).limit(HR_SYNC_HISTORY_PAGE)
+    )
+    return list(rows)
+
+
+@router.get("/hr-sync-runs/{run_id}", response_model=HrSyncRunDetailOut)
+async def get_hr_sync_run(
+    run_id: int,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> HrSyncRun:
+    """sysadmin 전용 — HR 동기화 회차 1건 + 신규·퇴직·재입사·삭제·중복 인원."""
+    _require_sysadmin(login_id)
+    run = await session.get(HrSyncRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"hr sync run {run_id} not found")
+    return run
 
 
 # 백업 파일명 화이트리스트 — 사이드카 pg_dump(bpm-*.dump)·로컬 sqlite 사본(bpm-*.sqlite)만 노출.

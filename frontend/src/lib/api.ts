@@ -1039,6 +1039,43 @@ export function listBatchRuns(): Promise<BatchRun[]> {
   return request<BatchRun[]>("/admin/batch-runs");
 }
 
+// HR 전체 동기화 회차 이력 — 회차 요약 목록 + 펼칠 때 받는 바뀐 사람 목록 / HR full-sync run history.
+export interface HrSyncPerson {
+  login_id: string;
+  name: string;
+  department: string;
+}
+
+export interface HrSyncRun {
+  id: number;
+  ran_at: string;
+  outcome: "success" | "failure";
+  detail: string | null;
+  scanned: number;
+  created: number;
+  deactivated: number;
+  reactivated: number;
+  deleted: number;
+  skipped: number;
+  duplicates: number;
+  managed: number;
+  mass_departure: boolean;
+}
+
+export type HrSyncChangeKind = "created" | "deactivated" | "reactivated" | "deleted" | "duplicates";
+
+export interface HrSyncRunDetail extends HrSyncRun {
+  changes: Record<HrSyncChangeKind, HrSyncPerson[]>;
+}
+
+export function listHrSyncRuns(): Promise<HrSyncRun[]> {
+  return request<HrSyncRun[]>("/admin/hr-sync-runs");
+}
+
+export function getHrSyncRun(runId: number): Promise<HrSyncRunDetail> {
+  return request<HrSyncRunDetail>(`/admin/hr-sync-runs/${runId}`);
+}
+
 // 백업 파일 관리 — 목록·온디맨드 실행·다운로드 (설정 Batch jobs 탭, sysadmin 전용).
 export interface BackupFile {
   filename: string;

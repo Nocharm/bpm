@@ -125,6 +125,7 @@ docker compose up -d --build
 - `AI_*`(AI_ENDPOINTS 포함)는 backend **런타임** 환경변수 → 모델 추가/삭제는 `.env` 수정 후 `docker compose up -d`로 backend 재생성(재빌드 불필요).
 - DB 스키마는 backend 기동 시 `create_all` + `_add_missing_columns`로 보강(마이그레이션은 후속) — **배포만으로 컬럼 추가·신규 테이블이 반영된다. 서버에서 리셋할 일은 없다.** 주의할 것은 두 가지:
   - **새 컬럼은 `backend/app/db.py`의 `_ADDED_COLUMNS`에 수동 등록**해야 자동 ALTER가 돈다(누락하면 서버에서 `column does not exist`로 터진다).
+  - 컬럼 **형 넓히기**는 자동이다 — 기동 시 `_reconcile_column_types`가 모델보다 좁은 Postgres 컬럼(시간대 없는 `TIMESTAMP` → `TIMESTAMPTZ`, `VARCHAR` → `TEXT`)을 바꾸고 backend 로그에 `converted column …`을 남긴다(2026-10-19 첫 배포에서 `app_settings.value`와 시각 컬럼 11개).
   - **컬럼 삭제·개명·테이블 제거는 자동 반영되지 않는다** — 구 컬럼이 DB에 남고, 그것이 `NOT NULL`이면 INSERT가 깨진다. 그런 변경은 배포 전에 직접 `DROP`하거나 nullable로 바꾼다.
 - 프룬 도입(2026-07-09) 후 첫 AD 전체 동기화는 스테일 ad 행을 대량 삭제할 수 있음(비활성·퇴사자). 삭제 행의 한글이름/한글부서도 함께 사라지므로, 동기화 전 한글이름 모달의 전체 목록 추출로 백업 권장.
 - **1회성 후처리는 [`setup-once.md`](setup-once.md) B절에 모아뒀다** — `ai_chat_logs` 드랍(B1) · KB 게시본 백필(B2) · 필드 승격 재임포트(B3) · HR 첫 sync와 고아 경로 이관(B4) · 노출 직책 확정(B5). 지난 릴리스라면 이미 끝났을 수 있으니 해당 항목만 골라 확인한다.

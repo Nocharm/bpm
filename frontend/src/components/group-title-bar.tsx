@@ -84,6 +84,7 @@ export function GroupTitleBar({
         <input
           autoFocus
           defaultValue={label}
+          maxLength={200}
           className="w-24 rounded-xs border border-surface/40 bg-surface/95 px-1 text-fine text-ink"
           placeholder={t("group.untitled")}
           onBlur={(event) => {

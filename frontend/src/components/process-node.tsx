@@ -925,6 +925,7 @@ function NodeTitle({
         autoFocus
         defaultValue={label}
         rows={1}
+        maxLength={200}
         // 줄바꿈 단축키 안내(#7) — 캔버스 인라인은 공간이 없어 title 툴팁으로
         title={t("hint.newline")}
         // nodrag — 입력 중 React Flow가 노드를 끌지 않게

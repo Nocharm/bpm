@@ -368,7 +368,7 @@ class GroupOut(BaseModel):
 
 
 class GroupRenameIn(BaseModel):
-    name: str
+    name: str = Field(max_length=200)  # GroupCreate와 같은 상한 — 컬럼 String(200) (리뷰 H-4)
 
 
 class PendingCheckoutRequestOut(BaseModel):
@@ -1234,7 +1234,8 @@ class NodeIn(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    title: str = ""
+    # 컬럼 String(200) — 넘으면 운영 Postgres가 저장을 500으로 깬다(리뷰 2026-10-19 H-4)
+    title: str = Field(default="", max_length=200)
     description: str = ""
     node_type: str = "process"
     # hex 색 또는 빈 값(타입 기본색) — 형식은 API 경계에서 검증
@@ -1371,7 +1372,7 @@ class EdgeIn(BaseModel):
     id: str
     source_node_id: str
     target_node_id: str
-    label: str = ""
+    label: str = Field(default="", max_length=200)  # 컬럼 String(200) (리뷰 H-4)
     source_side: HandleSide = "right"
     target_side: HandleSide = "left"
     source_handle: str | None = Field(default=None, max_length=200)
@@ -2486,6 +2487,53 @@ class AiProposal(BaseModel):
             if group.parent_key is not None and group.parent_key not in group_keyset:
                 raise ValueError(f"group references unknown parent key: {group.parent_key}")
         return self
+
+
+class HrSyncPersonOut(BaseModel):
+    """HR 동기화 회차에서 바뀐 사람 1명 — 기록 시점의 이름·부서 스냅샷."""
+
+    login_id: str
+    name: str = ""
+    department: str = ""
+
+
+class HrSyncRunOut(BaseModel):
+    """HR 전체 동기화 회차 요약 — 설정 Batch jobs 탭 이력 목록 / one HR full-sync run."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ran_at: datetime
+    outcome: str
+    detail: str | None
+    scanned: int
+    created: int
+    deactivated: int
+    reactivated: int
+    deleted: int
+    skipped: int
+    duplicates: int
+    managed: int
+    mass_departure: bool
+
+
+class HrSyncChangesOut(BaseModel):
+    created: list[HrSyncPersonOut] = []
+    deactivated: list[HrSyncPersonOut] = []
+    reactivated: list[HrSyncPersonOut] = []
+    deleted: list[HrSyncPersonOut] = []
+    duplicates: list[HrSyncPersonOut] = []
+
+
+class HrSyncRunDetailOut(HrSyncRunOut):
+    """회차 요약 + 바뀐 사람 목록 — 행을 펼칠 때만 받는다(대량 퇴직 회차는 수천 명)."""
+
+    changes: HrSyncChangesOut = HrSyncChangesOut()
+
+    @field_validator("changes", mode="before")
+    @classmethod
+    def _default_changes(cls, value: object) -> object:
+        return {} if value is None else value  # 실패 회차는 바뀐 사람이 없어 NULL로 남는다
 
 
 class BatchRunOut(BaseModel):

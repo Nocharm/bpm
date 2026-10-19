@@ -12,6 +12,8 @@ services:
     depends_on:
       - frontend
       - backend
+    # OOM·서버 재부팅 뒤 자동 복구 (리뷰 2026-10-19 H-10) — 운영자가 stop한 컨테이너는 그대로 둔다
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -27,6 +29,7 @@ services:
       NODE_OPTIONS: --max-old-space-size=512
     expose:
       - "3000"
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -90,6 +93,10 @@ services:
       N8N_POSITION_URL: ${N8N_POSITION_URL:-}
       HR_SYNC_INTERVAL_HOURS: ${HR_SYNC_INTERVAL_HOURS:-24}
       HR_SYNC_DELETE_CAP_PCT: ${HR_SYNC_DELETE_CAP_PCT:-20}
+      # uvicorn이 X-Forwarded-For를 믿을 프록시 대역 — 아래 networks.default 서브넷과 같은 값이어야
+      # 로그인 스로틀·login_records가 실제 클라이언트 IP를 본다 (리뷰 2026-10-19 H-7). backend는 호스트에
+      # 포트를 열지 않아 이 대역 밖에서는 직접 닿지 않고, 오른쪽부터 믿지 않는 첫 주소를 쓰므로 헤더 위조가 안 먹힌다.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-172.36.0.0/16}
       # 컨테이너 내부 백업 마운트 경로(아래 volumes와 짝) — .env의 BACKUP_DIR(호스트 경로)와 별개
       BACKUP_DIR: /backups
     volumes:
@@ -100,6 +107,7 @@ services:
         condition: service_healthy
     expose:
       - "8000"
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -129,6 +137,7 @@ services:
         # 공유 네트워크에는 여러 서비스의 db가 함께 있다 — 별칭이 유일한 구별 수단이라 스택마다 다르게
         # (운영=bpm-db · 검증 9910=.env의 DBV_DB_ALIAS=bpm9910-db).
         aliases: ["${DBV_DB_ALIAS:-bpm-db}"]
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -152,7 +161,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # 백업 루프가 죽으면 조용히 백업이 멈추므로 자동 재기동 (다른 서비스는 기존 정책 유지)
+    # 백업 루프가 죽으면 조용히 백업이 멈추므로 자동 재기동 (다른 서비스도 같은 정책)
     restart: unless-stopped
     deploy:
       resources:
@@ -165,6 +174,7 @@ volumes:
   pgdata:
 
 # 서버(사내 71번) 기본 브리지 서브넷이 사내망 대역과 충돌 → 명시 대역으로 고정
+# 바꾸면 backend FORWARDED_ALLOW_IPS 기본값도 같이 바꾼다
 networks:
   default:
     driver: bridge

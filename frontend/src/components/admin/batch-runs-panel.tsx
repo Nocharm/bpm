@@ -2,6 +2,7 @@
 // 배치 작업(DB 백업·HR 동기화) 최근 실행 상태 — 잡·결과별 최신 1행 (설정 > Batch jobs 탭, sysadmin 전용).
 // 서버 기록: 백업=scripts/db-backup.sh(psql), HR=backend run_full_sync — 최신 성공·실패만 upsert 보전.
 // DB 백업 카드는 온디맨드 실행(Backup now)·백업 파일 목록·로컬 다운로드까지 담당한다.
+// HR 카드는 회차 이력(HrSyncHistory, hr_sync_runs)을 함께 보인다 — 바뀐 사람을 회차별로 되짚는 용도.
 
 import { CheckCircle2, DatabaseBackup, Download, Play, Users, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -14,6 +15,7 @@ import {
   type BackupFile,
   type BatchRun,
 } from "@/lib/api";
+import { HrSyncHistory } from "@/components/admin/hr-sync-history";
 import { humanizeApiError } from "@/lib/api-errors";
 import { formatKst } from "@/lib/datetime";
 import { downloadBlob } from "@/lib/download-blob";
@@ -193,7 +195,7 @@ export function BatchRunsPanel() {
                     <dd className="min-w-0 text-ink">
                       {success ? formatKst(success.ran_at) : "-"}
                       {success?.detail && (
-                        <span className="ml-2 break-all text-ink-muted">{success.detail}</span>
+                        <span className="ml-2 break-words text-ink-muted">{success.detail}</span>
                       )}
                     </dd>
                   </div>
@@ -202,12 +204,13 @@ export function BatchRunsPanel() {
                     <dd className="min-w-0 text-ink">
                       {failure ? formatKst(failure.ran_at) : "-"}
                       {failure?.detail && (
-                        <span className="ml-2 break-all text-error">{failure.detail}</span>
+                        <span className="ml-2 break-words text-error">{failure.detail}</span>
                       )}
                     </dd>
                   </div>
                 </dl>
               )}
+              {id === "hr_sync" && <HrSyncHistory />}
               {id === "db_backup" && (
                 <div data-id="backup-files" className="mt-4 border-t border-hairline pt-3">
                   <h4 className="text-fine font-semibold text-ink-tertiary">

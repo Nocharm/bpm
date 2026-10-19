@@ -3,7 +3,8 @@
 import logging
 from collections.abc import AsyncGenerator
 
-from sqlalchemy import Connection, inspect, text
+from sqlalchemy import Connection, DateTime, MetaData, String, Text, inspect, text
+from sqlalchemy.types import TypeEngine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.models import Base
@@ -16,6 +17,8 @@ SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 # create_all로 못 채우는 신규 컬럼(기존 테이블에 추가된 것)을 보강하는 경량 스톱갭.
 # Alembic 도입 전까지 기존 DB가 깨지지 않도록 startup에서 멱등 적용. (table, column, DDL 타입)
+# 시각 컬럼은 TIMESTAMPTZ — 모델이 전부 timezone=True다. 예전 TIMESTAMP로 붙은 운영 컬럼은
+# _reconcile_column_types가 바꾼다 (리뷰 2026-10-19 H-6). sqlite는 형 이름을 가리지 않는다.
 _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("nodes", "group_id", "VARCHAR(50)"),  # spec Phase 2 — 업무 묶음 소속
     # 버전 승인 워크플로우 — 기존 map_versions에 컬럼 보강 (design 2026-06-14)
@@ -31,20 +34,20 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("groups", "parent_group_id", "VARCHAR(50)"),  # 그룹 중첩(하위 그룹핑) — design 2026-06-15
     ("nodes", "group_ids", "JSON"),  # 다중 그룹(태그) 소속 — design 2026-06-15
     ("nodes", "parallel_outputs", "JSON"),  # 병렬 출구 키 — 출력 규칙 2026-10-01
-    ("user_groups", "deleted_at", "TIMESTAMP"),  # 그룹 소프트삭제(7일 보존) — 2026-06-27
-    ("user_groups", "name_changed_at", "TIMESTAMP"),  # 주 1회 rename 제한 — 2026-06-27
+    ("user_groups", "deleted_at", "TIMESTAMPTZ"),  # 그룹 소프트삭제(7일 보존) — 2026-06-27
+    ("user_groups", "name_changed_at", "TIMESTAMPTZ"),  # 주 1회 rename 제한 — 2026-06-27
     # 매뉴얼 다중 문서 — 제목·언어·정렬 (F10, 2026-07-06). 레거시 단일 게시본 행은 ko로 흡수
     ("manual_docs", "title", "VARCHAR(200) DEFAULT ''"),
     ("manual_docs", "language", "VARCHAR(5) DEFAULT 'ko'"),
     ("manual_docs", "sort_order", "INTEGER DEFAULT 0"),
     # 서브프로세스 지정 — 지정 맵만 피커 노출 + 라이브 어트리뷰트 (2026-07-06)
-    ("process_maps", "sp_designated_at", "TIMESTAMP"),
+    ("process_maps", "sp_designated_at", "TIMESTAMPTZ"),
     ("process_maps", "sp_department", "VARCHAR(100)"),
     ("process_maps", "sp_assignee", "VARCHAR(100)"),
     ("process_maps", "sp_system", "VARCHAR(100)"),
     ("process_maps", "sp_duration", "VARCHAR(50)"),
     ("process_maps", "sp_changed_by", "VARCHAR(100)"),
-    ("process_maps", "sp_changed_at", "TIMESTAMP"),
+    ("process_maps", "sp_changed_at", "TIMESTAMPTZ"),
     # 노드 참조 링크 — CSV import design 2026-07-06
     ("nodes", "url", "VARCHAR(500) DEFAULT ''"),
     # URL 라벨 + 서브프로세스 지정 URL — url-label design 2026-07-07
@@ -77,8 +80,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "mode", "VARCHAR(20) DEFAULT 'normal'"),
     ("process_maps", "doc_name", "VARCHAR(300) DEFAULT ''"),
     ("process_maps", "doc_sections", "JSON"),
-    ("process_maps", "doc_imported_at", "TIMESTAMP"),
-    ("process_maps", "doc_generated_at", "TIMESTAMP"),
+    ("process_maps", "doc_imported_at", "TIMESTAMPTZ"),
+    ("process_maps", "doc_generated_at", "TIMESTAMPTZ"),
     ("interview_sessions", "mode", "VARCHAR(20) DEFAULT 'normal'"),
     # AI L5 캠페인 — 첨부 분리·플레이스홀더 건너뛰기 (2026-09-21, dev 서버에 테이블 기존재 대비)
     ("framework_interview_sessions", "attachments", "JSON"),
@@ -102,11 +105,11 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     # 임포트 출처 게이트웨이 종별 — "parallel"만 앱이 해석(§4 게이트 6 예외) (2026-09-02)
     ("edges", "gateway", "VARCHAR(20)"),
     # 피드백 알림 발송 시각 — 관리자 수동 발송(상태변경은 1회 한정) (2026-08-19)
-    ("feedback", "reply_notified_at", "TIMESTAMP"),
-    ("feedback", "status_notified_at", "TIMESTAMP"),
+    ("feedback", "reply_notified_at", "TIMESTAMPTZ"),
+    ("feedback", "status_notified_at", "TIMESTAMPTZ"),
     # 노트 수정 이력/아카이브 — 삭제는 아카이브로만, 영구삭제는 관리자 퍼지 (2026-08-19)
-    ("feedback_notes", "edited_at", "TIMESTAMP"),
-    ("feedback_notes", "archived_at", "TIMESTAMP"),
+    ("feedback_notes", "edited_at", "TIMESTAMPTZ"),
+    ("feedback_notes", "archived_at", "TIMESTAMPTZ"),
     # 인터뷰 필드 승격 — 노드/SP 대칭 + 대표/폴백 쌍 (design 2026-08-19 §1)
     ("nodes", "touch_time", "VARCHAR(50) DEFAULT ''"),
     ("nodes", "input", "TEXT DEFAULT ''"),
@@ -141,7 +144,7 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_annual_count", "VARCHAR(50)"),
     ("process_maps", "sp_fte", "VARCHAR(50)"),
     # 노트 사람 수정 시각 — 재임포트 교체 행 기본값 판정 (design 2026-09-03 followups §3)
-    ("map_notes", "edited_at", "TIMESTAMP"),
+    ("map_notes", "edited_at", "TIMESTAMPTZ"),
     # 알림 구조화 컨텍스트 — FE 언어 토글 렌더용, 레거시 행은 NULL→message 폴백 (2026-08-26)
     ("notifications", "payload", "JSON"),
     # Framework L5 연계 캔버스 (design 2026-08-28) — 카테고리↔캔버스 1:1 · 확정 스냅샷 번호
@@ -287,6 +290,55 @@ def _relax_employees_email_not_null(conn: Connection) -> None:
         conn.execute(text("ALTER TABLE employees ALTER COLUMN email DROP NOT NULL"))
 
 
+def find_column_type_drift(
+    metadata: MetaData, db_columns: dict[str, dict[str, TypeEngine]]
+) -> list[tuple[str, str, str]]:
+    """모델보다 좁은 DB 컬럼 형 — (table, column, 바꿀 DDL 타입). 넓히는 두 방향만 다룬다:
+    시간대 없는 TIMESTAMP → TIMESTAMPTZ(모델 timezone=True), VARCHAR → TEXT(모델 Text)."""
+    drift: list[tuple[str, str, str]] = []
+    for table in metadata.tables.values():
+        existing = db_columns.get(table.name)
+        if existing is None:
+            continue
+        for column in table.columns:
+            db_type = existing.get(column.name)
+            if db_type is None:
+                continue
+            model_type = column.type
+            if (
+                isinstance(model_type, DateTime) and model_type.timezone
+                and isinstance(db_type, DateTime) and not db_type.timezone
+            ):
+                drift.append((table.name, column.name, "TIMESTAMPTZ"))
+            elif (
+                isinstance(model_type, Text)
+                and isinstance(db_type, String) and not isinstance(db_type, Text)
+            ):
+                drift.append((table.name, column.name, "TEXT"))
+    return drift
+
+
+def _reconcile_column_types(conn: Connection) -> None:
+    """운영 Postgres 컬럼 형을 모델에 맞춘다 — create_all은 기존 컬럼 형을 고치지 않는다 (리뷰 2026-10-19 H-2·H-6).
+
+    TIMESTAMP → TIMESTAMPTZ는 USING 없이 바꾼다. 앱은 timestamptz로 바인드해 세션 TimeZone 기준
+    naive 값으로 저장됐고, 암묵 캐스트도 같은 세션 TimeZone으로 읽어 같은 절대 시각으로 돌아온다.
+    VARCHAR → TEXT는 재작성 없는 메타데이터 변경이다. sqlite는 형을 강제하지 않아 스킵.
+    """
+    if conn.dialect.name != "postgresql":
+        return
+    inspector = inspect(conn)
+    tables = set(inspector.get_table_names())
+    db_columns = {
+        table.name: {col["name"]: col["type"] for col in inspector.get_columns(table.name)}
+        for table in Base.metadata.tables.values()
+        if table.name in tables
+    }
+    for table, column, ddl_type in find_column_type_drift(Base.metadata, db_columns):
+        conn.execute(text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE {ddl_type}"))
+        logger.warning("converted column %s.%s to %s", table, column, ddl_type)
+
+
 def _drop_legacy_sp_description(conn: Connection) -> None:
     """폐기된 process_maps.sp_description 물리 삭제 — 맵 description으로 일원화 (사용자 결정 2026-08-31).
 
@@ -349,6 +401,7 @@ async def init_models() -> None:
         _enforce_version_approval_unique,
         _sweep_orphan_kb_chunks,
         _widen_interview_message_kind,
+        _reconcile_column_types,
         _relax_employees_email_not_null,
         _drop_legacy_sp_description,
         _drop_legacy_node_data_form,

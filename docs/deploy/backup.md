@@ -51,17 +51,41 @@ backend `/backups`로 마운트(+`BACKUP_DIR=/backups` env). API는 `/api/admin/
 
 운영 DB를 특정 시점 덤프로 되돌린다. **파괴적 작업** — 현재 DB 내용이 덤프 시점으로 교체된다.
 
+**빈 스키마에 한 트랜잭션으로 복원한다.** 예전 절차의 `pg_restore --clean --if-exists`(덮어쓰기)는
+덤프 뒤 배포에서 생긴 테이블의 FK가 핵심 테이블 드랍을 막아, 오류를 무시한 채 `exit 1`로 끝나고
+일부 테이블은 현재 값·일부는 덤프 값인 **섞인 DB**를 남겼다(리뷰 2026-10-19 H-1, postgres 16 재현:
+오류 5건, 맵 이름은 현재 값·노드는 덤프 값). 아래 절차는 같은 조건에서 `exit 0`·덤프와 동일한 DB를 만들고,
+덤프가 깨졌으면 아무것도 쓰지 않고 `exit 1`로 끝난다. 읽기전용 계정(`dbviewer_ro`) 권한은 덤프에 함께
+들어 있어 복원 뒤에도 유지된다.
+
 ```bash
 cd <저장소 루트>
-docker compose stop backend frontend    # 쓰기 중단 (db는 유지, 그동안 앱은 502)
-# --clean --if-exists: 기존 객체 드랍 후 재생성. 파일명은 backups/ 목록에서 선택
-docker compose exec -T db pg_restore -U ${POSTGRES_USER:-processmap} -d ${POSTGRES_DB:-processmap} \
-  --clean --if-exists --no-owner < backups/bpm-YYYYMMDD-HHMMSS.dump
+DUMP=backups/bpm-YYYYMMDD-HHMMSS.dump    # backups/ 목록에서 고른다
+PGU=${POSTGRES_USER:-processmap}; PGD=${POSTGRES_DB:-processmap}
+docker compose stop backend frontend     # 쓰기 중단 (db는 유지, 그동안 앱은 502)
+
+# 1) 안전망 — 지금 DB를 먼저 덤프한다. 복원이 실패하면 이 파일로 되돌린다
+SAFETY=backups/pre-restore-$(date +%Y%m%d-%H%M%S).dump
+docker compose exec -T db pg_dump -U $PGU -Fc $PGD > $SAFETY && ls -lh $SAFETY
+
+# 2) 빈 스키마로 비운다
+docker compose exec -T db psql -U $PGU -d $PGD -v ON_ERROR_STOP=1 \
+  -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+
+# 3) 한 트랜잭션으로 복원 — 오류가 하나라도 나면 전부 취소하고 exit 1
+docker compose exec -T db pg_restore -U $PGU -d $PGD --no-owner --exit-on-error --single-transaction < $DUMP
+echo "exit=$?"                           # 0이 아니면 4)로 가지 말고 아래 "실패하면"을 따른다
+
+# 4) 기동 — backend가 덤프 뒤에 생긴 테이블·컬럼을 create_all·자동 ALTER로 다시 붙인다
 docker compose start backend frontend
 curl -s http://localhost:9900/api/health   # {"status":"ok"}
-# 내용 확인: 브라우저 접속 또는
-docker compose exec db psql -U ${POSTGRES_USER:-processmap} -d ${POSTGRES_DB:-processmap} -c "SELECT count(*) FROM maps;"
+docker compose exec db psql -U $PGU -d $PGD -c "SELECT count(*) FROM process_maps;"
 ```
+
+**실패하면(3의 exit가 0이 아님)**: 스키마는 빈 상태로 남는다(부분 복원 없음). 앱을 띄우지 말고 2)·3)을
+`DUMP=$SAFETY`로 다시 실행해 복원 직전 상태로 되돌린 뒤 4)로 기동하고, 덤프 파일을 다른 날짜로 골라 다시 시도한다.
+
+> `pre-restore-*.dump`는 사이드카의 보존 정리 대상(`bpm-*.dump`)이 아니라 자동으로 지워지지 않는다 — 복구가 끝나면 수동으로 정리한다.
 
 ## 4. 복구 — 신규 서버 / 볼륨 유실 시
 
@@ -71,7 +95,8 @@ docker compose exec db psql -U ${POSTGRES_USER:-processmap} -d ${POSTGRES_DB:-pr
 docker compose up -d db                 # db만 먼저 기동(빈 DB 생성)
 docker compose exec db pg_isready -U ${POSTGRES_USER:-processmap}   # ready까지 대기
 docker compose exec -T db pg_restore -U ${POSTGRES_USER:-processmap} -d ${POSTGRES_DB:-processmap} \
-  --no-owner < backups/bpm-YYYYMMDD-HHMMSS.dump
+  --no-owner --exit-on-error --single-transaction < backups/bpm-YYYYMMDD-HHMMSS.dump
+echo "exit=$?"                          # 0이 아니면 다른 덤프로 다시 — 빈 DB라 반복해도 안전
 docker compose up -d --build            # 나머지 기동 — backend create_all은 기존 테이블을 건드리지 않음
 ```
 

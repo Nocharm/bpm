@@ -11,6 +11,7 @@ import {
   type NoticeImportance,
   type NoticeItem,
 } from "@/lib/api";
+import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import { DateRangeCalendar } from "@/components/notices/date-range-calendar";
 import { ModalBackdrop } from "@/components/modal-backdrop";
@@ -40,9 +41,10 @@ export function NoticeEditModal({
   const [importance, setImportance] = useState<NoticeImportance>(
     notice?.importance ?? "normal",
   );
-  const [startDate, setStartDate] = useState(notice ? notice.starts_at.slice(0, 10) : "");
+  // 날짜는 KST로 자른다 — 운영(Postgres)은 UTC(`Z`)로 응답해 원문을 자르면 시작일이 하루 앞당겨진다(리뷰 H-5)
+  const [startDate, setStartDate] = useState(notice ? formatKst(notice.starts_at).slice(0, 10) : "");
   const [endDate, setEndDate] = useState(
-    notice?.ends_at ? notice.ends_at.slice(0, 10) : "",
+    notice?.ends_at ? formatKst(notice.ends_at).slice(0, 10) : "",
   );
   const [unlimited, setUnlimited] = useState(notice ? notice.ends_at === null : false);
   const [bodyMd, setBodyMd] = useState(notice?.body_md ?? "");

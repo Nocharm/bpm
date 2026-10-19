@@ -34,7 +34,9 @@ class AppSetting(Base):
     __tablename__ = "app_settings"
 
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
-    value: Mapped[str] = mapped_column(String(500))
+    # JSON 목록(카탈로그·AI 팁·노출 직책)도 담아 길이 제한이 없어야 한다 — 기존 VARCHAR(500)은
+    # 기동 시 db._reconcile_column_types가 TEXT로 넓힌다 (리뷰 2026-10-19 H-2)
+    value: Mapped[str] = mapped_column(Text)
     updated_by: Mapped[str | None] = mapped_column(String(100), default=None)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
@@ -876,6 +878,34 @@ class BatchJobRun(Base):
     ran_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     # 성공=요약 카운트, 실패=사유
     detail: Mapped[str | None] = mapped_column(Text, default=None)
+
+
+class HrSyncRun(Base):
+    """HR 전체 동기화 회차 이력 — 회차마다 1행, 최근 HR_SYNC_HISTORY_KEEP건만 보전(설정 Batch jobs 탭).
+
+    대량 퇴직 같은 피드 사고를 멈추는 대신 기록해 사후에 누가 바뀌었는지 되짚는다 (사용자 결정 2026-10-19, 리뷰 H-3).
+    """
+
+    __tablename__ = "hr_sync_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ran_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    # 'success' | 'failure' — batch_job_runs와 같은 값
+    outcome: Mapped[str] = mapped_column(String(10))
+    # 실패=중단 사유·예외, 성공=None
+    detail: Mapped[str | None] = mapped_column(Text, default=None)
+    scanned: Mapped[int] = mapped_column(Integer, default=0)
+    created: Mapped[int] = mapped_column(Integer, default=0)
+    deactivated: Mapped[int] = mapped_column(Integer, default=0)
+    reactivated: Mapped[int] = mapped_column(Integer, default=0)
+    deleted: Mapped[int] = mapped_column(Integer, default=0)
+    skipped: Mapped[int] = mapped_column(Integer, default=0)
+    duplicates: Mapped[int] = mapped_column(Integer, default=0)
+    # 관리 인원(source ad/hr, 동기화 전) — 대량 퇴직 판정의 분모
+    managed: Mapped[int] = mapped_column(Integer, default=0)
+    mass_departure: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 바뀐 사람 — {"created"|"deactivated"|"reactivated"|"deleted"|"duplicates": [{login_id, name, department}]}
+    changes: Mapped[dict | None] = mapped_column(JSON, default=None)
 
 
 class LocalCredential(Base):

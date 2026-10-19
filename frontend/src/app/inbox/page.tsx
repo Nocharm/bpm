@@ -850,7 +850,8 @@ export default function InboxPage() {
                   ? t("inbox.deleteConfirmRead", { count: items.filter((n) => n.read).length })
                   : t("inbox.deleteConfirmBefore", {
                       date: beforeDate,
-                      count: items.filter((n) => n.created_at.slice(0, 10) < beforeDate).length,
+                      // 서버는 그 날짜 00:00 KST 미만을 지운다 — 개수도 KST 날짜로 센다(리뷰 H-5)
+                      count: items.filter((n) => formatKst(n.created_at).slice(0, 10) < beforeDate).length,
                     })
             }
             confirmLabel={t("inbox.deleteConfirmAction")}
