@@ -1,11 +1,12 @@
 // PNG 내보내기 Word 문서용 테마 스모크 — API로 복잡한 맵(긴 제목·병렬 출구·3갈래 판단·되돌림·끝 2개·영역·GMP·사용자 색)을
 // 시드하고 옵션 창(화면 그대로 ↔ Word 문서용, 스타일 3종, 병렬 표시·정보 블록 토글)을 조작하며 캡처한 뒤
-// 스타일별 PNG를 실제로 내려받아 저장한다.
+// 스타일별 PNG를 실제로 내려받아 저장한다. 끝으로 연결선 펼침 끔 + 나눠 싣기 ZIP과 출력 중 커서 가림막을 본다.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3047 BACKEND_URL=http://localhost:8048 node scripts/pw-png-export-word.mjs
 //   PW_LANG=ko|en(기본 ko). KEEP=1 이면 시드 맵을 지우지 않는다. 산출물은 저장소 루트 .shots/png-export-*.png (gitignore).
 // 전제: 백엔드 DEV_ENFORCE_PERMISSIONS=false, dev 유저 admin.sys.
 import { mkdirSync, readFileSync } from "node:fs";
 
+import JSZip from "jszip";
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -240,6 +241,54 @@ check(
 );
 await page.locator('[data-id="canvas-node-display-float-toggle"]').click();
 await page.locator('[data-id="canvas-a4-guide-toggle"]').click();
+
+// 연결선 펼침 끔 + 나눠 싣기 — 조각 PNG를 담은 ZIP 하나, 모든 조각이 같은 dpi(같은 배율)
+await page.keyboard.press("Escape");
+await page.locator(`button[aria-label="${LANG === "ko" ? "화면 맞춤(좌상단)" : "Fit to view (top-left)"}"]`).click();
+await page.waitForTimeout(600);
+await openModal();
+await page.locator('[data-id="png-export-toggle-edge-fan"]').click();
+await page.locator('[data-id="png-export-layout-split"]').click();
+await page.waitForTimeout(500);
+const splitSummary = (await page.locator('[data-id="png-export-split-summary"]').textContent()) ?? "";
+check("split summary counts pieces", /\d/.test(splitSummary), splitSummary.slice(0, 40));
+await modal.screenshot({ path: `${OUT}/png-export-modal-split.png` });
+// 커서를 창 뒤 노드 위에 둔 채 내려받는다 — 출력 중엔 가림막이 포인터를 받아 노드가 호버되지 않는다
+const hoverBox = await page.locator(".react-flow__node").nth(2).boundingBox();
+await page.mouse.move(hoverBox.x + hoverBox.width / 2, hoverBox.y + 12);
+const zipDownload = page.waitForEvent("download");
+await page.locator('[data-id="png-export-download"]').dispatchEvent("click");
+await page.waitForTimeout(300);
+const hoveredDuring = await page.evaluate(() => document.querySelectorAll(".react-flow__node:hover").length);
+check("shield keeps nodes unhovered during export", (await page.locator('[data-id="png-export-shield"]').count()) === 1 && hoveredDuring === 0);
+const zipFile = await zipDownload;
+check("split downloads one zip", zipFile.suggestedFilename().endsWith(".zip"), zipFile.suggestedFilename());
+await zipFile.saveAs(`${OUT}/png-export-word-split.zip`);
+const zip = await JSZip.loadAsync(readFileSync(`${OUT}/png-export-word-split.zip`));
+const pieceDpis = await Promise.all(
+  Object.values(zip.files).map(async (entry) => {
+    const bytes = Buffer.from(await entry.async("uint8array"));
+    const at = bytes.indexOf(Buffer.from("pHYs"));
+    return at > 0 ? Math.round(bytes.readUInt32BE(at + 4) * 0.0254) : 0;
+  }),
+);
+check("zip holds pieces at one dpi", pieceDpis.length >= 2 && pieceDpis.every((dpi) => dpi > 0 && dpi === pieceDpis[0]), `${pieceDpis.length} pieces · ${pieceDpis[0]} dpi`);
+await page.waitForTimeout(800);
+await page.mouse.move(hoverBox.x + hoverBox.width / 2 + 1, hoverBox.y + 13);
+await page.waitForTimeout(300);
+check(
+  "shield leaves after export (cursor was on a node)",
+  (await page.locator('[data-id="png-export-shield"]').count()) === 0 &&
+    (await page.evaluate(() => document.querySelectorAll(".react-flow__node:hover").length)) === 1,
+);
+await page.mouse.move(5, 500);
+await openModal();
+check(
+  "remembers fan off and split",
+  (await page.locator('[data-id="png-export-toggle-edge-fan"]').getAttribute("aria-checked")) === "false" &&
+    (await page.locator('[data-id="png-export-layout-split"]').getAttribute("aria-pressed")) === "true",
+);
+await page.keyboard.press("Escape");
 
 await browser.close();
 if (!KEEP) await api("DELETE", `/api/maps/${map.id}`).catch(() => undefined);

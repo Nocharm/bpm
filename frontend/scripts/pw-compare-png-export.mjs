@@ -1,11 +1,12 @@
 // 비교 화면 PNG 내보내기 스모크 — 비교 데모 맵(13, 기준 73 → 대상 74)을 열고 옵션 창(화면 그대로 ↔ 문서용, 범례·정보 블록·
 // 표시 정보 토글)을 조작하며 쉬머 중간 프레임과 안정 프레임을 캡처한 뒤 두 형식의 PNG를 실제로 내려받는다.
-// 파일 이름 규칙(맵_기준-vs-대상_compare_KST시각), 문서용 pHYs(dpi), 캡처 뒤 포커스 복원을 확인한다.
+// 파일 이름 규칙(맵_기준-vs-대상_compare_KST시각), 문서용 pHYs(dpi), 캡처 뒤 포커스 복원, 문서용 나눠 싣기 ZIP을 확인한다.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3061 MAP_ID=13 BASE_ID=73 TARGET_ID=74 node scripts/pw-compare-png-export.mjs
 //   PW_LANG=ko|en(기본 ko). 산출물은 저장소 루트 .shots/compare-png-*.png (gitignore).
 // 전제: 백엔드 DEV_ENFORCE_PERMISSIONS=false, dev 유저 admin.sys, 비교 데모 시드(seed_compare_demo).
 import { mkdirSync, readFileSync } from "node:fs";
 
+import JSZip from "jszip";
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -128,6 +129,37 @@ await page.locator('[data-id="compare-png-toggle-legend"]').click();
 await page.waitForTimeout(600);
 await download("document-bare");
 await page.screenshot({ path: `${OUT}/compare-png-page-after.png` });
+
+// 문서용 연결선 펼침 끔 + 나눠 싣기 — 조각 PNG를 담은 ZIP 하나(같은 dpi), 출력 중엔 커서 가림막
+await openModal();
+await page.locator('[data-id="compare-png-toggle-info"]').click();
+await page.locator('[data-id="compare-png-toggle-legend"]').click();
+check("edge fan chip shows for document", await page.locator('[data-id="compare-png-toggle-edge-fan"]').isVisible());
+await page.locator('[data-id="compare-png-toggle-edge-fan"]').click();
+await page.locator('[data-id="png-export-print-width"]').fill("40");
+await page.locator('[data-id="png-export-layout-split"]').click();
+await page.waitForTimeout(500);
+await modal.screenshot({ path: `${OUT}/compare-png-modal-split.png` });
+const zipDownload = page.waitForEvent("download", { timeout: 60_000 });
+await page.locator('[data-id="compare-png-download"]').click();
+await page.waitForTimeout(300);
+check("shield covers the canvas during export", (await page.locator('[data-id="compare-png-shield"]').count()) === 1);
+const zipFile = await zipDownload;
+check("split downloads one zip", zipFile.suggestedFilename().endsWith(".zip"), zipFile.suggestedFilename());
+await zipFile.saveAs(`${OUT}/compare-png-split.zip`);
+const zip = await JSZip.loadAsync(readFileSync(`${OUT}/compare-png-split.zip`));
+const pieceDpis = await Promise.all(
+  Object.values(zip.files).map(async (entry) => {
+    const bytes = Buffer.from(await entry.async("uint8array"));
+    const at = bytes.indexOf(Buffer.from("pHYs"));
+    return at > 0 ? Math.round(bytes.readUInt32BE(at + 4) * 0.0254) : 0;
+  }),
+);
+check("zip holds pieces at one dpi", pieceDpis.length >= 2 && pieceDpis.every((dpi) => dpi > 0 && dpi === pieceDpis[0]), `${pieceDpis.length} pieces · ${pieceDpis[0]} dpi`);
+await page.waitForTimeout(1200);
+check("shield leaves after export", (await page.locator('[data-id="compare-png-shield"]').count()) === 0);
+// 다음 실행이 화면 그대로 기본값부터 보도록 기억을 지운다
+await page.evaluate(() => window.localStorage.removeItem("bpm.comparePngExport"));
 
 await browser.close();
 const failed = results.filter((ok) => !ok).length;

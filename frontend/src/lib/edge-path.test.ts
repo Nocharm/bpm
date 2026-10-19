@@ -3,7 +3,13 @@ import { getStraightPath, Position, type Node } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
 import { toEdgeObstacle } from "@/lib/edge-detour";
-import { getEdgeObstacles, resolveEdgePath } from "@/lib/edge-path";
+import {
+  applyPrintEdgeCorners,
+  getEdgeCornerRadius,
+  getEdgeObstacles,
+  PRINT_EDGE_CORNER_RADIUS,
+  resolveEdgePath,
+} from "@/lib/edge-path";
 import { getBezierPathWithStub, getSmoothStepPathWithStub, type EdgeEndsArgs } from "@/lib/edge-stub";
 
 // 소스 우측 핸들(170,18) → 타깃 좌측 핸들(400,218) — 마주 보는 수평쌍, 기본 회랑 x=285
@@ -55,6 +61,29 @@ describe("resolveEdgePath - 꺾은선 체인", () => {
     expect(result.path.startsWith("M 170,18 L 232,18")).toBe(true);
     // 소스 행 구간(203.5,18)은 장애물 라벨 판정 안 → 회랑 세로 구간 중앙
     expect([result.labelX, result.labelY]).toEqual([237, 118]);
+  });
+
+  it("출력용 꺾임 반경은 RF 경로와 우회 경로 모두 작은 원호로 그린다", () => {
+    const step = resolveEdgePath({ ...LR, variant: "smoothstep", cornerRadius: PRINT_EDGE_CORNER_RADIUS });
+    expect(step.path).toBe(getSmoothStepPathWithStub(LR, PRINT_EDGE_CORNER_RADIUS)[0]);
+    expect(step.path).not.toBe(getSmoothStepPathWithStub(LR)[0]);
+    const detour = resolveEdgePath({
+      ...LR,
+      variant: "smoothstep",
+      fan: targetLane,
+      obstacles: [rowBlocker],
+      cornerRadius: PRINT_EDGE_CORNER_RADIUS,
+    });
+    // 회랑 x=237로 꺾는 첫 모서리 — 2px 앞에서 들어가 2px 아래로 나온다(화면은 5px)
+    expect(detour.path.startsWith("M 170,18 L 235,18 Q 237,18 237,20")).toBe(true);
+  });
+
+  it("출력 표시는 엣지 data에 꺾임 반경만 얹고 나머지 data는 그대로 둔다", () => {
+    const [marked] = applyPrintEdgeCorners([{ id: "e", data: { lineStyle: "smoothstep" } }]);
+    expect(marked.data).toEqual({ lineStyle: "smoothstep", cornerRadius: PRINT_EDGE_CORNER_RADIUS });
+    expect(getEdgeCornerRadius(marked.data)).toBe(PRINT_EDGE_CORNER_RADIUS);
+    expect(getEdgeCornerRadius({ cornerRadius: "2" })).toBeUndefined();
+    expect(getEdgeCornerRadius(undefined)).toBeUndefined();
   });
 
   it("양끝 노드는 장애물이 아니다 — 소스 id 장애물이 회랑을 덮어도 우회하지 않는다", () => {

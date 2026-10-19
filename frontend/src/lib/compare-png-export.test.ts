@@ -1,10 +1,9 @@
 // 비교 화면 PNG 옵션 기억·프레임 계산 단위 테스트
 import { afterEach, describe, expect, it } from "vitest";
 
-import { COMPARE_HEADER_H, COMPARE_LEGEND_H, measureCompareFrame } from "./export";
+import { getCompareDocumentChromePt, getPrintHeaderPt, measureCompareFrame, PRINT_LEGEND_ROW_PT } from "./export";
 import {
   DEFAULT_COMPARE_PNG_EXPORT_OPTIONS,
-  getCompareOutputHeight,
   loadComparePngExportOptions,
   saveComparePngExportOptions,
 } from "./compare-png-export";
@@ -25,6 +24,8 @@ describe("loadComparePngExportOptions", () => {
       showInfo: true,
       paper: "portrait",
       printWidthPct: 70,
+      edgeFan: false,
+      layout: "split",
     } as const;
     saveComparePngExportOptions(saved);
     expect(loadComparePngExportOptions()).toEqual(saved);
@@ -33,7 +34,15 @@ describe("loadComparePngExportOptions", () => {
   it("falls back per field when the stored value is broken", () => {
     window.localStorage.setItem(
       "bpm.comparePngExport",
-      JSON.stringify({ format: "word", showLegend: "yes", showInfo: false, paper: "letter", printWidthPct: 10 }),
+      JSON.stringify({
+        format: "word",
+        showLegend: "yes",
+        showInfo: false,
+        paper: "letter",
+        printWidthPct: 10,
+        edgeFan: 1,
+        layout: "pages",
+      }),
     );
     expect(loadComparePngExportOptions()).toEqual({
       ...DEFAULT_COMPARE_PNG_EXPORT_OPTIONS,
@@ -77,11 +86,11 @@ describe("measureCompareFrame", () => {
   });
 });
 
-describe("getCompareOutputHeight", () => {
-  it("adds the header and legend only when shown", () => {
-    expect(getCompareOutputHeight({ height: 500 }, { showInfo: false, showLegend: false })).toBe(500);
-    expect(getCompareOutputHeight({ height: 500 }, { showInfo: true, showLegend: true })).toBe(
-      500 + COMPARE_HEADER_H + COMPARE_LEGEND_H,
+describe("getCompareDocumentChromePt", () => {
+  it("adds the two-line info header and the legend row at print size only when shown", () => {
+    expect(getCompareDocumentChromePt({ showInfo: false, showLegend: false })).toBe(0);
+    expect(getCompareDocumentChromePt({ showInfo: true, showLegend: true })).toBe(
+      getPrintHeaderPt(2) + PRINT_LEGEND_ROW_PT,
     );
   });
 });

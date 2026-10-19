@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-19 — PNG 문서용 출력 다듬기: 나눠 싣기·인쇄 크기 고정 머리 블록·연결선 펼침 선택·입출력 사선 상자 (dev)
+
+- 워스트케이스 실출력(긴 LR 맵이 A4 폭에 띠처럼 줄어 노드 1.7~3pt, 머리 블록·범례도 같이 줄어듦)을 목업으로 보이고 사용자 확인 뒤 진행. 머리 블록·범례·연결 기호는 pt 고정 합성(`getPrintHeaderPt`, 제목 11·메타 7.5pt), 나눠 싣기(`lib/print-split`: 노드·라벨·영역 제목은 자르지 않고 빈 칸 후보 DP로 조각 수 최소→교차·영역·폭 고르기, 노드 글자 7pt 한도, 조각 위아래 내용만 남김, 잘린 연결선 양쪽 같은 문자, 같은 dpi 조각을 jszip(exceljs가 이미 끌어오던 3.10.1, 직접 의존으로) 무압축 ZIP 하나로)를 편집 Word·비교 문서용이 공유(`downloadDocumentFigure`). 옵션 창 칩 "연결선 펼침"(기본 켬, 끄면 팬 레인 없이 한 점에서)·인쇄 패널 "나눠 싣기"(조각 수는 창을 연 순간 화면 측정이라 "약 N조각" — 실제 출력은 문서 글꼴로 다시 재 하나쯤 다를 수 있다).
+- 문서용 출력만: 꺾임 반경 5→2(`edge.data.cornerRadius`, `resolveEdgePath` → RF·우회·팬 사이 구간), 노드·라벨·입출력 상자 1px, 시작/끝 칩 아이콘·조직 주의 아이콘(원래 필드 아이콘으로)·외부 L6 홈 색(탭·아이콘·출처 칩) 대신 테마 톤(`NodeActions.printDocument`), 조건 캡션 헤일로 끔(L5 어두운 헤일로가 종이에서 번짐). 화면+출력: 입력물 상자 왼쪽 위·산출물 상자 오른쪽 아래 사선(`.bpm-io-box`, clip-path+::before로 사선도 1px 선, 사용자 결정). 출력 중 커서 가림막(창이 닫히면 커서 아래 노드 호버가 찍히던 것).
+- 검증: vitest 1479·tsc·lint, 스모크 `pw-png-export-word` 37·`pw-compare-png-export` 23(ZIP 조각 dpi 동일·가림막 동안 호버 0), 워스트케이스 맵 실출력(편집 Word 5조각·비교 문서용 3조각·L5). 매뉴얼 md ko/en·`backend/app/manual.md` 갱신, 슬라이드 덱은 미재생성.
+
 ## 2026-10-17 — 출력 라운드 후속 정리 (dev)
 
 - 축소 드래그 성능: 영역(그룹) 멤버는 드래그 동결(#R2)에서 빠져 프레임마다 nodes를 커밋했고, 그때마다 페이지·노드·엣지 전부가 다시 렌더됐다(시드 120노드 맵 한 제스처에 노드 재렌더 ~1.2만). 영역 박스를 `GroupBoxLayer`로 떼어 라이브 좌표 신호(`lib/drag-live`)만 구독하게 하고 영역 멤버도 동결, 드롭 링·합류 강조는 `lib/drop-target` 스토어로 옮겨 드래그 중 페이지 렌더 0. 운영 빌드 A/B(새 시드 3회, 첫 제스처): drag-fit p95 33.4→16.8ms, 33ms 초과 ~55→~3프레임, 메인 스레드 95→63%, 노드 재렌더 ~12,200→~540. idle·pan·zoom 동일 60fps. 노드별 엣지 셀렉터는 이제 샘플 1.4%라 유지. `pw-perf-canvas` 계측 보강(`RENDERS`·`WHY`·`DRAG_FIT_NODE`·`DRAG_PACE`·`CPU_THROTTLE`·재렌더 계수)·스모크 `pw-verify-group-drag-live`.

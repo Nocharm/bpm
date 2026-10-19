@@ -126,12 +126,19 @@ import { findPublishedAt } from "@/components/version/requester-comment-banner";
 import { formatKst, formatKstShort } from "@/lib/datetime";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
 import { exportComparePng, measureCompareFrame, measureRenderedFlowBounds, type ExportFrame } from "@/lib/export";
+import { measureSplitSource } from "@/lib/print-split";
 import type { ComparePngExportOptions } from "@/lib/compare-png-export";
 import { buildDownloadName } from "@/lib/download-name";
 import { genId } from "@/lib/id";
 import { useEdgeObstacles } from "@/components/multiline-edge";
 import { type EdgeObstacle } from "@/lib/edge-detour";
-import { resolveEdgePath, type EdgeLineVariant, type EdgePathResult } from "@/lib/edge-path";
+import {
+  applyPrintEdgeCorners,
+  getEdgeCornerRadius,
+  resolveEdgePath,
+  type EdgeLineVariant,
+  type EdgePathResult,
+} from "@/lib/edge-path";
 import { assignEdgePulses, getDecisionTravel, isEdgePulse } from "@/lib/edge-pulse";
 import { buildEdgeCarry, isEdgeCarry } from "@/lib/edge-carry";
 import { getConditionCaptionExtents } from "@/lib/condition-captions";
@@ -229,6 +236,7 @@ function resolveCompareEdgePath(props: EdgeProps, obstacles?: readonly EdgeObsta
     obstacles,
     sourceId: props.source,
     targetId: props.target,
+    cornerRadius: getEdgeCornerRadius(props.data),
   });
 }
 
@@ -976,6 +984,8 @@ function ComparePane({
   // PNG 출력 중에만 옵션 창에서 고른 표시 정보로 그린다(끝나면 null → 사용자 설정). 배치·필·캡션도 이 값을 따른다
   const [exportDisplayFields, setExportDisplayFields] = useState<NodeDisplayToggle[] | null>(null);
   const viewDisplayFields = exportDisplayFields ?? displayFields;
+  // PNG 출력 중 — 커서 가림막을 깔고, 문서용이면 꺾임을 각지게·연결선 펼침 선택·노드 편집 신호를 문서 톤으로. null=평소
+  const [exportPrint, setExportPrint] = useState<{ document: { fan: boolean } | null } | null>(null);
   useEffect(() => {
     const saved = parseDisplayToggles(window.localStorage.getItem(COMPARE_DISPLAY_KEY), null);
     if (saved !== null) {
@@ -1011,8 +1021,12 @@ function ComparePane({
     setDisplayFields(next);
   };
   const nodeActions = useMemo<NodeActions>(
-    () => ({ ...COMPARE_NODE_ACTIONS, displayFields: viewDisplayFields }),
-    [viewDisplayFields],
+    () => ({
+      ...COMPARE_NODE_ACTIONS,
+      displayFields: viewDisplayFields,
+      printDocument: exportPrint?.document != null,
+    }),
+    [viewDisplayFields, exportPrint],
   );
   // 속성 탭 범위 — 모두 / 변경만(변경 노드에서 바뀐 필드만). 추가·삭제 노드는 전체가 새 값이라 모두로 취급.
   const [propsScope, setPropsScope] = useState<"all" | "changed">("changed");
@@ -1445,18 +1459,25 @@ function ComparePane({
       }), fanGeom);
   }, [merged, keptKeys, spKeys, handleSides, fanGeom, occupiedRects, flowDir, baseGraph, targetGraph, palette.muteUnchanged]);
 
-  // 포커스된 엣지만 굵게 얕게 패치 — 나머지 엣지는 appEdges 객체 그대로(identity 유지)
-  const displayEdges = useMemo(
-    () =>
-      focusId
-        ? appEdges.map((edge) =>
-            edge.id === focusId
-              ? { ...edge, selected: true, style: { ...(edge.style ?? {}), strokeWidth: 3 } }
-              : edge,
-          )
-        : appEdges,
-    [appEdges, focusId],
-  );
+  // 포커스된 엣지만 굵게 얕게 패치 — 나머지 엣지는 appEdges 객체 그대로(identity 유지).
+  // 문서용 PNG 출력 중엔 꺾임을 각지게 하고, 연결선 펼침을 끄면 팬 레인을 뺀다(삭제 직접연결 아크의 레인 불룩함은 유지)
+  const printEdges = exportPrint?.document ?? null;
+  const displayEdges = useMemo(() => {
+    const focused = focusId
+      ? appEdges.map((edge) =>
+          edge.id === focusId
+            ? { ...edge, selected: true, style: { ...(edge.style ?? {}), strokeWidth: 3 } }
+            : edge,
+        )
+      : appEdges;
+    if (!printEdges) return focused;
+    const shaped = printEdges.fan
+      ? focused
+      : focused.map((edge) =>
+          edge.data?.fan && edge.type !== "removedArc" ? { ...edge, data: { ...edge.data, fan: undefined } } : edge,
+        );
+    return applyPrintEdgeCorners(shaped);
+  }, [appEdges, focusId, printEdges]);
 
   const titleByKey = useMemo(
     () => new Map(merged.nodes.map((m) => [m.id, m.node.title])),
@@ -1729,10 +1750,14 @@ function ComparePane({
     const prevFocusId = focusId;
     const isFieldsChanged =
       fields.length !== displayFields.length || fields.some((field) => !displayFields.includes(field));
+    const isDocument = options.format === "document";
     setFocusId(null);
     if (isFieldsChanged) setExportDisplayFields(fields);
-    // 표시 정보가 바뀌면 노드 실측 → 재배치가 돈다(배치 안정 대기 LAYOUT_SETTLE_MS + 측정 여유)
-    if (isFieldsChanged) await new Promise<void>((resolve) => window.setTimeout(resolve, LAYOUT_SETTLE_MS + 480));
+    setExportPrint({ document: isDocument ? { fan: options.edgeFan } : null });
+    // 표시 정보·문서 톤(칩 아이콘)이 바뀌면 노드 실측 → 재배치가 돈다(배치 안정 대기 LAYOUT_SETTLE_MS + 측정 여유)
+    if (isFieldsChanged || isDocument) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, LAYOUT_SETTLE_MS + 480));
+    }
     await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     try {
       await exportComparePng(
@@ -1740,12 +1765,14 @@ function ComparePane({
         flow.getNodes(),
         buildDownloadName([mapName, `${versionTitle(baseId)}-vs-${versionTitle(targetId)}`, "compare"], "png"),
         {
-          document: options.format === "document",
+          document: isDocument,
           header: options.showInfo ? header : null,
           legend: options.showLegend ? pngLegend : null,
           muteUnchanged: palette.muteUnchanged,
           paper: options.paper,
           printWidthPct: options.printWidthPct,
+          layout: options.layout,
+          connectorLabel: t("pngExport.connectorLegend"),
         },
       );
     } catch (err) {
@@ -1759,6 +1786,7 @@ function ComparePane({
     }
     // catch가 모든 실패를 받으니 복원은 try 뒤에 둔다
     setExportDisplayFields(null);
+    setExportPrint(null);
     setFocusId(prevFocusId);
   };
 
@@ -2980,10 +3008,16 @@ function ComparePane({
           header={pngHeader}
           legendItems={pngLegend}
           canvasDisplayFields={displayFields}
+          measureSplit={() => {
+            const viewport = canvasRef.current?.querySelector<HTMLElement>(".react-flow__viewport");
+            return viewport && pngExport.frame ? measureSplitSource(viewport, pngExport.frame) : null;
+          }}
           onClose={() => setPngExport(null)}
           onExport={(options, fields) => void runPngExport(options, fields)}
         />
       )}
+      {/* PNG 출력 중 커서 가림막 — 창이 닫힌 뒤 커서 아래 노드의 호버 모습이 출력에 찍히지 않게 */}
+      {exportPrint !== null && <div data-id="compare-png-shield" className="fixed inset-0 z-[1300] cursor-progress" />}
       <ToastStack toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((toast) => toast.id !== id))} />
     </div>
   );

@@ -3,13 +3,15 @@
 // 비교 화면 PNG 내보내기 옵션 창 — 화면 그대로 / 문서용(결재자 보고용, 상태 색 유지) 선택, 범례·정보 블록·표시 정보 토글
 // (출력 순간에만 캔버스에 적용) + 샘플 비교 흐름 미리보기(현재 상태 색 구성을 따른다). 켜고 끄는 부분은 쉬머로
 // 생기고 사라지며(ShimmerPresence), 정보 블록은 위·범례는 아래로 출력과 같은 자리에 놓인다.
-// 문서용이면 인쇄 크기 패널(PngPrintPanel)을 오른쪽으로 펼친다. 마지막 선택은 브라우저에 기억(lib/compare-png-export).
+// 문서용이면 연결선 펼침 칩과 인쇄 크기 패널(PngPrintPanel, 나눠 싣기 포함)을 연다. 마지막 선택은 브라우저에 기억
+// (lib/compare-png-export).
 // 비교 화면(maps/[mapId]/compare/page.tsx) 내보내기 버튼이 연다. 편집 화면 PNG 창(png-export-modal)과 같은 골격.
 
 import { useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ListOrdered, PanelTop, X } from "lucide-react";
 
+import { EdgeFanIcon } from "@/components/edge-fan-icon";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { TOGGLE_ICONS, TOGGLE_LABEL_KEY } from "@/components/node-display-section";
 import { PngPrintPanel } from "@/components/png-print-panel";
@@ -17,16 +19,16 @@ import { resolveNodeStroke } from "@/components/process-node";
 import { ShimmerPresence } from "@/components/shimmer-presence";
 import { ToggleChip } from "@/components/toggle-chip";
 import {
-  getCompareOutputHeight,
   loadComparePngExportOptions,
   saveComparePngExportOptions,
   type ComparePngExportOptions,
   type ComparePngFormat,
 } from "@/lib/compare-png-export";
-import type { CompareLegendStatus, ExportFrame } from "@/lib/export";
+import { getCompareDocumentChromePt, type CompareLegendStatus, type ExportFrame } from "@/lib/export";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
+import type { SplitSource } from "@/lib/print-split";
 
 export interface CompareLegendItem {
   status: CompareLegendStatus;
@@ -44,6 +46,8 @@ interface ComparePngExportModalProps {
   legendItems: CompareLegendItem[];
   // 비교 화면의 현재 표시 정보 — 표시 정보 칩의 시작값(창에서 바꿔도 화면 설정은 그대로)
   canvasDisplayFields: NodeDisplayToggle[];
+  // 나눠 싣기 재료 측정(lib/print-split measureSplitSource) — 창을 열 때 한 번 부른다. 그림이 없으면 null
+  measureSplit: () => SplitSource | null;
   onClose: () => void;
   onExport: (options: ComparePngExportOptions, displayFields: NodeDisplayToggle[]) => void;
 }
@@ -78,20 +82,19 @@ export function ComparePngExportModal({
   header,
   legendItems,
   canvasDisplayFields,
+  measureSplit,
   onClose,
   onExport,
 }: ComparePngExportModalProps) {
   const { t } = useI18n();
   const [options, setOptions] = useState<ComparePngExportOptions>(() => loadComparePngExportOptions());
   const [displayFields, setDisplayFields] = useState<NodeDisplayToggle[]>(canvasDisplayFields);
+  // 지금 비교 화면 모습으로 잰 어림 — 출력은 문서 톤으로 다시 재므로 조각 수가 하나쯤 다를 수 있다
+  const [splitSource] = useState(measureSplit);
   const isDocument = options.format === "document";
   const update = (patch: Partial<ComparePngExportOptions>) => setOptions((prev) => ({ ...prev, ...patch }));
   const toggleField = (field: NodeDisplayToggle) =>
     setDisplayFields((prev) => (prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field]));
-  // 인쇄 계획은 정보 블록·범례까지 더한 출력 높이로 — showInfo=false로 Word 머리 블록 추정을 끈다
-  const printFrame = frame
-    ? { width: frame.width, height: getCompareOutputHeight(frame, options), zoom: frame.zoom }
-    : null;
 
   const handleExport = () => {
     saveComparePngExportOptions(options);
@@ -172,6 +175,16 @@ export function ComparePngExportModal({
                   on={options.showLegend}
                   onToggle={() => update({ showLegend: !options.showLegend })}
                 />
+                {/* 연결선 펼침 — 문서용만(화면 그대로는 비교 화면 모습 그대로) */}
+                <ShimmerPresence show={isDocument} dataId="compare-png-edge-fan-wrap" className="relative rounded-full">
+                  <ToggleChip
+                    dataId="compare-png-toggle-edge-fan"
+                    icon={<EdgeFanIcon />}
+                    label={t("pngExport.edgeFan")}
+                    on={options.edgeFan}
+                    onToggle={() => update({ edgeFan: !options.edgeFan })}
+                  />
+                </ShimmerPresence>
               </div>
             </div>
 
@@ -226,8 +239,10 @@ export function ComparePngExportModal({
               style={{ width: PRINT_PANEL_W }}
             >
               <PngPrintPanel
-                frame={printFrame}
-                options={{ paper: options.paper, printWidthPct: options.printWidthPct, showInfo: false }}
+                frame={frame}
+                options={options}
+                chromePt={getCompareDocumentChromePt(options)}
+                splitSource={splitSource}
                 onChange={update}
               />
             </div>
@@ -328,7 +343,7 @@ const DOCUMENT_TONE: SampleTone = {
   unchangedFill: () => "var(--cmp-doc-node-fill)",
   unchangedStroke: () => "var(--cmp-doc-node-stroke)",
   labelStroke: "var(--cmp-doc-label-stroke)",
-  nodeRadius: 2,
+  nodeRadius: 1,
 };
 
 function getBoxStyle(x: number, y: number, w: number, viewH: number): CSSProperties {

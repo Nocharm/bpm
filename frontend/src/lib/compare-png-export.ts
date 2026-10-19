@@ -1,15 +1,15 @@
-// 비교 화면 PNG 내보내기 옵션·출력 높이 — 옵션 창(compare-png-export-modal)과 출력(lib/export exportComparePng)이 공유.
+// 비교 화면 PNG 내보내기 옵션 — 옵션 창(compare-png-export-modal)과 비교 화면 출력(lib/export exportComparePng)이 공유.
 // 형식은 화면 그대로(비교 화면 모습) / 문서용(결재자 보고용 흰 바탕·Arial, 상태 색은 유지). 범례·정보 블록은 두 형식 공통.
 // 마지막 선택은 브라우저에 기억(bpm.comparePngExport) — 표시 정보는 비교 화면 설정에서 시작하므로 기억하지 않는다.
+// 문서용의 연결선 펼침·나눠 싣기는 편집 화면 Word 출력과 같은 규칙(lib/export·lib/print-split).
 
 import {
-  COMPARE_HEADER_H,
-  COMPARE_LEGEND_H,
   PAPER_ORIENTATIONS,
+  PRINT_LAYOUTS,
   PRINT_WIDTH_PCT_MAX,
   PRINT_WIDTH_PCT_MIN,
-  type ExportFrame,
   type PaperOrientation,
+  type PrintLayout,
 } from "@/lib/export";
 
 export type ComparePngFormat = "screen" | "document";
@@ -22,6 +22,9 @@ export interface ComparePngExportOptions {
   showInfo: boolean;
   paper: PaperOrientation;
   printWidthPct: number;
+  // 연결선 펼침(같은 핸들 형제 원호 레인) — 문서용만, 끄면 한 점에서 겹쳐 나간다
+  edgeFan: boolean;
+  layout: PrintLayout;
 }
 
 const STORAGE_KEY = "bpm.comparePngExport";
@@ -31,6 +34,8 @@ export const DEFAULT_COMPARE_PNG_EXPORT_OPTIONS: ComparePngExportOptions = {
   showInfo: true,
   paper: "landscape",
   printWidthPct: 100,
+  edgeFan: true,
+  layout: "single",
 };
 
 /** 마지막 선택 — 저장값이 없거나 깨졌으면 필드별 기본값. */
@@ -53,6 +58,8 @@ export function loadComparePngExportOptions(): ComparePngExportOptions {
         value.printWidthPct <= PRINT_WIDTH_PCT_MAX
           ? value.printWidthPct
           : fallback.printWidthPct,
+      edgeFan: typeof value.edgeFan === "boolean" ? value.edgeFan : fallback.edgeFan,
+      layout: PRINT_LAYOUTS.find((layout) => layout === value.layout) ?? fallback.layout,
     };
   } catch {
     // 사생활 모드·차단된 저장소 — 기본값으로 진행(기억은 편의 기능)
@@ -66,12 +73,4 @@ export function saveComparePngExportOptions(options: ComparePngExportOptions): v
   } catch {
     // 저장 실패는 다음 열기 때 기본값으로 돌아갈 뿐 — 내보내기 자체는 계속한다
   }
-}
-
-/** 출력 전체 높이(css px) — 정보 블록·범례 줄 높이는 고정(lib/export 합성 치수). 인쇄 크기 계산(getPrintPlan)에 넘긴다. */
-export function getCompareOutputHeight(
-  frame: Pick<ExportFrame, "height">,
-  options: Pick<ComparePngExportOptions, "showInfo" | "showLegend">,
-): number {
-  return frame.height + (options.showInfo ? COMPARE_HEADER_H : 0) + (options.showLegend ? COMPARE_LEGEND_H : 0);
 }

@@ -130,7 +130,7 @@ const ATTR_FIELD_ORDER = ["assignee", "department", "system"] as const;
 // 담당자 이름. 두 표기를 같은 grid 칸에 겹쳐 opacity로 교차 페이드해 높이가 흔들리지 않는다. 역할이 없으면
 // 전환 없이 단일 표기. 시스템 줄은 전환 없음 — 정식명(Other면 원문 메모)을 항상 1줄 말줄임.
 function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }) {
-  const { displayFields } = useNodeActions();
+  const { displayFields, printDocument = false } = useNodeActions();
   const { t } = useI18n();
   const warnings = useNodeWarnings(data);
   const alt = useDelayedFlag(active, NODE_ALT_DELAY_MS);
@@ -197,7 +197,8 @@ function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }
         }
         if (rest === null) return null;
         const swaps = alternate !== rest;
-        const warned = warnedFields[field];
+        // 문서용 출력은 조직 참조 경고(편집 신호)를 빼고 원래 필드 아이콘으로
+        const warned = warnedFields[field] && !printDocument;
         const Icon = warned ? TriangleAlert : FIELD_ICON[field];
         // 담당자 줄은 실명·역할 둘 중 하나만 바뀌어도 힌트
         const tint = getDiffTint(data, field, ...(field === "assignee" ? ["assignee_role"] : []));
@@ -326,11 +327,12 @@ function NodeIoDetails({
         const isSingle = visible.length === 1;
         return (
           // nodrag/nopan + 전파 차단 — 체크 조작이 드래그·더블클릭(요약 모달)로 새지 않게
+          // 입력은 왼쪽 위, 출력은 오른쪽 아래를 사선으로 잘라 모양만으로 구분한다(globals.css .bpm-io-box, 사용자 결정 2026-10-19)
           <div
             key={side}
             data-id={`node-io-list-${side}`}
-            className={`group/iobox nodrag nopan mt-1 rounded-sm border bg-surface px-1.5 py-1 ${
-              framed ? "border-ink-tertiary/40 shadow-sm" : "border-hairline"
+            className={`group/iobox nodrag nopan bpm-io-box bpm-io-box--${side} mt-1 px-1.5 py-1 ${
+              framed ? "bpm-io-box--framed" : ""
             }`}
             onPointerDown={(event) => event.stopPropagation()}
             onDoubleClick={(event) => event.stopPropagation()}
@@ -1597,7 +1599,7 @@ function externalSpNodeStyle(color: string): CSSProperties {
 // isConnectable — 노드 레벨 connectable(임베드 자식 false)이 여기로 전달됨. Handle에 명시 forward 필수 (F3).
 export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<AppNode>) {
   const { t } = useI18n();
-  const { ctrlDragIds, onConnectPlaceholder, onResizeNode, displayFields } = useNodeActions();
+  const { ctrlDragIds, onConnectPlaceholder, onResizeNode, displayFields, printDocument = false } = useNodeActions();
   // 노드 아래 종료 조건 캡션 유무 — 비교 화면 diff 필을 그 아래로 내린다
   const hasEndCaption = (getConditionCaptions(data, displayFields)?.end ?? "") !== "";
   const showCopyBadge = ctrlDragIds.has(id);
@@ -1636,6 +1638,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
     data.spSlotState === "superseded" ||
     data.spSlotState === "deleted";
   const spExternal = data.nodeType === "subprocess" && !!data.spOriginPath && !spPlaceholder;
+  // 외부 L6의 홈 L5 색(탭·아이콘·출처 배지) — 문서용 출력은 테마의 하위프로세스 톤(Word 변수, 비교 문서용은 보조 글자색)
+  const spAccent = printDocument ? "var(--word-sp-bar, var(--cmp-doc-sub))" : color;
   // 출처 배지 경로 — 외부 L6는 라이브 파생(spOriginPath), 플레이스홀더는 저장된 출처 L5 (design §10.1)
   const originPath =
     data.spOriginPath ?? (spPlaceholder ? (data.placeholderCategoryPath ?? null) : null);
@@ -1710,7 +1714,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           <span
             aria-hidden
             className="pointer-events-none absolute rounded-l-sm"
-            style={{ left: -1.5, top: -1.5, bottom: -1.5, width: 5, background: color }}
+            style={{ left: -1.5, top: -1.5, bottom: -1.5, width: 5, background: spAccent }}
           />
         )}
         {/* 비교 화면 SP는 끝 핸들 없이 변 핸들로 그려 끝 키가 사라진다 — SpOutputBadge와 같은 가드 */}
@@ -1726,7 +1730,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             size={16}
             strokeWidth={1.5}
             className="shrink-0 text-ink-secondary"
-            style={spExternal ? { color } : undefined}
+            style={spExternal ? { color: spAccent } : undefined}
           />
           <div className="min-w-0">
             {/* 타이틀 = 링크된 맵 이름 고정 — 인라인 이름 편집 차단 (F5) */}
@@ -1763,11 +1767,20 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
               linkedMapId={data.linkedMapId}
               title={originPath}
               className="nodrag nopan mt-0.5 inline-block max-w-full cursor-pointer self-start truncate rounded-xs border px-1 py-px text-xs transition-opacity duration-150 hover:opacity-80"
-              style={{
-                background: `color-mix(in srgb, ${color} 12%, white)`,
-                borderColor: `color-mix(in srgb, ${color} 38%, white)`,
-                color: `color-mix(in srgb, ${color} 72%, var(--color-ink))`,
-              }}
+              style={
+                printDocument
+                  ? {
+                      // GMP 필과 같은 문서 톤(globals.css .bpm-export-word .bpm-gmp-pill)
+                      background: "transparent",
+                      borderColor: "var(--word-pill-stroke, var(--cmp-doc-label-stroke))",
+                      color: "var(--word-pill-ink, var(--cmp-doc-sub))",
+                    }
+                  : {
+                      background: `color-mix(in srgb, ${color} 12%, white)`,
+                      borderColor: `color-mix(in srgb, ${color} 38%, white)`,
+                      color: `color-mix(in srgb, ${color} 72%, var(--color-ink))`,
+                    }
+              }
             >
               {originPath.split("/").slice(-2).join("/")}
             </FrameworkPeekTrigger>
@@ -2019,7 +2032,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border px-1.5 py-0 text-[10px] font-semibold leading-4"
             style={{ borderColor: color, background: "var(--color-surface)", color }}
           >
-            {data.nodeType === "start" ? (
+            {/* 아이콘은 화면 전용 — 문서용 출력은 글자만(사용자 결정 2026-10-19) */}
+            {printDocument ? null : data.nodeType === "start" ? (
               <Play size={10} strokeWidth={1.5} className="shrink-0" />
             ) : (
               <Flag size={10} strokeWidth={1.5} className="shrink-0" />

@@ -213,6 +213,7 @@ import {
   type ProcessNodeType,
 } from "@/lib/canvas";
 import { buildFanGeom, injectFanLanes } from "@/lib/edge-fanout";
+import { applyPrintEdgeCorners } from "@/lib/edge-path";
 import { generalDragLive, notifyDragLive } from "@/lib/drag-live";
 import {
   getDropTarget,
@@ -303,6 +304,7 @@ import {
   type PaperOrientation,
   type PngExportOptions,
 } from "@/lib/export";
+import { measureSplitSource } from "@/lib/print-split";
 import { buildExcelMeta, buildExcelModel } from "@/lib/excel-export";
 import { buildWbsModel } from "@/lib/excel-wbs";
 import { formatKst } from "@/lib/datetime";
@@ -1173,8 +1175,13 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [csvExport, setCsvExport] = useState<{ graph: Graph; fileName: string } | null>(null);
   // PNG 내보내기 옵션 창 — 화면 그대로 / Word 문서용(스타일·병렬 표시·정보 블록)
   const [pngExportOpen, setPngExportOpen] = useState(false);
-  // PNG 출력 중에만 캔버스에 덮어쓰는 보기 — 옵션 창에서 고른 표시 정보·입출력 펼침. null=평소(사용자 표시 정보)
-  const [printView, setPrintView] = useState<{ displayFields: NodeDisplayToggle[]; expandIo: boolean } | null>(null);
+  // PNG 출력 중에만 캔버스에 덮어쓰는 보기 — 옵션 창에서 고른 표시 정보·입출력 펼침, Word 문서용이면 document
+  // (연결선 펼침 여부 — 꺾임을 각지게 하고 노드의 편집 신호를 문서 톤으로). null=평소(사용자 표시 정보)
+  const [printView, setPrintView] = useState<{
+    displayFields: NodeDisplayToggle[];
+    expandIo: boolean;
+    document: { fan: boolean } | null;
+  } | null>(null);
   // A4 가이드(캔버스 경계선) — 개인 보기 설정, localStorage `bpm.a4Guide`. 처음엔 꺼짐·PNG 창에서 마지막 고른 용지
   const [a4Guide, setA4Guide] = useState<{ on: boolean; paper: PaperOrientation }>({ on: false, paper: "portrait" });
   // 신원·워크플로우 상태 (spec §workflow 2026-06-14)
@@ -6270,7 +6277,11 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   const handleExportPng = useCallback(async (exportOptions: PngExportOptions, exportFields: NodeDisplayToggle[]) => {
     // 고른 표시 정보·입출력 펼침을 캔버스에 잠시 적용 — 노드 실측과 간격 보정(height-shift 트윈)이 자리 잡은 뒤 찍는다
-    setPrintView({ displayFields: exportFields, expandIo: exportOptions.expandIo });
+    setPrintView({
+      displayFields: exportFields,
+      expandIo: exportOptions.expandIo,
+      document: exportOptions.theme === "word" ? { fan: exportOptions.edgeFan } : null,
+    });
     await new Promise<void>((resolve) => window.setTimeout(resolve, PRINT_VIEW_SETTLE_MS));
     // 선택 링·IO 상세·흐름 강조는 React 상태(selected 플래그·selectedId)가 그린다 — 캡처 전에 선택을
     // 비우고 한 프레임 기다려 평상시 모습으로 찍은 뒤 원래 선택을 복원한다(사용자 요청 2026-09-18).
@@ -6347,7 +6358,9 @@ function MapEditor({ mapId }: { mapId: number }) {
               crossing: exportOptions.crossing,
               paper: exportOptions.paper,
               printWidthPct: exportOptions.printWidthPct,
+              layout: exportOptions.layout,
               parallelLabel: t("pngExport.parallelLegend"),
+              connectorLabel: t("pngExport.connectorLegend"),
             }
           : undefined;
       await exportCanvasPng(exportNodes, buildExportFileName("png"), info, l5Charcoal, word);
@@ -8079,7 +8092,13 @@ function MapEditor({ mapId }: { mapId: number }) {
             };
             return { ...edge, data: { ...edge.data, pulse: live } };
           });
-    const finishEdges = (list: Edge[]): Edge[] => injectFanLanes(anchorEdgesToGhosts(withPulse(list)), fanGeom);
+    // PNG Word 출력 중 — 꺾임을 각지게 하고, 연결선 펼침을 끄면 팬 레인을 얹지 않는다(렌더 전용, lib/edge-path)
+    const printEdges = printView?.document ?? null;
+    const finishEdges = (list: Edge[]): Edge[] => {
+      const anchored = anchorEdgesToGhosts(withPulse(list));
+      if (!printEdges) return injectFanLanes(anchored, fanGeom);
+      return applyPrintEdgeCorners(printEdges.fan ? injectFanLanes(anchored, fanGeom) : anchored);
+    };
     const currentStyled = mirroredEdges.map((edge) => {
       // 인라인 펼침 시 A→B는 렌더에서만 숨김(데이터 보존)
       if (hiddenIds?.has(edge.id)) {
@@ -8151,7 +8170,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ),
     );
     return finishEdges([...currentStyled, ...childStyled, ...gatewayStyled]);
-  }, [edges, nodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, yOffsets, edgeCarry]);
+  }, [edges, nodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, yOffsets, edgeCarry, printView]);
   // 흐름 점 범례(우하단 노드 표시 정보 카드) — 펄스가 붙은 엣지가 하나라도 있을 때만
   const hasFlowPulse = styledEdges.some((edge) => isEdgePulse(edge.data?.pulse));
 
@@ -8454,6 +8473,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       expandedInlineIds: expandedInline,
       displayFields: nodeDisplayFields,
       printIoExpanded: printView?.expandIo ?? false,
+      printDocument: printView?.document != null,
       editingNodeId,
       onStartRename: startRename,
       onRename: renameNode,
@@ -12677,6 +12697,10 @@ function MapEditor({ mapId }: { mapId: number }) {
       {pngExportOpen && (
         <PngExportModal
           frame={nodes.length > 0 ? measureExportFrame(nodes) : null}
+          measureSplit={() => {
+            const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
+            return viewport && nodes.length > 0 ? measureSplitSource(viewport, measureExportFrame(nodes)) : null;
+          }}
           canvasDisplayFields={displayFields}
           onClose={() => setPngExportOpen(false)}
           onExport={(exportOptions, exportFields) => {
@@ -12686,6 +12710,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           }}
         />
       )}
+      {/* PNG 출력 중 커서 가림막 — 창이 닫히면 커서 아래 노드가 호버(핸들·체크박스·GMP 자리)로 바뀌어 출력에 찍혔다.
+          출력이 끝날 때까지 캔버스 대신 이 막이 포인터를 받는다 */}
+      {printView !== null && <div data-id="png-export-shield" className="fixed inset-0 z-[1300] cursor-progress" />}
       {/* 링크 미리보기 — 액션 바 "링크 열기"로 오픈, 인스펙터 포함 우측 전체를 덮는 오버레이 */}
       <LinkPreviewPanel url={linkPreviewUrl} onClose={() => setLinkPreviewUrl(null)} />
       {/* GMP 분류 피커 — 캔버스 필 클릭 좌표 앵커, 분류가 필 색을 자동 확정 (design 2026-08-20) */}

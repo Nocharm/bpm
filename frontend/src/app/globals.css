@@ -1402,6 +1402,53 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
     0 0 4px var(--color-canvas-l5),
     0 0 6px color-mix(in srgb, var(--color-canvas-l5) 80%, transparent);
 }
+/* 노드 입출력 목록 상자(process-node NodeIoDetails) — 입력은 왼쪽 위, 출력은 오른쪽 아래 모서리를 사선으로 잘라 모양만으로
+   구분한다(사용자 결정 2026-10-19). clip-path는 테두리까지 자르므로 선은 바탕(--io-line, 투명 테두리 1px 자리)으로, 칠은
+   안쪽 ::before로 그린다. ::before 사선을 2−√2(≈0.59px)만큼 당겨야 사선 선 두께가 다른 변과 같은 1px이 된다.
+   clip-path가 그림자도 자르므로 캔버스 위에 뜨는 상자(분기 아일랜드, --framed)는 선을 한 단계 진하게 한다. */
+.bpm-io-box {
+  --io-cut: 7px;
+  --io-r: var(--radius-sm);
+  --io-line: var(--color-hairline);
+  --io-fill: var(--color-surface);
+  position: relative;
+  isolation: isolate;
+  border: 1px solid transparent;
+  background: var(--io-line);
+}
+.bpm-io-box--framed {
+  --io-line: color-mix(in srgb, var(--color-ink-tertiary) 45%, var(--color-surface));
+}
+.bpm-io-box::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--io-fill);
+  pointer-events: none;
+}
+.bpm-io-box--input {
+  border-radius: 0 var(--io-r) var(--io-r) var(--io-r);
+  clip-path: polygon(var(--io-cut) 0, 100% 0, 100% 100%, 0 100%, 0 var(--io-cut));
+}
+.bpm-io-box--input::before {
+  border-radius: 0 calc(var(--io-r) - 1px) calc(var(--io-r) - 1px) calc(var(--io-r) - 1px);
+  clip-path: polygon(calc(var(--io-cut) - 0.59px) 0, 100% 0, 100% 100%, 0 100%, 0 calc(var(--io-cut) - 0.59px));
+}
+.bpm-io-box--output {
+  border-radius: var(--io-r) var(--io-r) 0 var(--io-r);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--io-cut)), calc(100% - var(--io-cut)) 100%, 0 100%);
+}
+.bpm-io-box--output::before {
+  border-radius: calc(var(--io-r) - 1px) calc(var(--io-r) - 1px) 0 calc(var(--io-r) - 1px);
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - var(--io-cut) + 0.59px),
+    calc(100% - var(--io-cut) + 0.59px) 100%,
+    0 100%
+  );
+}
 /* 아이콘엔 헤일로를 걸지 않는다 — 노드마다 svg drop-shadow(filter)를 두면 캡션 수만큼 합성 레이어가 생겨
    연결선 애니메이션이 도는 동안 매 프레임 GPU 합성이 ~20ms 늘어 캔버스가 60→28fps로 떨어졌다(2026-10-16 실측) */
 .bpm-io-pulse { animation: bpm-io-pulse-bg 700ms var(--ease-smooth) 120ms backwards; }
@@ -1594,7 +1641,7 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
   background: #ffffff !important;
   border-color: var(--word-label-stroke) !important;
   border-width: 1px !important;
-  border-radius: 3px !important;
+  border-radius: 1px !important;
   color: var(--word-ink) !important;
   box-shadow: none !important;
 }
@@ -1605,9 +1652,20 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 .bpm-export-word :is(.bpm-edge-carry, .bpm-io-link-mark) {
   display: none !important;
 }
-/* 각진 모서리 — 화면 라운드(rounded-sm)를 따르지 않는다. 터미널은 순서도 관례(알약)라 유지 */
+/* 각진 모서리 — 화면 라운드(rounded-sm)를 따르지 않는다. 터미널은 순서도 관례(알약)라 유지.
+   연결선 꺾임도 같은 결로 반지름을 줄인다(lib/edge-path PRINT_CORNER_RADIUS, 사용자 결정 2026-10-19) */
 .bpm-export-word :is([data-shell="process"], [data-shell="subprocess"], [data-shell="decision"]) {
-  border-radius: 2px !important;
+  border-radius: 1px !important;
+}
+/* 입출력 상자 — 사선 모양은 그대로, 모서리만 각지게 하고 선을 라벨 선 톤으로(흰 종이에서 사선이 보이게) */
+.bpm-export-word .bpm-io-box {
+  --io-r: 1px;
+  --io-line: var(--word-label-stroke);
+}
+/* 조건 캡션 — 화면의 글자 헤일로(캔버스색·L5 하늘색)는 흰 종이에서 번져 보인다. L5의 밝은 글자도 문서 톤으로 */
+.bpm-export-word .bpm-node-caption {
+  color: var(--word-sub) !important;
+  text-shadow: none !important;
 }
 .bpm-export-word .bpm-group-title {
   background: transparent !important;
@@ -1656,7 +1714,15 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
   box-shadow: none !important;
 }
 .bpm-export-compare-doc :is([data-shell="process"], [data-shell="subprocess"], [data-shell="decision"]) {
-  border-radius: 2px !important;
+  border-radius: 1px !important;
+}
+.bpm-export-compare-doc .bpm-io-box {
+  --io-r: 1px;
+  --io-line: var(--cmp-doc-label-stroke);
+}
+.bpm-export-compare-doc .bpm-node-caption {
+  color: var(--cmp-doc-sub) !important;
+  text-shadow: none !important;
 }
 .bpm-export-compare-doc .react-flow__node :is(.text-ink, .text-ink-secondary) {
   color: var(--cmp-doc-ink) !important;
@@ -1666,7 +1732,7 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 }
 .bpm-export-compare-doc .bpm-compare-edge-label {
   border: 1px solid var(--cmp-doc-label-stroke) !important;
-  border-radius: 3px !important;
+  border-radius: 1px !important;
   color: var(--cmp-doc-ink) !important;
 }
 .bpm-export-compare-doc .bpm-compare-edge-label[data-mirrored] {

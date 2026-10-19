@@ -66,11 +66,14 @@ export function getBezierEndOffset(args: EdgeEndsArgs, end: "source" | "target")
   return needsEdgeStub(args) ? Math.max(offset, BEZIER_MIN_CONTROL) : offset;
 }
 
-/** 꺾은선 — RF 경로에 최소 거리 대상이면 스텁(offset)만 40px로. 반환 [path, labelX, labelY] */
-export function getSmoothStepPathWithStub(args: EdgeEndsArgs): [string, number, number] {
-  const [path, labelX, labelY] = getSmoothStepPath(
-    needsEdgeStub(args) ? { ...args, offset: EDGE_MIN_STUB } : args,
-  );
+/** 꺾은선 — RF 경로에 최소 거리 대상이면 스텁(offset)만 40px로. borderRadius 미지정=RF 기본(5).
+ *  반환 [path, labelX, labelY] */
+export function getSmoothStepPathWithStub(args: EdgeEndsArgs, borderRadius?: number): [string, number, number] {
+  const [path, labelX, labelY] = getSmoothStepPath({
+    ...args,
+    ...(needsEdgeStub(args) ? { offset: EDGE_MIN_STUB } : null),
+    ...(borderRadius === undefined ? null : { borderRadius }),
+  });
   return [path, labelX, labelY];
 }
 

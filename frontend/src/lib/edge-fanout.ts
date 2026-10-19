@@ -421,6 +421,7 @@ function routeOrth(
  * 그 사이는 직각 라우터 + 5px 라운드. null = 팬 없음(호출자가 현행 우회/RF 경로 사용).
  * labelObstacles를 주면 라벨 앵커가 가려지지 않는 구간을 고른다(edge-detour 규칙). skipA/skipB = 가림 판정에서
  * 뺄 장애물 id(양끝 노드) — 호출자가 엣지마다 장애물 배열을 걸러 새로 만들지 않게.
+ * cornerRadius = 사이 구간 꺾임 반경(미지정=5). 팬 끝 원호는 레인 반경 그대로.
  */
 export function buildFanStepPath(
   args: FanPathArgs,
@@ -428,6 +429,7 @@ export function buildFanStepPath(
   labelObstacles: readonly (ObstacleRect & { id?: string })[] = [],
   skipA?: string,
   skipB?: string,
+  cornerRadius?: number,
 ): FanStepResult | null {
   const S = { x: args.sourceX, y: args.sourceY };
   const E = { x: args.targetX, y: args.targetY };
@@ -452,7 +454,7 @@ export function buildFanStepPath(
   if (route.length < 2) {
     return null;
   }
-  const [inner, labelMidX, labelMidY] = buildRoundedOrthPath(route, labelObstacles, skipA, skipB);
+  const [inner, labelMidX, labelMidY] = buildRoundedOrthPath(route, labelObstacles, skipA, skipB, cornerRadius);
   let labelX = labelMidX;
   let labelY = labelMidY;
   // 양끝 팬 4점 경로(같은 쌍의 왕복 엣지가 나란히 달리는 경우)는 중간 구간이 최장이라 라벨도 같은 자리에

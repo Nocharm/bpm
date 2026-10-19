@@ -30,6 +30,22 @@ export interface EdgePathArgs extends EdgeEndsArgs {
   /** 엣지 양끝 노드 id — 장애물·라벨 가림 판정에서 뺀다 */
   sourceId?: string;
   targetId?: string;
+  /** 꺾은선 꺾임 반경(px). 미지정=화면 기본(RF·우회 5). PNG 문서용 출력은 PRINT_EDGE_CORNER_RADIUS */
+  cornerRadius?: number;
+}
+
+/** PNG 문서용 출력의 꺾임 반경 — 노드 모서리(1px)와 같은 결로 각지게(사용자 결정 2026-10-19) */
+export const PRINT_EDGE_CORNER_RADIUS = 2;
+
+/** 출력 중 엣지 표시 — 표면(에디터 styledEdges·비교 appEdges)이 edge.data.cornerRadius로 얹는다(렌더 전용, 저장 안 함) */
+export function applyPrintEdgeCorners<T extends { data?: Record<string, unknown> }>(edges: readonly T[]): T[] {
+  return edges.map((edge) => ({ ...edge, data: { ...edge.data, cornerRadius: PRINT_EDGE_CORNER_RADIUS } }));
+}
+
+/** edge.data.cornerRadius 판별 — 엣지 컴포넌트가 unknown data에서 꺼낸다 */
+export function getEdgeCornerRadius(data: Record<string, unknown> | undefined): number | undefined {
+  const value = data?.cornerRadius;
+  return typeof value === "number" && value >= 0 ? value : undefined;
 }
 
 export interface EdgePathResult {
@@ -42,7 +58,7 @@ export interface EdgePathResult {
 
 /** 엣지 경로 + 라벨 앵커. 꺾은선만 obstacles를 쓴다(직선·곡선은 사용자가 고른 모양 유지). */
 export function resolveEdgePath(args: EdgePathArgs): EdgePathResult {
-  const { variant, fan, obstacles = [], sourceId, targetId } = args;
+  const { variant, fan, obstacles = [], sourceId, targetId, cornerRadius } = args;
   const ends: EdgeEndsArgs = {
     sourceX: args.sourceX,
     sourceY: args.sourceY,
@@ -62,17 +78,17 @@ export function resolveEdgePath(args: EdgePathArgs): EdgePathResult {
   }
   // 팬 경로가 다른 노드를 관통하면 이 엣지만 우회/RF 경로로 — 겹침 최소화는 장애물 회피보다 우선순위가 낮다
   if (fan) {
-    const fanned = buildFanStepPath(ends, fan, obstacles, sourceId, targetId);
+    const fanned = buildFanStepPath(ends, fan, obstacles, sourceId, targetId, cornerRadius);
     if (fanned && !isPolylineBlocked(fanned.points, obstacles, sourceId, targetId)) {
       return { path: fanned.d, labelX: fanned.labelX, labelY: fanned.labelY, route: "fan" };
     }
   }
   const detour = buildDetourPoints({ ...ends, obstacles, skipA: sourceId, skipB: targetId });
   if (detour) {
-    const [path, labelX, labelY] = buildRoundedOrthPath(detour, obstacles, sourceId, targetId);
+    const [path, labelX, labelY] = buildRoundedOrthPath(detour, obstacles, sourceId, targetId, cornerRadius);
     return { path, labelX, labelY, route: "detour" };
   }
-  const [path, labelX, labelY] = getSmoothStepPathWithStub(ends);
+  const [path, labelX, labelY] = getSmoothStepPathWithStub(ends, cornerRadius);
   return { path, labelX, labelY, route: "step" };
 }
 

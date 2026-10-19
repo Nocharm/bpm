@@ -14,7 +14,13 @@ import { type AppNode, EDGE_LABEL_MAX_WIDTH } from "@/lib/canvas";
 import { isEdgeCarry } from "@/lib/edge-carry";
 import { type EdgeObstacle } from "@/lib/edge-detour";
 import { isEdgeFan, type EdgeFan } from "@/lib/edge-fanout";
-import { getEdgeObstacles, resolveEdgePath, type EdgeLineVariant, type EdgePathResult } from "@/lib/edge-path";
+import {
+  getEdgeCornerRadius,
+  getEdgeObstacles,
+  resolveEdgePath,
+  type EdgeLineVariant,
+  type EdgePathResult,
+} from "@/lib/edge-path";
 import { getDecisionTravel, isEdgePulse } from "@/lib/edge-pulse";
 
 /** 같은 핸들 형제 팬 레인 — 표면(styledEdges·비교 appEdges)이 edge.data.fan으로 넘긴다. 없으면 undefined */
@@ -65,6 +71,7 @@ function resolvePropsPath(variant: EdgeLineVariant, props: EdgeProps, obstacles?
     obstacles,
     sourceId: props.source,
     targetId: props.target,
+    cornerRadius: getEdgeCornerRadius(props.data),
   });
 }
 

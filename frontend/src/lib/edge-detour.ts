@@ -227,12 +227,14 @@ function isLabelClear(
  * 라벨은 "중앙이 장애물에 가려지지 않는" 구간 중 최장 구간의 중앙 — 전부 가려지면 최장 구간 폴백.
  * 반경은 인접 구간 절반으로 클램프 — 짧은 구간에서 경로가 뒤집히지 않게.
  * skipA/skipB = 가림 판정에서 뺄 장애물 id(양끝 노드) — 엣지마다 장애물 배열을 다시 걸러 만들지 않게.
+ * cornerRadius = 모서리 반경 상한(PNG 문서용 출력은 더 작게, lib/edge-path PRINT_EDGE_CORNER_RADIUS).
  */
 export function buildRoundedOrthPath(
   points: { x: number; y: number }[],
   obstacles: readonly LabelObstacle[] = [],
   skipA?: string,
   skipB?: string,
+  cornerRadius: number = CORNER_RADIUS,
 ): [string, number, number] {
   const parts = [`M ${points[0].x},${points[0].y}`];
   for (let i = 1; i < points.length - 1; i += 1) {
@@ -241,7 +243,7 @@ export function buildRoundedOrthPath(
     const next = points[i + 1];
     const inLen = Math.hypot(cur.x - prev.x, cur.y - prev.y);
     const outLen = Math.hypot(next.x - cur.x, next.y - cur.y);
-    const r = Math.min(CORNER_RADIUS, inLen / 2, outLen / 2);
+    const r = Math.min(cornerRadius, inLen / 2, outLen / 2);
     const inX = cur.x - ((cur.x - prev.x) / inLen) * r;
     const inY = cur.y - ((cur.y - prev.y) / inLen) * r;
     const outX = cur.x + ((next.x - cur.x) / outLen) * r;

@@ -1,15 +1,18 @@
-// PNG 내보내기 옵션 기억(Word 문서용 테마 선택) 단위 테스트
+// PNG 내보내기 옵션 기억(Word 문서용 테마 선택)·인쇄 계획 단위 테스트
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   findAxisRuns,
   getA4GuideWidths,
   findCrossings,
+  getDocumentPrintPlan,
+  getPrintHeaderPt,
   getPrintPlan,
   loadPngExportOptions,
   savePngExportOptions,
   setPngDpi,
 } from "./export";
+import type { SplitSource } from "./print-split";
 
 afterEach(() => {
   window.localStorage.clear();
@@ -26,6 +29,8 @@ describe("loadPngExportOptions", () => {
       paper: "portrait",
       printWidthPct: 100,
       expandIo: false,
+      edgeFan: true,
+      layout: "single",
     });
   });
 
@@ -39,6 +44,8 @@ describe("loadPngExportOptions", () => {
       paper: "landscape",
       printWidthPct: 60,
       expandIo: true,
+      edgeFan: false,
+      layout: "split",
     } as const;
     savePngExportOptions(saved);
     expect(loadPngExportOptions()).toEqual(saved);
@@ -56,6 +63,8 @@ describe("loadPngExportOptions", () => {
         paper: "letter",
         printWidthPct: 140,
         expandIo: "yes",
+        edgeFan: "no",
+        layout: "zip",
       }),
     );
     expect(loadPngExportOptions()).toEqual({
@@ -67,6 +76,8 @@ describe("loadPngExportOptions", () => {
       paper: "portrait",
       printWidthPct: 100,
       expandIo: false,
+      edgeFan: true,
+      layout: "single",
     });
   });
 
@@ -124,7 +135,7 @@ describe("findCrossings", () => {
 describe("getPrintPlan", () => {
   it("fits the A4 portrait text width and raises the pixel ratio toward 300 dpi", () => {
     // 1000px 폭 맵을 본문 폭(21-5.08=15.92cm) 100%로 — 2배면 약 319dpi라 배율 2 유지
-    const plan = getPrintPlan({ width: 1000, height: 500, zoom: 1 }, { paper: "portrait", printWidthPct: 100, showInfo: false });
+    const plan = getPrintPlan({ width: 1000, height: 500, zoom: 1 }, { paper: "portrait", printWidthPct: 100 });
     expect(plan.contentWidthCm).toBeCloseTo(15.92);
     expect(plan.widthCm).toBeCloseTo(15.92);
     expect(plan.heightCm).toBeCloseTo(7.96);
@@ -135,15 +146,77 @@ describe("getPrintPlan", () => {
   });
 
   it("uses a higher pixel ratio for a narrow frame printed wide, capped at 4", () => {
-    const plan = getPrintPlan({ width: 400, height: 400, zoom: 1 }, { paper: "landscape", printWidthPct: 100, showInfo: false });
+    const plan = getPrintPlan({ width: 400, height: 400, zoom: 1 }, { paper: "landscape", printWidthPct: 100 });
     expect(plan.pixelRatio).toBe(4);
     expect(plan.pixelWidth).toBe(1600);
   });
 
   it("keeps the longest output side under the canvas cap", () => {
-    const plan = getPrintPlan({ width: 4096, height: 4096, zoom: 0.5 }, { paper: "landscape", printWidthPct: 100, showInfo: true });
+    const plan = getPrintPlan({ width: 4096, height: 4096, zoom: 0.5 }, { paper: "landscape", printWidthPct: 100 });
     expect(plan.pixelRatio).toBe(2);
     expect(plan.nodeTextPt).toBeCloseTo((7 * (24.62 / 2.54) * 72) / 4096);
+    // 나눠 싣기는 맵 전체를 한 번 찍는다 — 조각이 작아도 찍는 이미지의 긴 변으로 배율을 묶는다
+    const piece = getPrintPlan({ width: 800, height: 400, zoom: 1 }, { paper: "portrait", printWidthPct: 100 }, 0, 5000);
+    expect(piece.pixelRatio).toBe(2);
+  });
+
+  it("adds the header and legend at their fixed print size whatever the map width", () => {
+    const narrow = getPrintPlan({ width: 1000, height: 500, zoom: 1 }, { paper: "portrait", printWidthPct: 100 }, 72);
+    const wide = getPrintPlan({ width: 4000, height: 2000, zoom: 1 }, { paper: "portrait", printWidthPct: 100 }, 72);
+    // 72pt = 1인치 = 2.54cm가 그림 높이에 그대로 더해진다
+    expect(narrow.heightCm).toBeCloseTo(7.96 + 2.54);
+    expect(wide.heightCm).toBeCloseTo(7.96 + 2.54);
+  });
+});
+
+describe("getPrintHeaderPt", () => {
+  it("grows by one meta line height per line", () => {
+    expect(getPrintHeaderPt(2) - getPrintHeaderPt(1)).toBe(10);
+  });
+});
+
+describe("getDocumentPrintPlan", () => {
+  // 노드 다섯 개가 가로로 늘어선 3,000px 맵 — 노드 사이 빈 칸마다 연결선 하나
+  const source: SplitSource = {
+    width: 3000,
+    height: 300,
+    blocks: [0, 1, 2, 3, 4].map((i) => ({ x: 100 + i * 600, y: 100, width: 300, height: 80 })),
+    regions: [],
+    edges: [0, 1, 2, 3].map((i) => [
+      { x: 400 + i * 600, y: 140 },
+      { x: 700 + i * 600, y: 140 },
+    ]),
+  };
+  const frame = { width: 3000, height: 300, zoom: 1 };
+
+  it("keeps one image when the layout is single", () => {
+    const plan = getDocumentPrintPlan(frame, { paper: "portrait", printWidthPct: 100, layout: "single" }, 0, source);
+    expect(plan.split).toBeNull();
+    expect(plan.widthCm).toBeCloseTo(15.92);
+  });
+
+  it("splits a long map so every piece prints node text at 7pt or more at one shared scale", () => {
+    const plan = getDocumentPrintPlan(frame, { paper: "portrait", printWidthPct: 100, layout: "split" }, 0, source);
+    expect(plan.split).not.toBeNull();
+    const pieces = plan.split?.pieces ?? [];
+    expect(pieces.length).toBeGreaterThan(1);
+    expect(pieces[0].x0).toBe(0);
+    expect(pieces[pieces.length - 1].x1).toBe(3000);
+    expect(plan.nodeTextPt).toBeGreaterThanOrEqual(7);
+  });
+
+  it("fits the widest piece including its connector space into the text width", () => {
+    const plan = getDocumentPrintPlan(frame, { paper: "portrait", printWidthPct: 100, layout: "split" }, 0, source);
+    const widths = plan.pieceSizesCm.map((size) => size.width);
+    expect(widths.length).toBe(plan.split?.pieces.length);
+    expect(Math.max(...widths)).toBeCloseTo(plan.widthCm);
+    for (const width of widths) expect(width).toBeLessThanOrEqual(plan.widthCm + 1e-9);
+  });
+
+  it("falls back to one image when the whole map already fits a piece", () => {
+    const small = { ...source, width: 600, blocks: source.blocks.slice(0, 1), edges: [] };
+    const plan = getDocumentPrintPlan({ width: 600, height: 300, zoom: 1 }, { paper: "portrait", printWidthPct: 100, layout: "split" }, 0, small);
+    expect(plan.split).toBeNull();
   });
 });
 
@@ -153,7 +226,7 @@ describe("getA4GuideWidths", () => {
     expect(portrait.readable).toBeCloseTo((14 * (15.92 / 2.54) * 72) / 9);
     expect(portrait.minimum).toBeCloseTo((14 * (15.92 / 2.54) * 72) / 7);
     // 가이드 폭으로 찍으면 인쇄 계획이 정확히 9pt를 낸다(두 계산이 같은 식)
-    const plan = getPrintPlan({ width: portrait.readable, height: 400, zoom: 1 }, { paper: "portrait", printWidthPct: 100, showInfo: false });
+    const plan = getPrintPlan({ width: portrait.readable, height: 400, zoom: 1 }, { paper: "portrait", printWidthPct: 100 });
     expect(plan.nodeTextPt).toBeCloseTo(9);
     expect(getA4GuideWidths("landscape").readable).toBeGreaterThan(portrait.readable);
   });

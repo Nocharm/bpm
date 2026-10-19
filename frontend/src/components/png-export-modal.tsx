@@ -9,6 +9,7 @@ import { Fragment, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ListTree, PanelTop, X } from "lucide-react";
 
+import { EdgeFanIcon } from "@/components/edge-fan-icon";
 import { HoverTip } from "@/components/hover-tip";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { TOGGLE_ICONS, TOGGLE_LABEL_KEY } from "@/components/node-display-section";
@@ -18,7 +19,9 @@ import { ShimmerPresence } from "@/components/shimmer-presence";
 import { ToggleChip } from "@/components/toggle-chip";
 import {
   CROSSING_STYLES,
+  getPrintHeaderPt,
   loadPngExportOptions,
+  PRINT_LEGEND_ROW_PT,
   savePngExportOptions,
   WORD_EXPORT_STYLES,
   type CrossingStyle,
@@ -29,10 +32,13 @@ import {
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
+import type { SplitSource } from "@/lib/print-split";
 
 interface PngExportModalProps {
   // 현재 맵의 캡처 프레임(lib/export measureExportFrame) — 인쇄 크기 패널의 비율·해상도 계산. 노드가 없으면 null
   frame: ExportFrame | null;
+  // 나눠 싣기 재료 측정(lib/print-split measureSplitSource) — 창을 열 때 한 번 부른다. 캔버스가 없으면 null
+  measureSplit: () => SplitSource | null;
   // 캔버스의 현재 표시 정보 — 창을 열 때 표시 정보 칩의 시작값(창에서 바꿔도 캔버스 설정은 그대로)
   canvasDisplayFields: NodeDisplayToggle[];
   onClose: () => void;
@@ -69,11 +75,23 @@ const VIEW_W = 520;
 const VIEW_H_MIN = 150; // 샘플 노드가 표시 정보로 길어지면 그만큼 늘어난다
 const PARALLEL_MARK_X = 204;
 const PARALLEL_MARK_Y = 60;
-// 되돌림 선(y 96)이 두 세로 갈래(x 214·356)를 지나는 자리
-const CROSSING_POINTS: [number, number][] = [
-  [214, 96],
-  [356, 96],
-];
+// 병렬 두 갈래·합류의 세로 구간 x — 펼침을 켜면 원호 레인(lib/edge-fanout)이라 노드 쪽으로 붙는다
+const BRANCH_X = { fan: [208, 360], flat: [214, 356] } as const;
+// 갈래·합류 경로 — 펼침: 출발·도착 핸들에서 원호로 갈라지고 모인다 / 끔: 한 점에서 겹쳐 나가 꺾이는 지점에서 갈라진다
+const BRANCH_PATHS = {
+  fan: [
+    "M196,60 A12,12 0 0 0 208,48 L208,26 Q208,22 212,22 L231,22",
+    "M196,60 A12,12 0 0 1 208,72 L208,114 Q208,118 212,118 L231,118",
+    "M332,22 L356,22 Q360,22 360,26 L360,48 A12,12 0 0 0 372,60 L375,60",
+    "M332,118 L356,118 Q360,118 360,114 L360,72 A12,12 0 0 1 372,60 L375,60",
+  ],
+  flat: [
+    "M196,60 L214,60 L214,22 L231,22",
+    "M196,60 L214,60 L214,118 L231,118",
+    "M332,22 L356,22 L356,60 L375,60",
+    "M332,118 L356,118 L356,60 L375,60",
+  ],
+} as const;
 const CROSSING_BOX = 16; // 교차 글리프 상자(viewBox 단위)
 
 // 교차 글리프 상자 — 미리보기 svg와 같은 비율로 늘어나도록 % 위치·크기
@@ -160,8 +178,8 @@ const WORD_PALETTE: PreviewPalette = {
   decStroke: "var(--word-dec-stroke)",
   labelStroke: "var(--word-label-stroke)",
   sub: "var(--word-sub)",
-  nodeRadius: 2,
-  labelRadius: 3,
+  nodeRadius: 1,
+  labelRadius: 1,
 };
 
 // 테마·스타일 전환 때 색이 부드럽게 넘어가도록(SVG 속성 대신 style 속성이라 전이가 걸린다)
@@ -176,11 +194,15 @@ const PRINT_PANEL_W = 300;
 // 펼침 동안 왼쪽 가장자리를 붙잡는 이동 — 절반 폭만큼 오른쪽으로 밀되 화면 오른쪽 여백(16px)을 넘지 않게
 const EXPANDED_SHIFT = `max(0px, min(${PRINT_PANEL_W / 2}px, calc(50vw - ${(560 + PRINT_PANEL_W) / 2 + 16}px)))`;
 
-export function PngExportModal({ frame, canvasDisplayFields, onClose, onExport }: PngExportModalProps) {
+export function PngExportModal({ frame, measureSplit, canvasDisplayFields, onClose, onExport }: PngExportModalProps) {
   const { t } = useI18n();
   const [options, setOptions] = useState<PngExportOptions>(() => loadPngExportOptions());
   const [displayFields, setDisplayFields] = useState<NodeDisplayToggle[]>(canvasDisplayFields);
+  // 지금 캔버스 모습으로 잰 어림 — 출력은 고른 표시 정보·문서 글꼴로 다시 재므로 조각 수가 하나쯤 다를 수 있다
+  const [splitSource] = useState(measureSplit);
   const isWord = options.theme === "word";
+  // 머리 블록(메타 한 줄 어림)·병렬 범례 줄 — 인쇄 크기 패널의 한 장 세로 크기
+  const chromePt = (options.showInfo ? getPrintHeaderPt(1) : 0) + (options.showParallel ? PRINT_LEGEND_ROW_PT : 0);
   const hasIo = displayFields.includes("input") || displayFields.includes("output");
   const update = (patch: Partial<PngExportOptions>) => setOptions((prev) => ({ ...prev, ...patch }));
   const toggleField = (field: NodeDisplayToggle) =>
@@ -318,6 +340,13 @@ export function PngExportModal({ frame, canvasDisplayFields, onClose, onExport }
                     on={options.showInfo}
                     onToggle={() => update({ showInfo: !options.showInfo })}
                   />
+                  <ToggleChip
+                    dataId="png-export-toggle-edge-fan"
+                    icon={<EdgeFanIcon />}
+                    label={t("pngExport.edgeFan")}
+                    on={options.edgeFan}
+                    onToggle={() => update({ edgeFan: !options.edgeFan })}
+                  />
                   <div className="ml-auto inline-flex items-center gap-1.5">
                     <span className="text-fine text-ink-tertiary">{t("pngExport.crossing")}</span>
                     <div className="inline-flex items-center rounded-sm border border-hairline bg-surface-alt p-0.5">
@@ -358,7 +387,13 @@ export function PngExportModal({ frame, canvasDisplayFields, onClose, onExport }
               }`}
               style={{ width: PRINT_PANEL_W }}
             >
-              <PngPrintPanel frame={frame} options={options} onChange={update} />
+              <PngPrintPanel
+                frame={frame}
+                options={options}
+                chromePt={chromePt}
+                splitSource={splitSource}
+                onChange={update}
+              />
             </div>
           </div>
         </div>
@@ -442,7 +477,8 @@ const PAD_Y = 8;
 const GMP_ROW = 12;
 const TITLE_ROW = 18;
 const LINE_ROW = 11;
-const LANE_Y = 96; // 되돌림 선 높이 — 교차 자리(CROSSING_POINTS)와 같은 값
+const DEC_BOX_ROW = 17; // 분기 입출력 상자 한 칸(목록 한 줄 + 상자 여백)
+const LANE_Y = 96; // 되돌림 선 높이 — 교차 표시 자리의 y
 
 // 샘플 흐름 미리보기 — 실제 맵이 아니라 출력 모양의 차이(배경·색·병렬 표시·정보 블록·표시 정보)를 보여 준다
 function PngPreview({ options, displayFields }: { options: PngExportOptions; displayFields: NodeDisplayToggle[] }) {
@@ -450,6 +486,10 @@ function PngPreview({ options, displayFields }: { options: PngExportOptions; dis
   const isWord = options.theme === "word";
   const palette = isWord ? WORD_PALETTE : getScreenPalette();
   const edgeStyle: CSSProperties = { stroke: palette.edge, transition: COLOR_TRANSITION };
+  // 화면 그대로는 캔버스처럼 늘 펼침, Word는 칩을 따른다
+  const fanKey = !isWord || options.edgeFan ? "fan" : "flat";
+  // 되돌림 선(y LANE_Y)이 두 세로 갈래를 지나는 자리
+  const crossingPoints = BRANCH_X[fanKey].map((x) => [x, LANE_Y] as const);
   const meta = [
     `${t("export.infoOwningDept")} QA`,
     `${t("export.infoVersion")} v3`,
@@ -463,7 +503,7 @@ function PngPreview({ options, displayFields }: { options: PngExportOptions; dis
   const t1Bottom = TITLE_Y + TITLE_ROW / 2 + lineFields.length * LINE_ROW + PAD_Y;
   // 분기 노드 입출력 — 알약(접힘) 또는 목록(펼침), 판단 마름모 오른쪽 아래
   const decIo = (["input", "output"] as const).filter((side) => displayFields.includes(side));
-  const decIoBottom = decIo.length === 0 ? 0 : options.expandIo ? 90 + PAD_Y + decIo.length * LINE_ROW : 104;
+  const decIoBottom = decIo.length === 0 ? 0 : options.expandIo ? 90 + decIo.length * (DEC_BOX_ROW + 2) : 104;
   const viewH = Math.max(VIEW_H_MIN, t1Bottom + (hasConditions ? 22 : 12), decIoBottom + 10);
   // 되돌림 선 — 노드가 짧으면 아래 변으로, 길어 선 높이를 덮으면 오른쪽 변으로 들어간다
   const loopPath =
@@ -547,10 +587,9 @@ function PngPreview({ options, displayFields }: { options: PngExportOptions; dis
       <div className="relative">
         <svg viewBox={`0 0 ${VIEW_W} ${viewH}`} className="block w-full" aria-hidden>
           <path d="M72,60 L99,60" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
-          <path d="M196,60 L214,60 L214,22 L231,22" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
-          <path d="M196,60 L214,60 L214,118 L231,118" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
-          <path d="M332,22 L356,22 L356,60 L375,60" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
-          <path d="M332,118 L356,118 L356,60 L375,60" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
+          {BRANCH_PATHS[fanKey].map((d) => (
+            <path key={d} d={d} fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
+          ))}
           <path d="M444,60 L465,60" fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
           {/* 되돌림 — 두 세로 갈래와 교차한다(교차 표시 차이를 보여 주는 자리) */}
           <path d={loopPath} fill="none" strokeWidth={1.25} style={edgeStyle} markerEnd="url(#png-preview-arrow)" />
@@ -653,31 +692,30 @@ function PngPreview({ options, displayFields }: { options: PngExportOptions; dis
         <ShimmerPresence
           show={decIo.length > 0 && options.expandIo}
           dataId="png-export-preview-dec-list"
-          className="absolute flex flex-col border px-1.5"
-          style={{
-            ...getBoxStyle(418, 90, 94, viewH),
-            paddingTop: 4,
-            paddingBottom: 4,
-            borderColor: palette.labelStroke,
-            borderRadius: palette.nodeRadius,
-            background: "var(--color-surface)",
-          }}
+          className="absolute flex flex-col gap-0.5"
+          style={getBoxStyle(418, 90, 94, viewH)}
         >
+          {/* 캔버스와 같은 입출력 상자 — 입력은 왼쪽 위, 출력은 오른쪽 아래가 사선(globals.css .bpm-io-box) */}
           {decIo.map((side) => {
             const Icon = TOGGLE_ICONS[side];
             return (
-              <span key={side} className="flex items-center gap-1 text-[8px]" style={{ height: LINE_ROW, color: palette.sub }}>
+              <span
+                key={side}
+                className={`bpm-io-box bpm-io-box--${side} bpm-io-box--framed flex items-center gap-1 px-1.5 text-[8px]`}
+                style={{ height: DEC_BOX_ROW, color: palette.sub }}
+              >
                 <Icon size={8} strokeWidth={1.5} className="shrink-0" />
                 <span className="truncate">{t(side === "input" ? "pngExport.sampleDecInput" : "pngExport.sampleDecOutput")}</span>
               </span>
             );
           })}
         </ShimmerPresence>
-        {CROSSING_POINTS.map(([x, y]) => (
-          <Fragment key={`${x}:${y}`}>
+        {crossingPoints.map(([x, y], index) => (
+          // 자리 순번 키 — 펼침을 바꿔도 글리프가 다시 생기지 않고 자리만 옮긴다
+          <Fragment key={index}>
             <ShimmerPresence
               show={isWord && options.crossing === "jump"}
-              dataId={`png-export-preview-jump-${x}`}
+              dataId={`png-export-preview-jump-${index + 1}`}
               className="absolute"
               style={getCrossingBoxStyle(x, y, viewH)}
             >
@@ -685,7 +723,7 @@ function PngPreview({ options, displayFields }: { options: PngExportOptions; dis
             </ShimmerPresence>
             <ShimmerPresence
               show={isWord && options.crossing === "gap"}
-              dataId={`png-export-preview-gap-${x}`}
+              dataId={`png-export-preview-gap-${index + 1}`}
               className="absolute"
               style={getCrossingBoxStyle(x, y, viewH)}
             >

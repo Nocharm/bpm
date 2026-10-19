@@ -116,6 +116,9 @@ export interface NodeActions {
   // PNG 출력 중 — 입출력 목록을 줄 수 제한 없이 펼치고, 분기 노드 IO 아일랜드도 목록으로 편다(옵션 창 선택).
   // 미지정=false(평소·비교·프리뷰)
   printIoExpanded?: boolean;
+  // PNG 문서용 출력 중(편집 화면 Word·비교 문서용) — 편집 신호(경고 아이콘·시작/끝 칩 아이콘·외부 L6 홈 색)를
+  // 문서 톤으로 바꾼다. 미지정=false
+  printDocument?: boolean;
 }
 
 // IO 체크리스트 3단계(#2): collapsed=0줄(헤더만) · capped=3.5줄+오버플로 히든 · all=전부
