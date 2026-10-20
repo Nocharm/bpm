@@ -928,7 +928,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [versionId, setVersionId] = useState<number | null>(null);
   // 상태 배너 닫기 — "버전id:타이틀" 키 저장(영속 없음 — 맵 재진입 시 리마운트로 다시 노출)
   const [dismissedNoticeKey, setDismissedNoticeKey] = useState<string | null>(null);
-  const [scopes, setScopes] = useState<Scope[]>([{ kind: "root", title: "홈" }]);
+  // 루트 제목은 맵 상세가 도착하면 맵 이름으로 채운다 — 예전 자리표시 "홈"이 영어 화면에도 잠깐 보였다 (리뷰 2026-10-19)
+  const [scopes, setScopes] = useState<Scope[]>([{ kind: "root", title: "" }]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [windowGeom, setWindowGeom] = useState<Record<string, WindowGeom>>({});
   const [zOrder, setZOrder] = useState<string[]>([]);
@@ -3221,6 +3222,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 게이트는 선택 버전의 status만 반응 — versions 배열 identity를 deps에 두면 목록 갱신마다
   // 인터벌이 재구독되며 acquireCheckout이 즉시 재호출된다(스팸).
   const selectedVersionStatus = versions.find((v) => v.id === versionId)?.status ?? null;
+  const checkoutApplies = selectedVersionStatus === "draft" || selectedVersionStatus === "rejected";
   // 확정 요청·철회 직후 점유 상태를 바로 다시 본다 — 다음 폴(10초)까지 편집 가능/불가 표시가 어긋나지 않게 (리뷰 E-1)
   const [checkoutPollKey, setCheckoutPollKey] = useState(0);
   // 폴 실패 처리 — t 최신값을 읽되 재구독을 유발하지 않는다. true 반환 = 영구 409(권한 pending)로 폴링 정지.
@@ -9533,9 +9535,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         {/* 노드 검색은 좌측 사이드바 아웃라인 위로 이동(R4b) — searchSlot으로 주입 */}
 
         {/* 우: 상태 인디케이터 · undo/redo · 라이브러리 · AI · 저장 · 인스펙터 토글.
-            (공유·전체화면은 백엔드/동작 부재로 보류 — R3) */}
-        <div className="ml-auto flex items-center gap-1.5">
-          {readOnly && !isViewer && checkout?.checked_out_by && (
+            (공유·전체화면은 백엔드/동작 부재로 보류 — R3).
+            min-w-0 — 좁은 폭에선 이 묶음이 줄어 반려 사유가 먼저 잘린다. 없으면 저장 버튼이 화면 밖으로 밀렸다 (리뷰 2026-10-19 W-11) */}
+        <div className="ml-auto flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+          {/* 점유 표시는 편집 가능 상태(draft·rejected)에서만 — 제출 뒤엔 폴이 멈춰 직전 점유가 남아
+              오너 본인에게 "<본인> 편집 중 - 읽기 전용"이 떴다 (리뷰 2026-10-19 W-9) */}
+          {readOnly && !isViewer && checkoutApplies && checkout?.checked_out_by && (
             <span className="flex items-center gap-2 rounded-sm bg-changed/10 px-2 py-1 text-caption text-changed">
               <PencilLine size={14} strokeWidth={1.5} />{t("editor.editingByOther", { name: checkoutHolderLabel || checkout.checked_out_by })}
               {/* 활성 점유 강제 인수는 sysadmin만 — 에디터/오너는 읽기전용 안내만 본다 */}
@@ -9552,11 +9557,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           {currentVersion?.status === "rejected" && currentVersion.reject_reason && (
             <span
               data-id="wf-rejected-banner"
-              className="flex max-w-96 items-center gap-1.5 rounded-sm border border-error/40 bg-error/10 px-2 py-1 text-caption text-error"
+              className="flex min-w-0 max-w-96 items-center gap-1.5 overflow-hidden rounded-sm border border-error/40 bg-error/10 px-2 py-1 text-caption text-error"
               title={currentVersion.reject_reason}
             >
               <XCircle size={16} strokeWidth={1.5} className="shrink-0" />
-              <span className="text-caption-strong">{t("wf.rejectedLabel")}</span>
+              <span className="shrink-0 whitespace-nowrap text-caption-strong">{t("wf.rejectedLabel")}</span>
               {workflow?.rejected_by && workflow.version_id === currentVersion.id && (
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-error/40 bg-surface px-1.5 py-0.5 text-fine">
                   <User size={12} strokeWidth={1.5} />
@@ -9566,12 +9571,12 @@ function MapEditor({ mapId }: { mapId: number }) {
               <span className="truncate">{currentVersion.reject_reason}</span>
             </span>
           )}
-          {!isViewer && checkout?.mine && (
+          {!isViewer && checkoutApplies && checkout?.mine && (
             <span className="inline-flex items-center gap-1 text-fine text-ink-tertiary" title={t("editor.editingMineTitle")}>
               <Lock size={14} strokeWidth={1.5} />{t("editor.editingMine")}
             </span>
           )}
-          {status && <span className="text-caption text-error">{status}</span>}
+          {status && <span className="min-w-0 truncate text-caption text-error" title={status}>{status}</span>}
           {/* 저장 상태 — 필 형식(색상 유지). 실패 상세는 상단 배너로 노출 */}
           {saveState === "saving" && (
             <span className="rounded-full border border-hairline bg-surface-alt px-2 py-0.5 text-fine text-ink-tertiary">

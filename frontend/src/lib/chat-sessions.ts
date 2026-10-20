@@ -13,6 +13,22 @@ export interface ChatMessage {
 let localSeq = 0;
 
 // 낙관 표시용 로컬 메시지 — Date.now()는 컴포넌트 밖 팩토리에서만(react-hooks/purity)
+// 서버에 저장되지 않는 실패 안내 메시지의 kind — 자동 제목에서 뺀다
+export const CHAT_ERROR_KIND = "error";
+
+/** 마지막 어시스턴트 답변의 제목 키워드(최대 6단어·40자) — 대화 헤더 자동 타이틀. 실패 안내는 건너뛴다
+ * (대화 제목이 오류문으로 바뀌었다, 리뷰 2026-10-19 W-10). 쓸 답변이 없으면 빈 문자열. */
+export function buildAutoTitle(messages: readonly ChatMessage[]): string {
+  const last = [...messages].reverse().find((message) => message.role === "assistant" && message.kind !== CHAT_ERROR_KIND);
+  if (!last) return "";
+  const heading = last.content.match(/^#{1,6}\s+(.+)$/m);
+  const raw = (heading ? heading[1] : last.content)
+    .replace(/[#>*`\-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return raw.split(" ").slice(0, 6).join(" ").slice(0, 40);
+}
+
 export function createLocalMessage(
   role: ChatMessage["role"],
   content: string,

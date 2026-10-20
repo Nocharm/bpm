@@ -35,7 +35,14 @@ import {
   type AiProposal,
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
-import { createLocalMessage, toChatMessage, toPayload, type ChatMessage } from "@/lib/chat-sessions";
+import {
+  buildAutoTitle,
+  CHAT_ERROR_KIND,
+  createLocalMessage,
+  toChatMessage,
+  toPayload,
+  type ChatMessage,
+} from "@/lib/chat-sessions";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import { runGuardedNavigation } from "@/lib/navigation-guard";
@@ -294,14 +301,7 @@ export function AiChatPanel({
   // 마지막 어시스턴트 답변에서 제목 키워드 추출 → 헤더 자동 타이틀
   useEffect(() => {
     if (!onAutoTitle) return;
-    const last = [...messages].reverse().find((message) => message.role === "assistant");
-    if (!last) return;
-    const heading = last.content.match(/^#{1,6}\s+(.+)$/m);
-    const raw = (heading ? heading[1] : last.content)
-      .replace(/[#>*`\-]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    const title = raw.split(" ").slice(0, 6).join(" ").slice(0, 40);
+    const title = buildAutoTitle(messages);
     if (title) onAutoTitle(title);
   }, [messages, onAutoTitle]);
 
@@ -380,7 +380,7 @@ export function AiChatPanel({
         // 서버 미저장 에러 표시 — 새로고침하면 사라지는 게 의도
         setMessages((prev) => [
           ...prev,
-          createLocalMessage("assistant", humanizeApiError(err, t)),
+          createLocalMessage("assistant", humanizeApiError(err, t), CHAT_ERROR_KIND),
         ]);
       }
     } finally {

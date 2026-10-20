@@ -6,6 +6,7 @@
 //       export-column-picker-design(2026-10-02, 열 선택·IO/조건/GMP/병렬 열)
 import type { Graph, GraphEdge, GraphNode } from "./api";
 import { formatSystemCell, orderNodesByFlow } from "./csv-export";
+import { downloadBlob } from "./download-blob";
 import { parseDurationMinutes } from "./duration";
 import { EXCEL_COLUMNS, type ExcelColumnKey, normalizeExportColumns } from "./export-columns";
 import { formatGmp } from "./gmp";
@@ -778,12 +779,8 @@ export async function downloadWorkbookXlsx(
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  // 공용 헬퍼 — 객체 URL을 동기로 해제하면 Safari가 내려받기를 취소할 수 있었다 (리뷰 2026-10-19 D-9)
+  downloadBlob(blob, fileName);
 }
 
 /** ExcelModel → .xlsx 파일 다운로드(선택 열, 미지정이면 전 열). */

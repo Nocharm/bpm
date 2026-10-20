@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AiChatMessageRow } from "./api";
-import { createLocalMessage, toChatMessage, toPayload } from "./chat-sessions";
+import { buildAutoTitle, CHAT_ERROR_KIND, createLocalMessage, toChatMessage, toPayload } from "./chat-sessions";
 
 describe("chat-sessions view model", () => {
   it("converts a server row to a view message with epoch time", () => {
@@ -86,5 +86,22 @@ describe("kind/payload preservation (2026-07-10)", () => {
     const step = { order: 1, node_id: "n1", narration: "설명" };
     expect(toPayload({ ...base, kind: "walkthrough", steps: [step] })).toEqual({ steps: [step] });
     expect(toPayload({ ...base, kind: "walkthrough" })).toBeNull(); // 빈 steps
+  });
+});
+
+describe("buildAutoTitle", () => {
+  it("titles the chat from the last answer's heading", () => {
+    const messages = [createLocalMessage("user", "정리해 줘"), createLocalMessage("assistant", "## 구매 승인 흐름 정리\n본문")];
+    expect(buildAutoTitle(messages)).toBe("구매 승인 흐름 정리");
+  });
+
+  it("skips a failure notice so the title does not turn into the error (W-10)", () => {
+    const messages = [
+      createLocalMessage("assistant", "## 구매 승인 흐름 정리"),
+      createLocalMessage("user", "다시"),
+      createLocalMessage("assistant", "AI request failed (HTTP 502)", CHAT_ERROR_KIND),
+    ];
+    expect(buildAutoTitle(messages)).toBe("구매 승인 흐름 정리");
+    expect(buildAutoTitle([createLocalMessage("assistant", "timeout", CHAT_ERROR_KIND)])).toBe("");
   });
 });
