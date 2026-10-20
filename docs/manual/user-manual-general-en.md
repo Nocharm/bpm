@@ -42,7 +42,7 @@ Every map has an **owning department**; people who belong to it automatically ho
 
 The business **Framework** has its own role apart from map roles: **category admins**, appointed by a system administrator on a category (L1–L5). They edit and confirm the **linkage canvas** of that category and everything below it (Editing Maps manual, section 11), and manage their own subtree of categories in Settings (Administrator manual, section 13).
 
-A map with **Public** visibility is viewable by everyone; **Private** maps are visible only to collaborators and approvers. If you navigate to a private map you're not allowed to see, a no-access notice is shown.
+A map with **Public** visibility is viewable by everyone, including its working Draft versions (view only; Drafts of framework L5 canvases stay visible to their admins only); **Private** maps are visible only to collaborators and approvers. If you navigate to a private map you're not allowed to see, a no-access notice is shown.
 
 ---
 

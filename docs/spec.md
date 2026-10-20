@@ -21,7 +21,7 @@
 
 ```
 process_maps   id, name, description, created_by, created_at, updated_at, deleted_at(휴지통),
-               owner_id, visibility(private/public), owning_department,   # 권한 (RBAC)
+               owner_id, visibility(private/public), owning_department,   # 권한 (RBAC) — public은 Draft까지 전원 열람(설계 의도, 2026-10-20 확인), L5 캔버스 Draft만 권한자 전용
                mode(normal/framework=L5 연계 캔버스),
                category_id, consultant_code, consultant_owner_pending,    # 업무 체계 슬롯·컨설턴트 임포트
                sp_designated_at, sp_department, sp_assignee, sp_assignee_role, sp_system,
