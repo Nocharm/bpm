@@ -2,7 +2,7 @@
 // added/removed/changed/unchanged 상태 부여. 단일 캔버스 비교 화면이 좌표 무시·연결 기반 diff 렌더에 사용.
 
 import type { FlatNode, GraphEdge, VersionGraph } from "@/lib/api";
-import { FIELD_KEYS, getFieldValue, getLineageKey, type ChangedField } from "@/lib/diff";
+import { FIELD_KEYS, getFieldCompareValue, getFieldValue, getLineageKey, numberDuplicateKeys, type ChangedField } from "@/lib/diff";
 import { getOutputKey } from "@/lib/output-rules";
 import { PRIMARY_END_HANDLE } from "@/lib/subprocess-embed";
 
@@ -60,7 +60,7 @@ function diffFieldChanges(base: FlatNode, target: FlatNode): FieldChange[] {
   for (const [field, label] of FIELD_KEYS) {
     const before = getFieldValue(base, field);
     const after = getFieldValue(target, field);
-    if (before !== after) {
+    if (getFieldCompareValue(base, field) !== getFieldCompareValue(target, field)) {
       changes.push({ field: label, before: String(before ?? ""), after: String(after ?? "") });
     }
   }
@@ -128,9 +128,18 @@ export function buildMergedGraph(base: VersionGraph, target: VersionGraph): Merg
   const baseById = new Map(base.nodes.map((n) => [n.id, n]));
   const targetById = new Map(target.nodes.map((n) => [n.id, n]));
   const merged = new Map<string, MergedEdge>();
-  for (const edge of base.edges) {
+  // 같은 출구·같은 도착 엣지가 여럿이면 차례 번호로 따로 센다 — 확정 서명과 같은 개수 (F-10)
+  const baseIds = numberDuplicateKeys(base.edges.map((edge) => {
     const { source, target: tgt, exit } = edgeEndpoints(edge, baseById);
-    const id = buildEdgeId(source, tgt, exit);
+    return buildEdgeId(source, tgt, exit);
+  }));
+  const targetIds = numberDuplicateKeys(target.edges.map((edge) => {
+    const { source, target: tgt, exit } = edgeEndpoints(edge, targetById);
+    return buildEdgeId(source, tgt, exit);
+  }));
+  for (const [index, edge] of base.edges.entries()) {
+    const { source, target: tgt, exit } = edgeEndpoints(edge, baseById);
+    const id = baseIds[index];
     merged.set(id, {
       id,
       source,
@@ -142,23 +151,17 @@ export function buildMergedGraph(base: VersionGraph, target: VersionGraph): Merg
       status: "removed",
     });
   }
-  const unmatched: { edge: GraphEdge; source: string; target: string; exit: string }[] = [];
-  for (const edge of target.edges) {
+  const unmatched: { edge: GraphEdge; id: string; source: string; target: string; exit: string }[] = [];
+  for (const [index, edge] of target.edges.entries()) {
     const ends = edgeEndpoints(edge, targetById);
-    const existing = merged.get(buildEdgeId(ends.source, ends.target, ends.exit));
+    const existing = merged.get(targetIds[index]);
     if (existing) {
       applyTargetEdge(existing, edge);
     } else {
-      unmatched.push({ edge, ...ends });
+      unmatched.push({ edge, id: targetIds[index], ...ends });
     }
   }
-  for (const { edge, source, target: tgt, exit } of unmatched) {
-    const id = buildEdgeId(source, tgt, exit);
-    const existing = merged.get(id);
-    if (existing) {
-      applyTargetEdge(existing, edge); // 같은 출구의 중복 엣지 — 앞서 짝지은 항목에 합친다
-      continue;
-    }
+  for (const { edge, id, source, target: tgt, exit } of unmatched) {
     const partner = [...merged.values()].find(
       (e) => e.status === "removed" && e.source === source && e.target === tgt,
     );

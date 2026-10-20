@@ -115,6 +115,24 @@ export function getFieldValue(node: FlatNode, field: keyof FlatNode): unknown {
   return Array.isArray(value) ? [...value].sort().join(", ") : (value ?? null);
 }
 
+/** 변경 판정용 값 — 배열은 항목 경계를 지켜 비교한다. 표시용 ", " 결합은 `["a, b"]`와 `["a","b"]`를 같게 봐
+ * 확정 서명과 어긋났다 (리뷰 2026-10-19 F-10). */
+export function getFieldCompareValue(node: FlatNode, field: keyof FlatNode): unknown {
+  const value = node[field];
+  return Array.isArray(value) ? JSON.stringify([...value].sort()) : getFieldValue(node, field);
+}
+
+/** 같은 키가 또 나오면 차례 번호를 붙인다(`key#2`) — 같은 출구·같은 도착 엣지를 하나로 접으면
+ * 중복 엣지 추가가 무변경으로 보여 확정 서명(엣지 목록 그대로)과 어긋났다 (F-10). */
+export function numberDuplicateKeys(keys: readonly string[]): string[] {
+  const seen = new Map<string, number>();
+  return keys.map((key) => {
+    const count = (seen.get(key) ?? 0) + 1;
+    seen.set(key, count);
+    return count === 1 ? key : `${key}#${count}`;
+  });
+}
+
 // 변경 필드 라벨 키 — compare 화면·연계 캔버스 확정 요약 공용 (2026-08-28 승격)
 export const FIELD_MSG: Record<ChangedField, MessageKey> = {
   title: "field.title",
@@ -206,27 +224,10 @@ export function computeVersionDiff(
     }
   }
   const pairedRightIds = new Set(pairs.map(([, rightNode]) => rightNode.id));
-  let unmatchedRight = right.nodes.filter((node) => !pairedRightIds.has(node.id));
-
-  // fallback — 계보가 없으면 (부모 계보, 제목)이 같은 노드끼리 매칭
-  const fallbackRight = new Map(
-    unmatchedRight.map((node) => [
-      `${getParentLineageKey(node, rightById)}|${node.title}`,
-      node,
-    ]),
-  );
-  const stillUnmatchedLeft: FlatNode[] = [];
-  for (const node of unmatchedLeft) {
-    const key = `${getParentLineageKey(node, leftById)}|${node.title}`;
-    const counterpart = fallbackRight.get(key);
-    if (counterpart) {
-      pairs.push([node, counterpart]);
-      fallbackRight.delete(key);
-    } else {
-      stillUnmatchedLeft.push(node);
-    }
-  }
-  unmatchedRight = [...fallbackRight.values()];
+  const unmatchedRight = right.nodes.filter((node) => !pairedRightIds.has(node.id));
+  // 계보로만 짝짓는다 — 예전 (부모 계보, 제목) 폴백은 지우고 같은 제목으로 다시 만든 노드를 무변경으로 봐
+  // 비교 화면·확정 서명(계보)과 어긋났다 (F-10). 복제는 처음부터 계보(source_node_id)를 실어 폴백이 쓰일 일이 없다.
+  const stillUnmatchedLeft = unmatchedLeft;
 
   const entries: NodeDiffEntry[] = [];
   const leftNodeStatus = new Map<string, NodeDiffEntry>();
@@ -234,7 +235,7 @@ export function computeVersionDiff(
 
   for (const [leftNode, rightNode] of pairs) {
     const changedFields: ChangedField[] = FIELD_KEYS.filter(
-      ([field]) => getFieldValue(leftNode, field) !== getFieldValue(rightNode, field),
+      ([field]) => getFieldCompareValue(leftNode, field) !== getFieldCompareValue(rightNode, field),
     ).map(([, key]) => key);
     if (getParentLineageKey(leftNode, leftById) !== getParentLineageKey(rightNode, rightById)) {
       changedFields.push("location");
@@ -307,20 +308,22 @@ export function computeVersionDiff(
     const base = `${source ? getLineageKey(source) : edge.source_node_id}→${target ? getLineageKey(target) : edge.target_node_id}`;
     return exit === PRIMARY_END_HANDLE ? base : `${base}@${exit}`;
   };
-  const leftEdgeKeys = new Set(left.edges.map((edge) => edgeKey(edge, leftById)));
-  const rightEdgeKeys = new Set(right.edges.map((edge) => edgeKey(edge, rightById)));
+  const leftKeys = numberDuplicateKeys(left.edges.map((edge) => edgeKey(edge, leftById)));
+  const rightKeys = numberDuplicateKeys(right.edges.map((edge) => edgeKey(edge, rightById)));
+  const leftEdgeKeys = new Set(leftKeys);
+  const rightEdgeKeys = new Set(rightKeys);
   const leftEdgeStatus = new Map<string, DiffStatus>();
   const rightEdgeStatus = new Map<string, DiffStatus>();
-  for (const edge of left.edges) {
-    if (!rightEdgeKeys.has(edgeKey(edge, leftById))) {
+  left.edges.forEach((edge, index) => {
+    if (!rightEdgeKeys.has(leftKeys[index])) {
       leftEdgeStatus.set(edge.id, "removed");
     }
-  }
-  for (const edge of right.edges) {
-    if (!leftEdgeKeys.has(edgeKey(edge, rightById))) {
+  });
+  right.edges.forEach((edge, index) => {
+    if (!leftEdgeKeys.has(rightKeys[index])) {
       rightEdgeStatus.set(edge.id, "added");
     }
-  }
+  });
 
   return {
     entries,

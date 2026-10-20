@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-20 — 7d② 무결성 잔여: 시스템 리뷰 F-3·F-10·F-11·F-12 + 확인 필요 게이트 3·중복 행 (dev)
+
+- 대표 끝은 끝이 둘 이상이면 사람이 고른다(사용자 결정 F-3): 저장이 대신 고르지 않고 제출 422, 에디터·설정 패널 저장 체크리스트, 대표 토글은 하나만 켜짐(끝 하나는 자동 지정 그대로). 게이트 3은 다른 L5의 L6 링크가 SP 지정이 풀리면 끊긴 링크로 센다(자기 L5 소속 L6는 지정과 무관 — 그래프 저장 규칙과 같고, 슬롯 교체로 미지정 맵이 L6가 될 수 있어 전면 적용은 확정 불능을 만든다). 권한 행 중복은 맵 행 잠금(추가·오너 이전)과 임포트 오너 교체 정리로 막고, 이미 겹친 버전 번호·게시본·권한 행은 기동 로그로만 알린다(사용자 결정). 새 링크를 더하는 저장은 PG advisory 잠금으로 줄 세워 맞링크 순환을 막는다. 비교·변경 요약은 배열을 항목 경계로, 중복 엣지를 따로 세고, 제목 폴백 없이 계보로만 짝짓는다(확정 서명과 같은 판정). SP 끝 판정은 정확한 변 id만 대표 끝으로 접는다("t-shirt order" 끝).
+- 회귀 pytest +5(수정 전 5 실패)·vitest +7(수정 전 5 실패). 일회용 postgres:16: 동시 권한 추가 수정 전 6/6 중복 → 0/10(409), 맞링크 동시 저장 수정 전 6/6 순환 → 0/10(422), 기존 중복은 경고만·데이터 보존. 브라우저 `scripts/pw-verify-primary-end.mjs` 6/6. pytest 1818·ruff·py3.11·tsc·lint·vitest 1530·COMPONENTS 최신. 매뉴얼 ko/en·`backend/app/manual.md`·CLAUDE.md 반영.
+
 ## 2026-10-20 — 7d① 운영 잔여: 시스템 리뷰 H-9·H-11·H-12 + 확인 필요 HR 주기·reset_db·ref_audit (dev)
 
 - Backup now 트리거는 사이드카(root)가 1777로 만드는 `requests/`에 쓴다(비root backend가 root 소유 백업 디렉터리에 못 써 서버에서 500), 못 쓰면 503+조치 안내+실패 기록. 사이드카 스크립트가 바뀌었으니 배포 때 `docker compose up -d --force-recreate db-backup`(deploy.md). sqlite도 연결마다 FK를 켜 영구삭제 cascade가 운영과 같다. HR 자동 동기화는 마지막 회차(`hr_sync_runs`)에서 주기를 잇는다(지났으면 기동 5분 뒤, 기록 없는 첫 설치는 한 주기 뒤, 사용자 결정). `reset_db`는 postgres에 맵·직원이 있으면 지우기 전에 멈추고, A8 명령에 `-p`·`--env-file`. ref_audit은 반려·결재 대기 작업본도 스캔. 쓰이지 않던 `CHECKOUT_TTL_MINUTES` 제거(설정·env·compose·spec이 "무활동 자동 해제"로 안내), deploy.md 토큰 무효화 문구 정정.

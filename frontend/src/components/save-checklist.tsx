@@ -25,18 +25,26 @@ export function getMultiOutputNodeIds(
   return getOutputViolations(nodes, edges).map((violation) => violation.nodeId);
 }
 
+export interface SaveCheckNode extends OutputRuleNode {
+  label: string;
+  isPrimaryEnd?: boolean;
+}
+
 // 저장(그래프 검증) 조건의 충족 여부 — 체크리스트 렌더와 저장/승인 차단 로직 공용(어긋남 방지).
-// 백엔드 validate_process 정합(시작 1개 / 대표끝=1 / 끝 이름 중복 없음) + 출력 규칙(확정 게이트 6과 동치):
+// 백엔드 validate_process·제출 게이트 정합(시작 1개 / 대표끝=1 / 끝 이름 중복 없음) + 출력 규칙(확정 게이트 6과 동치):
 // 삽입 재연결 등으로 한 출구에 엣지가 2개 이상 생기면(일시 허용) 저장·승인 시작에서 작업자에게 알린다.
+// 대표 끝: 끝이 하나면 저장이 자동 지정하고, 둘 이상이면 사람이 하나를 켜야 한다 (사용자 결정 2026-10-20, 리뷰 F-3).
 export function getSaveCheckStates(
-  nodes: readonly (OutputRuleNode & { label: string })[],
+  nodes: readonly SaveCheckNode[],
   edges: readonly OutputRuleEdge[],
 ): { start: boolean; primaryEnd: boolean; endUnique: boolean; singleOutput: boolean } {
   const startCount = nodes.filter((node) => node.nodeType === "start").length;
-  const endLabels = nodes.filter((node) => node.nodeType === "end").map((node) => node.label);
+  const ends = nodes.filter((node) => node.nodeType === "end");
+  const endLabels = ends.map((node) => node.label);
+  const primaryCount = ends.filter((node) => node.isPrimaryEnd).length;
   return {
     start: startCount === 1,
-    primaryEnd: endLabels.length >= 1,
+    primaryEnd: ends.length === 1 ? primaryCount <= 1 : ends.length > 1 && primaryCount === 1,
     endUnique: new Set(endLabels).size === endLabels.length,
     singleOutput: getMultiOutputNodeIds(nodes, edges).length === 0,
   };

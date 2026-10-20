@@ -260,6 +260,38 @@ def _enforce_version_approval_unique(conn: Connection) -> None:
     ))
 
 
+# 이미 겹친 행 진단 — (이름, 테이블, 묶음 쿼리). 결과 행 = 겹친 한 묶음, 마지막 열은 개수
+_DUPLICATE_CHECKS: list[tuple[str, str, str]] = [
+    ("map version number", "map_versions",
+     "SELECT map_id, version_number, COUNT(*) FROM map_versions WHERE version_number IS NOT NULL "
+     "GROUP BY map_id, version_number HAVING COUNT(*) > 1"),
+    ("published version", "map_versions",
+     "SELECT map_id, COUNT(*) FROM map_versions WHERE status = 'published' "
+     "GROUP BY map_id HAVING COUNT(*) > 1"),
+    ("map permission", "map_permissions",
+     "SELECT map_id, principal_type, principal_id, COUNT(*) FROM map_permissions "
+     "GROUP BY map_id, principal_type, principal_id HAVING COUNT(*) > 1"),
+]
+
+
+def _report_duplicate_rows(conn: Connection) -> None:
+    """버전 번호·게시본·권한 행 중복을 기동 로그로만 알린다 — 데이터는 바꾸지 않는다.
+
+    새 중복은 맵 행 잠금이 막는다(게시·버전 생성·권한 추가·오너 이전). 이미 겹친 운영 데이터는 사람이 보고
+    고르게 남긴다 (사용자 결정 2026-10-20, 리뷰 확인 필요 항목). 로그 예: duplicate map permission rows: 2 groups.
+    """
+    tables = set(inspect(conn).get_table_names())
+    for label, table, query in _DUPLICATE_CHECKS:
+        if table not in tables:
+            continue
+        groups = conn.execute(text(query)).all()
+        if groups:
+            logger.warning(
+                "duplicate %s rows: %d groups (first %s) - left as is, review by hand",
+                label, len(groups), [tuple(row) for row in groups[:5]],
+            )
+
+
 def _sweep_orphan_kb_chunks(conn: Connection) -> None:
     """삭제(소프트/영구)된 맵의 KB 청크 잔재 정리 — 훅 추가 이전 데이터 소급 (hardening T16).
 
@@ -409,6 +441,7 @@ async def init_models() -> None:
     for step in (
         _enforce_interview_seq_unique,
         _enforce_version_approval_unique,
+        _report_duplicate_rows,
         _sweep_orphan_kb_chunks,
         _widen_interview_message_kind,
         _reconcile_column_types,

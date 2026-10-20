@@ -219,6 +219,8 @@ async def add_permission(
             status_code=409,
             detail="department already owns this map - editor role is derived",
         )
+    # 맵 행 잠금 — 같은 사람을 동시에 두 번 추가하면 둘 다 존재 검사를 통과해 행이 둘 생겼다(PG, 리뷰 확인 필요 항목)
+    await session.get(ProcessMap, map_id, with_for_update=True, populate_existing=True)
     existing = await session.scalar(
         select(MapPermission).where(
             MapPermission.map_id == map_id,
@@ -454,6 +456,8 @@ async def transfer_owner(
     """
     found_map = await _get_map_or_404(session, map_id)
     new_owner = payload.new_owner
+    # 맵 행 잠금 — 파생 editor에게 owner 행을 새로 만들 때 동시 추가와 겹쳐 같은 사람 행이 둘 생기지 않게
+    await session.get(ProcessMap, map_id, with_for_update=True, populate_existing=True)
 
     grants = list(
         (

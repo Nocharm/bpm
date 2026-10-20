@@ -2,8 +2,9 @@
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
@@ -90,7 +91,8 @@ async def unique_linkage_name(
 def validate_process(nodes: list[NodeIn]) -> None:
     """프로세스 그래프 규칙 검증 + 대표 끝 기본값 설정 — 위반 시 ValueError. (spec §3.3)
 
-    끝 노드가 있고 is_primary_end 미지정(0개)이면 sort_order 최소 끝을 대표로 기본 지정.
+    끝 노드가 하나뿐이고 대표 미지정이면 그 끝을 대표로 지정한다. 끝이 둘 이상이면 대표 없이도 저장되고
+    제출이 막힌다(사람이 고른다) — 자동 지정은 대표를 지운 링크 맵의 부모 출구를 다른 끝으로 옮겼다 (리뷰 F-3).
     """
     if not nodes:
         return
@@ -104,10 +106,8 @@ def validate_process(nodes: list[NodeIn]) -> None:
     primaries = [e for e in ends if e.is_primary_end]
     if len(primaries) > 1:
         raise ValueError(f"대표 끝은 1개여야 합니다 (현재 {len(primaries)}개).")
-    # spec §3.3: 끝이 있는데 대표가 없으면 sort_order 최소(동점은 payload 순서) 끝을 기본 지정
-    if ends and not primaries:
-        first_end = min(ends, key=lambda e: e.sort_order)
-        first_end.is_primary_end = True
+    if len(ends) == 1 and not primaries:
+        ends[0].is_primary_end = True
 
 
 def validate_framework_canvas(nodes: list[NodeIn]) -> None:
@@ -384,6 +384,17 @@ async def get_placeholder_category_paths(
     return {cid: path for cid in targets if (path := paths.get(cid)) is not None}
 
 
+# 링크 그래프 잠금 키(pg_advisory_xact_lock) — 앱 안에서 이 용도로만 쓴다. 바꾸면 배포 중 구·신 인스턴스가 따로 잠근다
+LINK_GRAPH_LOCK_KEY = 7_020_001
+
+
+async def lock_link_graph(session: AsyncSession) -> None:
+    """새 링크를 더하는 저장을 줄 세운다(트랜잭션 끝까지) — 두 맵이 서로를 동시에 링크하면 각자 커밋 전 상태로
+    사이클 검사를 통과해 순환이 저장됐다(PG, 리뷰 2026-10-19 F-11). sqlite는 쓰기가 원래 하나씩이라 건너뛴다."""
+    if session.bind.dialect.name == "postgresql":
+        await session.execute(select(func.pg_advisory_xact_lock(LINK_GRAPH_LOCK_KEY)))
+
+
 async def assert_no_cycle(
     session: AsyncSession, version_id: int, nodes: list[NodeIn]
 ) -> None:
@@ -496,7 +507,8 @@ def _find_scc_iterative(node_ids: list[str], adj: dict[str, list[str]]) -> list[
     return components
 
 
-_SIDE_HANDLE_RE = re.compile(r"^[st]-")
+# 변 id는 정확히 s-/t-<변> — 접두만 보면 "t-shirt order" 같은 끝 제목까지 대표 끝으로 접혔다 (리뷰 2026-10-19 F-12)
+_SIDE_HANDLE_RE = re.compile(r"^[st]-(top|right|bottom|left)$")
 # "in:left"는 FE가 내지 않는 값(좌측은 `in`)이지만 FE `parseSubprocessInHandle`이 수용하므로 같이 받는다
 _IN_HANDLES = {"in", "in:left", "in:right", "in:top", "in:bottom"}
 
@@ -564,6 +576,23 @@ def _find_noexit_cycle_nodes(nodes: list[Node], edges: list[Edge]) -> list[str]:
     return violations
 
 
+def _is_stale_link(
+    deleted_at: datetime | None,
+    retired_to_map_id: int | None,
+    category_id: int | None,
+    designated_at: datetime | None,
+    canvas_category_id: int | None,
+) -> bool:
+    """게이트 3 판정 — 삭제·이양·체계 해제, 또는 다른 L5의 L6인데 SP 지정이 해제된 링크.
+
+    자기 L5 소속 L6는 지정과 무관하게 링크할 수 있다(그래프 저장 규칙과 같다). 다른 L5 L6 참조는 라이브러리
+    지정이 근거라 지정이 풀리면 끊긴 링크다 — 예전엔 그대로 확정됐다 (사용자 결정 2026-10-20, 리뷰 확인 필요 항목).
+    """
+    if deleted_at is not None or retired_to_map_id is not None or category_id is None:
+        return True
+    return designated_at is None and category_id != canvas_category_id
+
+
 async def validate_confirm_readiness(
     session: AsyncSession, found_map: ProcessMap, draft: MapVersion
 ) -> list[GateFailure]:
@@ -591,7 +620,10 @@ async def validate_confirm_readiness(
     if linked:
         rows = (
             await session.execute(
-                select(ProcessMap.id, ProcessMap.deleted_at, ProcessMap.retired_to_map_id, ProcessMap.category_id)
+                select(
+                    ProcessMap.id, ProcessMap.deleted_at, ProcessMap.retired_to_map_id, ProcessMap.category_id,
+                    ProcessMap.sp_designated_at,
+                )
                 .where(ProcessMap.id.in_(linked.keys()))
             )
         ).all()
@@ -599,8 +631,8 @@ async def validate_confirm_readiness(
         # 3) stale_link — 삭제/이양/영구삭제(맵 실종)/해제(category_id NULL)된 링크 (spec 2026-09-06 §6.3)
         stale = [
             nid for mid, nid in linked.items()
-            if mid not in by_id or by_id[mid][1] is not None or by_id[mid][2] is not None
-            or by_id[mid][3] is None
+            if mid not in by_id
+            or _is_stale_link(by_id[mid][1], by_id[mid][2], by_id[mid][3], by_id[mid][4], category_id)
         ]
         if stale:
             failures.append(GateFailure("stale_link", len(stale), stale))
@@ -695,12 +727,12 @@ async def validate_confirm_readiness_batch(
     pub_ids: set[int] = set()
     if all_linked_ids:
         link_status = {
-            mid: (deleted_at, retired_to, category_id)
-            for mid, deleted_at, retired_to, category_id in (
+            mid: (deleted_at, retired_to, category_id, designated_at)
+            for mid, deleted_at, retired_to, category_id, designated_at in (
                 await session.execute(
                     select(
                         ProcessMap.id, ProcessMap.deleted_at, ProcessMap.retired_to_map_id,
-                        ProcessMap.category_id,
+                        ProcessMap.category_id, ProcessMap.sp_designated_at,
                     ).where(ProcessMap.id.in_(all_linked_ids))
                 )
             ).all()
@@ -740,8 +772,7 @@ async def validate_confirm_readiness_batch(
         if linked:
             stale = [
                 nid for mid, nid in linked.items()
-                if mid not in link_status or link_status[mid][0] is not None or link_status[mid][1] is not None
-                or link_status[mid][2] is None
+                if mid not in link_status or _is_stale_link(*link_status[mid], category_id)
             ]
             if stale:
                 failures.append(GateFailure("stale_link", len(stale), stale))

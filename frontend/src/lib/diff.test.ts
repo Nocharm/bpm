@@ -185,3 +185,31 @@ describe("computeVersionDiff - 고정 버전(F-6)", () => {
     expect(pair({ follow_latest: true, linked_version_id: 10 }, { follow_latest: true, linked_version_id: 11 })).toEqual([]);
   });
 });
+
+describe("computeVersionDiff - 확정 서명과 같은 판정 (리뷰 F-10)", () => {
+  const proc = (id: string, sourceId: string | null, title: string, over: Partial<FlatNode> = {}): FlatNode => ({
+    ...FLAT, id, title, node_type: "process", source_node_id: sourceId, ...over,
+  });
+
+  it("keeps array items apart: one exit named 'a, b' is not two exits", () => {
+    const left: VersionGraph = { nodes: [proc("n1", null, "Fork", { parallel_outputs: ["a, b"] })], edges: [] };
+    const right: VersionGraph = { nodes: [proc("n2", "n1", "Fork", { parallel_outputs: ["a", "b"] })], edges: [] };
+    expect(computeVersionDiff(left, right).entries.map((e) => e.status)).toEqual(["changed"]);
+  });
+
+  it("counts a duplicate edge on the same exit as added", () => {
+    const left: VersionGraph = { nodes: [proc("a1", null, "A"), proc("b1", null, "B")], edges: [edge("e1", "a1", "b1")] };
+    const right: VersionGraph = {
+      nodes: [proc("a2", "a1", "A"), proc("b2", "b1", "B")],
+      edges: [edge("e2", "a2", "b2"), edge("e3", "a2", "b2")],
+    };
+    const diff = computeVersionDiff(left, right);
+    expect([...diff.rightEdgeStatus.entries()]).toEqual([["e3", "added"]]);
+  });
+
+  it("treats a node deleted and recreated with the same title as removed + added", () => {
+    const left: VersionGraph = { nodes: [proc("x1", null, "Review")], edges: [] };
+    const right: VersionGraph = { nodes: [proc("y1", null, "Review")], edges: [] };
+    expect(computeVersionDiff(left, right).entries.map((e) => e.status).sort()).toEqual(["added", "removed"]);
+  });
+});

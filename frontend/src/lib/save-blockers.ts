@@ -29,6 +29,7 @@ export function listGraphSaveBlockers(graph: Graph, t: Translate): string[] {
       nodeType: node.node_type,
       label: node.title,
       parallelOutputs: node.parallel_outputs,
+      isPrimaryEnd: node.is_primary_end,
     })),
     graph.edges.map((edge) => ({
       source: edge.source_node_id,

@@ -164,3 +164,39 @@ def test_app_settings_survive_a_half_emoji(client: TestClient) -> None:
         client.put("/api/admin/app-settings", json={
             "exposed_positions": before["exposed_positions"], "systems": before["systems"],
         })
+
+
+# ── F-3 끝이 여럿이면 대표 끝은 사람이 고른다 ────────────────────────────────
+
+
+def _two_end_graph(prefix: str, primary: str | None) -> dict:
+    ends = [("ok", "승인"), ("no", "반려")]
+    nodes = [
+        {"id": f"{prefix}-s", "title": "Start", "node_type": "start", "pos_x": 0, "pos_y": 0},
+        {"id": f"{prefix}-d", "title": "검토", "node_type": "decision", "pos_x": 200, "pos_y": 0},
+        *[
+            {"id": f"{prefix}-{key}", "title": title, "node_type": "end", "pos_x": 400, "pos_y": 0,
+             "is_primary_end": key == primary}
+            for key, title in ends
+        ],
+    ]
+    edges = [
+        {"id": f"{prefix}-1", "source_node_id": f"{prefix}-s", "target_node_id": f"{prefix}-d", "label": ""},
+        {"id": f"{prefix}-2", "source_node_id": f"{prefix}-d", "target_node_id": f"{prefix}-ok", "label": "예"},
+        {"id": f"{prefix}-3", "source_node_id": f"{prefix}-d", "target_node_id": f"{prefix}-no", "label": "아니오"},
+    ]
+    return {"nodes": nodes, "edges": edges, "groups": []}
+
+
+def test_submit_requires_a_chosen_primary_end(client: TestClient, enforce: None) -> None:  # noqa: F811
+    """대표 끝을 지우면 서버가 다른 끝을 골라 부모 맵의 기본 출구가 '반려'로 옮겨 갈 수 있었다 (사용자 결정 2026-10-20, F-3)."""
+    owner, vid = _draft(client)
+    act_as(owner)
+    tag = uuid4().hex[:6]
+    assert client.put(f"/api/versions/{vid}/graph", json=_two_end_graph(f"f3-{tag}", None)).status_code == 200
+    saved = client.get(f"/api/versions/{vid}/graph").json()
+    assert not any(n["is_primary_end"] for n in saved["nodes"])  # 저장은 되고 대신 고르지 않는다
+    r = client.post(f"/api/versions/{vid}/submit", json={})
+    assert r.status_code == 422 and r.json()["detail"].startswith("choose a primary end")
+    assert client.put(f"/api/versions/{vid}/graph", json=_two_end_graph(f"f3-{tag}", "ok")).status_code == 200
+    assert _post(client, owner, f"/api/versions/{vid}/submit") == 200

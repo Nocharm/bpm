@@ -312,33 +312,31 @@ def test_clone_preserves_subprocess_fields(client: TestClient) -> None:
     assert edge["line_style"] == "straight", f"line_style lost: {edge}"
 
 
-# ── FIX 2: primary end defaults to first end (by sort_order) if unspecified ──
+# ── FIX 2: 대표 끝 기본값 — 끝 하나만 자동 지정, 둘 이상은 사람이 고른다(리뷰 F-3) ──
 
-def test_primary_end_defaults_to_first(client: TestClient) -> None:
-    """끝 노드가 있고 is_primary_end 미지정 시 sort_order 최소 끝이 기본 대표가 돼야 한다."""
+def test_primary_end_defaults_only_for_a_single_end(client: TestClient) -> None:
+    """끝이 하나면 대표로 자동 지정. 둘 이상이면 대표 없이 저장된다 — 서버가 고르면 부모 출구가 다른 끝으로 옮겨 갔다."""
     vid = _new_version(client, "default-primary")
     s, e1, e2 = _make_ids(vid, "s", "e1", "e2")
     r = client.put(f"/api/versions/{vid}/graph", json={
         "nodes": [
             {"id": s, "node_type": "start"},
-            # sort_order 2 — listed first in payload but higher sort_order
             {"id": e2, "title": "반려", "node_type": "end", "sort_order": 2},
-            # sort_order 1 — smallest, should become primary
             {"id": e1, "title": "승인", "node_type": "end", "sort_order": 1},
         ],
         "edges": [],
     })
     assert r.status_code == 200, r.json()
-
     g = client.get(f"/api/versions/{vid}/graph").json()
-    ends = {n["id"]: n for n in g["nodes"] if n["node_type"] == "end"}
-    primaries = [n for n in ends.values() if n["is_primary_end"]]
-    assert len(primaries) == 1, f"Expected exactly 1 primary end, got: {primaries}"
-    assert primaries[0]["id"] == e1, (
-        f"Expected e1 (sort_order=1) to be primary, got: {primaries[0]}"
-    )
-    # e2 must NOT be primary
-    assert ends[e2]["is_primary_end"] is False
+    assert not any(n["is_primary_end"] for n in g["nodes"] if n["node_type"] == "end")
+
+    r = client.put(f"/api/versions/{vid}/graph", json={
+        "nodes": [{"id": s, "node_type": "start"}, {"id": e1, "title": "승인", "node_type": "end", "sort_order": 1}],
+        "edges": [],
+    })
+    assert r.status_code == 200, r.json()
+    g = client.get(f"/api/versions/{vid}/graph").json()
+    assert [n["is_primary_end"] for n in g["nodes"] if n["node_type"] == "end"] == [True]
 
 
 def test_rejects_multiple_primaries(client: TestClient) -> None:

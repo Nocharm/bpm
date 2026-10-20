@@ -719,8 +719,17 @@ async def submit_version(
 
     # 출력 규칙(갈래는 판단 노드나 병렬 출구로) — 에디터 저장 체크리스트만 막고 서버는 보지 않아, 설정 패널의
     # 제출·셀프 게시로 규칙을 어긴 맵이 게시됐다. L5 캔버스 확정 게이트 6과 같은 판정이다 (사용자 결정 2026-10-20, 리뷰 F-4)
+    version_nodes = list((await session.scalars(select(Node).where(Node.version_id == version_id))).all())
+    # 끝이 둘 이상이면 대표 끝은 사람이 고른다 — 서버가 대신 고르면 부모 맵의 기본 출구가 다른 끝(예: 반려)으로
+    # 조용히 옮겨 갔다 (사용자 결정 2026-10-20, 리뷰 F-3). 끝 하나는 저장이 자동 지정한다.
+    ends = [n for n in version_nodes if n.node_type == "end"]
+    if len(ends) >= 2 and sum(1 for n in ends if n.is_primary_end) != 1:
+        raise HTTPException(
+            status_code=422,
+            detail=f"choose a primary end: {len(ends)} end nodes and none is marked primary",
+        )
     violating = find_output_rule_violations(
-        list((await session.scalars(select(Node).where(Node.version_id == version_id))).all()),
+        version_nodes,
         list((await session.scalars(select(Edge).where(Edge.version_id == version_id))).all()),
     )
     if violating:

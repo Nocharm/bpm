@@ -145,6 +145,7 @@ import {
   getSaveCheckStates,
   getMultiOutputNodeIds,
   type SaveCheckItem,
+  type SaveCheckNode,
 } from "@/components/save-checklist";
 import { ProcessNode, resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
@@ -368,7 +369,6 @@ import {
   getParallelOutputKeys,
   setOutputParallel,
   type OutputRuleEdge,
-  type OutputRuleNode,
 } from "@/lib/output-rules";
 import { assignEdgePulses, isEdgePulse } from "@/lib/edge-pulse";
 import { ParallelExitIcon } from "@/lib/parallel-icon";
@@ -821,8 +821,14 @@ const EDGE_LINE_STYLE_OPTIONS = [
 ] as const;
 
 // 저장 체크리스트·출력 규칙 입력 — 노드는 병렬 출구, 엣지는 출구 키·레거시 게이트웨이까지 넘긴다(lib/output-rules.ts).
-function buildCheckNode(node: AppNode): OutputRuleNode & { label: string } {
-  return { id: node.id, nodeType: node.data.nodeType, label: node.data.label, parallelOutputs: node.data.parallelOutputs };
+function buildCheckNode(node: AppNode): SaveCheckNode {
+  return {
+    id: node.id,
+    nodeType: node.data.nodeType,
+    label: node.data.label,
+    parallelOutputs: node.data.parallelOutputs,
+    isPrimaryEnd: node.data.isPrimaryEnd,
+  };
 }
 
 function buildCheckEdge(edge: Edge): OutputRuleEdge {
@@ -3441,7 +3447,14 @@ function MapEditor({ mapId }: { mapId: number }) {
     const problemIds = getMultiOutputNodeIds(simpleNodes, simpleEdges);
     return [
       { key: "start", label: t("save.checkOneStart"), ok: states.start },
-      { key: "primaryEnd", label: t("save.checkPrimaryEnd"), ok: states.primaryEnd },
+      {
+        key: "primaryEnd",
+        label: t("save.checkPrimaryEnd"),
+        ok: states.primaryEnd,
+        // 끝이 여럿인데 대표가 없으면 끝 노드들로 이동 — 그중 하나를 대표로 켠다 (F-3)
+        onLocate: states.primaryEnd ? undefined : () =>
+          locateProblemNodes(simpleNodes.filter((node) => node.nodeType === "end").map((node) => node.id)),
+      },
       { key: "endUnique", label: t("save.checkUniqueEnd"), ok: states.endUnique },
       {
         key: "singleOutput",
@@ -5902,7 +5915,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         const mapped = current.map((node) =>
           node.id === selectedId
             ? { ...node, data: { ...node.data, ...patch } }
-            : node,
+            : patch.isPrimaryEnd === true && node.data.isPrimaryEnd
+              ? { ...node, data: { ...node.data, isPrimaryEnd: false } } // 대표 끝은 하나 — 켜면 다른 끝은 꺼진다 (리뷰 F-3)
+              : node,
         );
         return propagate ? propagateIoLinks(mapped, subprocessRefs).nodes : mapped;
       });

@@ -15,6 +15,7 @@ from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.subprocess import (
     assert_no_cycle,
+    lock_link_graph,
     get_placeholder_category_paths,
     get_subprocess_refs,
     validate_framework_canvas,
@@ -414,6 +415,20 @@ async def replace_graph(
 
     await _assert_new_links_allowed(session, version, payload.nodes, user, contained_ids)
 
+    stored_link_ids = set(
+        (
+            await session.scalars(
+                select(Node.linked_map_id).where(
+                    Node.version_id == version_id, Node.linked_map_id.is_not(None)
+                )
+            )
+        ).all()
+    )
+    if any(
+        n.node_type == "subprocess" and n.linked_map_id and n.linked_map_id not in stored_link_ids
+        for n in payload.nodes
+    ):
+        await lock_link_graph(session)
     try:
         await assert_no_cycle(session, version_id, payload.nodes)
     except ValueError as exc:

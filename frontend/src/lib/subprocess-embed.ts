@@ -40,7 +40,8 @@ export function isSubprocessInHandle(id: string | null | undefined): boolean {
 
 /** 끝 핸들(대표 끝 `__primary__` 또는 끝 제목) — 변 id(`s-*`/`t-*`)·들어오는 문·빈 값은 아니다. */
 export function isSubprocessEndHandle(id: string | null | undefined): boolean {
-  return !!id && !/^[st]-/.test(id) && !isSubprocessInHandle(id);
+  // 변 id는 정확히 s-/t-<변> — 접두만 보면 "t-shirt order" 같은 끝 제목까지 대표 끝으로 접혔다 (F-12, BE get_output_key 동치)
+  return !!id && !/^[st]-(top|right|bottom|left)$/.test(id) && !isSubprocessInHandle(id);
 }
 
 /** 출구 엣지가 나가는 끝 키 — 끝 핸들이 아니면(레거시 변 id·없음) 대표 끝. */

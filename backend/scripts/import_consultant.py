@@ -1110,10 +1110,23 @@ async def _review_governance(
         if checked:
             found.owner_id = delivered_owner
             found.consultant_owner_pending = False
+            # 오너 행 하나를 새 오너로 옮긴다. 새 오너가 이미 협업자면 그 행을 지운다 — 남기면 같은 사람 권한 행이
+            # 둘이 됐다(리뷰 2026-10-19 확인 필요 항목). 여분 오너 행(비정상)도 함께 정리해 오너 행은 정확히 하나.
+            owner_rows = list(await session.scalars(select(MapPermission).where(
+                MapPermission.map_id == found.id, MapPermission.role == "owner").order_by(MapPermission.id)))
             for perm in await session.scalars(select(MapPermission).where(
-                    MapPermission.map_id == found.id, MapPermission.role == "owner")):
-                perm.principal_id = delivered_owner
-                perm.granted_by = actor
+                    MapPermission.map_id == found.id, MapPermission.principal_type == "user",
+                    MapPermission.principal_id == delivered_owner, MapPermission.role != "owner")):
+                await session.delete(perm)
+            for extra in owner_rows[1:]:
+                await session.delete(extra)
+            if owner_rows:
+                owner_rows[0].principal_type = "user"
+                owner_rows[0].principal_id = delivered_owner
+                owner_rows[0].granted_by = actor
+            else:
+                session.add(MapPermission(map_id=found.id, principal_type="user",
+                                          principal_id=delivered_owner, role="owner", granted_by=actor))
             report.add(cmap.code, "governance", f"owner {delivered_owner} assigned")
 
     if cmap.department.strip():

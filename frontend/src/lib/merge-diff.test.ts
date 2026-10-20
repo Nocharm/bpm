@@ -245,3 +245,24 @@ describe("buildMergedGraph - 엣지 정체성(D4: SP 출구 끝 키만 내용)",
     expect(merged.edges.find((e) => e.id === "a->b")?.status).toBe("unchanged");
   });
 });
+
+describe("buildMergedGraph - duplicate edges (리뷰 F-10)", () => {
+  it("keeps a second edge on the same exit as its own added entry", () => {
+    const base: VersionGraph = {
+      nodes: [mkNode({ id: "a" }), mkNode({ id: "b" })],
+      edges: [mkEdge("e1", "a", "b")],
+    };
+    const target: VersionGraph = {
+      nodes: [mkNode({ id: "a2", source_node_id: "a" }), mkNode({ id: "b2", source_node_id: "b" })],
+      edges: [mkEdge("e2", "a2", "b2"), mkEdge("e3", "a2", "b2")],
+    };
+    const statuses = buildMergedGraph(base, target).edges.map((e) => e.status).sort();
+    expect(statuses).toEqual(["added", "unchanged"]);
+  });
+
+  it("flags an array split that the display join would hide", () => {
+    const base: VersionGraph = { nodes: [mkNode({ id: "f", parallel_outputs: ["a, b"] })], edges: [] };
+    const target: VersionGraph = { nodes: [mkNode({ id: "f2", source_node_id: "f", parallel_outputs: ["a", "b"] })], edges: [] };
+    expect(buildMergedGraph(base, target).nodes[0].status).toBe("changed");
+  });
+});

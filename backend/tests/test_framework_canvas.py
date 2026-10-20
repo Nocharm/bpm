@@ -863,6 +863,48 @@ def test_confirm_readiness_stale_link(client: TestClient, enforce: None) -> None
     assert "stale_link" in failures and failures["stale_link"].count == 1
 
 
+def test_confirm_readiness_stale_link_catches_undesignated_external_l6(client: TestClient, enforce: None) -> None:
+    """다른 L5의 L6 참조는 SP 지정이 근거 — 지정이 풀리면 끊긴 링크. 자기 L5 소속 L6는 지정과 무관 (리뷰 2026-10-19)."""
+    import asyncio
+
+    map_id, draft_id = _make_canvas(client, "FWC-GT-UNDES", "게이트지정해제")
+    other_l5 = _seed_category(client, "FWC-GT-UNDES-X", "게이트지정해제외부", level=5)
+    external_id = _seed_l6_map(client, other_l5, "외부업무", "FWC-GT-UNDES-XM1")
+
+    async def _set_designation(mid: int, on: bool) -> None:
+        from app.clock import now as now_kst
+        from app.db import SessionLocal
+        from app.models import ProcessMap
+
+        async with SessionLocal() as session:
+            m = await session.get(ProcessMap, mid)
+            m.sp_designated_at = now_kst() if on else None
+            await session.commit()
+
+    asyncio.run(_set_designation(external_id, True))  # 라이브러리 지정 — 다른 L5 캔버스가 링크할 수 있다
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    own = graph["nodes"][0]  # 자기 L5 소속 L6 — 시드는 지정 없음
+    external = dict(own, id="fwcgtundesnode0000000000000001", title="외부업무", linked_map_id=external_id)
+    _put_graph(client, draft_id, [own, external])
+    assert "stale_link" not in {f.code for f in _confirm_readiness(map_id, draft_id)}
+
+    asyncio.run(_set_designation(external_id, False))
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert failures["stale_link"].node_ids == [external["id"]]
+
+    async def _batch() -> list:
+        from app.db import SessionLocal
+        from app.models import ProcessMap
+        from app.subprocess import validate_confirm_readiness_batch
+
+        async with SessionLocal() as session:
+            found_map = await session.get(ProcessMap, map_id)
+            return (await validate_confirm_readiness_batch(session, [(found_map, draft_id)]))[map_id]
+
+    batch = {f.code: f for f in asyncio.run(_batch())}  # 현황판·대시보드 배치판도 같은 판정
+    assert batch["stale_link"].node_ids == [external["id"]]
+
+
 def test_confirm_readiness_l6_unpublished(client: TestClient, enforce: None) -> None:
     """링크된 맵에 게시본이 없으면 l6_unpublished."""
     import asyncio

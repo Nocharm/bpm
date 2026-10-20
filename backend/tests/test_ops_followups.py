@@ -69,3 +69,50 @@ def test_reset_db_guard_leaves_local_sqlite_alone() -> None:
             await conn.run_sync(ensure_reset_allowed)
 
     asyncio.run(_run())
+
+
+def test_startup_reports_existing_duplicates_without_touching_them(caplog) -> None:
+    """이미 겹친 권한 행은 기동 로그로만 알린다 — 지우지 않는다 (사용자 결정 2026-10-20)."""
+    import logging
+
+    from app.db import _report_duplicate_rows
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            m = await _new_map(session, "dup report")
+            for _ in range(2):
+                session.add(MapPermission(map_id=m.id, principal_type="user", principal_id="user.dup",
+                                          role="editor", granted_by="user.lee"))
+            await session.commit()
+            return m.id
+
+    async def _run_step() -> None:
+        async with engine.begin() as conn:
+            await conn.run_sync(_report_duplicate_rows)
+
+    async def _count(map_id: int) -> int:
+        async with SessionLocal() as session:
+            return await session.scalar(select(func.count()).select_from(MapPermission).where(MapPermission.map_id == map_id))
+
+    map_id = asyncio.run(_seed())
+    with caplog.at_level(logging.WARNING, logger="app.db"):
+        asyncio.run(_run_step())
+    assert any("duplicate map permission rows" in r.message and "user.dup" in r.message for r in caplog.records)
+    assert asyncio.run(_count(map_id)) == 2
+    asyncio.run(_purge(map_id))
+
+
+async def _purge(map_id: int) -> None:
+    async with SessionLocal() as session:
+        await session.execute(delete(ProcessMap).where(ProcessMap.id == map_id))
+        await session.commit()
+
+
+def test_output_key_folds_only_exact_side_ids() -> None:
+    """접두(s-/t-)만 보던 판정이 "t-shirt order" 끝을 대표 끝으로 접었다 — FE isSubprocessEndHandle과 동치 (F-12)."""
+    from app.subprocess import PRIMARY_END_HANDLE, get_output_key
+
+    assert get_output_key("subprocess", "t-shirt order") == "t-shirt order"
+    assert get_output_key("subprocess", "s-top") == PRIMARY_END_HANDLE
+    assert get_output_key("subprocess", "in:left") == PRIMARY_END_HANDLE
+    assert get_output_key("process", "t-shirt order") == PRIMARY_END_HANDLE

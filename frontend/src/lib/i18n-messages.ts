@@ -2599,7 +2599,7 @@ const en = {
   "framework.gate.title": "Confirm readiness",
   "framework.gate.missing_l6": "All linked L6 placed",
   "framework.gate.placeholder": "No placeholders",
-  "framework.gate.stale_link": "No stale links (deleted, handed over or unassigned)",
+  "framework.gate.stale_link": "No stale links (deleted, handed over, unassigned or registration revoked)",
   "framework.gate.l6_unpublished": "All linked L6 published",
   "framework.gate.noexit_cycle": "No exit-less loops",
   "framework.gate.plain_fanout": "Splits use a decision or a parallel exit",
@@ -2607,7 +2607,7 @@ const en = {
   // ── 실패 필 라벨(부정형) — 현황판·요약 카드의 error 톤 필 전용, 확정 체크리스트(위)는 긍정문 유지 (final review Finding 2)
   "framework.gateFail.missing_l6": "Missing L6",
   "framework.gateFail.placeholder": "Placeholders",
-  "framework.gateFail.stale_link": "Stale links (deleted / handed over / unassigned)",
+  "framework.gateFail.stale_link": "Stale links (deleted / handed over / unassigned / revoked)",
   "framework.gateFail.l6_unpublished": "Unpublished L6",
   "framework.gateFail.noexit_cycle": "Exit-less loop",
   "framework.gateFail.plain_fanout": "Split without a decision or parallel exit",
@@ -3146,6 +3146,7 @@ const en = {
   "apiError.ownerOnlyBundle": "Only the map owner can bundle this with a version submission.",
   "apiError.spDesignationPending": "A registration request is already pending for this map.",
   "apiError.backupRequestBlocked": "The backup request could not be written. Recreate the db-backup service on the server (docker compose up -d --force-recreate db-backup).",
+  "apiError.choosePrimaryEnd": "This map has several end nodes. Turn on Primary end for one of them before requesting approval.",
   "apiError.requestFailed": "Request failed (HTTP {status})",
 } as const;
 
@@ -5741,7 +5742,7 @@ const ko: Record<MessageKey, string> = {
   "framework.gate.title": "확정 준비 상태",
   "framework.gate.missing_l6": "연결된 L6가 모두 배치됨",
   "framework.gate.placeholder": "플레이스홀더 없음",
-  "framework.gate.stale_link": "끊긴 링크 없음(삭제·이양·해제)",
+  "framework.gate.stale_link": "끊긴 링크 없음(삭제·이양·해제·지정 해제)",
   "framework.gate.l6_unpublished": "연결된 L6가 모두 게시됨",
   "framework.gate.noexit_cycle": "출구 없는 순환 없음",
   "framework.gate.plain_fanout": "갈래는 판단 노드나 병렬 출구로",
@@ -5749,7 +5750,7 @@ const ko: Record<MessageKey, string> = {
   // ── 실패 필 라벨(부정형) — 현황판·요약 카드의 error 톤 필 전용, 확정 체크리스트(위)는 긍정문 유지 (final review Finding 2)
   "framework.gateFail.missing_l6": "L6 미배치",
   "framework.gateFail.placeholder": "플레이스홀더",
-  "framework.gateFail.stale_link": "끊긴 링크(삭제·이양·해제)",
+  "framework.gateFail.stale_link": "끊긴 링크(삭제·이양·해제·지정 해제)",
   "framework.gateFail.l6_unpublished": "L6 미게시",
   "framework.gateFail.noexit_cycle": "출구 없는 순환",
   "framework.gateFail.plain_fanout": "판단·병렬 없이 갈라짐",
@@ -6284,6 +6285,7 @@ const ko: Record<MessageKey, string> = {
   "apiError.ownerOnlyBundle": "맵 오너만 버전 제출과 함께 묶을 수 있습니다.",
   "apiError.spDesignationPending": "이미 이 맵의 등록 요청이 승인 대기 중입니다.",
   "apiError.backupRequestBlocked": "백업 요청을 쓰지 못했습니다. 서버에서 db-backup 서비스를 다시 만들어 주세요(docker compose up -d --force-recreate db-backup).",
+  "apiError.choosePrimaryEnd": "끝 노드가 여러 개입니다. 승인을 요청하기 전에 그중 하나의 대표 끝을 켜 주세요.",
   "apiError.requestFailed": "요청이 실패했습니다 (HTTP {status})",
 };
 

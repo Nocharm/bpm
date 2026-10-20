@@ -221,3 +221,32 @@ def test_map_detail_exposes_owner_pending_flag(client: TestClient) -> None:
     m = _map_row(code)
     body = client.get(f"/api/maps/{m.id}").json()
     assert body["consultant_owner_pending"] is True
+
+
+def test_owner_decision_does_not_duplicate_an_existing_collaborator(client: TestClient) -> None:
+    """새 오너가 이미 협업자면 오너 행으로 옮겨 쓰며 같은 사람 행이 둘이 됐다 (리뷰 2026-10-19 확인 필요 항목)."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapPermission
+
+    code = "task-gov-0009"
+    assert _post(client, _delivery(code, owner="a", approvers=[], department=None),
+                 apply=True).status_code == 200
+    m = _map_row(code)
+
+    async def _grant_editor() -> None:
+        async with SessionLocal() as session:
+            session.add(MapPermission(map_id=m.id, principal_type="user", principal_id="b",
+                                      role="editor", granted_by="a"))
+            await session.commit()
+
+    async def _rows() -> list[tuple[str, str]]:
+        async with SessionLocal() as session:
+            return sorted((await session.execute(select(MapPermission.principal_id, MapPermission.role).where(
+                MapPermission.map_id == m.id, MapPermission.principal_type == "user"))).all())
+
+    _run(_grant_editor())
+    _post(client, _delivery(code, owner="b", approvers=[], department=None),
+          apply=True, decisions=[{"code": code, "field": "owner"}])
+    assert _run(_rows()) == [("b", "owner")]

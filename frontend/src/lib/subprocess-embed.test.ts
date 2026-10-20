@@ -84,4 +84,10 @@ describe("isSubprocessInHandle / isSubprocessEndHandle", () => {
     expect(isSubprocessEndHandle(undefined)).toBe(false);
     expect(isSubprocessEndHandle("")).toBe(false);
   });
+
+  it("only exact side ids fold into the primary end, not titles that start with s-/t- (F-12)", () => {
+    expect(isSubprocessEndHandle("t-shirt order")).toBe(true);
+    expect(isSubprocessEndHandle("s-top")).toBe(false);
+    expect(isSubprocessEndHandle("t-bottom")).toBe(false);
+  });
 });
