@@ -6,7 +6,7 @@
 ## 2026-10-20 — 7d③ 화면 잔여: 시스템 리뷰 D-9·W-9·W-10·W-11 + 확인 필요 "홈" (dev)
 
 - 에디터 상단 바: 점유 표시는 편집 가능 상태(draft·rejected)에서만(승인 요청 뒤 폴이 멈춰 오너 본인에게 "편집 중 - 읽기 전용"·강제 편집이 남던 것), 오른쪽 묶음 `min-w-0`+줄바꿈 금지라 좁은 폭에선 반려 사유가 먼저 잘리고 저장 버튼은 화면 안. AI 챗 실패 안내는 kind `error`로 자동 제목에서 빠진다(`buildAutoTitle`). Excel 내려받기는 공용 `downloadBlob`(동기 해제 Safari 취소). 루트 스코프 자리표시 "홈"은 빈 제목(영어 화면 노출).
-- 브라우저 `scripts/pw-verify-topbar-followups.mjs`: 수정 전 프런트 2/8(제출 뒤 "admin.sys is editing - read only · Force edit", 900·1060px에서 저장 버튼 x=1106) → 수정 후 8/8. vitest +2(수정 전 로직 재연 시 제목 "AI request failed (HTTP 502)"), 내보내기 스모크 22/22. tsc·lint·vitest 1532·COMPONENTS 최신.
+- 브라우저 `scripts/pw-verify-topbar-followups.mjs`: 수정 전 프런트 2/8(제출 뒤 "admin.sys is editing - read only · Force edit", 900·1060px에서 저장 버튼 x=1106) → 수정 후 8/8. vitest +2(수정 전 로직 재연 시 제목 "AI request failed (HTTP 502)"), 내보내기 스모크 22/22. tsc·lint·vitest 1532·COMPONENTS 최신. 공개 일반 맵의 Draft 전원 열람은 설계 의도로 확정(사용자 결정 2026-10-20) — spec·사용 안내 ko/en에 명시.
 
 ## 2026-10-20 — 7d② 무결성 잔여: 시스템 리뷰 F-3·F-10·F-11·F-12 + 확인 필요 게이트 3·중복 행 (dev)
 
