@@ -96,6 +96,11 @@ const PT_PER_INCH = 72;
 export type WordExportStyle = "mono" | "gray" | "navy";
 export const WORD_EXPORT_STYLES: WordExportStyle[] = ["mono", "gray", "navy"];
 
+/** 캡처 동안 뷰포트에 붙이는 Word 테마 클래스 — 에디터는 출력 보기를 적용할 때부터 붙여 문서 글꼴 크기로 잰다 */
+export function getWordExportClasses(style: WordExportStyle): string[] {
+  return ["bpm-export-word", `bpm-export-word--${style}`];
+}
+
 /** 교차선 표시 — 가로선이 세로선을 반원으로 넘어가거나(jump), 세로선이 교차 자리에서 끊긴다(gap). */
 export type CrossingStyle = "none" | "jump" | "gap";
 export const CROSSING_STYLES: CrossingStyle[] = ["none", "jump", "gap"];
@@ -1170,7 +1175,7 @@ async function downloadViewportPng(
     clickDownload(fileName, await composePng(dataUrl, frame, info, dark));
     return;
   }
-  const wordClasses = ["bpm-export-word", `bpm-export-word--${word.style}`];
+  const wordClasses = getWordExportClasses(word.style);
   viewport.classList.add(...wordClasses);
   const palette = readWordPalette(viewport);
   const header = word.showInfo && info ? { title: info.title, meta: [info.rows.map((row) => `${row.label} ${row.value}`)] } : null;

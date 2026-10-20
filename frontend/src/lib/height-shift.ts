@@ -2,6 +2,7 @@
 // 성장분은 기존 저장 여백을 먼저 흡수하고, 밀 때 표시 간격은 min(저장 간격, MIN_GAP)을 유지한다.
 // 같은 행(저장 Y구간 strict 겹침 체인)은 밀림량을 행 max로 동기화해 가로 정렬을 보존한다.
 // 노드 밖 조건 캡션(위=시작·아래=종료)도 표시 높이로 취급해 위아래 노드와 간격을 벌린다.
+// PNG 출력 중엔 정렬 유지 이동(lib/print-anchor)을 받아, 행은 저장 좌표로 묶고 충돌만 옮긴 좌표로 판정한다.
 import {
   estimateNodeHeight,
   estimateNodeWidth,
@@ -9,19 +10,21 @@ import {
   type AppNode,
 } from "@/lib/canvas";
 import { NO_CAPTION_EXTENTS, type CaptionExtents } from "@/lib/condition-captions";
+import type { PrintShift } from "@/lib/print-anchor";
 
 // 4px 미만 성장은 무시 — 폰트 렌더 편차로 인한 미세 지터 방지
 const EPSILON = 4;
 // 밀 때 유지하는 표시 여백 상한(px) — 원래 저장 간격이 더 좁으면 그 좁은 간격을 그대로 유지
 export const HEIGHT_MIN_GAP = 16;
+const NO_SHIFTS: ReadonlyMap<string, PrintShift> = new Map();
 
 /** 역변환 프로브가 참조하는 푸셔 — 기준높이 아래(base)보다 표시 bottom이 내려온 노드. */
 export interface HeightPusher {
   id: string; // 원본 노드 id — 드래그 역변환에서 자기 자신 제외용
-  x0: number; // 저장 X 구간(표시 X와 동일 — 인라인 펼침 중엔 height-shift가 게이트 오프)
+  x0: number; // 저장 X 구간(표시 X와 동일 — 인라인 펼침 중엔 height-shift가 게이트 오프, 출력 중엔 정렬 유지 이동 포함)
   x1: number;
   baseBottom: number; // 저장 y + 기준높이 — savedGap 판정 기준
-  dispBottom: number; // 저장 y + 행 오프셋 + 표시높이
+  dispBottom: number; // 저장 y(+ 출력 정렬 유지 이동) + 행 오프셋 + 표시높이
 }
 
 export interface HeightShiftField {
@@ -54,7 +57,8 @@ export function getDisplayWidth(node: AppNode): number {
 
 interface FieldItem {
   id: string;
-  top: number;
+  top: number; // 저장 y — 행 묶기·저장 간격 기준
+  layoutTop: number; // 저장 y + 출력 정렬 유지 이동 — 충돌 판정·표시 bottom 기준(평소엔 top과 같다)
   baseBottom: number;
   x0: number;
   x1: number;
@@ -68,10 +72,13 @@ interface FieldItem {
  * (X 구간이 겹치는 위쪽 푸셔의 dispBottom + min(savedGap, MIN_GAP) − top)의 max를 행 전체에
  * 부여한다. 밀리거나 커진 노드는 다시 푸셔가 되어 아래 행으로 연쇄한다.
  * getCaptionExtents: 노드 밖 위·아래 캡션 높이 — 위 캡션은 그 노드의 top을, 아래 캡션은 dispBottom을 넓힌다.
+ * shifts: PNG 출력의 정렬 유지 이동(저장 좌표 기준 nodes에 얹을 양). 옮긴 좌표로 행을 묶으면 위로 올린 노드가
+ * 윗행에 합쳐져 겹친 채 밀리지 않는다 — 행은 저장 좌표로 묶고, 오프셋은 옮긴 좌표 위에 더할 양으로 돌려준다.
  */
 export function buildHeightShiftField(
   nodes: AppNode[],
   getCaptionExtents: (node: AppNode) => CaptionExtents = () => NO_CAPTION_EXTENTS,
+  shifts: ReadonlyMap<string, PrintShift> = NO_SHIFTS,
 ): HeightShiftField {
   const captionAbove = new Map<string, number>();
   const items: FieldItem[] = nodes
@@ -80,12 +87,15 @@ export function buildHeightShiftField(
       const dispH = getDisplayHeight(node);
       const { above, below } = getCaptionExtents(node);
       if (above > 0) captionAbove.set(node.id, above);
+      const shift = shifts.get(node.id);
+      const x0 = node.position.x + (shift?.dx ?? 0);
       return {
         id: node.id,
         top: node.position.y,
+        layoutTop: node.position.y + (shift?.dy ?? 0),
         baseBottom: node.position.y + baseH,
-        x0: node.position.x,
-        x1: node.position.x + getDisplayWidth(node),
+        x0,
+        x1: x0 + getDisplayWidth(node),
         // 지터 가드 — EPSILON 미만 성장은 기준높이로 취급
         dispH: dispH - baseH >= EPSILON ? dispH : baseH,
         capAbove: above,
@@ -119,15 +129,16 @@ export function buildHeightShiftField(
         if (pusher.x1 < member.x0 || pusher.x0 > member.x1) continue;
         const savedGap = member.top - pusher.baseBottom; // 행 구조상 ≥ 0(윗행 bottom ≤ 이 행 top)
         const needed =
-          pusher.dispBottom + Math.min(savedGap, HEIGHT_MIN_GAP) + member.capAbove - member.top;
+          pusher.dispBottom + Math.min(savedGap, HEIGHT_MIN_GAP) + member.capAbove - member.layoutTop;
         if (needed > rowOffset) rowOffset = needed;
       }
     }
     for (const member of members) {
       if (rowOffset > 0) offsets.set(member.id, rowOffset);
-      const dispBottom = member.top + rowOffset + member.dispH + member.capBelow;
-      // 위 캡션이 하나라도 있으면 커지지 않은 노드도 푸셔 — 아래 노드의 위 캡션이 이 노드와 겹치는지 판정해야 한다
-      if (dispBottom > member.baseBottom || captionAbove.size > 0) {
+      const dispBottom = member.layoutTop + rowOffset + member.dispH + member.capBelow;
+      // 위 캡션이 하나라도 있으면 커지지 않은 노드도 푸셔 — 아래 노드의 위 캡션이 이 노드와 겹치는지 판정해야 한다.
+      // 정렬 유지 이동이 있으면 마찬가지 — 위로 올린 아래 노드가 이 노드와 겹치는지 판정해야 한다
+      if (dispBottom > member.baseBottom || captionAbove.size > 0 || shifts.size > 0) {
         pushers.push({
           id: member.id,
           x0: member.x0,

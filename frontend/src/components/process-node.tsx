@@ -1600,7 +1600,14 @@ function externalSpNodeStyle(color: string): CSSProperties {
 // isConnectable — 노드 레벨 connectable(임베드 자식 false)이 여기로 전달됨. Handle에 명시 forward 필수 (F3).
 export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<AppNode>) {
   const { t } = useI18n();
-  const { ctrlDragIds, onConnectPlaceholder, onResizeNode, displayFields, printDocument = false } = useNodeActions();
+  const {
+    ctrlDragIds,
+    onConnectPlaceholder,
+    onResizeNode,
+    displayFields,
+    printDocument = false,
+    printing = false,
+  } = useNodeActions();
   // 노드 아래 종료 조건 캡션 유무 — 비교 화면 diff 필을 그 아래로 내린다
   const hasEndCaption = (getConditionCaptions(data, displayFields)?.end ?? "") !== "";
   const showCopyBadge = ctrlDragIds.has(id);
@@ -1806,8 +1813,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         <NodeConditionCaption data={data} side="start" />
         <NodeConditionCaption data={data} side="end" />
         {/* 버전 추적 배너(하단) — 새 발행본이 우선(핀 고정을 함의), 아니면 핀 고정 안내만.
-            점+텍스트보다 가시성 강화: 전체 폭 틴트 배너 (사용자 요청 2026-08-23) */}
-        {data.updateAvailable ? (
+            점+텍스트보다 가시성 강화: 전체 폭 틴트 배너 (사용자 요청 2026-08-23).
+            문서용 출력엔 편집 안내라 전부 뺀다(lib/export도 캡처 때 숨기지만, 출력 보기에서 빼야 노드 크기가 출력과 같다) */}
+        {printDocument ? null : data.updateAvailable ? (
           // 배너는 한 줄 고정(짧은 문구+truncate) — 전문은 툴팁 (사용자 요청 2026-08-23)
           <div
             data-id="sp-banner-update"
@@ -1907,7 +1915,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             <Pin size={12} strokeWidth={1.5} className="shrink-0" />
             <span className="truncate">{t("subprocess.pinnedBanner")}</span>
           </div>
-        ) : data.followLatest === true ? (
+        ) : data.followLatest === true && !printing ? (
           // 최신본 추종 중(기본 상태) — 박스 없는 강조 글자 한 줄. 기본 상태가 배너 박스까지 두르면
           // 과해서 가장 조용한 표현으로: 색은 조치 필요 상태에만, 정보 박스는 핀 고정까지만
           // (사용자 결정 2026-08-25). 위에서 미지정/해제를 걸렀으니 여기 오면 실링크+지정 유효.
