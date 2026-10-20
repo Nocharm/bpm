@@ -82,7 +82,7 @@ npx tsc --noEmit -p tsconfig.json; npx vitest run
 
 ## 데이터 초기화 / 데모 시드
 
-**로컬·데모 전용** — 운영 서버는 런칭되어 현업 데이터가 있으므로 `reset_db`를 실행하면 안 된다(`drop_all`). 서버 스키마는 배포 시 자동 보강된다(`docs/deploy/deploy.md` §3). 로컬에서 DB를 비우고 종합 데모 데이터를 채우려면 backend/ 에서:
+**로컬·데모 전용** — 운영 서버는 런칭되어 현업 데이터가 있으므로 `reset_db`를 실행하면 안 된다(`drop_all`, postgres에 맵·직원이 있으면 지우기 전에 스스로 멈춘다). 서버 스키마는 배포 시 자동 보강된다(`docs/deploy/deploy.md` §3). 로컬에서 DB를 비우고 종합 데모 데이터를 채우려면 backend/ 에서:
 
 ```bash
 .venv/bin/python -m scripts.reset_db        # drop+create + 종합 데모(조직도·직원401·맵12·그룹6)

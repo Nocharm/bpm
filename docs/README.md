@@ -15,27 +15,26 @@
 
 ## QA · 검증 ([`qa/`](qa/))
 - [`qa/interview-import-field-map.md`](qa/interview-import-field-map.md) — 인터뷰 JSON 0.4/0.5 전달 스키마 필드 대조표(착지·무시·조용한 오변환·파일 거부 조건). 실파일 dry-run 리포트를 읽는 기준.
-- [`qa/node-spacing-qa.md`](qa/node-spacing-qa.md) — height-shift(노드 간격 자동 재조정) 브라우저 QA T라운드 8항목(워스트 겹침·트윈·그룹/PNG·무오염·인라인 배제).
-- [`qa/2026-08-20-field-promotion-qa.md`](qa/2026-08-20-field-promotion-qa.md) — 인터뷰 필드 승격 실브라우저 QA 29항목(스모크 `pw-smoke-field-promotion.mjs` 주도).
-- [`qa/governance-ux-checklist.md`](qa/governance-ux-checklist.md) — 거버넌스 UX 4페이즈(P0 라이프사이클·C 승인 탭·B 카드 멤버·A 게시 동봉) 사용자 실검증 체크리스트.
-- [`qa/alarm-audit.md`](qa/alarm-audit.md) — 알림 기능 전수 조사·감사.
+- [`qa/2026-08-20-field-promotion-qa.md`](qa/2026-08-20-field-promotion-qa.md) — 인터뷰 필드 승격 실브라우저 QA 29항목(스모크 `pw-smoke-field-promotion.mjs`가 항목 번호로 참조).
 - [`qa/2026-09-fw-slot-governance-qa.md`](qa/2026-09-fw-slot-governance-qa.md) — 슬롯 거버넌스 기능·시나리오 QA (기능 26·시나리오 10·스모크 `pw-smoke-framework-slot.mjs`).
+- [`qa/2026-10-19-system-review.md`](qa/2026-10-19-system-review.md) — 시스템 전체 시나리오 리뷰(9개 시나리오·실행 검증, P0 3·P1 14·P2 59·P3 10, 공통 원인·수정 트랙). 권장 순서 1~7단계 수정 완료(2026-10-21 main).
+
+정리됨(2026-10-21, 기능 머지·검증 완료된 시점 기록 — git history에서 조회): `alarm-audit.md`(알림 전수 감사, 07-16) · `governance-ux-checklist.md`(거버넌스 UX 실검증, 08-14) · `io-linking-qa.md`(IO 연결 브라우저 QA, 08-21~23) · `node-spacing-qa.md`(height-shift 워스트 QA).
 
 ## 매뉴얼 ([`manual/`](manual/))
 - 사용자 매뉴얼 — 일반([EN](manual/user-manual-general-en.md)·[KO](manual/user-manual-general-ko.md)) / 편집([EN](manual/user-manual-editing-en.md)·[KO](manual/user-manual-editing-ko.md))
 - 관리자 매뉴얼 — [EN](manual/admin-manual-en.md)·[KO](manual/admin-manual-ko.md)
-- 슬라이드 매뉴얼([`manual/slides/`](manual/slides/)) — 실화면 스크린샷이 담긴 PPT형 스탠드얼론 HTML(←/→ 이동)+PDF. 사용자([KO](manual/slides/bpm-manual-user-ko.html)·[EN](manual/slides/bpm-manual-user-en.html)) / 관리자([KO](manual/slides/bpm-manual-admin-ko.html)·[EN](manual/slides/bpm-manual-admin-en.html)) — md 매뉴얼이 원본이며 갱신 시 함께 재생성한다. PDF는 [`manual/slides/export-pdf.mjs`](manual/slides/export-pdf.mjs)(`frontend/`에서 실행, playwright-core + 시스템 Chrome, 슬라이드당 1페이지)로 뽑으며 **출력은 `frontend/public/manuals/`** — 앱이 `/manuals/<deck>.pdf`로 정적 서빙하고 매뉴얼 뷰어 "한눈에 보기" 메뉴에서 내려받는다(파일명 계약 `frontend/src/lib/manual-pdf.ts`). **덱은 카피 데이터 + 테마로 빌드한다**: 슬라이드 카피는 [`manual/slides/content/`](manual/slides/content/)(`user_ko`·`user_en`·`admin_ko`·`admin_en`, 포인트 = 리드+한 줄 설명, `<b>`=UI 요소 필·`<code>`=키), 스타일은 [`manual/slides/theme.css`](manual/slides/theme.css)(Pretendard Variable data URI 임베드·다크 챕터 구분·슬라이드별 푸터 페이지 번호), 빌더는 [`manual/slides/build_deck.py`](manual/slides/build_deck.py) — 이미지는 `shot: True`면 직전 빌드 덱의 같은 순번 이미지를 이월하고, 문자열이면 `.shots/<경로>`를 새로 임베드한다(슬라이드를 넣고 빼는 회차는 새 이미지를 경로로 지정). 재생성 절차: 캡처 `frontend/scripts/pw-manual-shots.mjs`·`pw-manual-shots-6.mjs`(+캠페인 스모크 `PW_LANG=ko|en`) → 카피/이미지 갱신 후 `python3 docs/manual/slides/build_deck.py` → 넘침 검사 `frontend/scripts/check-deck-overflow.mjs` → PDF.
+- 슬라이드 매뉴얼([`manual/slides/`](manual/slides/)) — 실화면 스크린샷이 담긴 PPT형 스탠드얼론 HTML(←/→ 이동)+PDF. 사용자([KO](manual/slides/bpm-manual-user-ko.html)·[EN](manual/slides/bpm-manual-user-en.html)) / 관리자([KO](manual/slides/bpm-manual-admin-ko.html)·[EN](manual/slides/bpm-manual-admin-en.html)) — md 매뉴얼이 원본이며 갱신 시 함께 재생성한다. PDF는 [`manual/slides/export-pdf.mjs`](manual/slides/export-pdf.mjs)(`frontend/`에서 실행, playwright-core + 시스템 Chrome, 슬라이드당 1페이지)로 뽑으며 **출력은 `frontend/public/manuals/`** — 앱이 `/manuals/<deck>.pdf`로 정적 서빙하고 매뉴얼 뷰어 "한눈에 보기" 메뉴에서 내려받는다(파일명 계약 `frontend/src/lib/manual-pdf.ts`). **덱은 카피 데이터 + 테마로 빌드한다**: 슬라이드 카피는 [`manual/slides/content/`](manual/slides/content/)(`user_ko`·`user_en`·`admin_ko`·`admin_en`, 포인트 = 리드+한 줄 설명, `<b>`=UI 요소 필·`<code>`=키), 스타일은 [`manual/slides/theme.css`](manual/slides/theme.css)(Pretendard Variable data URI 임베드·다크 챕터 구분·슬라이드별 푸터 페이지 번호), 빌더는 [`manual/slides/build_deck.py`](manual/slides/build_deck.py) — 이미지는 `shot: True`면 직전 빌드 덱의 같은 순번 이미지를 이월하고, 문자열이면 `.shots/<경로>`를 새로 임베드한다(슬라이드를 넣고 빼는 회차는 새 이미지를 경로로 지정). 재생성 절차: 캡처 `frontend/scripts/pw-manual-shots*.mjs`(회차별, +캠페인·출력 스모크 `PW_LANG=ko|en`) → 카피/이미지 갱신 후 `python3 docs/manual/slides/build_deck.py` → 넘침 검사 `frontend/scripts/check-deck-overflow.mjs` → PDF.
 
 ## 교훈 ([`lessons/`](lessons/README.md))
 캔버스 에디터(React Flow) 시행착오 방지 — 좌표·렌더·검증 함정. 에디터(`page.tsx`) 수정 전 필독.
 
 ## 설계 기록 ([`design/`](design/README.md))
-- [`design/2026-08-08-governance-ux-design.md`](design/2026-08-08-governance-ux-design.md) — 거버넌스 UX 확장 A/B/C **미구현 트랙**.
-
-아직 소비될 설계 문서만 유지(컨설턴트 계약·인터뷰 임포트 어댑터·거버넌스 UX) — 전체 목록은 [`design/README.md`](design/README.md). **main 머지된 기능의 스냅샷은 폐기** — git history에서 조회(`rules/common/documentation.md`).
+아직 소비될 설계 문서만 유지(컨설턴트 체계 스키마·엔진, 인터뷰 임포트 어댑터 원설계 — 둘 다 코드 주석이 경로로 참조) — 전체 목록은 [`design/README.md`](design/README.md). **main 머지된 기능의 스냅샷은 폐기** — git history에서 조회(`rules/common/documentation.md`).
 
 ## 릴리스 공지 ([`notices/`](notices/))
-- [2026-07-06](notices/2026-07-06-release.md) · [2026-07-13](notices/2026-07-13-release.md) · [2026-07 2차](notices/2026-07-release-2.md) · [2026-08-14](notices/2026-08-14-release.md) · [2026-08-19](notices/2026-08-19-release.md) · [2026-08-25](notices/2026-08-25-release.md) · [2026-09-12](notices/2026-09-12-release.md) · [2026-10-16](notices/2026-10-16-release.md)
+- [2026-10-16](notices/2026-10-16-release.md) — 10월 2차(Word 문서용 PNG·A4 가이드·조건/입출력 표시·화면 설정).
+- 이전 공지(2026-07-06 ~ 2026-09-12, 7건)는 [`history/release-notices.md`](history/release-notices.md) 한 파일로 합쳤다.
 - [`notices/2026-08-09-consultant-delivery-interface-mail.md`](notices/2026-08-09-consultant-delivery-interface-mail.md) — 컨설팅사 발송용 메일 초안(수용 방향 + 전달 데이터 인터페이스(안)).
 - [`notices/2026-09-28-pi-meeting-prep.md`](notices/2026-09-28-pi-meeting-prep.md) — PI팀 회의 자료(진척도·범위·계약 종료 후 컨설팅 범위 맵의 시스템 오너 2안: Agent 존속·PI팀 오너 / 종료 시 1회 이양·BPM 원본, 각 안의 성립 조건과 식별 키).
 
@@ -43,3 +42,7 @@
 CSV 임포트 샘플 3종(procurement·recruitment·incident-change).
 [`samples/consultant-interview-sample/`](samples/consultant-interview-sample/) — 인터뷰 결과 JSON(0.5) 합성 샘플 2파일(EPCV: calibration·utility). 각 L5에 L6 ≥4, 순환·분기 포함, 타 L5 참조(`externalTasks`) 동봉. 계약·시나리오 매트릭스: [`samples/interview-json-0.5.md`](samples/interview-json-0.5.md). 설정 > Framework > Interview import 입력, 실전달물 아님. canonical 전달물 샘플은 인터뷰 JSON 단일화(2026-08-18)로 제거.
 [`samples/framework-linkage-dummy/`](samples/framework-linkage-dummy/) — L5 연계 캔버스 시연용 더미 L5 5종(0.5, Quality 계열: qc-raw-material·qc-finished-product·qa-deviation-oos·change-control·brr). 서로를 `externalTasks`로 참조해 정확 일치 직결·근사 불일치 플레이스홀더·후차 해소·origin unknown을 한 세트로 시연한다.
+
+## 아카이브 ([`history/`](history/))
+- [`history/PROGRESS-archive.md`](history/PROGRESS-archive.md) — 루트 `PROGRESS.md`에서 옮긴 이전 진행 로그(이동분은 원문 그대로, 최신 이동분이 위).
+- [`history/release-notices.md`](history/release-notices.md) — 2026-07 ~ 2026-09 릴리스 공지 원문 모음.
