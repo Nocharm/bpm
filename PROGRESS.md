@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-21 — 10월 3차 공지 초안 (main)
+
+- `docs/notices/2026-10-21-release.md`: 10-16 공지 이후 변경(출력 라운드 후속·PNG 나눠 싣기·리뷰 수정 1~7단계)을 사용자가 보는 변화만 골라 정리. 출처는 그 사이 매뉴얼 ko 변경분과 PROGRESS, 보안 수정은 결과 동작만 적었다. 관리자 절은 선택 게시, "지금 백업"은 db-backup 재생성 뒤 참이라 게시 메모에 남김.
+
 ## 2026-10-21 — dev → main 머지(7차): 시스템 리뷰 수정 1~7단계 + PNG 문서용 나눠 싣기·정렬 유지
 
 - **시스템 리뷰 수정**(`docs/qa/2026-10-19-system-review.md` P0 3·P1 14·P2 59·P3 10, 권장 순서 7단계): 단계마다 수정 전 코드로 재현(회귀 pytest·vitest, 브라우저 `pw-verify-*`, 동시성·운영 전용은 일회용 postgres:16) → 수정 후 확인. 단계별 상세·수치는 `git show 81f35c0f:PROGRESS.md`.

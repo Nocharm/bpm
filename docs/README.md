@@ -33,6 +33,7 @@
 아직 소비될 설계 문서만 유지(컨설턴트 체계 스키마·엔진, 인터뷰 임포트 어댑터 원설계 — 둘 다 코드 주석이 경로로 참조) — 전체 목록은 [`design/README.md`](design/README.md). **main 머지된 기능의 스냅샷은 폐기** — git history에서 조회(`rules/common/documentation.md`).
 
 ## 릴리스 공지 ([`notices/`](notices/))
+- [2026-10-21](notices/2026-10-21-release.md) — 10월 3차 초안(나눠 싣기·비교 PNG 옵션 창·인쇄용 Excel·CSV 왕복·나가기 전 확인·승인 요청 조건·L5 확정 요청·관리자 HR 이력).
 - [2026-10-16](notices/2026-10-16-release.md) — 10월 2차(Word 문서용 PNG·A4 가이드·조건/입출력 표시·화면 설정).
 - 이전 공지(2026-07-06 ~ 2026-09-12, 7건)는 [`history/release-notices.md`](history/release-notices.md) 한 파일로 합쳤다.
 - [`notices/2026-08-09-consultant-delivery-interface-mail.md`](notices/2026-08-09-consultant-delivery-interface-mail.md) — 컨설팅사 발송용 메일 초안(수용 방향 + 전달 데이터 인터페이스(안)).
