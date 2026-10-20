@@ -181,7 +181,7 @@ The **Settings → Directory → Local Accounts** tab appears **only while the s
 
 **Settings → Database → Tables** is a read-only browser over the backend database with server-side paging, sorting, and filtering.
 
-- Use it for spot checks. It never writes.
+- Use it for spot checks. It never writes. The `password_hash` column of local accounts shows as `[redacted]` on screen and in CSV, and search skips it.
 - **CSV export** (sysadmin only): the **Export CSV** button in the header downloads **all rows** with the current sort and filter applied, streamed from the server (no paging). Excel compatibility (BOM) and the formula-injection guard match the admin-table exports.
 - **Login records** live in the `login_records` table: one row per user per day, written on first authentication of the day. This is the audit view for "who used the app when".
 - **Notification retention**: `notifications` keeps only the **most recent 100 rows per person**, a fixed policy (not adjustable). Overflow is auto-deleted oldest-first, regardless of read state, whenever a new notification arrives.
@@ -198,7 +198,7 @@ Selecting `notifications` in **Tables** adds a from–to date range and a **Dele
 
 Shows the latest attempts of the **DB backup** and the **HR (people) sync**, per job. The last **success** and the last **failure** each keep their time and summary, so you can tell at a glance in the morning whether the overnight batches ran clean. A failure row newer than the last success is your signal to act.
 
-- **Backup now (on demand)**: the **Backup now** button on the DB backup card makes a backup outside the daily schedule. In production (postgres) the backend drops a request file that the sidecar picks up within seconds to run `pg_dump`, so after the "Backup requested" notice, re-check the list a moment later; local sqlite copies immediately.
+- **Backup now (on demand)**: the **Backup now** button on the DB backup card makes a backup outside the daily schedule. In production (postgres) the backend drops a request file that the sidecar picks up within seconds to run `pg_dump`, so after the "Backup requested" notice, re-check the list a moment later; local sqlite copies immediately. If it says "The backup request could not be written", the sidecar has not restarted with the new script yet: run `docker compose up -d --force-recreate db-backup` once on the server.
 - **Backup files and download**: the same card lists the backup files in `${BACKUP_DIR}`, and each can be **downloaded** for an off-server copy (sysadmin only).
 - **HR sync history**: below the HR card, every full sync run is listed newest first (latest 30 shown, 200 kept). Each run shows how many people were scanned and how many were new, left, rejoined, removed or duplicated; expand a run to see each person's name, ID and department. Mass-departure runs carry a **Mass departure** badge. People deactivated by a feed accident come back on the next good sync, but approvals cancelled and checkouts released in between do not, so use this list to find who needs follow-up.
 

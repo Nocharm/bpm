@@ -12,7 +12,8 @@ ENV_TABLE_AUTH = """<table class="tbl"><thead><tr><th>Variable</th><th>Effect</t
 ENV_TABLE_OPS = """<table class="tbl"><thead><tr><th>Variable</th><th>Effect</th></tr></thead><tbody>
 <tr><td><code>N8N_HR_URL</code> / <code>N8N_HR_TOKEN</code></td><td>HR webhook URL &amp; secret. Sync activates only with both</td></tr>
 <tr><td><code>N8N_POSITION_URL</code></td><td>EDW head-position webhook. Empty disables collection</td></tr>
-<tr><td><code>HR_SYNC_INTERVAL_HOURS</code></td><td>Auto-sync interval (default 24, 0 = off). Keep 0 for the first migration</td></tr>
+<tr><td><code>HR_SYNC_INTERVAL_HOURS</code></td><td>Auto-sync interval (default 24, 0 = off), counted from the last run. Keep 0 for the first migration</td></tr>
+<tr><td><code>FORWARDED_ALLOW_IPS</code></td><td>Proxies trusted for X-Forwarded-For. Empty = the compose subnet</td></tr>
 <tr><td><code>HR_SYNC_DELETE_CAP_PCT</code></td><td>Sync deletion cap % (default 20, 0 = off)</td></tr>
 <tr><td><code>BACKUP_DIR</code> / <code>BACKUP_RETENTION_DAYS</code></td><td>Backup path (default ./backups, point at a NAS for off-server) · retention days (default 14)</td></tr>
 <tr><td><code>MANUAL_URL</code></td><td>Editor-toolbar manual button. Hidden when empty</td></tr>
@@ -23,12 +24,12 @@ DECK = {
     "lang": "en",
     "html_title": "BPM Administrator Manual",
     "label": "Business Process Map · Administrator Manual",
-    "date": "2026-10-02",
+    "date": "2026-10-20",
     "cover": {
         "eyebrow": "Administrator Manual · English edition",
         "h1": "Business Process Map<br>Administrator Manual",
         "sub": "Consoles, operations and governance for system administrators. Everything in the User Manual applies to you too.",
-        "meta": ["Company process-map system", "As of 2026-09-30"],
+        "meta": ["Company process-map system", "As of 2026-10-20"],
         "hint": "Navigate with <kbd>←</kbd><kbd>→</kbd> or click the screen edges · <kbd>Home</kbd> to restart",
     },
     "toc": {"kicker": "Contents", "sec": "What's inside", "title": "What's inside"},
@@ -115,8 +116,8 @@ DECK = {
                 {"title": "Employees &amp; sync", "shot": True, "pts": [
                     ("Source", "The n8n HR webhook. A full sync refreshes employees plus departments (AD only enriches titles)."),
                     ("Sync all from AD button", "Employees tab. Ends with a scanned / upserted / deactivated / deleted summary. One per 5 min."),
-                    ("Auto sync", "<code>HR_SYNC_INTERVAL_HOURS</code> (default 24 h) plus per-user daily sync on login."),
-                    ("Safeguards", "The sync-preview dry run and the deletion cap <code>HR_SYNC_DELETE_CAP_PCT</code> (default 20%)."),
+                    ("Auto sync", "<code>HR_SYNC_INTERVAL_HOURS</code> (24 h) counts from the last run; overdue runs 5 min after boot."),
+                    ("Safeguards", "sync-preview, deletion cap <code>HR_SYNC_DELETE_CAP_PCT</code> (20%), mass departures logged per run."),
                     ("Departures", "Not deleted. Marked active=false and excluded from pickers."),
                 ]},
                 {"title": "Departments &amp; heads", "shot": True, "pts": [
@@ -142,9 +143,9 @@ DECK = {
                 ]},
                 {"title": "Local accounts (ldap mode)", "pts": [
                     ("When shown", "Only in ldap auth mode. ID / password logins for external consultants."),
-                    ("Sign-in order", "Local accounts first, then AD fallback. 5 attempts per 5 minutes."),
+                    ("Sign-in order", "Local accounts first, then AD fallback. 5 attempts per 5 minutes, concurrent ones included."),
                     ("Per account", "Reset password · deactivate / reactivate · delete (permanent). Deactivate first when an engagement ends."),
-                    ("Sysadmin toggle", "<b>Local accounts only</b>. Directory accounts only via <code>BPM_SYSADMINS</code>."),
+                    ("Sysadmin toggle", "<b>Local accounts only</b> (directory: <code>BPM_SYSADMINS</code>). Revoked when HR takes the ID over."),
                     ("Tokens", "Lifetime and secret rotation live in docs/deploy/deploy.md §2.1."),
                 ]},
             ],
@@ -156,12 +157,12 @@ DECK = {
                 {"title": "Category management &amp; level delegation", "shot": True, "pts": [
                     ("Layout", "Manage / Status toggle. Tree left, detail panel right. Single-child chains open through to the fork."),
                     ("Six actions", "Add child · Rename · Managing dept · Linkage admins · Move · Delete. Blocked ones show a reason."),
-                    ("Rules", "Max 5 levels, maps on L5 only, no duplicate siblings (409)."),
+                    ("Rules", "Max 5 levels, maps on L5 only. Duplicate siblings 409; level-changing moves over maps 422."),
                     ("Managing department", "Empty inherits from the parent. Becomes the canvas's owning department."),
                     ("Delegation", "Admins add / rename / reorder under their own category. Can't move or delete it."),
                 ]},
                 {"title": "Linkage admins", "shot": True, "pts": [
-                    ("Appoint", "Select a row → <b>Linkage admins</b> in the detail panel. Users / groups, buffered until one confirm."),
+                    ("Appoint", "Select a row → <b>Linkage admins</b>. Saved on one confirm; removed admins are notified."),
                     ("Inherit downward", "Appoint at L1–L4 and every L5 canvas below becomes editable."),
                     ("Shown as", "The detail panel's info line (three names, then +N), dual-named per language."),
                     ("Canvases", "Real maps (<code>mode=framework</code>) hidden from the map list and SP library."),
@@ -171,7 +172,7 @@ DECK = {
                     ("confirmed state", "Apart from publishing. Snapshots and the draft can't be deleted. Regular workflows are blocked server-side."),
                     ("Six gates", "All L6 placed · no placeholders · no stale links · all L6 published · no exit-less loops · splits use a decision or a parallel exit."),
                     ("Single source", "The Approval tab's <b>Confirm readiness</b> checklist. One failing gate disables Confirm."),
-                    ("Who confirms", "The checkout holder if <b>direct admin</b> or sysadmin. Higher admins send a confirm request."),
+                    ("Who confirms", "<b>Direct admin</b> or sysadmin holding checkout. Higher admins request; then only deciders check out."),
                     ("Draft visibility", "Admins and sysadmins only. Everyone else lands on the latest confirmed snapshot."),
                 ]},
                 {"title": "Slot changes", "shot": True, "pts": [
@@ -189,15 +190,16 @@ DECK = {
                 ]},
                 {"title": "Interview import · format, dry run, governance", "shot": True, "pts": [
                     ("Flow", "<b>Interview JSON</b> section → file-pill strip → <b>Dry run</b> → report → Apply. Sysadmin-only."),
-                    ("Format", "0.4 (<code>relations</code>) · 0.5 (<code>externalTasks</code>). 0.3 rejected. Re-runs are idempotent."),
+                    ("Format", "0.4 · 0.5 (<code>externalTasks</code>); 0.3 rejected; idempotent. Files moving categories or maps fail."),
                     ("Two-column report", "Left: Summary · Needs review · External L6 · admins · governance. Right: files → L5 canvas → maps."),
                     ("Governance changes", "On re-import, differing owner / department / approvers / notes become rows: <b>Keep ↩ / Replace ⇄</b>."),
                     ("Owner assignment", "An empty or unknown owner makes the importing sysadmin interim owner (Owner unconfirmed)."),
                 ]},
                 {"title": "Interview import · landing rules, placeholders, notes", "pts": [
                     ("Department path", "Exact → leading levels dropped → unique suffix → mirror chain. No match registers the path as-is."),
-                    ("Landing", "Activities become nodes, edges connectors. Exclusive → decision, parallel → parallel exit, self-loop → repeat branch."),
-                    ("Fan-out", "Two or more outgoing edges that are not all parallel get a branch node after the activity."),
+                    ("Landing", "Activities become nodes, edges connectors. Exclusive → decision, parallel → parallel exit."),
+                    ("Auto branches", "Self-loops: \"반복 여부(자동 생성됨)\" (2nd onward numbered). Mixed fan-outs: \"{activity} 결과\"."),
+                    ("Redelivery carry-over", "Values carry over by activity name, or by position when only the name changed."),
                     ("Fields and notes", "Conditions, times and systems land as fields, originals kept as source notes. Systems matched to the catalog."),
                     ("Automatic", "Exact output = input matches link as IO, horizontal auto-layout, a draft right after publish."),
                     ("L5 canvas", "Built or extended from top-level L6 flows (exclusive → decision, parallel → parallel exit). Redelivery only adds nodes."),
@@ -234,23 +236,26 @@ DECK = {
             "desc": "The table viewer, notification purge, batch status, and daily backups.",
             "slides": [
                 {"title": "The table viewer", "shot": True, "pts": [
-                    ("Read-only", "Server-side paging, sorting, filtering. It never writes."),
+                    ("Read-only", "Server-side paging, sorting, filtering; never writes. <code>password_hash</code> shows [redacted]."),
                     ("CSV export", "All rows with the current sort / filter."),
                     ("Login records", "<code>login_records</code>. One row per user per day, the audit view."),
                     ("Notification purge", "Selecting <code>notifications</code> adds a range purge. Grouped preview, then hard delete."),
                     ("Retention", "Notifications keep the most recent 100 per person."),
                 ]},
-                {"title": "Batch job status", "shot": True, "pts": [
+                {"title": "Batch job status", "shot": "manual10/en-batch-hr-history.jpg", "pts": [
                     ("Per job", "DB backup and HR sync. Last success and last failure with time and summary."),
                     ("Signal", "A failure newer than the last success means act."),
                     ("Back up now", "Outside the daily schedule. Production runs <code>pg_dump</code> via the sidecar, local copies sqlite."),
                     ("Backup files", "List of <code>${BACKUP_DIR}</code> with downloads for an off-server copy (sysadmin)."),
+                    ("HR sync history", "Per-run counts, names on expand; large departures get <b>Mass departure</b>."),
                 ]},
                 {"title": "Daily automatic backups (prod)", "pts": [
                     ("db-backup sidecar", "Daily after <b>04:00 KST</b>, plus once on boot if today's dump is missing."),
                     ("Verification", "Kept only after <code>pg_restore --list</code> passes. Outcomes land on the Batch jobs tab."),
                     ("Retention", "<code>${BACKUP_DIR}</code> (default ./backups) · <code>${BACKUP_RETENTION_DAYS}</code> (default 14)."),
-                    ("Off-server copies", "Server disk only for now. Recovery runbook: <code>docs/deploy/backup.md</code>."),
+                    ("Off-server copies", "Server disk only for now; keep off-server copies regularly."),
+                    ("Backup now error", "\"The backup request could not be written\": recreate the sidecar (<code>--force-recreate db-backup</code>)."),
+                    ("Restore", "Empty schema, single transaction, never over the live DB. Runbook <code>docs/deploy/backup.md</code>."),
                 ]},
             ],
         },
@@ -274,11 +279,12 @@ DECK = {
                     ("Soft delete", "Maps and groups purge after 7 days. <b>Restore</b> until then."),
                     ("Scope", "Owners see their own, sysadmin sees everyone's trash."),
                     ("Instant purge", "Remove without the 7-day wait. Trash-state maps only, <b>no undo</b>."),
+                    ("Linkage canvases", "Trashed canvases read \"No canvas\"; a sysadmin restore brings them back (409 if replaced)."),
                 ]},
                 {"title": "Version workflow · admin powers", "pts": [
                     ("Force checkout", "Take the lock when the holder is away (unsaved context is lost). Checkouts never expire on their own."),
                     ("Effective owner", "Submit, publish and decide checkouts on any map."),
-                    ("Withdraw is the exception", "Pending / Approved only by the submitter."),
+                    ("Withdraw is the exception", "Submitter-only for Pending / Approved, unless they left or lost access (then a sysadmin)."),
                     ("Approver reassignment", "Recover approver-less maps via the forced-reassign flow."),
                     ("Expiry", "Publishing expires the previous version (terminal). Continue via Republish."),
                 ]},

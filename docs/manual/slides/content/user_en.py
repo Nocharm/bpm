@@ -5,12 +5,12 @@ DECK = {
     "lang": "en",
     "html_title": "BPM User Manual",
     "label": "Business Process Map · User Manual",
-    "date": "2026-10-17",
+    "date": "2026-10-20",
     "cover": {
         "eyebrow": "User Manual · English edition",
         "h1": "Business Process Map<br>User Manual",
         "sub": "Draw processes as flowcharts, manage them as versions, finalize through approval.",
-        "meta": ["Company process-map system", "As of 2026-10-17"],
+        "meta": ["Company process-map system", "As of 2026-10-20"],
         "hint": "Navigate with <kbd>←</kbd><kbd>→</kbd> or click the screen edges · <kbd>Home</kbd> to restart",
     },
     "toc": {"kicker": "Contents", "sec": "What's inside", "title": "What's inside"},
@@ -42,7 +42,7 @@ DECK = {
                     ("Viewer", "Read-only. Browse, compare, comment."),
                     ("Approver", "Review and approve or reject submitted versions."),
                     ("Owning department", "One per map. Its members hold Editor automatically."),
-                    ("Visibility", "<b>Public</b> is viewable by everyone, <b>Private</b> by collaborators and approvers only."),
+                    ("Visibility", "<b>Public</b>: everyone can view, drafts included. <b>Private</b>: collaborators and approvers."),
                     ("Category admins", "Framework-only role. They edit and confirm the linkage canvases of their category and below (⑨)."),
                 ]},
             ],
@@ -161,8 +161,17 @@ DECK = {
                 {"title": "Saving &amp; validation", "pts": [
                     ("Autosave", "About 2 s after you stop. The Save button shows Saving / Saved / Failed."),
                     ("Save checklist", "One Start · one primary End · unique End names · splits use a decision or a parallel exit (parallel exits two or more)."),
+                    ("Primary end", "With several End nodes, turn on <b>Primary end</b> for one. The server won't pick for you."),
+                    ("On submit too", "Map Settings submissions check the same list, and the server re-checks it."),
                     ("Editing needs", "A draft (#Draft / #Rejected) plus <b>your checkout</b>. Otherwise read-only."),
                     ("Pending downgrade", "While your permission downgrade is pending, checkout and submission are refused."),
+                ]},
+                {"title": "Leaving with unsaved edits", "shot": "manual10/en-leave-guard.jpg", "pts": [
+                    ("When", "You navigate away before autosave (about 2 s) runs, or after a save failed."),
+                    ("Three choices", "<b>Save and leave</b> · Leave without saving · Stay."),
+                    ("While asking", "Autosave pauses, and resumes if you stay."),
+                    ("Browser back", "The back button can't ask, so it saves right away."),
+                    ("Closing the tab", "Closing or reloading the tab shows the browser's warning."),
                 ]},
                 {"title": "Shortcuts at a glance", "pts": [
                     ("Editing", "<code>Ctrl+C/V</code> copy · <code>Ctrl</code>+drag duplicate · <code>Ctrl+Z</code>/<code>Ctrl+Shift+Z</code> · <code>Delete</code> · <code>F2</code> rename · <code>Shift+Enter</code> line break"),
@@ -293,10 +302,11 @@ DECK = {
                 {"title": "From draft to published", "pts": [
                     ("① Request approval", "Check the approvers, add a comment. <b>AI draft</b> writes a 2–4 line rationale."),
                     ("② Approve / reject", "Rejections need a reason. Approval is unanimous."),
-                    ("③ Publish", "<b>Only the submitter</b> publishes. The previous version expires."),
+                    ("③ Publish", "<b>Only the submitter</b> (a sysadmin if they left or lost access). The previous version expires."),
                     ("Withdraw", "Pending / Approved by the submitter only, Rejected also by owner / admin. The withdrawer gets the checkout."),
                     ("Self-publish", "If you're the only approver, one popover runs approve → publish."),
                     ("Bundle visibility", "Owners attach a visibility change that applies at publish."),
+                    ("Checks first", "Submitting needs the save checklist, in Map Settings too; the server re-checks."),
                 ]},
                 {"title": "Comments &amp; history", "pts": [
                     ("Stored with history", "Comments from submit / approve / publish / withdraw dialogs."),
@@ -350,12 +360,12 @@ DECK = {
                     ("Regenerate", "Title-row button discards the saved copy."),
                     ("Deep link", "<code>?base=&amp;target=</code>. Very large diffs send at most 200 nodes and 200 edges."),
                 ]},
-                {"title": "Compare PNG export", "shot": "manual9/en-compare-png-modal-document.jpg", "pts": [
+                {"title": "Compare PNG export", "shot": "manual10/en-compare-png-modal-document.jpg", "pts": [
                     ("Open", "<b>Export</b> in the change list. An options dialog comes first."),
                     ("Format", "Canvas, or Document (white, Arial, square corners)."),
                     ("Status colors", "Added / changed / removed follow your color scheme; unchanged is neutral gray."),
                     ("Contents", "Info header (base → target, counts) · Legend · node detail chips."),
-                    ("Print size", "For Document: A4 portrait / landscape, figure width, dpi and text pt."),
+                    ("Print size", "For Document: A4, figure width, dpi and text pt, plus <b>Fan out connectors</b> and Split."),
                 ]},
             ],
         },
@@ -365,22 +375,22 @@ DECK = {
             "slides": [
                 {"title": "CSV import", "shot": True, "pts": [
                     ("Import CSV", "Top bar. Download the template, fill, upload. 25 columns, max 500 rows."),
-                    ("Merge rule", "By name. Existing nodes keep color / comments / groups; blank cells keep values."),
-                    ("Unknown column", "Columns outside the list are rejected."),
+                    ("Merge rule", "By name, edge spaces ignored. Keeps color, comments, groups, Start links; blanks keep values."),
+                    ("File checks", "Unknown columns and unclosed quotes are errors. Non-UTF-8 files load as EUC-KR, flagged."),
                     ("Normalization", "Assignees match by name. Role and system aliases become canonical; unknown systems become <b>Other</b>."),
                     ("Preview", "Added / Matched / Removed summary and warnings, then apply. A prompt for external AIs is provided."),
                 ]},
-                {"title": "PNG export · Options dialog", "shot": "manual9/en-png-export-modal-word.jpg", "pts": [
+                {"title": "PNG export · Options dialog", "shot": "manual10/en-png-export-modal-split.jpg", "pts": [
                     ("Format", "<b>Canvas</b> (canvas look, 2× resolution) or Word document. <code>Ctrl+Shift+E</code>."),
                     ("Word document", "White background, Arial + Malgun Gothic. Three styles: Mono · Gray · Gray + Navy."),
-                    ("Chips", "Parallel marks · Map info header. Line crossings: None / Jump / Gap."),
-                    ("Node details", "Chips for what nodes carry. Applied only while exporting; canvas settings stay."),
+                    ("Chips", "Parallel marks · Map info header · <b>Fan out connectors</b>. Crossings: None / Jump / Gap."),
+                    ("Node details", "Applied only while exporting. Alignment you set on the canvas survives size changes."),
                     ("Preview", "A sample shows each choice at once. Choices are remembered in this browser."),
                 ]},
                 {"title": "Print size and the A4 guide", "shot": "manual9/en-a4-crop.jpg", "pts": [
                     ("Print size panel", "Opens for Word document. A4 portrait / landscape and <b>Figure width</b> (30 to 100%)."),
-                    ("Readouts", "Size in cm · resolution in dpi (300+ is print quality) · node text in pt."),
-                    ("Into Word", "The PNG carries its DPI, so Word inserts it at the chosen width."),
+                    ("Readouts", "Size cm · dpi (300+ is print quality) · node text pt. Word inserts at the chosen width."),
+                    ("Split", "Cuts between nodes so text stays 7pt or more; one ZIP of pieces, cut lines share a letter."),
                     ("A4 guide", "Top of the eye-icon card. Inside the 9pt line prints readable; past 7pt is too small."),
                     ("Narrowing", "Landscape at 100% width, or vertical auto layout <code>Shift+K</code>."),
                 ]},
@@ -394,7 +404,7 @@ DECK = {
                 {"title": "CSV export · Preview and warnings", "shot": "manual9/en-csv-export-warnings.jpg", "pts": [
                     ("Preview", "First rows and the <b>file name</b>, right in the dialog."),
                     ("Columns", "Picked columns of the 25 import columns. Name, Parallel and Next always stay."),
-                    ("Warnings", "Lists what will not come back the same on re-import, before you download."),
+                    ("Warnings", "What won't come back the same, unnamed steps and duplicate names, before you download."),
                     ("Formula cells", "Cells starting with <code>= + - @</code> get a <code>'</code> prefix, removed again on import."),
                     ("Time", "Duration stays in the typed form <code>1.30</code> for round trips."),
                 ]},
@@ -460,9 +470,9 @@ DECK = {
                 {"title": "Confirm &amp; versions", "shot": True, "pts": [
                     ("Six gates", "All L6 placed · no placeholders · no stale links · all L6 published · no exit-less loops · splits use a decision or a parallel exit."),
                     ("Who confirms", "The checkout holder if they are the <b>direct admin</b> (or a sysadmin). Higher admins send a confirm request."),
-                    ("Versions", "v1.0 → v1.1 …, <b>Major</b> makes v2.0 and prunes intermediate minors."),
+                    ("Request pending", "Requester goes read-only; only direct admins / sysadmins may check out. Can be withdrawn."),
+                    ("Versions", "v1.0 → v1.1 …, <b>Major</b> makes v2.0. Snapshots are read-only and comparable."),
                     ("Changes required", "Layout-only moves can't confirm. The section shows changes since the last confirm."),
-                    ("Snapshots", "Read-only from the version dropdown, comparable against each other."),
                 ]},
                 {"title": "Placeholders &amp; replacement", "shot": True, "pts": [
                     ("Dashed node", "An unregistered L6 slot. The bottom banner's <b>Connect</b> opens the dialog."),
@@ -472,7 +482,7 @@ DECK = {
                 ]},
                 {"title": "Replacing stale links &amp; slot history", "shot": True, "pts": [
                     ("Three banners", "\"Removed from the framework\" · \"Handed over to (map)\" · \"Deleted\". Each offers <b>replace</b>."),
-                    ("Stale links gate", "The node turns dashed and the confirm checklist catches it."),
+                    ("Stale links gate", "Dashed node, caught by the confirm checklist, as is another L5's \"Designation revoked\" L6."),
                     ("Successor pinned", "Click the banner: the successor map is pinned as a recommendation card."),
                     ("Recently handed over", "Badge for 14 days on a node that just took over a slot."),
                     ("Slot history", "Hover an L6 node for assign · move · unassign · delete · hand-over with timestamps."),
