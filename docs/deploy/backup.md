@@ -38,8 +38,11 @@ FAIL 로그가 반복되면 db 상태(`docker compose ps db`)와 `.env`의 `POST
 
 같은 탭의 **DB 백업 카드**에서:
 
-- **Backup now** — 즉시 백업 1회. 서버(postgres)는 backend가 `${BACKUP_DIR}/backup.request`
+- **Backup now** — 즉시 백업 1회. 서버(postgres)는 backend가 `${BACKUP_DIR}/requests/backup.request`
   트리거 파일을 쓰고, 사이드카(5초 폴링)가 지운 뒤 pg_dump를 수행한다(검증·기록·보존정리 동일).
+  `requests/`는 사이드카가 기동할 때 `1777`로 만든다 — backend는 비root라 root 소유 백업 디렉터리에
+  직접 못 쓴다(예전 경로는 서버에서 500이었다). 버튼이 "restart the db-backup service" 오류를 내면
+  사이드카가 새 스크립트로 아직 안 뜬 것이다: `docker compose up -d --force-recreate db-backup`.
   로컬 네이티브(sqlite)는 backend가 sqlite backup API로 즉시 사본(`bpm-*.sqlite`)을 만든다.
 - **백업 파일 목록·다운로드** — `${BACKUP_DIR}`의 `bpm-*.dump`/`bpm-*.sqlite`를 최신순으로 보여주고
   관리자 PC로 내려받을 수 있다(오프서버 사본을 수동으로 확보하는 경로).

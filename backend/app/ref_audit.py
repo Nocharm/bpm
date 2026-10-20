@@ -24,7 +24,7 @@ from app.models import (
 )
 from app.orgchart import load_valid_org_prefixes
 from app.permissions.logic import role_rank
-from app.workflow import DRAFT, PUBLISHED, create_notifications
+from app.workflow import DRAFT, PENDING, PUBLISHED, REJECTED, create_notifications
 
 Source = Literal[
     "map_grant", "group_member", "owning_dept", "sp_dept", "node_dept",
@@ -116,7 +116,10 @@ async def load_valid_sets(session: AsyncSession) -> ValidSets:
 
 
 async def load_target_versions(session: AsyncSession) -> dict[int, list[tuple[int, str]]]:
-    """맵별 노드 스캔 대상 — 게시본 + 최신 드래프트(최대 id). 그 외 버전은 제외."""
+    """맵별 노드 스캔 대상 — 게시본 + 최신 드래프트 + 최신 반려·결재 대기본(각 최대 id). 만료본·확정 스냅샷은 제외.
+
+    반려·결재 대기 중인 작업본은 스캔에서 빠져 고아 참조가 숨었다 (리뷰 2026-10-19). 표시는 둘 다 draft.
+    """
     rows = (
         await session.execute(
             select(MapVersion.map_id, MapVersion.id, MapVersion.status).order_by(MapVersion.id)
@@ -124,16 +127,19 @@ async def load_target_versions(session: AsyncSession) -> dict[int, list[tuple[in
     ).all()
     published: dict[int, int] = {}
     draft: dict[int, int] = {}
+    in_review: dict[int, int] = {}
     for map_id, version_id, status in rows:
         if status == PUBLISHED:
             published[map_id] = version_id
         elif status == DRAFT:
             draft[map_id] = version_id  # id 오름차순 → 마지막이 최신
+        elif status in (REJECTED, PENDING):
+            in_review[map_id] = version_id
     out: dict[int, list[tuple[int, str]]] = {}
     for map_id, version_id in published.items():
         out.setdefault(map_id, []).append((version_id, "published"))
-    for map_id, version_id in draft.items():
-        out.setdefault(map_id, []).append((version_id, "draft"))
+    for map_id, version_id in [*draft.items(), *in_review.items()]:
+        out.setdefault(map_id, []).append((version_id, "draft"))  # 에디터 버전 필과 같은 표기
     return out
 
 

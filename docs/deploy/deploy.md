@@ -110,7 +110,7 @@ AI_ENDPOINTS=
 
 둘 다 로그인 자체를 막을 뿐 **이미 발급된 토큰은 즉시 무효화되지 않는다** — 아래 참고.
 
-**토큰은 만료 전 강제 무효화가 안 된다.** 앱 서명 토큰(HS256, 무상태)은 서버가 세션을 추적하지 않으므로 계정을 삭제/비활성화해도 만료 시각(`AUTH_JWT_TTL_HOURS`, 기본 8시간) 전까지는 그 토큰 자체로 계속 인증된다(`/api/me` 조회는 막히지만 토큰 검증은 통과). **즉시 전면 차단이 필요하면 `AUTH_JWT_SECRET`을 교체하고 backend를 재기동한다** — 서명키가 바뀌면 기존에 발급된 모든 토큰이 한 번에 무효화된다(전 사용자 재로그인 필요, kill switch 용도).
+**토큰은 만료 전 강제 무효화가 안 된다.** 앱 서명 토큰(HS256, 무상태)은 서버가 세션을 추적하지 않으므로 계정을 삭제/비활성화해도 만료 시각(`AUTH_JWT_TTL_HOURS`, 기본 8시간) 전까지는 그 토큰 자체로 계속 인증된다(`/api/me`를 포함한 API 호출이 그대로 통과한다). **즉시 전면 차단이 필요하면 `AUTH_JWT_SECRET`을 교체하고 backend를 재기동한다** — 서명키가 바뀌면 기존에 발급된 모든 토큰이 한 번에 무효화된다(전 사용자 재로그인 필요, kill switch 용도).
 
 **백엔드 워커를 늘리면 sysadmin 캐시가 프로세스별로 갈라진다.** sysadmin 부여/회수(`grant_sysadmin_cache`, `backend/app/permissions/logic.py`)는 프로세스 내 메모리 캐시다. 현재 Dockerfile은 uvicorn 단일 워커 전제 — 워커를 늘리면 부여/회수가 일부 워커에만 반영돼 사용자마다 다른 권한을 보는 상황이 생긴다. 스케일아웃 시 이 캐시를 DB 조회로 전환할 것.
 
@@ -129,7 +129,8 @@ docker compose up -d --build
   - **컬럼 삭제·개명·테이블 제거는 자동 반영되지 않는다** — 구 컬럼이 DB에 남고, 그것이 `NOT NULL`이면 INSERT가 깨진다. 그런 변경은 배포 전에 직접 `DROP`하거나 nullable로 바꾼다.
 - 프룬 도입(2026-07-09) 후 첫 AD 전체 동기화는 스테일 ad 행을 대량 삭제할 수 있음(비활성·퇴사자). 삭제 행의 한글이름/한글부서도 함께 사라지므로, 동기화 전 한글이름 모달의 전체 목록 추출로 백업 권장.
 - **1회성 후처리는 [`setup-once.md`](setup-once.md) B절에 모아뒀다** — `ai_chat_logs` 드랍(B1) · KB 게시본 백필(B2) · 필드 승격 재임포트(B3) · HR 첫 sync와 고아 경로 이관(B4) · 노출 직책 확정(B5). 지난 릴리스라면 이미 끝났을 수 있으니 해당 항목만 골라 확인한다.
-- **데모 데이터 시드**(`backend/scripts/reset_db.py`)는 빈 DB 전용 → [`setup-once.md`](setup-once.md) A8. ⚠️ `drop_all`이라 **운영에서 실행 금지**.
+- **`scripts/db-backup.sh`를 바꾼 배포는 사이드카를 다시 만든다** — 스크립트는 바인드 마운트라 `up -d --build`가 db-backup을 재생성하지 않아 옛 루프가 계속 돈다: `docker compose up -d --force-recreate db-backup`. 2026-10-20 배포(Backup now 트리거가 `requests/`로 이동)가 해당한다.
+- **데모 데이터 시드**(`backend/scripts/reset_db.py`)는 빈 DB 전용 → [`setup-once.md`](setup-once.md) A8. ⚠️ `drop_all`이라 **운영에서 실행 금지**(postgres는 맵·직원이 있으면 스크립트가 스스로 멈춘다).
 - **db-viewer 읽기전용 조회**를 새 스택에 처음 붙일 때만 → [`db-viewer-readonly.md`](db-viewer-readonly.md)(계정 발급·소스 등록은 서버 수작업). 매 배포에 반복하지 않는다.
 
 ## 4. 헬스체크 + 인증/AD 검증

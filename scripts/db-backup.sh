@@ -45,10 +45,14 @@ run_backup() {
 }
 
 # 온디맨드 트리거 — backend(설정 > Batch jobs "Backup now")가 이 파일을 쓰면 지우고 즉시 1회 덤프.
-# 파일명은 backend routers/admin.py BACKUP_TRIGGER_FILENAME과 계약.
-TRIGGER="$BACKUP_DIR/backup.request"
+# 경로는 backend routers/admin.py BACKUP_TRIGGER_DIRNAME/BACKUP_TRIGGER_FILENAME과 계약.
+# backend는 비root(appuser)라 root 소유 백업 디렉터리에 못 쓴다 → 누구나 쓸 수 있는 하위 디렉터리를
+# 여기(root)서 만든다. 스티키 비트라 남의 파일은 못 지운다 (리뷰 2026-10-19 H-9)
+REQUEST_DIR="$BACKUP_DIR/requests"
+TRIGGER="$REQUEST_DIR/backup.request"
 
-mkdir -p "$BACKUP_DIR"
+mkdir -p "$BACKUP_DIR" "$REQUEST_DIR"
+chmod 1777 "$REQUEST_DIR"
 log "started (daily at $BACKUP_TIME KST, retention ${RETENTION_DAYS}d)"
 has_dump_today || run_backup
 

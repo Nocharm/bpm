@@ -35,9 +35,6 @@ class Settings(BaseSettings):
     # 로컬 네이티브는 저장소 루트 backups/(backend cwd 기준 상대), 서버 compose는 /backups 마운트로 오버라이드.
     backup_dir: str = "../backups"
 
-    # Tuning — 버전 체크아웃 잠금의 무활동 자동 해제 시간(분). spec §7 Phase C
-    checkout_ttl_minutes: int = 30
-
     # 편집용 반응형 매뉴얼 사이트 주소 — 비우면 에디터의 매뉴얼 사이트 버튼 숨김 (F9)
     manual_url: str = ""
 

@@ -110,11 +110,13 @@ docker network rm bpm-9910_default 2>/dev/null   # 잔재 정리
 
 ### A8. 신규·빈 DB 한정 — 데모 시드
 
-**운영 DB에는 절대 실행 금지**(`reset_db`는 `drop_all`이다). 데모·스테이징 빈 DB에서만:
+**운영 DB에는 절대 실행 금지**(`reset_db`는 `drop_all`이다). 데모·스테이징 빈 DB에서만, **그 스택의 프로젝트명과 env 파일을 반드시 붙인다** — 빠뜨리면 기본 프로젝트(운영 9900)의 backend에서 돈다:
 
 ```bash
-docker compose exec backend python -m scripts.reset_db
+docker compose -p <스택 프로젝트명> --env-file <스택 .env> exec backend python -m scripts.reset_db
 ```
+
+postgres에서는 맵이나 직원이 한 건이라도 있으면 지우기 전에 `refusing to reset`으로 멈춘다(2026-10-20 가드). 그 메시지가 나오면 대상 스택이 맞는지부터 확인한다.
 
 `reset_db`는 스키마를 `drop_all`+`create_all`로 다시 만들고 종합 데모(조직도·직원 ~400·그룹 6·맵 12)를 한 번에 채운다(`backend/scripts/seed_org_demo.py`, RNG 고정). 운영 DB 복사본으로 세우는 검증 스택은 시드하지 않는다 — 복원이 곧 데이터다.
 

@@ -3145,6 +3145,7 @@ const en = {
   "apiError.syncThrottled": "Sync was throttled - please try again shortly.",
   "apiError.ownerOnlyBundle": "Only the map owner can bundle this with a version submission.",
   "apiError.spDesignationPending": "A registration request is already pending for this map.",
+  "apiError.backupRequestBlocked": "The backup request could not be written. Recreate the db-backup service on the server (docker compose up -d --force-recreate db-backup).",
   "apiError.requestFailed": "Request failed (HTTP {status})",
 } as const;
 
@@ -6282,6 +6283,7 @@ const ko: Record<MessageKey, string> = {
   "apiError.syncThrottled": "동기화가 제한되었습니다 - 잠시 후 다시 시도하세요.",
   "apiError.ownerOnlyBundle": "맵 오너만 버전 제출과 함께 묶을 수 있습니다.",
   "apiError.spDesignationPending": "이미 이 맵의 등록 요청이 승인 대기 중입니다.",
+  "apiError.backupRequestBlocked": "백업 요청을 쓰지 못했습니다. 서버에서 db-backup 서비스를 다시 만들어 주세요(docker compose up -d --force-recreate db-backup).",
   "apiError.requestFailed": "요청이 실패했습니다 (HTTP {status})",
 };
 

@@ -10,7 +10,7 @@
 
 import asyncio
 
-from sqlalchemy import select, text
+from sqlalchemy import Connection, inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import SessionLocal, engine
@@ -54,9 +54,27 @@ async def backfill_version_events(session: AsyncSession) -> int:
     return added
 
 
+def ensure_reset_allowed(conn: Connection) -> None:
+    """postgres는 빈 DB에서만 — 맵·직원이 한 건이라도 있으면 drop_all 전에 멈춘다(SystemExit).
+
+    운영 이미지에도 이 스크립트가 실려 있어 compose `-p` 하나만 틀려도 운영 DB가 지워질 수 있었다 (리뷰 2026-10-19).
+    로컬 sqlite는 데모 리셋이 본래 용도라 막지 않는다.
+    """
+    if conn.dialect.name == "sqlite":
+        return
+    tables = set(inspect(conn).get_table_names())
+    for table in ("process_maps", "employees"):
+        if table in tables and conn.execute(text(f"SELECT 1 FROM {table} LIMIT 1")).first() is not None:
+            raise SystemExit(
+                f"refusing to reset: {table} has rows in {conn.engine.url.render_as_string(hide_password=True)}"
+                " - reset_db drops every table and is only for a new, empty database (setup-once A8)"
+            )
+
+
 async def main() -> None:
     # 1. 스키마 재생성 — 전체 삭제 후 새로
     async with engine.begin() as conn:
+        await conn.run_sync(ensure_reset_allowed)
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     print("schema  drop_all + create_all 완료")

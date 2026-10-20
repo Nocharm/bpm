@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-20 — 7d① 운영 잔여: 시스템 리뷰 H-9·H-11·H-12 + 확인 필요 HR 주기·reset_db·ref_audit (dev)
+
+- Backup now 트리거는 사이드카(root)가 1777로 만드는 `requests/`에 쓴다(비root backend가 root 소유 백업 디렉터리에 못 써 서버에서 500), 못 쓰면 503+조치 안내+실패 기록. 사이드카 스크립트가 바뀌었으니 배포 때 `docker compose up -d --force-recreate db-backup`(deploy.md). sqlite도 연결마다 FK를 켜 영구삭제 cascade가 운영과 같다. HR 자동 동기화는 마지막 회차(`hr_sync_runs`)에서 주기를 잇는다(지났으면 기동 5분 뒤, 기록 없는 첫 설치는 한 주기 뒤, 사용자 결정). `reset_db`는 postgres에 맵·직원이 있으면 지우기 전에 멈추고, A8 명령에 `-p`·`--env-file`. ref_audit은 반려·결재 대기 작업본도 스캔. 쓰이지 않던 `CHECKOUT_TTL_MINUTES` 제거(설정·env·compose·spec이 "무활동 자동 해제"로 안내), deploy.md 토큰 무효화 문구 정정.
+- 회귀 `test_ops_followups.py` 3 + 백업 503·HR 첫 지연 테스트(수정 전 코드에서 cascade 잔재 1·1, 반려·대기 미스캔 재현). 실컨테이너(postgres 이미지, 명명 볼륨=root 소유): 비root 쓰기가 옛 경로 Permission denied → 새 경로 성공·사이드카 덤프 생성. 일회용 postgres: 빈 DB 리셋 정상 → 시드된 DB는 exit 1·12맵 보존. pytest 1813·ruff·py3.11·tsc·lint·vitest 1523. 관리자 매뉴얼 ko/en·backup/deploy/setup-once·spec·CLAUDE.md 반영.
+
 ## 2026-10-20 — 7c CSV 데이터 왕복: 시스템 리뷰 D-1~D-8 (dev)
 
 - 같은 맵 재가져오기는 제목을 앞뒤 공백 없이 맞추되 원래 제목을 남기고, 기존 Start 연결을 유지한다(되돌아가기가 있는 맵은 행 순서만 바꿔도 Start가 옮겨 갔다). 판단 노드엔 병렬 출구를 두지 않고(`NodeIn`·CSV·AI 세 경로) 레거시 gateway 병렬 팬아웃은 CSV에도 Parallel=Y로 내보내 Excel과 맞춘다. 닫히지 않은 따옴표는 시작 줄을 알리는 오류(나머지 파일을 한 셀로 삼키던 것, 카탈로그 CSV 포함), 인용된 CRLF는 LF로, UTF-8이 아니어서 EUC-KR로 읽은 파일은 경고. 저장이 받는 값은 가져오기도 받는다(Other 메모 200자, http가 아닌 링크는 경고만, 열기는 여전히 http(s)만). `'=x` 같은 원문은 수식 가드를 한 번 더 붙여 왕복 보존(FE·관리자 CSV 동치). 이름 없는 단계·공백만 다른 같은 제목은 내보내기 경고. 자동 반복 ◇는 한 맵에서 두 번째부터 번호(사용자 결정 D-7=A, 어댑터·L5 창작부·역변환·미리보기 같은 규칙). L5 캔버스 에디터엔 CSV 가져오기를 열지 않는다.

@@ -111,8 +111,7 @@ def test_checkout_is_sticky_no_ttl_expiry(
     version_id = _create_version(client)
     client.post(f"/api/versions/{version_id}/checkout", json={})
 
-    # TTL을 0으로 낮춰도 sticky — 다른 사용자는 여전히 획득 못 함
-    monkeypatch.setattr(settings, "checkout_ttl_minutes", 0)
+    # 시간 설정이 없다 — 다른 사용자는 여전히 획득 못 함
     monkeypatch.setattr(settings, "dev_user", "reviewer")
     state = client.post(f"/api/versions/{version_id}/checkout", json={}).json()
 

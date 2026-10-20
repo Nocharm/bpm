@@ -252,6 +252,8 @@ async def get_hr_sync_run(
 # 경로 구분자가 못 들어가는 형식이라 다운로드 경로 탈출이 원천 차단된다.
 _BACKUP_NAME_RE = re.compile(r"^bpm-\d{8}-\d{6}\.(dump|sqlite)$")
 # 온디맨드 트리거 — 백엔드가 이 파일을 쓰면 db-backup 사이드카(≤5s 폴링)가 지우고 즉시 pg_dump 1회.
+# 하위 디렉터리는 사이드카(root)가 1777로 만든다 — 비root backend가 root 소유 백업 디렉터리엔 못 쓴다 (H-9)
+BACKUP_TRIGGER_DIRNAME = "requests"
 BACKUP_TRIGGER_FILENAME = "backup.request"
 
 
@@ -308,8 +310,17 @@ async def run_backup_now(
         )
         return BackupRunOut(status="completed", filename=filename)
     # postgres — pg_dump는 db와 버전이 맞는 사이드카가 수행(트리거 소비·검증·기록까지)
-    trigger = backup_dir / BACKUP_TRIGGER_FILENAME
-    trigger.write_text(f"{login_id} {now_kst().isoformat()}\n")
+    trigger = backup_dir / BACKUP_TRIGGER_DIRNAME / BACKUP_TRIGGER_FILENAME
+    try:
+        trigger.write_text(f"{login_id} {now_kst().isoformat()}\n")
+    except OSError as exc:
+        # 사이드카가 아직 새 스크립트로 안 떴거나(요청 디렉터리 없음) 권한이 바뀐 경우 — 500 대신 원인과 조치를 알린다
+        await record_batch_run(session, "db_backup", "failure", f"on-demand trigger not writable: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"backup request could not be written to {trigger.parent} ({exc.strerror}) - "
+            "restart the db-backup service (docs/deploy/backup.md 2.5)",
+        ) from exc
     return BackupRunOut(status="requested")
 
 

@@ -44,6 +44,7 @@ const DETAIL_PREFIX_MAP: [string, MessageKey][] = [
   ["sync throttled", "apiError.syncThrottled"],
   ["only the owner can bundle", "apiError.ownerOnlyBundle"],
   ["a designation request is already pending", "apiError.spDesignationPending"],
+  ["backup request could not be written", "apiError.backupRequestBlocked"],
 ];
 
 export function humanizeApiError(err: unknown, t: TFunc): string {

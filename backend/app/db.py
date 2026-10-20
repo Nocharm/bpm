@@ -3,7 +3,7 @@
 import logging
 from collections.abc import AsyncGenerator
 
-from sqlalchemy import Connection, DateTime, MetaData, String, Text, inspect, text
+from sqlalchemy import Connection, DateTime, MetaData, String, Text, event, inspect, text
 from sqlalchemy.types import TypeEngine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -14,6 +14,16 @@ logger = logging.getLogger(__name__)
 
 engine = create_async_engine(settings.database_url)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+if engine.dialect.name == "sqlite":
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection: object, _record: object) -> None:
+        # sqlite는 연결마다 FK를 꺼 둔다 — 운영(PG)과 달리 영구삭제 잔재가 남고, 재사용된 rowid로
+        # 새 맵이 지운 맵의 권한·요청 행을 물려받았다 (리뷰 2026-10-19 H-11)
+        cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 # create_all로 못 채우는 신규 컬럼(기존 테이블에 추가된 것)을 보강하는 경량 스톱갭.
 # Alembic 도입 전까지 기존 DB가 깨지지 않도록 startup에서 멱등 적용. (table, column, DDL 타입)

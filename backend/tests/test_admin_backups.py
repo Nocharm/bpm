@@ -1,6 +1,7 @@
 """백업 관리 API — sysadmin 게이트·온디맨드 sqlite 백업·목록·다운로드·postgres 트리거."""
 
 import asyncio
+import os
 from typing import Iterator
 
 import pytest
@@ -9,7 +10,7 @@ from sqlalchemy import delete
 
 from app.db import SessionLocal
 from app.models import BatchJobRun
-from app.routers.admin import BACKUP_TRIGGER_FILENAME
+from app.routers.admin import BACKUP_TRIGGER_DIRNAME, BACKUP_TRIGGER_FILENAME
 from app.settings import settings
 
 SYSADMIN = "admin.kim"
@@ -91,12 +92,31 @@ def test_run_postgres_writes_trigger_file(client: TestClient, backup_dir, monkey
     monkeypatch.setattr(
         settings, "database_url", "postgresql+asyncpg://u:p@db:5432/processmap"
     )
+    os.makedirs(f"{backup_dir}/{BACKUP_TRIGGER_DIRNAME}")  # 사이드카(db-backup.sh)가 1777로 만드는 디렉터리
     res = client.post("/api/admin/backups/run", headers={"X-Dev-User": SYSADMIN})
     assert res.status_code == 200
     assert res.json() == {"status": "requested", "filename": None}
-    trigger = f"{backup_dir}/{BACKUP_TRIGGER_FILENAME}"
+    trigger = f"{backup_dir}/{BACKUP_TRIGGER_DIRNAME}/{BACKUP_TRIGGER_FILENAME}"
     with open(trigger, encoding="utf-8") as fh:
         assert SYSADMIN in fh.read()
+
+
+def test_run_postgres_reports_an_unwritable_request_dir(client: TestClient, backup_dir, monkeypatch) -> None:
+    """서버에서 비root backend가 root 소유 백업 디렉터리에 트리거를 못 써 500이었다 (리뷰 2026-10-19 H-9)."""
+    monkeypatch.setattr(
+        settings, "database_url", "postgresql+asyncpg://u:p@db:5432/processmap"
+    )
+    request_dir = f"{backup_dir}/{BACKUP_TRIGGER_DIRNAME}"
+    os.makedirs(request_dir)
+    os.chmod(request_dir, 0o555)  # root 소유 디렉터리를 비root로 보는 것과 같다
+    try:
+        res = client.post("/api/admin/backups/run", headers={"X-Dev-User": SYSADMIN})
+    finally:
+        os.chmod(request_dir, 0o755)
+    assert res.status_code == 503
+    assert "restart the db-backup service" in res.json()["detail"]
+    runs = client.get("/api/admin/batch-runs", headers={"X-Dev-User": SYSADMIN}).json()
+    assert any(r["job"] == "db_backup" and r["outcome"] == "failure" for r in runs)
 
 
 def test_download_rejects_non_whitelisted_names(client: TestClient, backup_dir) -> None:

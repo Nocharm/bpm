@@ -1,8 +1,11 @@
-"""내장 HR 스케줄러 테스트 — sleep-first 루프가 run_full_sync를 호출하고 예외에 견디는지."""
+"""내장 HR 스케줄러 테스트 — 루프가 run_full_sync를 호출하고 예외에 견디는지, 첫 회차를 마지막 기록에서 잇는지."""
 
 import asyncio
+from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
+
+from app.clock import KST
 
 from app.settings import settings
 
@@ -37,3 +40,16 @@ def test_sync_loop_calls_full_sync_and_survives_errors(client: TestClient, monke
 
     asyncio.run(_run())
     assert calls["n"] == 2
+
+
+def test_first_run_continues_from_the_last_recorded_run() -> None:
+    """기동마다 한 주기를 새로 기다려 배포가 잦으면 자동 동기화가 돌지 않았다 (리뷰 2026-10-19)."""
+    from app.main import HR_SYNC_STARTUP_GRACE_SECONDS, get_first_hr_sync_delay
+
+    now = datetime(2026, 10, 20, 9, 0, tzinfo=KST)
+    day = 24 * 3600
+    assert get_first_hr_sync_delay(None, now, day) == day  # 첫 설치 — 수동 절차 뒤 한 주기
+    assert get_first_hr_sync_delay(now - timedelta(hours=20), now, day) == 4 * 3600
+    assert get_first_hr_sync_delay(now - timedelta(days=3), now, day) == HR_SYNC_STARTUP_GRACE_SECONDS
+    # sqlite는 시간대 없는 KST 벽시계로 돌려준다
+    assert get_first_hr_sync_delay(datetime(2026, 10, 19, 21, 0), now, day) == 12 * 3600
