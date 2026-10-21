@@ -59,7 +59,7 @@ Keycloak federation(로그인·토큰 발급)과 백엔드 LDAP 동기화(employ
 
 ```bash
 TOKEN='<X-API-Key 값>'
-curl -s -X POST http://182.199.63.71:5678/webhook/hr-dept \
+curl -s -X POST http://<n8n-host>:5678/webhook/hr-dept \
   -H "X-API-Key: $TOKEN" -H "Content-Type: application/json" \
   -d '{"kind":"employees","loginId":"<본인 loginId>"}' | head -c 300
 ```

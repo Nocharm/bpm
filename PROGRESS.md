@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-21 — 공개 저장소 서버 주소 가림 (main)
+
+- 저장소가 공개라 실서버 IP(Keycloak·n8n 예시)와 사내 호스트명(AI GPU·예정 도메인)을 `<keycloak-host>`·`<n8n-host>`·`<ai-host>`·"도메인"으로 바꿨다. 실값은 서버 `.env`에만 둔다. compose 내부 브리지 대역(사설망)은 배포 설정이라 유지. git 이력에는 옛 값이 남는다.
+
 ## 2026-10-21 — 서버 compose 메모리 상한 정렬 (main)
 
 - 서버의 `docker-compose.yml`이 저장소와 달라져 있었다(git 이력에 없는 값, 서버에서 직접 수정). proxy 상한 128M → 96M은 nginx 실사용(수십 MB)에 충분해 저장소를 서버 값에 맞췄다. 서버는 로컬 수정을 버리고(`git checkout -- docker-compose.yml`) 받아야 `git pull`이 멈추지 않는다.

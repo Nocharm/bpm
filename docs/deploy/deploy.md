@@ -57,7 +57,7 @@ BACKUP_RETENTION_DAYS=14
 # 인증 모드 — 빈 값이면 AUTH_ENABLED로 하위호환 유도(§2.1). 3값 중 하나로 명시 권장.
 AUTH_MODE=keycloak
 AUTH_ENABLED=true
-KEYCLOAK_ISSUER=http://182.199.63.71:8080/realms/ai-portal
+KEYCLOAK_ISSUER=http://<keycloak-host>:8080/realms/ai-portal
 KEYCLOAK_AUDIENCE=
 KEYCLOAK_CLIENT_ID=bpm-frontend
 # ldap 모드일 때만 필수 — openssl rand -hex 32
@@ -76,7 +76,7 @@ SYSTEM_ADMIN_LOGIN_IDS=hong.gildong,kim.cheolsu   # 초기 관리자 loginId(콤
 # GLM-5.3/SGLang(2026-10-21, 5.2에서 교체): 모델은 glm-5.3-nvfp4 하나. 사고량은 모델명이 아니라
 # 코드가 요청 파라미터(chat_template_kwargs의 reasoning_effort·clear_thinking)로 지정 — 5.2의 enable_thinking은 없어짐.
 AI_ENABLED=true
-AI_BASE_URL=https://gpu02.sbiologics.com/v1
+AI_BASE_URL=https://<ai-host>/v1
 AI_API_TOKEN=<시크릿>
 AI_MODEL=glm-5.3-nvfp4
 # 응답 max_tokens 상한(사고 토큰 포함) — 작으면 빈 응답. 타임아웃은 최대 사고 기준 120~180 권장

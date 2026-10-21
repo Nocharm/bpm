@@ -94,7 +94,7 @@ docker compose up -d --build   # 접속: http://<서버>:9900
 
 **경계:** 브라우저 → `:9900`(앱 nginx) → (Next.js | FastAPI) → PostgreSQL. frontend↔backend 통신은 nginx 경유 HTTP. 입력 검증은 backend API 경계에서 수행 (`rules/common/security.md`).
 
-**nginx 토폴로지 (확정):** 서버 엣지 nginx(443/80)는 직접 편집 가능한 별도 자산. 앱 compose nginx는 **9900**에 노출하고 우선 포트로 직접 접속, 추후 엣지 nginx에 도메인(g-ai-agent.sbiologics.com) 라우팅 추가.
+**nginx 토폴로지 (확정):** 서버 엣지 nginx(443/80)는 직접 편집 가능한 별도 자산. 앱 compose nginx는 **9900**에 노출하고 우선 포트로 직접 접속, 추후 엣지 nginx에 도메인 라우팅 추가.
 
 **인증 (확정):** 같은 서버의 기존 Keycloak(realm `ai-portal`) OIDC 사용. 주소는 하드코딩 금지 — `.env` 경유 (`docs/spec.md` §4).
 

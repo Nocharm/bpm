@@ -95,7 +95,7 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 
 ## 4. 인증 — Keycloak (OIDC)
 
-- 같은 배포 서버의 Keycloak 사용: realm `ai-portal` (주소는 `.env`로 관리, 예: `http://182.199.63.71:8080/realms/ai-portal`)
+- 같은 배포 서버의 Keycloak 사용: realm `ai-portal` (주소는 `.env`로 관리, 예: `http://<keycloak-host>:8080/realms/ai-portal`)
 - frontend: OIDC Authorization Code + PKCE 로그인(`react-oidc-context`) → backend API 호출 시 Bearer 토큰
 - backend: realm JWKS로 RS256 서명 검증(`pyjwt[crypto]`) 후 사용자 식별 — `created_by`에 기록
 - **인증 모드(확정, 2026-08-19)**: backend `AUTH_MODE`(`keycloak`|`ldap`|`dev`, 비면 구 `AUTH_ENABLED`로 유도)가 유일한 스위치. frontend는 빌드타임 상수 없이 `GET /api/auth/mode`로 부팅 시 런타임 조회한다. 로컬 네이티브는 `AUTH_MODE` 미설정(=`dev`, 우회), 서버 compose는 `keycloak`. `/api/health`는 항상 인증 면제
@@ -110,7 +110,7 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 | db | PostgreSQL | |
 | proxy | nginx — **서버 노출 포트 9900** | `/` → frontend, `/api` → backend |
 
-- 접속: 우선 `http://<서버IP or g-ai-agent.sbiologics.com>:9900` 포트 직접 접속 → 추후 서버 엣지 nginx(직접 편집 가능)에 도메인 라우팅 추가
+- 접속: 우선 `http://<서버IP 또는 도메인>:9900` 포트 직접 접속 → 추후 서버 엣지 nginx(직접 편집 가능)에 도메인 라우팅 추가
 - Keycloak(8080)은 이 compose 외부의 기존 서비스 — 주소는 `.env`로만 참조
 
 ## 6. 단계별 구현 순서 (제안)
