@@ -1403,11 +1403,14 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
     0 0 6px color-mix(in srgb, var(--color-canvas-l5) 80%, transparent);
 }
 /* 노드 입출력 목록 상자(process-node NodeIoDetails) — 입력은 왼쪽 위, 출력은 오른쪽 아래 모서리를 사선으로 잘라 모양만으로
-   구분한다(사용자 결정 2026-10-19). clip-path는 테두리까지 자르므로 선은 바탕(--io-line, 투명 테두리 1px 자리)으로, 칠은
-   안쪽 ::before로 그린다. ::before 사선을 2−√2(≈0.59px)만큼 당겨야 사선 선 두께가 다른 변과 같은 1px이 된다.
-   clip-path가 그림자도 자르므로 캔버스 위에 뜨는 상자(분기 아일랜드, --framed)는 선을 한 단계 진하게 한다. */
+   구분한다(사용자 결정 2026-10-19). 사선은 가로:세로 2:1(약 27°, 2026-10-21 45°에서 눕힘 — 더 잘 보이게).
+   clip-path는 테두리까지 자르므로 선은 바탕(--io-line, 투명 테두리 1px 자리)으로, 칠은 안쪽 ::before로 그린다.
+   ::before 사선을 가로 r+1−√(r²+1)(r=2, ≈0.764px)·세로 그 1/r(≈0.382px)만큼 당겨야 사선 선 두께가 다른 변과 같은
+   1px이 된다(비율을 바꾸면 두 값과 --io-cut-x 배수를 같이). clip-path가 그림자도 자르므로 캔버스 위에 뜨는 상자
+   (분기 아일랜드, --framed)는 선을 한 단계 진하게 한다. */
 .bpm-io-box {
-  --io-cut: 7px;
+  --io-cut-y: 7px;
+  --io-cut-x: calc(var(--io-cut-y) * 2);
   --io-r: var(--radius-sm);
   --io-line: var(--color-hairline);
   --io-fill: var(--color-surface);
@@ -1419,6 +1422,10 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 .bpm-io-box--framed {
   --io-line: color-mix(in srgb, var(--color-ink-tertiary) 45%, var(--color-surface));
 }
+/* 축소 견본(PNG 옵션 창 샘플 노드, 상자 높이 14px) — 같은 각도로 짧게 잘라 왼쪽 아이콘이 사선에 걸리지 않게 */
+.bpm-io-box--compact {
+  --io-cut-y: 5px;
+}
 .bpm-io-box::before {
   content: "";
   position: absolute;
@@ -1429,23 +1436,29 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 }
 .bpm-io-box--input {
   border-radius: 0 var(--io-r) var(--io-r) var(--io-r);
-  clip-path: polygon(var(--io-cut) 0, 100% 0, 100% 100%, 0 100%, 0 var(--io-cut));
+  clip-path: polygon(var(--io-cut-x) 0, 100% 0, 100% 100%, 0 100%, 0 var(--io-cut-y));
 }
 .bpm-io-box--input::before {
   border-radius: 0 calc(var(--io-r) - 1px) calc(var(--io-r) - 1px) calc(var(--io-r) - 1px);
-  clip-path: polygon(calc(var(--io-cut) - 0.59px) 0, 100% 0, 100% 100%, 0 100%, 0 calc(var(--io-cut) - 0.59px));
+  clip-path: polygon(
+    calc(var(--io-cut-x) - 0.764px) 0,
+    100% 0,
+    100% 100%,
+    0 100%,
+    0 calc(var(--io-cut-y) - 0.382px)
+  );
 }
 .bpm-io-box--output {
   border-radius: var(--io-r) var(--io-r) 0 var(--io-r);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--io-cut)), calc(100% - var(--io-cut)) 100%, 0 100%);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--io-cut-y)), calc(100% - var(--io-cut-x)) 100%, 0 100%);
 }
 .bpm-io-box--output::before {
   border-radius: calc(var(--io-r) - 1px) calc(var(--io-r) - 1px) 0 calc(var(--io-r) - 1px);
   clip-path: polygon(
     0 0,
     100% 0,
-    100% calc(100% - var(--io-cut) + 0.59px),
-    calc(100% - var(--io-cut) + 0.59px) 100%,
+    100% calc(100% - var(--io-cut-y) + 0.382px),
+    calc(100% - var(--io-cut-x) + 0.764px) 100%,
     0 100%
   );
 }

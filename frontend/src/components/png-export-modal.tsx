@@ -711,7 +711,7 @@ function PngPreview({ options, displayFields }: { options: PngExportOptions; dis
                 dataId={`png-export-preview-line-${field}`}
                 className={
                   isIo
-                    ? `relative bpm-io-box bpm-io-box--${field} mt-0.5 flex items-center gap-1 px-1 text-[8px]`
+                    ? `relative bpm-io-box bpm-io-box--${field} bpm-io-box--compact mt-0.5 flex items-center gap-1 px-1 text-[8px]`
                     : "relative flex items-center gap-1 rounded-xs text-[8px]"
                 }
                 style={{ height: isIo ? IO_BOX_ROW - 2 : LINE_ROW, color: palette.sub }}
