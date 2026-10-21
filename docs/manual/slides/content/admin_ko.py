@@ -5,7 +5,7 @@ ENV_TABLE_AUTH = """<table class="tbl"><thead><tr><th>변수</th><th>효과</th>
 <tr><td><code>AUTH_MODE</code></td><td><code>keycloak</code> | <code>ldap</code> | <code>dev</code>. 프론트는 부팅 시 <code>GET /api/auth/mode</code>로 조회</td></tr>
 <tr><td><code>AUTH_JWT_SECRET</code> / <code>AUTH_JWT_TTL_HOURS</code></td><td>ldap 세션 서명 키(교체 = 전 세션 무효) · 수명(기본 8h)</td></tr>
 <tr><td><code>DEV_ENFORCE_PERMISSIONS</code></td><td>인증 없이도 RBAC 강제(로컬 검증용)</td></tr>
-<tr><td><code>AI_BASE_URL</code> / <code>AI_MODEL</code></td><td>AI 서버(OpenAI 호환) · 모델 id. 사내 GPU는 <code>glm-5.3:nvfp4</code> 단일</td></tr>
+<tr><td><code>AI_BASE_URL</code> / <code>AI_MODEL</code></td><td>AI 서버(OpenAI 호환) · 모델 id. 사내 GPU는 <code>glm-5.3-nvfp4</code> 단일</td></tr>
 <tr><td><code>AI_MAX_TOKENS</code> / <code>AI_TIMEOUT_SECONDS</code></td><td>응답 토큰 상한(작으면 빈 응답) · 호출 타임아웃(120~180 권장)</td></tr>
 </tbody></table>"""
 

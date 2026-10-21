@@ -6,7 +6,8 @@
 ## 2026-10-21 — 사내 AI GLM-5.3 전환 v1.1.1 (main)
 
 - 사내 공지(5.3: `enable_thinking` 폐지, 사고량은 `reasoning_effort` low/high/max·생략=max, `clear_thinking` 신설·채팅 true 권장, 끄던 자리는 low+clear_thinking): `ai_client.call_ai`가 지정 사고량이면 `{"reasoning_effort": <값>, "clear_thinking": True}`, 최대(None)는 종전대로 생략. 사고를 끄는 값이 없어져 `AiReasoning` `"none"`을 `"low"`로 개명(호출부 3곳·재시도). 우리 메시지엔 이전 사고 내용(`reasoning_content`)을 싣지 않아 `clear_thinking`은 권장값을 따르는 것 외에 동작 차이는 없을 것으로 본다(실서버 확인 전).
-- 모델 표기 `glm-5.3:nvfp4`: `.env.example`·`deploy.md`·관리자 매뉴얼 ko/en·관리자 슬라이드(HTML·PDF 재생성, 캡처 원본은 dev 워크트리 `.shots`에서 복사). 공지는 v1.1.1 배포 기준으로. pytest 1818·ruff.
+- 모델 표기 `glm-5.3-nvfp4`: `.env.example`·`deploy.md`·관리자 매뉴얼 ko/en·관리자 슬라이드(HTML·PDF 재생성, 캡처 원본은 dev 워크트리 `.shots`에서 복사). 공지는 v1.1.1 배포 기준으로. pytest 1818·ruff.
+- 모델 id 정정 `glm-5.3:nvfp4` → `glm-5.3-nvfp4`(사용자 확인): 처음 전달받은 표기를 옮긴 것이라 문서·예시·주석만 바꿨다(코드는 `.env` `AI_MODEL`을 그대로 실어 앱 동작 불변 → 버전 유지).
 
 ## 2026-10-21 — 서비스 버전 도입 v1.1.0 (main)
 

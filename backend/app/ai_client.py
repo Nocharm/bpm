@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_SEP = "::"  # 다중 엔드포인트 모델 id 구분자 — "<엔드포인트명>::<모델id>"
 
-# 사고량 — SGLang GLM-5.3(glm-5.3:nvfp4, 2026-10-21)은 chat_template_kwargs.reasoning_effort(low/high/max,
+# 사고량 — SGLang GLM-5.3(glm-5.3-nvfp4, 2026-10-21)은 chat_template_kwargs.reasoning_effort(low/high/max,
 # 생략=max)로 정한다. 5.2의 enable_thinking은 없어져 사고를 완전히 끄는 값은 없다.
 # None=최대 사고(파라미터 생략), "high"=중간, "low"=최소(5.2 enable_thinking=false 자리, 사내 공지 권장).
 AiReasoning = Literal["high", "low"]

@@ -389,7 +389,7 @@ AI 기능(챗·인터뷰·드래프터 등)이 쓰는 **내장 프롬프트를 �
 | `HR_SYNC_DELETE_CAP_PCT` | backend `.env` | 전체 동기화 삭제 상한(관리 행의 %). 기본 20, 0 = 가드 끔 |
 | `FORWARDED_ALLOW_IPS` | `.env` (compose) | backend가 X-Forwarded-For를 믿을 프록시 대역. 비우면 compose 네트워크 서브넷(`172.36.0.0/16`). 틀리면 로그인 기록·로그인 제한이 nginx 주소를 봅니다 |
 | `AI_BASE_URL` | backend `.env` | AI 서버 주소(OpenAI 호환). 현재 사내 GPU는 `https://gpu02.sbiologics.com/v1` |
-| `AI_MODEL` | backend `.env` | 기본 모델 id. 사내 GPU는 **`glm-5.3:nvfp4` 하나**(2026-10-21 GLM-5.2에서 교체). 사고량은 모델명이 아니라 앱이 호출마다 정합니다 |
+| `AI_MODEL` | backend `.env` | 기본 모델 id. 사내 GPU는 **`glm-5.3-nvfp4` 하나**(2026-10-21 GLM-5.2에서 교체). 사고량은 모델명이 아니라 앱이 호출마다 정합니다 |
 | `AI_MAX_TOKENS` | backend `.env` | 응답 토큰 상한(사고 토큰 포함). 기본 8000. **너무 작으면 답이 빈 문자열로 돌아옵니다** |
 | `AI_TIMEOUT_SECONDS` | backend `.env` | 호출 1회 타임아웃(초). 기본 60. 최대 사고 모드는 오래 걸려 120~180 권장 |
 | `EMBED_URL` | backend `.env` | 지식기반용 bge-m3 임베딩 서버 주소(OpenAI 호환 `/embeddings`). 비우면 지식기반 기능 전체 비활성 |
