@@ -125,7 +125,7 @@ async def _ask_json(
 ) -> _SchemaT:
     """call_ai + JSON 추출 + 스키마 검증 — 실패 1회 재프롬프트 후 TurnError.
 
-    reasoning: 호출 목적별 사고 모드 — 드래프터는 None(최대), 인터뷰어 턴은 "high", 첨부 추출은 "none".
+    reasoning: 호출 목적별 사고량 — 드래프터는 None(최대), 인터뷰어 턴은 "high", 첨부 추출은 "low".
     """
     for attempt in range(2):
         try:
@@ -550,7 +550,7 @@ async def extract_attachment_facts(interview_id: int, attachment_id: int) -> Non
                 [{"role": "system", "content": overrides.get("extract_contract") or _EXTRACT_CONTRACT},
                  {"role": "user", "content": parsed_text}],
                 None, AttachmentFactsOut,
-                reasoning="none",  # 단순 추출 — 사고 불필요, 백그라운드 지연 최소화
+                reasoning="low",  # 단순 추출 — 사고 최소, 백그라운드 지연 최소화
             )
         finally:
             usage_log.reset(usage_token)

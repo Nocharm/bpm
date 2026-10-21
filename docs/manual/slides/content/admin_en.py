@@ -5,7 +5,7 @@ ENV_TABLE_AUTH = """<table class="tbl"><thead><tr><th>Variable</th><th>Effect</t
 <tr><td><code>AUTH_MODE</code></td><td><code>keycloak</code> | <code>ldap</code> | <code>dev</code>. The frontend reads it at boot via <code>GET /api/auth/mode</code></td></tr>
 <tr><td><code>AUTH_JWT_SECRET</code> / <code>AUTH_JWT_TTL_HOURS</code></td><td>ldap session signing key (rotate = kill switch) · lifetime (default 8 h)</td></tr>
 <tr><td><code>DEV_ENFORCE_PERMISSIONS</code></td><td>Enforce RBAC locally even with auth off</td></tr>
-<tr><td><code>AI_BASE_URL</code> / <code>AI_MODEL</code></td><td>AI server (OpenAI-compatible) and model id. The in-house GPU uses just <code>glm-5.2</code></td></tr>
+<tr><td><code>AI_BASE_URL</code> / <code>AI_MODEL</code></td><td>AI server (OpenAI-compatible) and model id. The in-house GPU uses just <code>glm-5.3:nvfp4</code></td></tr>
 <tr><td><code>AI_MAX_TOKENS</code> / <code>AI_TIMEOUT_SECONDS</code></td><td>Response token cap (too low = empty replies) · per-call timeout (120–180 s recommended)</td></tr>
 </tbody></table>"""
 

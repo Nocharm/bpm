@@ -14,9 +14,10 @@ logger = logging.getLogger(__name__)
 
 MODEL_SEP = "::"  # 다중 엔드포인트 모델 id 구분자 — "<엔드포인트명>::<모델id>"
 
-# 사고 모드 — SGLang glm-5.2 전환(2026-08-18)부터 모델명 alias가 아니라 요청 파라미터로 지정.
-# None=최대 사고(기본), "high"=유일한 중간 단계(low/medium은 서버가 조용히 max 처리), "none"=사고 끔.
-AiReasoning = Literal["high", "none"]
+# 사고량 — SGLang GLM-5.3(glm-5.3:nvfp4, 2026-10-21)은 chat_template_kwargs.reasoning_effort(low/high/max,
+# 생략=max)로 정한다. 5.2의 enable_thinking은 없어져 사고를 완전히 끄는 값은 없다.
+# None=최대 사고(파라미터 생략), "high"=중간, "low"=최소(5.2 enable_thinking=false 자리, 사내 공지 권장).
+AiReasoning = Literal["high", "low"]
 
 # 전역 동시성 가드 — 루프별 캐시(세마포어는 첫 경합 루프에 바인딩되므로 루프 간 공유 금지).
 # 운영은 uvicorn 단일 루프라 전역 상한과 동치. 닫힌 루프 엔트리는 접근 시 정리.
@@ -133,10 +134,10 @@ async def call_ai(
         "response_format": {"type": "json_object"},
         "max_tokens": max_tokens if max_tokens is not None else settings.ai_max_tokens,
     }
-    if reasoning == "high":
-        payload["chat_template_kwargs"] = {"reasoning_effort": "high"}
-    elif reasoning == "none":
-        payload["chat_template_kwargs"] = {"enable_thinking": False}
+    if reasoning is not None:
+        # clear_thinking(생략=false)은 이전 턴의 사고 내용을 프롬프트에서 지운다 — 사내 공지가 채팅 용도에 true 권장.
+        # 최대 사고(None)는 종전대로 파라미터를 통째로 생략한다
+        payload["chat_template_kwargs"] = {"reasoning_effort": reasoning, "clear_thinking": True}
     async with _get_semaphore():
         async with httpx2.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
             response = await client.post(url, json=payload, headers=_headers(endpoint))

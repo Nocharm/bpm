@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-21 — 사내 AI GLM-5.3 전환 v1.1.1 (main)
+
+- 사내 공지(5.3: `enable_thinking` 폐지, 사고량은 `reasoning_effort` low/high/max·생략=max, `clear_thinking` 신설·채팅 true 권장, 끄던 자리는 low+clear_thinking): `ai_client.call_ai`가 지정 사고량이면 `{"reasoning_effort": <값>, "clear_thinking": True}`, 최대(None)는 종전대로 생략. 사고를 끄는 값이 없어져 `AiReasoning` `"none"`을 `"low"`로 개명(호출부 3곳·재시도). 우리 메시지엔 이전 사고 내용(`reasoning_content`)을 싣지 않아 `clear_thinking`은 권장값을 따르는 것 외에 동작 차이는 없을 것으로 본다(실서버 확인 전).
+- 모델 표기 `glm-5.3:nvfp4`: `.env.example`·`deploy.md`·관리자 매뉴얼 ko/en·관리자 슬라이드(HTML·PDF 재생성, 캡처 원본은 dev 워크트리 `.shots`에서 복사). 공지는 v1.1.1 배포 기준으로. pytest 1818·ruff.
+
 ## 2026-10-21 — 서비스 버전 도입 v1.1.0 (main)
 
 - 사용자 요청 "상단바에 버전, 메인 머지마다 기준": 운영이 `a7d6cd99`(10-14 main)인 것을 기준점 v1.0.0으로 태그하고, 지금 main을 v1.1.0으로. 값은 `frontend/package.json` `version` 하나 → `next.config.ts` `env.BPM_APP_VERSION` 인라인 → 상단 바 이름 옆(툴팁으로 맵 버전과 구분, 측정 복제 행에도 넣어 반응형 단계 유지). 백엔드는 함께 배포되므로 따로 두지 않았다(Docker 빌드 컨텍스트에 `.git`이 없어 커밋 해시 대신 태그로 추적).

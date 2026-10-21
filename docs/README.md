@@ -33,7 +33,7 @@
 아직 소비될 설계 문서만 유지(컨설턴트 체계 스키마·엔진, 인터뷰 임포트 어댑터 원설계 — 둘 다 코드 주석이 경로로 참조) — 전체 목록은 [`design/README.md`](design/README.md). **main 머지된 기능의 스냅샷은 폐기** — git history에서 조회(`rules/common/documentation.md`).
 
 ## 릴리스 공지 ([`notices/`](notices/))
-- [2026-10-21](notices/2026-10-21-release.md) — v1.1.0 배포 공지 초안(9~10월 통합). 마지막 게시(08-25) 이후 변경 전체를 하나로 묶었다(먼저 확인할 변경: 갈래 규칙·Primary end·이탈 확인·Word 제거·역할·용어 통일, 이어서 화면별).
+- [2026-10-21](notices/2026-10-21-release.md) — v1.1.1 배포 공지 초안(9~10월 통합). 마지막 게시(08-25) 이후 변경 전체를 하나로 묶었다(먼저 확인할 변경: 갈래 규칙·Primary end·이탈 확인·Word 제거·역할·용어 통일, 이어서 화면별).
 - 이전 공지(2026-07-06 ~ 2026-08-25 게시분 6건)와 게시하지 않고 통합본으로 대체한 초안 3건(9월 1차·10월 2차·10월 3차)은 [`history/release-notices.md`](history/release-notices.md) 한 파일에 원문으로 있다.
 - [`notices/2026-08-09-consultant-delivery-interface-mail.md`](notices/2026-08-09-consultant-delivery-interface-mail.md) — 컨설팅사 발송용 메일 초안(수용 방향 + 전달 데이터 인터페이스(안)).
 - [`notices/2026-09-28-pi-meeting-prep.md`](notices/2026-09-28-pi-meeting-prep.md) — PI팀 회의 자료(진척도·범위·계약 종료 후 컨설팅 범위 맵의 시스템 오너 2안: Agent 존속·PI팀 오너 / 종료 시 1회 이양·BPM 원본, 각 안의 성립 조건과 식별 키).

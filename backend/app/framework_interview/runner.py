@@ -158,9 +158,9 @@ async def _draw_row(db: AsyncSession, session: FrameworkInterviewSession, task: 
     usage: list = []
     token = usage_log.set(usage)
     try:
-        # 행 JSON은 길어(활동 12개·IO 배열) 사고를 켜면 예산을 다 쓰고 빈 응답이 오기 쉽다 — 사고 없이 바로 쓴다.
+        # 행 JSON은 길어(활동 12개·IO 배열) 사고가 길면 예산을 다 쓰고 빈 응답이 오기 쉽다 — 사고를 최소로 바로 쓴다.
         # 설문 답을 옮겨 적는 작업이라 사고가 품질에 기여하는 바도 작다(실사용 실패 2026-09-28)
-        out = await ask_schema(messages, RowOut, normalizer=normalize_row, reasoning="none")
+        out = await ask_schema(messages, RowOut, normalizer=normalize_row, reasoning="low")
         row = finalize_row_output(out, card, existing_row)
         chain = await load_category_chain(db, session.category_id)
         l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]}

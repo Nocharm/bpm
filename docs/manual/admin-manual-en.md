@@ -389,7 +389,7 @@ Fill an L5 through a conversation with AI instead of a document (sysadmin only).
 | `HR_SYNC_DELETE_CAP_PCT` | backend `.env` | Full-sync deletion cap (% of managed rows). Default 20, 0 = guard off |
 | `FORWARDED_ALLOW_IPS` | `.env` (compose) | Proxy range whose X-Forwarded-For the backend trusts. Empty uses the compose network subnet (`172.36.0.0/16`). If wrong, login records and login throttling see the nginx address |
 | `AI_BASE_URL` | backend `.env` | AI server URL (OpenAI-compatible). The in-house GPU is `https://gpu02.sbiologics.com/v1` |
-| `AI_MODEL` | backend `.env` | Default model id. After the SGLang move this is **just `glm-5.2`** (the old `-think` / `-high` / `-nothink` aliases are gone) |
+| `AI_MODEL` | backend `.env` | Default model id. The in-house GPU serves **just `glm-5.3:nvfp4`** (replaced GLM-5.2 on 2026-10-21). The app sets the thinking level per call, not through the model name |
 | `AI_MAX_TOKENS` | backend `.env` | Response token cap, thinking tokens included. Default 8000. **Too low and replies come back empty** |
 | `AI_TIMEOUT_SECONDS` | backend `.env` | Per-call timeout in seconds. Default 60. Max-thinking calls are slow; 120–180 is recommended |
 | `EMBED_URL` | backend `.env` | bge-m3 embedding server for the knowledge base (OpenAI-compatible `/embeddings`). Empty disables the knowledge base entirely |

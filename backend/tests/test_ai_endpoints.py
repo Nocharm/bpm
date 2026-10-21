@@ -127,7 +127,7 @@ def test_call_ai_hits_selected_endpoint(
 def test_call_ai_payload_thinking_modes(
     monkeypatch: pytest.MonkeyPatch, fake_http: type[_FakeClient]
 ) -> None:
-    """GLM-5.2(SGLang) 사고 모드 계약 — 기본=최대(파라미터 생략), high/none은 chat_template_kwargs."""
+    """GLM-5.3(SGLang) 사고량 계약 — 기본=최대(파라미터 생략), high/low는 reasoning_effort+clear_thinking."""
     monkeypatch.setattr(settings, "ai_endpoints", _TWO_ENDPOINTS)
     msgs = [{"role": "user", "content": "hi"}]
 
@@ -138,11 +138,12 @@ def test_call_ai_payload_thinking_modes(
     assert payload["max_tokens"] == settings.ai_max_tokens
 
     asyncio.run(ai_client.call_ai(msgs, reasoning="high"))
-    assert fake_http.calls[1]["payload"]["chat_template_kwargs"] == {"reasoning_effort": "high"}
+    assert fake_http.calls[1]["payload"]["chat_template_kwargs"] == {"reasoning_effort": "high", "clear_thinking": True}
 
-    asyncio.run(ai_client.call_ai(msgs, reasoning="none", max_tokens=500))
+    asyncio.run(ai_client.call_ai(msgs, reasoning="low", max_tokens=500))
     payload = fake_http.calls[2]["payload"]
-    assert payload["chat_template_kwargs"] == {"enable_thinking": False}
+    # 5.3엔 enable_thinking이 없다 — 사고를 끄던 자리는 low+clear_thinking(사내 공지 권장)
+    assert payload["chat_template_kwargs"] == {"reasoning_effort": "low", "clear_thinking": True}
     assert payload["max_tokens"] == 500
 
 

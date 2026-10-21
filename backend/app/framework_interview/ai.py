@@ -5,7 +5,7 @@ orchestrator._ask_json은 "JSON만 다시" 한 줄로 1회 재시도라 스키�
 
 빈 응답은 형식 오류가 아니다 — 사고(thinking)가 max_tokens를 다 써 content가 ""로 오는 경우라
 ("invalid JSON: Expecting value (line 1)"로 보이던 실사용 실패 2026-09-28) 오류를 되먹여도 같은 일이 반복된다.
-그때는 같은 메시지로 사고를 끄고(reasoning="none") 다시 부른다.
+그때는 같은 메시지로 사고를 최소로 줄여(reasoning="low") 다시 부른다.
 """
 
 import json
@@ -82,8 +82,8 @@ async def ask_schema(
                 attempt + 1, attempts, schema_cls.__name__, last_error.replace("\n", " "), reply.content,
             )
             if isinstance(exc, ValueError) and str(exc) == EMPTY_REPLY_MESSAGE:
-                # 빈 응답엔 되먹일 게 없다 — 같은 메시지로 사고를 끄고 다시(이미 껐으면 그대로 한 번 더)
-                reasoning = "none"
+                # 빈 응답엔 되먹일 게 없다 — 같은 메시지로 사고를 최소로 줄여 다시(이미 low면 그대로 한 번 더)
+                reasoning = "low"
                 continue
             if attempt < attempts - 1:
                 messages = [
