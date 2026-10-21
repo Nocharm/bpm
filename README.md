@@ -105,5 +105,6 @@ docker compose up -d --build
 ```
 
 > 전체 절차(Keycloak 클라이언트 등록·헬스체크·롤백)는 **[`docs/deploy/deploy.md`](docs/deploy/deploy.md)** 참고.
+> 배포 단위는 **서비스 버전**(`vX.Y.Z` 태그, 상단 바 서비스 이름 옆에 표시) — 버전별 범위·배포 메모는 **[`CHANGELOG.md`](CHANGELOG.md)**, main 머지마다 올린다.
 > DB는 `db-backup` 사이드카가 매일 04:00 KST 자동 덤프(기본 `./backups`, 14일 보존) — 정책·복구는 **[`docs/deploy/backup.md`](docs/deploy/backup.md)**.
 > 서버의 엣지 nginx(443/80)와 충돌하지 않도록 앱은 9900에 노출한다. 줄바꿈은 `.gitattributes`로 LF 고정 — Windows PC를 경유해도 안전. 자세한 운영 제약은 `CLAUDE.md`의 Operations 섹션 참고.

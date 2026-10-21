@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-21 — 서비스 버전 도입 v1.1.0 (main)
+
+- 사용자 요청 "상단바에 버전, 메인 머지마다 기준": 운영이 `a7d6cd99`(10-14 main)인 것을 기준점 v1.0.0으로 태그하고, 지금 main을 v1.1.0으로. 값은 `frontend/package.json` `version` 하나 → `next.config.ts` `env.BPM_APP_VERSION` 인라인 → 상단 바 이름 옆(툴팁으로 맵 버전과 구분, 측정 복제 행에도 넣어 반응형 단계 유지). 백엔드는 함께 배포되므로 따로 두지 않았다(Docker 빌드 컨텍스트에 `.git`이 없어 커밋 해시 대신 태그로 추적).
+- 규칙 `rules/common/git.md` "On Main Merge — 서비스 버전"(MINOR=보이는 변경·PATCH=수정만, 머지 정리 커밋에 버전+`CHANGELOG.md`, annotated 태그 푸시, 배포일 기록), `deploy.md` §3·§4·§8, 공지 제목을 v1.1.0 배포 공지로.
+
 ## 2026-10-21 — 입출력 상자 사선 눕힘 (main)
 
 - 사용자 요청 "45도보다 더 눕혀서 티나게": 사선을 가로:세로 2:1(14×7px, 약 27°)로. 칠 안쪽 당김은 비율에서 나오는 상수(0.764·0.382px)라 크기를 바꿔도 선 두께 1px 유지. PNG 옵션 창 축소 견본은 `--compact`(5px)로 같은 각도, 왼쪽 아이콘이 사선에 걸리지 않게. `pw-png-export-word` 38/38.

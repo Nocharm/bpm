@@ -24,6 +24,16 @@ type(scope): English summary — 한국어 요약
 2. **README 영향 확인** — 이번 커밋이 README가 설명하는 내용(커맨드, 구조, 설정, 사용법)을 바꿨으면 해당 섹션을 같은 커밋에서 갱신한다. 영향 없으면 건드리지 않는다. 전수 점검은 `/sync-all` (문서 규칙: `documentation.md`).
 3. **진행 중인 체크리스트/트래커 md** — 작업 단위 트래커(예: `SCREEN-REDESIGN-EDITOR.md`)가 있으면 해당 행·항목(검증·시현·검토결과·커밋 열 등)을 같은 커밋에서 갱신한다. 없으면 생략.
 
+## On Main Merge — 서비스 버전
+
+main에 머지할 때마다(dev → main fast-forward 포함) 서비스 버전을 올린다. 상단 바 서비스 이름 옆에 보이는 값이라, 운영 서버에 어느 빌드가 올라가 있는지 화면으로 확인하는 기준이 된다(사용자 지시 2026-10-21).
+
+- **단일 소스**: `frontend/package.json` `version`(SemVer). `frontend/`에서 `npm version <minor|patch> --no-git-tag-version`으로 올린다(`package-lock.json`이 같이 바뀐다). 빌드 때 `next.config.ts` `env.BPM_APP_VERSION`으로 번들에 들어간다.
+- **올림 규칙**: 사용자에게 보이는 기능·동작 변경이 있으면 MINOR, 버그 수정·문서·내부 변경만이면 PATCH. MAJOR는 사용자와 정한다.
+- **같은 커밋에서**: 버전 올림과 루트 `CHANGELOG.md` 항목(날짜·범위·주요 변경·배포 메모·공지 링크)을 머지 정리 커밋에 담는다. 그 커밋에 annotated 태그 `vX.Y.Z`를 달고 태그까지 푸시한다(`git push origin vX.Y.Z`). 태그는 옮기거나 다시 달지 않는다. 고칠 것이 생기면 다음 PATCH로.
+- **배포 기록**: 운영 서버에 올린 뒤 상단 바 버전으로 확인하고, `CHANGELOG.md` 해당 항목에 배포일을 적는다.
+- main에 직접 들어가는 문서만의 커밋은 버전을 올리지 않아도 된다. 앱 동작이 바뀌는 커밋이 main에 단독으로 들어가면 PATCH를 올린다.
+
 ## On Branch Merge
 
 브랜치를 dev/main에 머지할 때, 그 브랜치에서 쌓인 `PROGRESS.md` 항목들을 **하나의 요약 항목으로 압축**한다 — 브랜치의 목적·결과·주요 결정만 남기고 중간 시행착오 항목은 삭제한다. 머지 커밋(또는 머지 직후 커밋)에서 수행하며, PROGRESS 머지 충돌도 이 요약본으로 해소한다.

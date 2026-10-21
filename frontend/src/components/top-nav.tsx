@@ -44,6 +44,9 @@ import { InboxBadge } from "@/components/inbox-badge";
 import { NotificationBell } from "@/components/notification-bell";
 import { Tooltip } from "@/components/tooltip";
 
+// 서비스 버전(next.config `env`가 package.json "version"을 인라인) — 맵 버전(v1, v2…)과 별개라 툴팁으로 밝힌다
+const APP_VERSION = process.env.BPM_APP_VERSION ?? "";
+
 // 상단 세그먼트 전환 탭 — 맵목록/공지/인박스. 슬라이딩 박스로 현재 경로 강조.
 const NAV_TABS: { href: string; labelKey: MessageKey; Icon: typeof MapIcon }[] = [
   { href: "/", labelKey: "nav.tab.maps", Icon: MapIcon },
@@ -78,7 +81,10 @@ function NavMeasureRow({
   return (
     <>
       <div className="flex items-center gap-4">
-        <span className="text-body-strong text-ink">{t("app.name")}</span>
+        <span className="flex items-baseline gap-1.5">
+          <span className="text-body-strong text-ink">{t("app.name")}</span>
+          {APP_VERSION !== "" && <span className="text-fine text-ink-tertiary">v{APP_VERSION}</span>}
+        </span>
         <div className="inline-flex gap-1 rounded-sm bg-surface-alt p-1 text-fine">
           {NAV_TABS.map((tab, i) => {
             const active = i === activeIdx;
@@ -253,22 +259,31 @@ export function TopNav() {
       className="relative flex h-10 shrink-0 items-center justify-between border-b border-hairline bg-surface px-4"
     >
       <div className="flex items-center gap-4">
-        {/* 홈 로고 = 새로고침 의미 — 저장된 홈 검색·필터를 비우고 전체 리로드(SPA 아님) */}
-        <Link
-          href="/"
-          className="text-body-strong text-ink"
-          onClick={(e) => {
-            e.preventDefault();
-            try {
-              window.sessionStorage.removeItem("bpm.home.filters");
-            } catch {
-              /* 무시 */
-            }
-            window.location.assign("/");
-          }}
-        >
-          {t("app.name")}
-        </Link>
+        <span className="flex items-baseline gap-1.5">
+          {/* 홈 로고 = 새로고침 의미 — 저장된 홈 검색·필터를 비우고 전체 리로드(SPA 아님) */}
+          <Link
+            href="/"
+            className="text-body-strong text-ink"
+            onClick={(e) => {
+              e.preventDefault();
+              try {
+                window.sessionStorage.removeItem("bpm.home.filters");
+              } catch {
+                /* 무시 */
+              }
+              window.location.assign("/");
+            }}
+          >
+            {t("app.name")}
+          </Link>
+          {APP_VERSION !== "" && (
+            <Tooltip label={t("nav.appVersion")}>
+              <span data-id="nav-app-version" className="text-fine text-ink-tertiary">
+                v{APP_VERSION}
+              </span>
+            </Tooltip>
+          )}
+        </span>
         {/* 3-way 전환 탭 — 피드백 패널 유형 세그먼트 디자인(회색 트랙 + 흰 활성 pill·아이콘 유지).
             S1+: 비활성은 아이콘만+title, 활성은 아이콘+라벨(IconPillFilter 문법 350ms 슬라이드) */}
         <div className="inline-flex gap-1 rounded-sm bg-surface-alt p-1 text-fine">

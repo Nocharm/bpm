@@ -120,6 +120,8 @@ AI_ENDPOINTS=
 docker compose up -d --build
 ```
 
+- **배포 단위는 서비스 버전**(`vX.Y.Z` 태그, 맨 위 항목은 루트 `CHANGELOG.md`). 버전마다 배포 메모(사이드카 재생성 등)가 CHANGELOG에 있으니 배포 전에 읽는다. 버전 규칙은 `rules/common/git.md` "On Main Merge — 서비스 버전".
+
 - `AUTH_MODE`/`AUTH_ENABLED`/`KEYCLOAK_*`/`AUTH_JWT_SECRET`는 backend **런타임** 환경변수(§2.1) → 값만 바꾸면 `docker compose up -d`(재빌드 불필요)로 backend 재생성 시 반영. frontend는 부팅 시 backend에 조회하므로 재빌드 불필요.
 - `LDAP_*`는 backend **런타임** 환경변수 → 값만 바꾸면 `docker compose up -d`(재빌드 불필요)로 backend 재생성 시 반영.
 - `AI_*`(AI_ENDPOINTS 포함)는 backend **런타임** 환경변수 → 모델 추가/삭제는 `.env` 수정 후 `docker compose up -d`로 backend 재생성(재빌드 불필요).
@@ -143,6 +145,8 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:9900/   # 200
 # backend가 LDAP 설정을 받았는지
 docker compose exec backend python -c "from app.settings import settings; print('ldap_enabled=', settings.ldap_enabled, 'admins=', settings.admin_login_ids())"
 ```
+
+브라우저에서 상단 바 서비스 이름 옆 버전(`vX.Y.Z`)이 배포한 버전과 같은지 보고, `CHANGELOG.md` 해당 항목에 배포일을 적는다(같지 않으면 frontend 이미지가 다시 빌드되지 않은 것, §7).
 
 브라우저(`http://<서버>:9900`) 플로우: ① 미인증 → `/login` 리다이렉트 ② "Keycloak으로 로그인" → 메인 진입 ③ 유저명 클릭 → `SYSTEM_ADMIN_LOGIN_IDS` 계정이면 관리자 페이지 노출 ④ 관리자 페이지 → "AD 전체 동기화" → `scanned/upserted/excluded` 요약 ⑤ 5분 내 재클릭 → 429(throttled). **로그인 시 1인 동기화**: 각 사용자가 로그인하면 `/api/me`에서 본인 1명을 AD에서 upsert(전체 동기화 없이도 점진 충전).
 
@@ -208,7 +212,7 @@ curl -s http://localhost:9900/api/auth/mode; echo  # issuer·clientId가 채워�
 ## 8. 롤백
 
 ```bash
-git checkout <이전-커밋> && docker compose up -d --build
+git checkout <이전-태그> && docker compose up -d --build   # 예: v1.0.0 (CHANGELOG.md)
 ```
 
 데이터는 `pgdata` 볼륨에 유지. 완전 초기화는 `docker compose down -v`(볼륨 삭제 — 주의).
