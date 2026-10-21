@@ -15,6 +15,7 @@ import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { formatSystem } from "@/lib/catalogs";
 import { useI18n } from "@/lib/i18n";
 import { INSPECTOR_ROW, INSPECTOR_ROW_LABEL } from "@/lib/inspector-row";
+import { toSafeHref } from "@/lib/url";
 
 interface AttributeReadRowsProps {
   department: string;
@@ -41,6 +42,7 @@ export function AttributeReadRows({
 }: AttributeReadRowsProps) {
   const { t } = useI18n();
   const note = (systemNote ?? "").trim();
+  const href = toSafeHref(url);
   return (
     <>
       <div className={INSPECTOR_ROW} data-id={`${dataIdPrefix}-row-department`}>
@@ -108,10 +110,15 @@ export function AttributeReadRows({
           <LinkIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
           {t("field.url")}
         </span>
-        {url.trim() !== "" ? (
+        {url.trim() !== "" && href === null ? (
+          // 위험한 스킴(javascript: 등) — 링크 없이 원문만
+          <span data-id={`${dataIdPrefix}-url-text`} className="min-w-0 truncate text-right text-caption text-ink" title={url}>
+            {urlLabel.trim() || url}
+          </span>
+        ) : href !== null ? (
           // 링크 필 — 새 탭. 라벨이 있으면 라벨, 없으면 URL(말줄임)
           <a
-            href={url}
+            href={href}
             target="_blank"
             rel="noreferrer"
             data-id={`${dataIdPrefix}-url-pill`}

@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-22 — 링크 주소 화면 가드 (dev)
+
+- 보안 리뷰: 저장된 URL이 `href`에 그대로 들어가 `javascript:` 링크가 가능했다(인스펙터 SP 카드·홈 맵 상세 SP 섹션). 사용자 결정 "화면 수준에서만 막고, http 없이 복사한 주소도 열리게": `lib/url.ts` `toSafeHref`가 http·https·mailto만 링크로 만들고(대소문자·제어문자·탭/줄바꿈 우회 포함), 스킴이 없으면 `https://`를 붙인다. 위험한 값은 글자로만 보인다. 저장값·서버 검증은 그대로.
+- 적용: 노드 속성 읽기 행·홈 맵 상세·링크 미리보기(새 탭 버튼). 노드 창·지정 창의 "http로 시작" 경고와 지정 창 저장 막기는 걷어냈다(자동 보정되므로). CSV 가져오기 경고는 유지.
+
 ## 2026-10-21 — 공개 저장소 서버 주소 가림 (main)
 
 - 저장소가 공개라 실서버 IP(Keycloak·n8n 예시)와 사내 호스트명(AI GPU·예정 도메인)을 `<keycloak-host>`·`<n8n-host>`·`<ai-host>`·"도메인"으로 바꿨다. 실값은 서버 `.env`에만 둔다. compose 내부 브리지 대역(사설망)은 배포 설정이라 유지. git 이력에는 옛 값이 남는다.

@@ -44,6 +44,7 @@ import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { useI18n } from "@/lib/i18n";
 import { formatParamValue, PARAM_LABEL_KEY } from "@/lib/params";
 import { countFilledSpTiles, parseIoRows, resolveValueOrNote, type IoRow } from "@/lib/sp-detail";
+import { toSafeHref } from "@/lib/url";
 
 interface MapDetailSpSectionProps {
   detail: MapDetail;
@@ -175,6 +176,7 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
   const role = str(detail.sp_assignee_role);
   const assigneeFilled = names.length > 0 || role !== "";
   const url = str(detail.sp_url);
+  const urlHref = toSafeHref(url);
   const gmpText = detail.sp_gmp ? formatGmp(detail.sp_gmp) : "";
   const attrCount = [
     deptPath !== "",
@@ -401,15 +403,22 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
                         t("field.url"),
                         "",
                         "",
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noreferrer"
-                          data-id="map-detail-sp-url-link"
-                          className="min-w-0 truncate text-accent underline underline-offset-2"
-                        >
-                          {str(detail.sp_url_label) || url}
-                        </a>,
+                        urlHref === null ? (
+                          // 위험한 스킴(javascript: 등) — 링크 없이 원문만
+                          <span data-id="map-detail-sp-url-text" className="min-w-0 truncate" title={url}>
+                            {str(detail.sp_url_label) || url}
+                          </span>
+                        ) : (
+                          <a
+                            href={urlHref}
+                            target="_blank"
+                            rel="noreferrer"
+                            data-id="map-detail-sp-url-link"
+                            className="min-w-0 truncate text-accent underline underline-offset-2"
+                          >
+                            {str(detail.sp_url_label) || url}
+                          </a>
+                        ),
                       )
                     ) : (
                       <div

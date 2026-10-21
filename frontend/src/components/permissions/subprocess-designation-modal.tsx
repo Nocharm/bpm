@@ -57,7 +57,6 @@ import {
   type SpParamField,
 } from "@/lib/params";
 import { formatSumPreview, sumParamField } from "@/lib/param-sum";
-import { isHttpUrl } from "@/lib/url";
 
 export interface DesignationForm {
   department: string;
@@ -213,7 +212,6 @@ export function SubprocessDesignationModal({
     };
   }, [publishedVersionId, t]);
 
-  const urlInvalid = form.url.trim() !== "" && !isHttpUrl(form.url);
   const isParamTile = (field: TileField): field is ParamTile => (PARAM_TILES as readonly string[]).includes(field);
   // Σ 대상 — 회당 지표(참고치 2종 제외). 비용은 현재 단위 필드로 합산
   const sumFieldOf = (tile: ActiveTile): SpParamField | null => {
@@ -488,9 +486,6 @@ export function SubprocessDesignationModal({
               value={active.value}
               onChange={(e) => setActive((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
             />
-            {active.value.trim() !== "" && !isHttpUrl(active.value) && (
-              <p className="text-fine text-error">{t("subprocess.urlInvalid")}</p>
-            )}
             <input
               data-id="sp-tile-input-url-label"
               className={`${INPUT_CLASS} disabled:opacity-40`}
@@ -675,7 +670,6 @@ export function SubprocessDesignationModal({
                     />
                     {(["system", "url"] as const).map(renderTile)}
                   </div>
-                  {urlInvalid && <p className="text-fine text-error">{t("subprocess.urlInvalid")}</p>}
                 </div>
               )}
             </AutoHeight>
@@ -753,7 +747,7 @@ export function SubprocessDesignationModal({
             type="button"
             data-id="subprocess-designation-save"
             className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
-            disabled={!form.department.trim() || saving || urlInvalid}
+            disabled={!form.department.trim() || saving}
             onClick={() => void handleSave()}
           >
             {t("perm.sp.save")}

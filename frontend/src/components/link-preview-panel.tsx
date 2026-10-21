@@ -18,7 +18,7 @@ import { useEffect, useState } from "react";
 
 import { checkEmbeddable } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { isHttpUrl, isSafePreviewUrl } from "@/lib/url";
+import { isSafePreviewUrl, toSafeHref } from "@/lib/url";
 
 // load 이벤트가 이 시간 안에 안 오면 임베드 차단으로 판정(ms) — 스펙 6s
 const LOAD_TIMEOUT_MS = 6000;
@@ -41,8 +41,10 @@ export function LinkPreviewPanel({
   // 패널은 등록 URL이면 무조건 연다(유효성검사 없음, 사용자 결정 2026-08-25) — 안전 판정
   // (isSafePreviewUrl: http(s)+자기 오리진 차단)은 iframe "로드"만 게이트(샌드박스 탈출 방지 유지).
   // 비안전 URL은 즉시 폴백 카드로.
+  // http 없이 저장된 주소도 https://를 붙여 연다(toSafeHref, 사용자 결정 2026-10-21) — 위험한 스킴은 null
   const open = url !== null && url.trim() !== "";
-  const validUrl = open && isSafePreviewUrl(url) ? url : null;
+  const href = open ? toSafeHref(url) : null;
+  const validUrl = href !== null && isSafePreviewUrl(href) ? href : null;
   const currentKey = `${validUrl ?? ""}#${reloadKey}`;
   // 로딩/실패는 status↔currentKey 비교로 파생 — effect 내 동기 setState 금지(react-hooks/set-state-in-effect)
   const loaded = status?.key === currentKey && status.state === "loaded";
@@ -60,6 +62,7 @@ export function LinkPreviewPanel({
   if (open && url !== shownUrl) {
     setShownUrl(url);
   }
+  const shownHref = toSafeHref(shownUrl);
 
   // 임베드 차단 타임아웃 — 만료 시점까지 이 key로 load가 안 왔으면 failed 마킹(이미 loaded면 유지)
   useEffect(() => {
@@ -149,8 +152,8 @@ export function LinkPreviewPanel({
               <button
                 type="button"
                 onClick={() => {
-                  // 새 탭 열기는 http(s)만 — javascript: 등 임의 스킴 차단(안전 게이트 유지)
-                  if (isHttpUrl(shownUrl)) window.open(shownUrl, "_blank", "noopener");
+                  // 새 탭 열기 — javascript: 등 위험한 스킴 차단(안전 게이트 유지)
+                  if (shownHref !== null) window.open(shownHref, "_blank", "noopener");
                 }}
                 aria-label={t("linkPreview.openNewTab")}
                 title={t("linkPreview.openNewTab")}
@@ -247,11 +250,11 @@ export function LinkPreviewPanel({
                 <div className="w-full truncate rounded-xs border border-hairline bg-surface-alt px-2.5 py-1.5 text-fine text-ink-tertiary">
                   {shownUrl}
                 </div>
-                {/* 새 탭 열기는 http(s)만 — 임의 스킴(javascript: 등)은 버튼 자체를 숨긴다 */}
-                {isHttpUrl(shownUrl) && (
+                {/* 새 탭 열기 — 위험한 스킴(javascript: 등)은 버튼 자체를 숨긴다 */}
+                {shownHref !== null && (
                   <button
                     type="button"
-                    onClick={() => window.open(shownUrl, "_blank", "noopener")}
+                    onClick={() => window.open(shownHref, "_blank", "noopener")}
                     className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-accent px-3 text-xs font-semibold text-on-accent hover:bg-accent-focus"
                   >
                     <ExternalLink size={14} strokeWidth={1.5} />
