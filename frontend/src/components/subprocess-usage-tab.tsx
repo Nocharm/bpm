@@ -150,8 +150,11 @@ export function SubprocessUsageTab({
       {/* 지정 메타 — 버전·시점·행위자 (SP 카드와 동일 박스 스타일) */}
       <section className="rounded-md border border-hairline bg-surface-alt/50 p-3">
         <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="flex items-center gap-1.5 text-fine font-semibold text-ink-tertiary">
-            <Workflow size={14} strokeWidth={1.5} className="text-accent" />
+          {/* 제목 강조 — 인스펙터 SP 카드 헤더와 같은 틴트 배지 + 진한 제목 (사용자 결정 2026-10-21) */}
+          <span className="flex items-center gap-1.5 text-caption-strong text-ink">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm bg-accent-tint text-accent">
+              <Workflow size={14} strokeWidth={1.5} />
+            </span>
             {t("inspector.spUsageMetaTitle")}
             {/* 임베드는 항상 최신 게시본을 따른다는 안내 — 호버 툴팁(제목 옆) */}
             <Tooltip content={t("inspector.spUsageFollowsLatest")}>

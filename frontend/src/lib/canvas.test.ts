@@ -9,6 +9,7 @@ import {
   getFlowPathBackward,
   getFlowPathForward,
   getNextNodeAlongFlow,
+  getNodeTypeLabelKey,
   getPrevNodeAlongFlow,
   hasCustomTerminalLabel,
   hasReciprocalEdge,
@@ -28,6 +29,18 @@ import {
   type ProcessNodeType,
 } from "@/lib/canvas";
 import { PRIMARY_END_HANDLE, SUBPROCESS_IN_HANDLE } from "@/lib/subprocess-embed";
+
+describe("getNodeTypeLabelKey (타입 표시 라벨)", () => {
+  it("subprocess는 추가 메뉴 선택지 밖이어도 자기 라벨을 쓴다", () => {
+    expect(getNodeTypeLabelKey("subprocess")).toBe("nodeType.subprocess");
+  });
+
+  it("선택지 타입은 같은 키, 모르는 타입은 undefined", () => {
+    expect(getNodeTypeLabelKey("process")).toBe("nodeType.process");
+    expect(getNodeTypeLabelKey("decision")).toBe("nodeType.decision");
+    expect(getNodeTypeLabelKey("bogus")).toBeUndefined();
+  });
+});
 
 describe("sideFromHandleId (하위프로세스 in 변형 포함)", () => {
   it("s-/t- 변 id와 in 변형을 변으로 읽고, 끝 키·null은 폴백", () => {

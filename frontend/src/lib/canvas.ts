@@ -191,6 +191,13 @@ export const NODE_TYPE_OPTIONS: { value: ProcessNodeType; labelKey: MessageKey }
   { value: "end", labelKey: "nodeType.end" },
 ];
 
+/** 노드 타입 표시 라벨 키 — NODE_TYPE_OPTIONS는 추가 메뉴 선택지라 subprocess가 없어 따로 푼다
+ * (그 목록만 찾으면 SP 노드가 인스펙터에서 '프로세스', 요약 모달에서 원문 'subprocess'로 보였다). */
+export function getNodeTypeLabelKey(type: string): MessageKey | undefined {
+  if (type === "subprocess") return "nodeType.subprocess";
+  return NODE_TYPE_OPTIONS.find((option) => option.value === type)?.labelKey;
+}
+
 /** DB의 자유 문자열 node_type을 렌더 가능한 타입으로 정규화 (레거시 "default" → process). */
 export function normalizeNodeType(value: string): ProcessNodeType {
   switch (value) {

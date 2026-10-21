@@ -46,6 +46,7 @@ import {
 import { EdgeEndModal } from "@/components/edge-end-modal";
 import { IconTip } from "@/components/icon-tip";
 import { SubprocessInspectorCard } from "@/components/subprocess-inspector-card";
+import { SubprocessNodeBanner } from "@/components/subprocess-node-banner";
 import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
 import { MapNotesSection } from "@/components/maps/map-notes-section";
 import { SubprocessUsageTab } from "@/components/subprocess-usage-tab";
@@ -198,6 +199,7 @@ import {
   setNewEdgeLineStyle,
   estimateNodeHeight,
   estimateNodeWidth,
+  getNodeTypeLabelKey,
   hasBpmAttributes,
   NODE_HEIGHT,
   NODE_TYPE_OPTIONS,
@@ -10786,7 +10788,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               .map((gid) => groups.find((g) => g.id === gid)?.label)
               .filter((label): label is string => Boolean(label));
             const groupLabel = groupLabels.length > 0 ? groupLabels.join(", ") : null;
-            const typeKey = NODE_TYPE_OPTIONS.find((option) => option.value === node.data.nodeType)?.labelKey;
+            const typeKey = getNodeTypeLabelKey(node.data.nodeType);
             // subprocess가 링크 맵에서 상속하는 회당 4필드 — 읽기전용 표시용(라이브 참조)
             const summarySpRef =
               node.data.nodeType === "subprocess" && node.data.linkedMapId != null
@@ -11071,6 +11073,40 @@ function MapEditor({ mapId }: { mapId: number }) {
                     // 설명·end/subprocess 특수필드는 비교기간 OLD에 유지(후속 이관). 핸들러 재사용.
                     <div className="flex flex-col gap-3">
                       <h2 className="text-caption-strong text-ink-secondary">{t("editor.nodeEdit")}</h2>
+                      {/* subprocess 노드 — 연결 맵 배너(이름·열기·지정/추종 상태) + 연결 버전 선택을 맨 위로.
+                          아래 카드들은 일반 노드와 같은 모양이라 SP라는 표시가 패널에 없었다 (사용자 결정 2026-10-21) */}
+                      {selectedNode.data.nodeType === "subprocess" && (
+                        <SubprocessNodeBanner
+                          name={selectedNode.data.label}
+                          linked={selectedNode.data.linkedMapId != null}
+                          locked={selectedNode.data.locked === true || selectedSpRef?.hidden === true}
+                          designated={selectedSpRef ? selectedSpRef.designated : null}
+                          followLatest={selectedNode.data.followLatest ?? false}
+                          onOpenMap={
+                            selectedNode.data.linkedMapId != null &&
+                            selectedNode.data.locked !== true &&
+                            selectedSpRef?.hidden !== true
+                              ? () => promptOpenLinkedMap(selectedNode.id)
+                              : undefined
+                          }
+                        />
+                      )}
+                      {/* 연결 버전 선택(최신 추종 토글 + 버전 고정 + 업데이트) */}
+                      {selectedNode.data.nodeType === "subprocess" &&
+                        selectedNode.data.linkedMapId != null &&
+                        selectedNode.data.locked !== true &&
+                        selectedSpRef?.hidden !== true && (
+                          <SubprocessVersionPicker
+                            linkedMapId={selectedNode.data.linkedMapId}
+                            linkedVersionId={selectedNode.data.linkedVersionId ?? null}
+                            followLatest={selectedNode.data.followLatest ?? false}
+                            updateAvailable={selectedNode.data.updateAvailable ?? false}
+                            readOnly={readOnly}
+                            onFollowLatest={(value) => updateSelectedData({ followLatest: value }, false)}
+                            onPinVersion={(versionId) => updateSelectedData({ linkedVersionId: versionId }, false)}
+                            onUpdate={() => handleUpdateSubprocess(selectedNode.id)}
+                          />
+                        )}
                       <div>
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
                         <textarea
@@ -11145,10 +11181,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         <div className="flex min-h-[34px] items-center gap-3 py-1.5">
                           <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.type")}</span>
                           <span className="min-w-0 flex-1 truncate text-right text-caption text-ink-secondary">
-                            {t(
-                              NODE_TYPE_OPTIONS.find((option) => option.value === selectedNode.data.nodeType)
-                                ?.labelKey ?? "nodeType.process",
-                            )}
+                            {t(getNodeTypeLabelKey(selectedNode.data.nodeType) ?? "nodeType.process")}
                           </span>
                         </div>
                         {/* 색 — subprocess는 단일색 고정이라 선택 UI 숨김 (spec 2026-07-06 §9) */}
@@ -11482,22 +11515,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                           onSave={(patch) => updateSelectedData(patch, true)}
                         />
                       )}
-                      {/* subprocess 노드 — 연결 버전 선택(최신 추종 토글 + 버전 고정 + 업데이트) */}
-                      {selectedNode.data.nodeType === "subprocess" &&
-                        selectedNode.data.linkedMapId != null &&
-                        selectedNode.data.locked !== true &&
-                        selectedSpRef?.hidden !== true && (
-                          <SubprocessVersionPicker
-                            linkedMapId={selectedNode.data.linkedMapId}
-                            linkedVersionId={selectedNode.data.linkedVersionId ?? null}
-                            followLatest={selectedNode.data.followLatest ?? false}
-                            updateAvailable={selectedNode.data.updateAvailable ?? false}
-                            readOnly={readOnly}
-                            onFollowLatest={(value) => updateSelectedData({ followLatest: value }, false)}
-                            onPinVersion={(versionId) => updateSelectedData({ linkedVersionId: versionId }, false)}
-                            onUpdate={() => handleUpdateSubprocess(selectedNode.id)}
-                          />
-                        )}
                       {/* 미지정 링크 — 등록 요청 CTA/Requested 배지 (spec 2026-07-19). key로 링크 전환 시 리셋 */}
                       {/* 열람권 없는 링크 맵엔 등록 요청을 보낼 수 없다(서버 viewer 게이트) — 버튼이 403 원문 토스트로 끝났다 (리뷰 W-5) */}
                       {selectedNode.data.nodeType === "subprocess" &&

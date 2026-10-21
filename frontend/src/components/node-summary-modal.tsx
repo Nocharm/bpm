@@ -55,7 +55,7 @@ import { SystemSuggestInput } from "@/components/system-suggest-input";
 import { createComment, listComments, type CommentItem, type VersionGraph } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { formatAssignees, parseAssignees } from "@/lib/assignee";
-import { NODE_TYPE_OPTIONS, type ProcessNodeType } from "@/lib/canvas";
+import { getNodeTypeLabelKey, type ProcessNodeType } from "@/lib/canvas";
 import { commitSystem, formatSystem, useCatalogs } from "@/lib/catalogs";
 import { formatThousands } from "@/lib/duration";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
@@ -76,7 +76,6 @@ import {
   type SpParamField,
 } from "@/lib/params";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
-import { isHttpUrl } from "@/lib/url";
 
 // 정보 수정 모달이 편집하는 필드 — 부분 패치
 export type NodeEditPatch = Partial<{
@@ -562,7 +561,7 @@ export function NodeSummaryModal({
   const labels = buildPopoverActionLabels(t);
   // 독 카드의 타입 표기 — 캔버스 노드 타입 옵션과 같은 번역 키
   const typeLabelOf = (type: string): string => {
-    const key = NODE_TYPE_OPTIONS.find((option) => option.value === type)?.labelKey;
+    const key = getNodeTypeLabelKey(type);
     return key ? t(key) : type;
   };
   const [comments, setComments] = useState<CommentItem[]>([]);
@@ -1264,9 +1263,6 @@ export function NodeSummaryModal({
               value={active.value}
               onChange={(e) => setActive((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
             />
-            {active.value.trim() !== "" && !isHttpUrl(active.value) && (
-              <p className="text-fine text-error">{t("subprocess.urlInvalid")}</p>
-            )}
             <input
               data-id="summary-tile-input-url-label"
               className={`${INPUT_CLASS} disabled:opacity-40`}
