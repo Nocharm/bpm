@@ -52,9 +52,12 @@ export function buildNodeRefCheck(
   departments: readonly DirectoryDept[],
   eligibleNames: ReadonlySet<string>,
 ): NodeRefCheck {
-  const deptLeaves = buildDeptLeaves(users, departments);
+  // 두 번 돈다 — 에디터는 Map.values() 이터레이터를 넘기므로 배열로 굳히지 않으면 부서 리프 수집이
+  // 소비해 담당자 인덱스가 비고, 재직자 전원이 assigneeOrphan이 된다
+  const userList = Array.from(users);
+  const deptLeaves = buildDeptLeaves(userList, departments);
   const deptByPerson = new Map<string, string>();
-  for (const user of users) {
+  for (const user of userList) {
     // 저장값은 영문 name이지만 한글명으로 들어온 값도 같은 사람으로 해석한다(AssigneePills와 대칭)
     if (!deptByPerson.has(user.name)) deptByPerson.set(user.name, user.department ?? "");
     if (user.korean_name && !deptByPerson.has(user.korean_name)) {

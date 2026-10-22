@@ -68,3 +68,13 @@ describe("collectNodeWarnings", () => {
     expect(warnings.map((w) => w.kind)).toEqual(["deptOrphan", "assigneeOrphan"]);
   });
 });
+
+describe("buildNodeRefCheck", () => {
+  it("에디터처럼 Map.values() 이터레이터를 넘겨도 재직자를 고아로 판정하지 않는다", () => {
+    // 이터레이터는 한 번만 돈다 — 부서 리프 수집이 먼저 소비하면 담당자 인덱스가 비어 전원이 고아였다
+    const byId = new Map(users.map((user) => [user.id, user] as const));
+    const fromIterator = buildNodeRefCheck(byId.values(), depts, new Set(["Hyeonjin Lee"]));
+    expect(collectNodeWarnings("QC Support Team", "Hyeonjin Lee", fromIterator)).toEqual([]);
+    expect(fromIterator.deptLeaves.has("QA Team")).toBe(true);
+  });
+});
