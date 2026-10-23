@@ -7,6 +7,7 @@
 
 - 설계 `docs/design/2026-10-23-orphan-refs-open-design.md`·계획 `docs/superpowers/plans/2026-10-23-orphan-refs-open.md`. 사용자 결정: 줄마다 평소 권한(공통 규칙, sysadmin 포함), 노드는 a·b·c(점유 중이면 알림), 빨간 점은 직접 고칠 줄만, 화면은 그림 설명 + 부서·사용자 카드 그리드(시안 4판).
 - Task 1: 라우터에 박혀 있던 거버넌스 판정(워크플로 참여·보류 다운그레이드·승인 진행·오우닝 부서 소속·요청 알림·제거 요청 생성)을 `app/permissions/governance.py`로 뽑았다. 감사 경로가 같은 함수를 써야 "공통 규칙"이 갈라지지 않는다. 라우터 상태 코드·문구는 그대로.
+- Task 2: 스캔의 노드 줄을 버전 단위에서 맵 단위로(`node_dept:{map_id}`), 고칠 대상은 작업본 W(없으면 게시본). W에선 고쳐졌고 게시본에만 남으면 `pending`(게시 대기). `load_node_targets`/`NodeTarget` 신설, 승인 완료(APPROVED) 작업본이 스캔·홈 배지에서 빠지던 빈틈을 메움. 줄마다 `from_value`를 채워 이후 카드 합치기가 줄별 값을 안다.
 
 ## 2026-10-22 — 담당자 "재직자 명단에 없음" 오경고 수정 (dev)
 

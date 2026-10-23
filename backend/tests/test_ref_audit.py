@@ -78,6 +78,145 @@ def _lines(groups: list[ref_audit.RefGroup], value: str) -> list[ref_audit.RefLi
     return next((g.lines for g in groups if g.value == value), [])
 
 
+async def _seed_node_versions(spec: list[tuple[str, list[str]]], **version_kw) -> tuple[int, list[int]]:
+    """맵 하나에 (상태, 노드 부서 목록)을 순서대로 버전으로 만든다 → (map_id, version_ids)."""
+    async with SessionLocal() as session:
+        m = await _new_map(session, "node lines", owning_department=LIVE)
+        version_ids: list[int] = []
+        for status, departments in spec:
+            version = MapVersion(map_id=m.id, label=status, status=status, **version_kw.get(status, {}))
+            session.add(version)
+            await session.flush()
+            session.add_all(
+                Node(id=f"nl-{version.id}-{i}", version_id=version.id, title=f"n{i}", department=department)
+                for i, department in enumerate(departments)
+            )
+            version_ids.append(version.id)
+        await session.commit()
+        return m.id, version_ids
+
+
+def _scan_node_dept_lines(map_id: int) -> list[ref_audit.RefLine]:
+    async def _run() -> list[ref_audit.RefGroup]:
+        async with SessionLocal() as session:
+            valid = await ref_audit.load_valid_sets(session)
+            ctx = await ref_audit.load_scan_context(session)
+            return await ref_audit.scan_dept_refs(session, valid, ctx)
+
+    return [ln for g in asyncio.run(_run()) for ln in g.lines if ln.map_id == map_id and ln.source == "node_dept"]
+
+
+def test_node_lines_one_per_map_targeting_working_version(client: TestClient) -> None:
+    """게시본 2 + Draft 1에 낡은 부서가 있어도 줄은 맵당 1개 — 고칠 대상은 Draft, 곳 수도 Draft 기준."""
+    map_id, (pub_id, draft_id) = asyncio.run(_seed_node_versions([
+        ("published", [GONE_LEAF, GONE_LEAF, LIVE_LEAF]),
+        ("draft", [GONE_LEAF, ""]),
+    ]))
+
+    lines = _scan_node_dept_lines(map_id)
+
+    assert len(lines) == 1
+    line = lines[0]
+    assert line.target_id == f"node_dept:{map_id}"
+    assert line.version_id == draft_id and line.version_status == "draft"
+    assert line.count == 1
+    assert line.pending is False and line.working_status == "draft"
+    assert line.from_value == GONE_LEAF
+
+
+def test_node_line_pending_when_only_published_has_value(client: TestClient) -> None:
+    """Draft는 이미 고쳐져 있고 게시본에만 낡은 값이 남으면 게시 대기 — 게시본 기준 곳 수."""
+    map_id, (pub_id, draft_id) = asyncio.run(_seed_node_versions([
+        ("published", [GONE_LEAF, GONE_LEAF]),
+        ("draft", [LIVE_LEAF]),
+    ]))
+
+    (line,) = _scan_node_dept_lines(map_id)
+
+    assert line.pending is True
+    assert line.version_id == pub_id and line.version_status == "published"
+    assert line.count == 2
+    assert line.target_id == f"node_dept:{map_id}"
+    assert line.working_status == "draft"
+
+
+def test_node_line_without_working_version_is_not_pending(client: TestClient) -> None:
+    """작업본이 아예 없는 맵(최신=게시본)은 게시 대기가 아니라 게시본에 낡은 값이 있는 일반 줄이다."""
+    map_id, (pub_id, expired_id) = asyncio.run(_seed_node_versions([
+        ("published", [GONE_LEAF]),
+        ("expired", [GONE_LEAF, GONE_LEAF]),  # 만료본은 스캔 대상이 아니다
+    ]))
+
+    (line,) = _scan_node_dept_lines(map_id)
+
+    assert line.pending is False
+    assert line.version_id == pub_id and line.count == 1
+    assert line.working_status is None and line.checked_out_by is None
+
+
+def test_node_line_includes_approved_working_version(client: TestClient) -> None:
+    """승인 완료·게시 전(APPROVED) 작업본이 스캔에서 빠져 고아 참조가 숨던 빈틈."""
+    map_id, (pub_id, approved_id) = asyncio.run(_seed_node_versions([
+        ("published", [LIVE_LEAF]),
+        ("approved", [GONE_LEAF]),
+    ]))
+
+    (line,) = _scan_node_dept_lines(map_id)
+
+    assert line.version_id == approved_id
+    assert line.working_status == "approved" and line.pending is False
+    assert line.count == 1
+
+
+def test_node_line_carries_holder_of_working_version(client: TestClient) -> None:
+    map_id, (_pub_id, draft_id) = asyncio.run(_seed_node_versions(
+        [("published", [LIVE_LEAF]), ("draft", [GONE_LEAF])],
+        draft={"checked_out_by": "user.park"},
+    ))
+
+    (line,) = _scan_node_dept_lines(map_id)
+
+    assert line.version_id == draft_id and line.checked_out_by == "user.park"
+
+
+def test_load_target_versions_includes_approved(client: TestClient) -> None:
+    map_id, (pub_id, approved_id) = asyncio.run(_seed_node_versions([
+        ("published", [LIVE_LEAF]),
+        ("approved", [LIVE_LEAF]),
+    ]))
+
+    async def _run() -> dict[int, list[tuple[int, str]]]:
+        async with SessionLocal() as session:
+            return await ref_audit.load_target_versions(session)
+
+    assert asyncio.run(_run())[map_id] == [(pub_id, "published"), (approved_id, "draft")]
+
+
+def test_load_node_targets_picks_published_and_working(client: TestClient) -> None:
+    """working = 최신 버전이 진행 중 상태일 때 그 버전. 확정 스냅샷은 최신 판정에서 빠진다."""
+    working_map, (pub_id, draft_id, _confirmed_id) = asyncio.run(_seed_node_versions(
+        [("published", []), ("draft", []), ("confirmed", [])],
+        draft={"checked_out_by": "user.park"},
+    ))
+    settled_map, (settled_pub_id,) = asyncio.run(_seed_node_versions([("published", [])]))
+    expired_only_map, _ = asyncio.run(_seed_node_versions([("expired", [])]))
+
+    async def _run() -> dict[int, ref_audit.NodeTarget]:
+        async with SessionLocal() as session:
+            return await ref_audit.load_node_targets(session)
+
+    targets = asyncio.run(_run())
+    assert targets[working_map] == ref_audit.NodeTarget(
+        map_id=working_map, published_id=pub_id, working_id=draft_id,
+        working_status="draft", checked_out_by="user.park",
+    )
+    assert targets[settled_map] == ref_audit.NodeTarget(
+        map_id=settled_map, published_id=settled_pub_id, working_id=None,
+        working_status=None, checked_out_by=None,
+    )
+    assert expired_only_map not in targets
+
+
 def test_valid_sets_cover_paths_leaves_users_names(client: TestClient) -> None:
     # 자체 시드 비활성 직원 사용 — conftest의 owning.anchor/"Owning Anchor Division"은
     # test_interview_api.py가 같은 부서명으로 active=True 앵커를 커밋해(세션 공유 DB) 전체
@@ -129,15 +268,19 @@ def test_scan_dept_refs_reports_paths_and_leaves_in_scope(client: TestClient) ->
     assert group_line.group_id == ids["group"] and group_line.group_name
 
     leaf_lines = [ln for ln in _lines(groups, GONE_LEAF) if ln.map_id == ids["map"]]
-    by_source = {(ln.source, ln.version_status): ln for ln in leaf_lines}
-    assert ("sp_dept", None) in by_source and by_source[("sp_dept", None)].fixable
-    assert by_source[("node_dept", "published")].count == 2
-    assert by_source[("node_dept", "published")].version_id == ids["pub"]
-    assert by_source[("node_dept", "draft")].count == 1
-    assert by_source[("node_dept", "draft")].version_id == ids["draft"]
-    assert not by_source[("node_dept", "draft")].fixable
+    by_source = {ln.source: ln for ln in leaf_lines}
+    assert sorted(by_source) == ["node_dept", "sp_dept"]  # 노드 줄은 맵당 1개
+    assert by_source["sp_dept"].fixable
+    # 게시본(2)과 최신 드래프트(1)에 모두 있으면 드래프트 기준 한 줄
+    node = by_source["node_dept"]
+    assert node.target_id == f"node_dept:{ids['map']}"
+    assert node.count == 1 and node.version_id == ids["draft"] and node.version_status == "draft"
+    assert not node.fixable and not node.pending
     # 구 드래프트(old)는 범위 밖 — 최신 드래프트만
     assert all(ln.version_id != ids["old"] for ln in leaf_lines)
+    # 모든 소스의 줄이 그룹 값을 from_value로 갖는다
+    assert all(ln.from_value == GONE for ln in path_lines)
+    assert all(ln.from_value == GONE_LEAF for ln in leaf_lines)
     # 실존 경로·리프는 목록에 없다
     assert all(g.value not in (LIVE, LIVE_LEAF) for g in groups)
     # value_kind
@@ -254,11 +397,16 @@ def test_scan_user_refs_reports_logins_and_names(client: TestClient) -> None:
     # 행 없는 login도 고아
     nobody = [ln for ln in _lines(groups, "nobody") if ln.map_id == ids["map"]]
     assert [ln.source for ln in nobody] == ["map_collab"]
-    # 이름 기반 — SP 담당자 1 + 노드 담당자(게시본 2노드)
+    # 이름 기반 — SP 담당자 1 + 노드 담당자(작업본 없이 게시본 2노드 → 게시본에 한 줄)
     names = [ln for ln in _lines(groups, "Gone Person") if ln.map_id == ids["map"]]
     by_source = {ln.source: ln for ln in names}
     assert by_source["sp_assignee"].fixable and by_source["sp_assignee"].target_id == f"sp_assignee:{ids['map']}"
-    assert by_source["node_assignee"].count == 2 and not by_source["node_assignee"].fixable
+    node = by_source["node_assignee"]
+    assert node.count == 2 and not node.fixable
+    assert node.target_id == f"node_assignee:{ids['map']}"
+    assert node.version_id == ids["pub"] and node.version_status == "published" and not node.pending
+    assert all(ln.from_value == "Gone Person" for ln in names)
+    assert all(ln.from_value == "gone.user" for ln in gone)
     assert next(g for g in groups if g.value == "Gone Person").value_kind == "name"
     assert all(g.value != "Minjae Lee" for g in groups)
 
@@ -295,33 +443,30 @@ def test_count_stale_refs_by_map(client: TestClient) -> None:
     assert counts[user_ids["map"]] == 3
 
 
-def test_list_maps_stale_ref_count_matches_audit_scan_scope(client: TestClient) -> None:
-    """홈 배지(GET /api/maps)와 감사 스캔은 같은 대상(게시본+최신 드래프트)을 봐야 한다.
+def test_list_maps_stale_ref_count_covers_published_and_working_versions(client: TestClient) -> None:
+    """홈 배지(GET /api/maps)는 게시본과 작업본(승인 완료 포함)의 낡은 참조를 각각 센다.
 
-    published v1(정상) → draft v2(낡은 부서 1건) → 그 뒤에 만들어진 v3(pending, 최신 버전)
-    순서라도, v2가 여전히 "최신 드래프트"이므로 스캔 대상에 포함돼야 한다(finding A:
-    list_maps가 예전엔 "최신 버전==draft"일 때만 셌고, ref_audit은 최신 드래프트를 항상 셌다).
+    published v1(낡은 부서 1건) + approved v2(낡은 부서 1건). APPROVED 작업본은 스캔 대상에서
+    빠져 있었다(2026-10-23) — 감사 스캔과 같은 대상 정의(`load_target_versions`)를 쓴다.
     """
     async def _seed() -> int:
         async with SessionLocal() as session:
             m = await _new_map(session, f"scope-parity-{uuid.uuid4().hex}", owning_department=LIVE)
             v1 = MapVersion(map_id=m.id, label="v1", status="published")
-            v2 = MapVersion(map_id=m.id, label="v2", status="draft")
+            v2 = MapVersion(map_id=m.id, label="v2", status="approved")
             session.add_all([v1, v2])
             await session.flush()
-            v3 = MapVersion(map_id=m.id, label="v3", status="pending")
-            session.add(v3)
-            await session.flush()
             session.add_all([
-                Node(id=f"n1-{v1.id}", version_id=v1.id, title="clean", department=LIVE_LEAF),
-                Node(id=f"n2-{v2.id}", version_id=v2.id, title="stale", department=GONE_LEAF),
+                Node(id=f"n1-{v1.id}", version_id=v1.id, title="old stale", department=GONE_LEAF),
+                Node(id=f"n2-{v2.id}", version_id=v2.id, title="new stale", department=GONE_LEAF),
+                Node(id=f"n3-{v2.id}", version_id=v2.id, title="clean", department=LIVE_LEAF),
             ])
             await session.commit()
             return m.id
 
     map_id = asyncio.run(_seed())
     rows = {m["id"]: m for m in client.get("/api/maps", headers=SYS).json()}
-    assert rows[map_id]["stale_ref_count"] == 1
+    assert rows[map_id]["stale_ref_count"] == 2
 
 
 def test_get_ref_audit_requires_sysadmin_and_returns_sections(
@@ -449,7 +594,7 @@ def test_remap_rejections(client: TestClient, sysadmin_enforced: None) -> None:
     ids = asyncio.run(_seed_dept_refs())
     # 노드 소스는 불가
     assert _remap(client, kind="dept", from_value=GONE_LEAF, to_value=LIVE,
-                  target_ids=[f"node_dept:{ids['pub']}"]).status_code == 422
+                  target_ids=[f"node_dept:{ids['map']}"]).status_code == 422
     # 미존재 대상 경로
     assert _remap(client, kind="dept", from_value=GONE, to_value="Nope/Nowhere",
                   target_ids=[f"owning_dept:{ids['map']}"]).status_code == 422
@@ -559,11 +704,11 @@ def test_remap_user_remove_and_owner_guard(client: TestClient) -> None:
 
 
 def test_notify_bundles_per_owner_and_skips_departed_owner(client: TestClient) -> None:
-    dept_ids = asyncio.run(_seed_dept_refs())   # 오너 user.lee — 노드 부서 pub 2 + draft 1, SP 부서 1
+    dept_ids = asyncio.run(_seed_dept_refs())   # 오너 user.lee — 노드 부서(작업본 기준 1), SP 부서 1
     user_ids = asyncio.run(_seed_user_refs())   # 오너 gone.user(퇴직) — 노드 담당자 2
     res = client.post("/api/admin/ref-audit/notify", headers=SYS, json={"target_ids": [
-        f"node_dept:{dept_ids['pub']}", f"node_dept:{dept_ids['draft']}", f"sp_dept:{dept_ids['map']}",
-        f"node_assignee:{user_ids['pub']}",
+        f"node_dept:{dept_ids['map']}", f"sp_dept:{dept_ids['map']}",
+        f"node_assignee:{user_ids['map']}",
     ]})
     assert res.status_code == 200, res.text
     body = res.json()
@@ -582,7 +727,7 @@ def test_notify_bundles_per_owner_and_skips_departed_owner(client: TestClient) -
     payload = asyncio.run(_notif())
     assert payload is not None and payload["actor"] == "admin.kim" and payload["count"] == 1
     entry = next(e for e in payload["maps"] if e["id"] == dept_ids["map"])
-    assert entry == {"id": dept_ids["map"], "name": entry["name"], "node_dept": 3, "node_assignee": 0,
+    assert entry == {"id": dept_ids["map"], "name": entry["name"], "node_dept": 1, "node_assignee": 0,
                      "sp_dept": 1, "sp_assignee": 0}
     # 오너 액션 대상이 아닌 소스는 422
     assert client.post("/api/admin/ref-audit/notify", headers=SYS,

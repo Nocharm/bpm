@@ -3,6 +3,7 @@
 설계: 2026-09-09-ref-audit-design.md (git history). 저장 테이블 없음 — 호출 시점에 계산한다.
 """
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -24,7 +25,16 @@ from app.models import (
 )
 from app.orgchart import load_valid_org_prefixes
 from app.permissions.logic import role_rank
-from app.workflow import DRAFT, PENDING, PUBLISHED, REJECTED, create_notifications
+from app.workflow import (
+    APPROVED,
+    CONFIRMED,
+    DRAFT,
+    IN_PROGRESS_STATUSES,
+    PENDING,
+    PUBLISHED,
+    REJECTED,
+    create_notifications,
+)
 
 Source = Literal[
     "map_grant", "group_member", "owning_dept", "sp_dept", "node_dept",
@@ -66,6 +76,13 @@ class RefLine:
     category_name: str | None = None
     version_id: int | None = None
     version_status: str | None = None
+    # 노드 줄 전용 — 작업본(W)에는 이미 고쳐져 게시본에만 남은 줄(고칠 것 없이 게시를 기다린다)
+    pending: bool = False
+    # 노드 줄 전용 — 그 맵 작업본의 상태·점유자(작업본이 없으면 None). 줄별 결과 판정이 읽는다
+    working_status: str | None = None
+    checked_out_by: str | None = None
+    # 이 줄이 속한 그룹의 값 — 스캔이 모든 소스의 줄에 채운다(카드로 합쳐도 줄마다 적용 대상 값을 안다)
+    from_value: str = ""
 
 
 @dataclass
@@ -77,12 +94,23 @@ class RefGroup:
 
 
 @dataclass
+class NodeTarget:
+    """맵 하나의 노드 스캔 대상 — 게시본과 작업본(W). W = 최신 버전이 진행 중 상태일 때 그 버전."""
+
+    map_id: int
+    published_id: int | None
+    working_id: int | None
+    working_status: str | None
+    checked_out_by: str | None
+
+
+@dataclass
 class ScanContext:
-    """스캔이 공유하는 맵·오너 표시명·대상 버전 — 한 번만 로드."""
+    """스캔이 공유하는 맵·오너 표시명·노드 스캔 대상 — 한 번만 로드."""
 
     maps: dict[int, ProcessMap]
     owner_names: dict[str, str]
-    versions: dict[int, list[tuple[int, str]]]
+    node_targets: dict[int, NodeTarget]
 
 
 def split_names(value: str | None) -> list[str]:
@@ -116,9 +144,11 @@ async def load_valid_sets(session: AsyncSession) -> ValidSets:
 
 
 async def load_target_versions(session: AsyncSession) -> dict[int, list[tuple[int, str]]]:
-    """맵별 노드 스캔 대상 — 게시본 + 최신 드래프트 + 최신 반려·결재 대기본(각 최대 id). 만료본·확정 스냅샷은 제외.
+    """홈 배지용 맵별 노드 대상 — 게시본 + 최신 드래프트 + 최신 반려·결재 대기·승인 완료본(각 최대 id).
 
-    반려·결재 대기 중인 작업본은 스캔에서 빠져 고아 참조가 숨었다 (리뷰 2026-10-19). 표시는 둘 다 draft.
+    만료본·확정 스냅샷은 제외. 반려·결재 대기 작업본이 빠져 고아 참조가 숨었고 (리뷰 2026-10-19),
+    승인 완료(APPROVED) 작업본도 같은 빈틈이었다 (2026-10-23). 표시는 모두 draft.
+    감사 화면의 노드 줄은 이 목록이 아니라 `load_node_targets`(맵당 게시본+작업본 하나)를 쓴다.
     """
     rows = (
         await session.execute(
@@ -133,7 +163,7 @@ async def load_target_versions(session: AsyncSession) -> dict[int, list[tuple[in
             published[map_id] = version_id
         elif status == DRAFT:
             draft[map_id] = version_id  # id 오름차순 → 마지막이 최신
-        elif status in (REJECTED, PENDING):
+        elif status in (REJECTED, PENDING, APPROVED):
             in_review[map_id] = version_id
     out: dict[int, list[tuple[int, str]]] = {}
     for map_id, version_id in published.items():
@@ -141,6 +171,41 @@ async def load_target_versions(session: AsyncSession) -> dict[int, list[tuple[in
     for map_id, version_id in [*draft.items(), *in_review.items()]:
         out.setdefault(map_id, []).append((version_id, "draft"))  # 에디터 버전 필과 같은 표기
     return out
+
+
+async def load_node_targets(session: AsyncSession) -> dict[int, NodeTarget]:
+    """맵별 노드 스캔 대상 — 게시본(최대 id)과 작업본 W. 확정 스냅샷은 별도 트랙이라 최신 판정에서 뺀다.
+
+    W = 최신 버전이 DRAFT·PENDING·APPROVED·REJECTED일 때 그 버전, 게시본·만료본이면 없음.
+    새 버전은 최신이 게시된 뒤에만 만들어져 맵당 진행 중 버전은 하나다. 게시본도 W도 없는 맵은 뺀다.
+    """
+    rows = (
+        await session.execute(
+            select(MapVersion.map_id, MapVersion.id, MapVersion.status, MapVersion.checked_out_by)
+            .order_by(MapVersion.id)
+        )
+    ).all()
+    published: dict[int, int] = {}
+    latest: dict[int, tuple[int, str, str | None]] = {}
+    for map_id, version_id, status, holder in rows:
+        if status == CONFIRMED:
+            continue
+        latest[map_id] = (version_id, status, holder)  # id 오름차순 → 마지막이 최신
+        if status == PUBLISHED:
+            published[map_id] = version_id
+    targets: dict[int, NodeTarget] = {}
+    for map_id, (version_id, status, holder) in latest.items():
+        is_working = status in IN_PROGRESS_STATUSES
+        published_id = published.get(map_id)
+        if published_id is None and not is_working:
+            continue
+        targets[map_id] = NodeTarget(
+            map_id=map_id, published_id=published_id,
+            working_id=version_id if is_working else None,
+            working_status=status if is_working else None,
+            checked_out_by=holder if is_working else None,
+        )
+    return targets
 
 
 async def load_scan_context(session: AsyncSession) -> ScanContext:
@@ -155,17 +220,20 @@ async def load_scan_context(session: AsyncSession) -> ScanContext:
                 )
             ).all()
         )
-    return ScanContext(maps=maps, owner_names=owner_names, versions=await load_target_versions(session))
+    return ScanContext(maps=maps, owner_names=owner_names, node_targets=await load_node_targets(session))
 
 
 def _map_line(ctx: ScanContext, source: str, m: ProcessMap, target_id: str, *,
-              count: int = 1, version_id: int | None = None, version_status: str | None = None) -> RefLine:
+              count: int = 1, version_id: int | None = None, version_status: str | None = None,
+              pending: bool = False, target: NodeTarget | None = None) -> RefLine:
     owner = m.owner_id or m.created_by
     return RefLine(
         source=source, fixable=FIXABLE[source], count=count, target_id=target_id,
         map_id=m.id, map_name=m.name, owner_id=owner,
         owner_name=ctx.owner_names.get(owner) if owner else None,
-        version_id=version_id, version_status=version_status,
+        version_id=version_id, version_status=version_status, pending=pending,
+        working_status=target.working_status if target else None,
+        checked_out_by=target.checked_out_by if target else None,
     )
 
 
@@ -177,6 +245,7 @@ class _Groups:
         self._by_key: dict[tuple[str, str], RefGroup] = {}
 
     def add(self, value: str, value_kind: str, line: RefLine) -> None:
+        line.from_value = value
         group = self._by_key.setdefault((value, value_kind), RefGroup(self.kind, value, value_kind))
         group.lines.append(line)
 
@@ -187,17 +256,61 @@ class _Groups:
         return groups
 
 
-async def _load_node_columns(session: AsyncSession, ctx: ScanContext) -> list[tuple[int, str, str]]:
-    version_ids = [vid for pairs in ctx.versions.values() for vid, _ in pairs]
-    if not version_ids:
-        return []
-    return list(
-        (
-            await session.execute(
-                select(Node.version_id, Node.department, Node.assignee).where(Node.version_id.in_(version_ids))
-            )
-        ).all()
-    )
+def _node_version_roles(ctx: ScanContext) -> dict[int, tuple[int, bool]]:
+    """스캔할 노드 버전 id → (맵 id, 작업본 여부) — 소프트삭제 맵은 뺀다."""
+    roles: dict[int, tuple[int, bool]] = {}
+    for map_id, target in ctx.node_targets.items():
+        m = ctx.maps.get(map_id)
+        if m is None or m.deleted_at is not None:
+            continue
+        if target.published_id is not None:
+            roles[target.published_id] = (map_id, False)
+        if target.working_id is not None:
+            roles[target.working_id] = (map_id, True)
+    return roles
+
+
+async def _count_stale_node_values(
+    session: AsyncSession, ctx: ScanContext, stale_values: Callable[[str, str], Iterable[str]]
+) -> tuple[dict[tuple[int, str], int], dict[tuple[int, str], int]]:
+    """(맵, 낡은 값) → 노드 수 — (게시본, 작업본) 따로. stale_values(부서, 담당자)가 노드 하나의 낡은 값 목록을 낸다."""
+    roles = _node_version_roles(ctx)
+    published: dict[tuple[int, str], int] = {}
+    working: dict[tuple[int, str], int] = {}
+    if not roles:
+        return published, working
+    rows = (
+        await session.execute(
+            select(Node.version_id, Node.department, Node.assignee).where(Node.version_id.in_(list(roles)))
+        )
+    ).all()
+    for version_id, department, assignee in rows:
+        map_id, is_working = roles[version_id]
+        bucket = working if is_working else published
+        for value in stale_values(department, assignee):
+            bucket[(map_id, value)] = bucket.get((map_id, value), 0) + 1
+    return published, working
+
+
+def _add_node_lines(groups: _Groups, ctx: ScanContext, source: str, value_kind: str,
+                    published: dict[tuple[int, str], int], working: dict[tuple[int, str], int]) -> None:
+    """(맵, 값)당 노드 줄 하나 — 고칠 대상은 작업본, 작업본이 없으면 게시본.
+
+    작업본에도 있으면 작업본 기준 곳 수. 작업본이 있는데 값이 게시본에만 남았으면 이미 고쳐진 것이라
+    pending(게시 대기) — 게시본 곳 수를 보여 주되 고칠 것은 없다.
+    """
+    for map_id, value in sorted(published.keys() | working.keys()):
+        target = ctx.node_targets[map_id]
+        m = ctx.maps[map_id]
+        if (map_id, value) in working:
+            version_id, count, pending = target.working_id, working[(map_id, value)], False
+        else:
+            version_id, count, pending = target.published_id, published[(map_id, value)], target.working_id is not None
+        groups.add(value, value_kind, _map_line(
+            ctx, source, m, f"{source}:{map_id}", count=count, version_id=version_id,
+            version_status="draft" if version_id == target.working_id else "published",
+            pending=pending, target=target,
+        ))
 
 
 def _live_maps(ctx: ScanContext) -> list[ProcessMap]:
@@ -240,20 +353,11 @@ async def scan_dept_refs(session: AsyncSession, valid: ValidSets, ctx: ScanConte
         if m.sp_department and m.sp_department not in valid.dept_leaves:
             groups.add(m.sp_department, "leaf", _map_line(ctx, "sp_dept", m, f"sp_dept:{m.id}"))
 
-    status_by_vid = {vid: (mid, status) for mid, pairs in ctx.versions.items() for vid, status in pairs}
-    counts: dict[tuple[int, str], int] = {}
-    for version_id, department, _assignee in await _load_node_columns(session, ctx):
-        if department and department not in valid.dept_leaves:
-            counts[(version_id, department)] = counts.get((version_id, department), 0) + 1
-    for (version_id, department), count in counts.items():
-        map_id, status = status_by_vid[version_id]
-        m = ctx.maps.get(map_id)
-        if m is None or m.deleted_at is not None:
-            continue
-        groups.add(department, "leaf", _map_line(
-            ctx, "node_dept", m, f"node_dept:{version_id}", count=count,
-            version_id=version_id, version_status=status,
-        ))
+    def stale_departments(department: str, _assignee: str) -> list[str]:
+        return [department] if department and department not in valid.dept_leaves else []
+
+    published, working = await _count_stale_node_values(session, ctx, stale_departments)
+    _add_node_lines(groups, ctx, "node_dept", "leaf", published, working)
     return groups.finish()
 
 
@@ -314,21 +418,11 @@ async def scan_user_refs(session: AsyncSession, valid: ValidSets, ctx: ScanConte
             if name not in valid.user_names:
                 groups.add(name, "name", _map_line(ctx, "sp_assignee", m, f"sp_assignee:{m.id}"))
 
-    status_by_vid = {vid: (mid, status) for mid, pairs in ctx.versions.items() for vid, status in pairs}
-    counts: dict[tuple[int, str], int] = {}
-    for version_id, _department, assignee in await _load_node_columns(session, ctx):
-        for name in split_names(assignee):
-            if name not in valid.user_names:
-                counts[(version_id, name)] = counts.get((version_id, name), 0) + 1
-    for (version_id, name), count in counts.items():
-        map_id, status = status_by_vid[version_id]
-        m = ctx.maps.get(map_id)
-        if m is None or m.deleted_at is not None:
-            continue
-        groups.add(name, "name", _map_line(
-            ctx, "node_assignee", m, f"node_assignee:{version_id}", count=count,
-            version_id=version_id, version_status=status,
-        ))
+    def stale_assignees(_department: str, assignee: str) -> list[str]:
+        return [name for name in split_names(assignee) if name not in valid.user_names]
+
+    published, working = await _count_stale_node_values(session, ctx, stale_assignees)
+    _add_node_lines(groups, ctx, "node_assignee", "name", published, working)
     return groups.finish()
 
 
