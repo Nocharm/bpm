@@ -11,6 +11,7 @@
 - Task 3: `app/ref_audit_policy.py` — actor 범위(`load_actor_scope`·`is_line_visible`: editor 이상 맵·관리 그룹·임명 위임 카테고리)와 줄별 결과 판정 `decide`(설계 §5·§6 표, 순수 함수). 사실은 `load_decision_context`가 줄 수와 무관한 고정 쿼리로 읽고, 고른 대체 값에 달린 사실(오너 이전 후보·담당자 열람권)도 `to_value`로 미리 읽는다. 리뷰 반영: grant 가드는 `delete_permission` 순서(오너는 대기 요청이 있어도 즉시), 비활성 그룹 줄은 `group_inactive` 잠김, 오너 후보는 `transfer_owner`처럼 명시 grant가 있으면 그 역할로만, 스캔 뒤 사라진 대상의 줄은 `is_line_visible(…, ctx)`가 거른다.
 - Task 4: `GET /api/ref-audit`·`/summary`(`routers/ref_audit.py`, 로그인만 요구, 범위 밖은 403 아닌 빈 목록)와 카드 조립 `app/ref_audit_cards.py`. 부서는 경로·리프 그룹을 리프명으로, 사람은 로그인·이름 그룹을 퇴직 직원 기록의 login으로 합치되(이름이 둘 이상 login을 가리키면 못 찾은 것) 줄마다 `from_value`를 유지한다. 구 `/admin/ref-audit` GET과 읽기 스키마는 제거, remap·notify는 Task 5까지 남김.
 - Task 5: `POST /api/ref-audit/preview`·`/apply`(`app/ref_audit_apply.py`). 검증(종류·제거 금지·대체 값) 실패만 쓰기 전 422, 나머지는 대상 맵 행을 먼저 잠근 뒤 다시 스캔·판정해 범위 밖·이미 바뀐 줄은 건너뛴다. 결과별 쓰기: 설정류 바로·노드는 내 점유/점유 가져오기/`Reference cleanup` 새 Draft(게시본 불변)·Editor의 editor grant 대체는 새 grant 즉시+옛 grant 제거 승인 요청·알림은 수신자별 1건(`as`). 오너 직접 적용은 대기 다운그레이드를 대체(`governance.supersede_pending_downgrades`로 이동). 구 admin remap·notify·`fixable` 제거.
+- Task 6: 프런트 타입·카드 집계. `api.ts`를 새 계약(`RefCard`·`RefAuditData`·결과 7종·잠김 사유·경고·미리보기/적용)으로 교체하고 `lib/ref-audit.ts`는 버킷·곳 수 집계·정렬(게시 대기만 맨 뒤)·맵 줄 요약·링 비율·적용 예고만 가진 순수 함수로 다시 썼다. 알림 `ref_fix_requested`의 맵 항목이 8개 소스 키를 싣게 되어 `sumRefFixCounts`로 합산(옛 알림은 키 4개). 구 sysadmin 패널·카드는 삭제하고 설정 refs 탭 본문은 새 화면(Task 9) 전까지 비운다.
 
 ## 2026-10-22 — 담당자 "재직자 명단에 없음" 오경고 수정 (dev)
 

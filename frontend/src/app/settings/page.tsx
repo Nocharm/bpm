@@ -19,7 +19,6 @@ import { BatchRunsPanel } from "@/components/admin/batch-runs-panel";
 import { EmployeeTable } from "@/components/admin/employee-table";
 import { ApprovalQueue } from "@/components/admin/approval-queue";
 import { DepartmentTable } from "@/components/admin/department-table";
-import { RefAuditPanel } from "@/components/admin/ref-audit-panel";
 import { LocalAccountTable } from "@/components/admin/local-account-table";
 import { TableViewer } from "@/components/admin/table-viewer";
 import { DeletedMapsPanel } from "@/components/admin/deleted-maps-panel";
@@ -306,7 +305,7 @@ export default function SettingsPage() {
               onToast={(message) => showToast({ id: genId(), message })}
             />
           )}
-          {current === "refs" && <RefAuditPanel />}
+          {/* refs 탭 본문 자리 - 새 고아 참조 화면(RefAuditPage)이 들어오기 전까지 비워 둔다 */}
           {current === "localAccounts" && (
             <LocalAccountTable onToast={(message) => showToast({ id: genId(), message })} />
           )}

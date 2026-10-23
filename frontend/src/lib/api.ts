@@ -1929,78 +1929,121 @@ export interface AdminDept {
   korean_name: string; // dept_info 임포트값 — 없으면 ""
 }
 
-// ── 고아 참조 감사 (design 2026-09-09) ────────────────────────────────
+// ── 고아 참조 감사 (design 2026-09-09, 일반 사용자 오픈 2026-10-23) ────────────────────────────────
 
 export type RefSource =
   | "map_grant" | "group_member" | "owning_dept" | "sp_dept" | "node_dept"
   | "map_owner" | "map_collab" | "map_approver" | "group_user" | "category_perm"
   | "sp_assignee" | "node_assignee";
 
-export interface RefLine {
+/** 줄 하나의 결과 — 서버가 actor 기준으로 판정(direct·checkout·new_draft·approval은 직접 고침, 나머지는 알림·잠김·게시 대기). */
+export type RefOutcome = "direct" | "checkout" | "new_draft" | "approval" | "notify" | "locked" | "pending";
+export type RefLockReason =
+  | "in_workflow" | "request_pending" | "owner_left" | "in_approval" | "framework" | "not_eligible" | "group_inactive";
+/** no_access = 대체 담당자가 그 맵을 못 봄 · no_new_grant = 새 grant 없이 옛 grant 제거만 일어남. */
+export type RefWarning = "no_access" | "no_new_grant";
+export type RefVersionStatus = "draft" | "pending" | "approved" | "rejected" | "published";
+/** 적용이 건너뛴 이유 — 잠김 사유·게시 대기, 적용 시점 재판정의 범위 밖·이미 바뀜. */
+export type RefSkipReason = RefLockReason | "pending" | "out_of_scope" | "already_changed";
+
+/** notify 줄의 수신자 — role은 오너/점유자(알림 payload `as`와 같은 값). */
+export interface RefNotifyTo {
+  id: string;
+  name: string;
+  role: "owner" | "holder";
+}
+
+export interface RefCardLine {
   source: RefSource;
-  fixable: boolean;   // false = 노드 필드(드래프트 필요) — 캐치·알림만
-  count: number;      // 노드 계열=해당 버전의 노드 수, 그 외 1
-  target_id: string;  // '{source}:{pk}' — remap/notify 요청 키
-  map_id: number | null;
-  map_name: string | null;
-  owner_id: string | null;
-  owner_name: string | null;
-  group_id: number | null;
-  group_name: string | null;
-  category_id: number | null;
-  category_name: string | null;
-  version_id: number | null;
-  version_status: string | null; // published | draft (노드 계열만)
+  target_id: string;   // '{source}:{pk}' — 미리보기·적용 요청 키
+  from_value: string;  // 이 줄이 속한 원래 그룹의 값(같은 target_id가 값마다 따로 있을 수 있다)
+  count: number;       // 노드 계열=해당 버전의 노드 수, 그 외 1
+  outcome: RefOutcome;
+  reason?: RefLockReason | null;
+  notify_to?: RefNotifyTo | null;
+  warning?: RefWarning | null;
+  map_id?: number | null;
+  map_name?: string | null;
+  map_role?: "editor" | "owner" | null;
+  version_id?: number | null;
+  version_label?: string | null;
+  version_status?: RefVersionStatus | null; // 노드 줄 전용
+  group_id?: number | null;
+  group_name?: string | null;
+  category_id?: number | null;
+  category_name?: string | null;
 }
 
-export interface RefGroup {
+/** 같은 대상(부서 리프·사람)을 참조하는 줄들의 묶음 — 화면 카드 하나. */
+export interface RefCard {
   kind: "dept" | "user";
-  value: string;
-  value_kind: "path" | "leaf" | "login" | "name";
-  lines: RefLine[];
+  key: string;
+  label: string;
+  sub: string;
+  lines: RefCardLine[];
 }
 
-export interface RefAudit {
-  departments: RefGroup[];
-  users: RefGroup[];
+export interface RefAuditScope {
+  maps: number;
+  groups: number;
+  categories: number;
+}
+
+export interface RefAuditData {
+  departments: RefCard[];
+  users: RefCard[];
+  scope: RefAuditScope;
   generated_at: string;
 }
 
-export interface RefRemapBody {
-  kind: "dept" | "user";
+export interface RefTarget {
+  target_id: string;
   from_value: string;
+}
+
+/** 미리보기·적용 공통 본문 — 고른 줄을 to_value로 대체(replace)하거나 지운다(remove). */
+export interface RefApplyBody {
+  kind: "dept" | "user";
   mode: "replace" | "remove";
   to_value?: string;
-  target_ids: string[];
+  targets: RefTarget[];
 }
 
-export interface RefRemapResult {
-  applied: Record<string, number>;
-  skipped: string[];
+export interface RefPreviewLine {
+  target_id: string;
+  from_value: string;
+  outcome: RefOutcome;
+  reason?: RefLockReason | null;
+  notify_to?: RefNotifyTo | null;
+  warning?: RefWarning | null;
 }
 
-export interface RefNotifyResult {
-  recipients: number;
-  maps: number;
-  skipped_maps: { id: number; name: string; reason: "owner_missing" }[];
+export interface RefApplyResult {
+  places: Partial<Record<RefOutcome, number>>; // 결과별 곳 수(direct·checkout·new_draft·approval·notify)
+  drafts: { map_id: number; version_id: number }[]; // 새로 만든 Draft — 게시해야 반영된다
+  approval_requests: number;
+  notified: number; // 알림 수신자 수
+  skipped: { target_id: string; reason: RefSkipReason }[];
 }
 
-/** sysadmin 전용 — 현 조직에 없는 부서·사용자 참조 12곳 온디맨드 스캔. */
-export function getRefAudit(): Promise<RefAudit> {
-  return request<RefAudit>("/admin/ref-audit");
+/** 로그인 사용자 누구나 — 내 범위에서 현 조직에 없는 부서·사용자 참조를 카드로 온디맨드 스캔. */
+export function getRefAudit(): Promise<RefAuditData> {
+  return request<RefAuditData>("/ref-audit");
 }
 
-/** sysadmin 전용 — 체크한 라인만 replace/remove(부분 실패 없음, 값이 바뀐 라인은 skipped). */
-export function postRefRemap(body: RefRemapBody): Promise<RefRemapResult> {
-  return request<RefRemapResult>("/admin/ref-audit/remap", { method: "POST", body: JSON.stringify(body) });
+/** 빨간 점 소스 — 직접 고칠 수 있는 줄(direct·checkout·new_draft·approval)의 곳 수 합. */
+export function getRefAuditSummary(): Promise<{ actionable: number }> {
+  return request<{ actionable: number }>("/ref-audit/summary");
 }
 
-/** sysadmin 전용 — 노드/SP 낡은 참조를 맵 오너당 1건으로 묶어 알림. */
-export function postRefNotify(targetIds: string[]): Promise<RefNotifyResult> {
-  return request<RefNotifyResult>("/admin/ref-audit/notify", {
-    method: "POST",
-    body: JSON.stringify({ target_ids: targetIds }),
-  });
+/** 적용 시점과 같은 판정을 쓰기 없이 돌려준다 — 대상·모드가 바뀔 때마다 칩 갱신용. */
+export function postRefPreview(body: RefApplyBody): Promise<{ lines: RefPreviewLine[] }> {
+  return request<{ lines: RefPreviewLine[] }>("/ref-audit/preview", { method: "POST", body: JSON.stringify(body) });
+}
+
+/** 고른 줄을 평소 권한 규칙대로 적용 — 줄마다 직접 반영·새 Draft·승인 요청·알림 중 하나. */
+export function postRefApply(body: RefApplyBody): Promise<RefApplyResult> {
+  return request<RefApplyResult>("/ref-audit/apply", { method: "POST", body: JSON.stringify(body) });
 }
 
 export interface AdminDirectory {
@@ -2068,13 +2111,18 @@ export function deleteLocalAccount(loginId: string): Promise<void> {
   });
 }
 
+// ref_fix_requested 맵 항목 — 곳 수 키는 백엔드 NOTIFY_COUNT_SOURCES와 같은 집합(옛 알림은 앞 4개만 싣는다)
 export interface NotificationMapEntry {
   id: number;
   name: string;
-  node_dept: number;
-  node_assignee: number;
-  sp_dept: number;
-  sp_assignee: number;
+  node_dept?: number;
+  node_assignee?: number;
+  sp_dept?: number;
+  sp_assignee?: number;
+  owning_dept?: number;
+  map_approver?: number;
+  map_grant?: number;
+  map_collab?: number;
 }
 
 // 알림 구조화 컨텍스트 — 백엔드 create_notifications payload 계약(유형별 부분 집합).
@@ -2096,6 +2144,7 @@ export interface NotificationPayload {
   title?: string;
   count?: number; // fw_external_linked — 이번 전달로 이어진 자리표 수
   maps?: NotificationMapEntry[]; // ref_fix_requested — 오너당 묶음 알림의 맵 목록
+  as?: "owner" | "holder"; // ref_fix_requested — 받는 자격(맵 오너 또는 작업본 점유자)
 }
 
 export interface NotificationItem {

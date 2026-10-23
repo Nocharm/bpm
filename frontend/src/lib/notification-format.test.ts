@@ -1,9 +1,9 @@
 // 알림 렌더 포맷 — 언어 토글 렌더·레거시 폴백·사유 처리 계약 (design 2026-08-26)
 import { describe, expect, it } from "vitest";
 
-import type { NotificationItem } from "@/lib/api";
+import type { NotificationItem, NotificationMapEntry } from "@/lib/api";
 import { messages, type Lang, type MessageKey } from "@/lib/i18n-messages";
-import { formatNotification, formatNotificationBodyParts } from "@/lib/notification-format";
+import { formatNotification, formatNotificationBodyParts, sumRefFixCounts } from "@/lib/notification-format";
 
 const makeT = (lang: Lang) => (key: MessageKey, vars?: Record<string, string | number>) => {
   let str: string = messages[lang][key] ?? key;
@@ -207,7 +207,7 @@ describe("formatNotificationBodyParts", () => {
     const item: NotificationItem = {
       ...base, type: "ref_fix_requested", map_id: null, version_id: null,
       message: "Junho Kim asked you to fix stale department/assignee references in 2 map(s)",
-      payload: { actor: "admin.kim", actor_name: "Junho Kim", count: 2,
+      payload: { actor: "admin.kim", actor_name: "Junho Kim", count: 2, as: "owner",
                  maps: [{ id: 1, name: "Order intake", node_dept: 3, node_assignee: 0, sp_dept: 0, sp_assignee: 1 },
                         { id: 2, name: "Refund", node_dept: 0, node_assignee: 2, sp_dept: 0, sp_assignee: 0 }] },
     };
@@ -228,5 +228,19 @@ describe("formatNotificationBodyParts", () => {
     expect(en.title).toBe("Refund");
     expect(en.body).toBe("Junho Kim made you the owner of this map - previous owner 'Gone Person' has left");
     expect(formatNotificationBodyParts(item, makeT("en"))).toContainEqual({ chip: "Gone Person", kind: "name" });
+  });
+});
+
+describe("sumRefFixCounts", () => {
+  it("맵 항목의 곳 수 키 8종을 모두 더한다", () => {
+    const entry: NotificationMapEntry = {
+      id: 1, name: "Order intake",
+      node_dept: 1, node_assignee: 2, sp_dept: 3, sp_assignee: 4,
+      owning_dept: 5, map_approver: 6, map_grant: 7, map_collab: 8,
+    };
+    expect(sumRefFixCounts(entry)).toBe(36);
+  });
+  it("옛 알림(키 4개)은 빠진 키를 0으로 센다", () => {
+    expect(sumRefFixCounts({ id: 2, name: "Refund", node_dept: 3, node_assignee: 0, sp_dept: 0, sp_assignee: 1 })).toBe(4);
   });
 });

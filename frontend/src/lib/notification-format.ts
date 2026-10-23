@@ -22,7 +22,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import type { NotificationItem, NotificationPayload } from "@/lib/api";
+import type { NotificationItem, NotificationMapEntry, NotificationPayload } from "@/lib/api";
 import type { MessageKey } from "@/lib/i18n-messages";
 
 export interface NotificationView {
@@ -89,6 +89,16 @@ export function getNotificationIcon(type: string): LucideIcon {
   if (type.startsWith("fw_slot")) return ArrowLeftRight;
   if (type.startsWith("fw_confirm")) return BadgeCheck;
   return Bell;
+}
+
+// ref_fix_requested 맵 항목이 싣는 곳 수 키 — 백엔드 NOTIFY_COUNT_SOURCES와 같은 집합
+const REF_FIX_COUNT_KEYS: readonly Exclude<keyof NotificationMapEntry, "id" | "name">[] = [
+  "node_dept", "node_assignee", "sp_dept", "sp_assignee", "owning_dept", "map_approver", "map_grant", "map_collab",
+];
+
+/** 맵 항목 하나의 낡은 참조 곳 수 합 — 옛 알림은 키가 4개뿐이라 빠진 키는 0으로 센다. */
+export function sumRefFixCounts(entry: NotificationMapEntry): number {
+  return REF_FIX_COUNT_KEYS.reduce((sum, key) => sum + (entry[key] ?? 0), 0);
 }
 
 // 리치 렌더로 치환 가능한 변수 — 파츠 분할 시 센티널로 대체된다

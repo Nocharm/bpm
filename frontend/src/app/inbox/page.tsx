@@ -61,7 +61,7 @@ import type { MessageKey } from "@/lib/i18n-messages";
 import { genId } from "@/lib/id";
 import { formatKst } from "@/lib/datetime";
 import { getNotificationCategory, NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notification-categories";
-import { formatNotification, formatNotificationBodyParts, getNotificationIcon } from "@/lib/notification-format";
+import { formatNotification, formatNotificationBodyParts, getNotificationIcon, sumRefFixCounts } from "@/lib/notification-format";
 import { filterByQuery } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { useQuietScroll } from "@/lib/use-quiet-scroll";
@@ -1103,7 +1103,7 @@ function NotificationDetail({
               >
                 <span className="max-w-[16rem] truncate">{entry.name}</span>
                 <span className="rounded-full bg-error/10 px-1.5 text-error">
-                  {t("inbox.refFixCount", { n: entry.node_dept + entry.node_assignee + entry.sp_dept + entry.sp_assignee })}
+                  {t("inbox.refFixCount", { n: sumRefFixCounts(entry) })}
                 </span>
               </Link>
             ))}
