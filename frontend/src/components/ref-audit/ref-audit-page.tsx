@@ -6,13 +6,15 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { RefAuditHero } from "@/components/ref-audit/ref-audit-hero";
 import { RefDeptCard } from "@/components/ref-audit/ref-dept-card";
+import { RefDetailDialog } from "@/components/ref-audit/ref-detail-dialog";
 import { RefUserCard } from "@/components/ref-audit/ref-user-card";
-import { getRefAudit, type RefAuditData, type RefCard } from "@/lib/api";
+import { getRefAudit, type RefApplyResult, type RefAuditData, type RefCard } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { sortCards } from "@/lib/ref-audit";
 import { notifyRefAuditChanged } from "@/lib/ref-audit-summary";
+import { formatAppliedToast } from "@/lib/ref-audit-view";
 
 // 스캔 한 번의 결과 — key가 reloadKey와 다르면 아직 그 스캔이 끝나지 않은 것
 interface ScanResult {
@@ -62,7 +64,11 @@ function Section({ dataId, icon: Icon, round, titleKey, subKey, count, children 
   );
 }
 
-export function RefAuditPage() {
+interface RefAuditPageProps {
+  onToast: (message: string) => void; // 적용 결과 요약 — 설정 화면의 토스트 스택에 올린다
+}
+
+export function RefAuditPage({ onToast }: RefAuditPageProps) {
   const { t } = useI18n();
   const [reloadKey, setReloadKey] = useState(0);
   const [result, setResult] = useState<ScanResult | null>(null);
@@ -97,6 +103,13 @@ export function RefAuditPage() {
 
   function handleOpenCard(card: RefCard) {
     setSelected(card);
+  }
+
+  // 적용이 끝나면 창을 닫고 결과를 토스트로 알린 뒤 다시 스캔한다. 재스캔 성공 경로가 notifyRefAuditChanged()로 빨간 점도 갱신한다
+  function handleApplied(results: RefApplyResult[]) {
+    setSelected(null);
+    onToast(formatAppliedToast(results, t));
+    setReloadKey((key) => key + 1);
   }
 
   let body: ReactNode;
@@ -173,13 +186,17 @@ export function RefAuditPage() {
   }
 
   return (
-    <div
-      data-id="ref-audit-page"
-      data-selected-card={selected ? `${selected.kind}:${selected.key}` : undefined}
-      className="@container flex flex-col gap-5"
-    >
+    <div data-id="ref-audit-page" className="@container flex flex-col gap-5">
       <RefAuditHero page={page} loading={isLoading} onRescan={handleRescan} />
       {body}
+      {selected ? (
+        <RefDetailDialog
+          key={`${selected.kind}:${selected.key}`}
+          card={selected}
+          onClose={() => setSelected(null)}
+          onApplied={handleApplied}
+        />
+      ) : null}
     </div>
   );
 }

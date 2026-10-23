@@ -1,12 +1,28 @@
-// 고아 참조 히어로 순수 로직 — 숫자 3개·범위 칩·결과 칩 라벨·그림 위 경우 8종 표. 컴포넌트는 렌더만 한다 (design 2026-10-23 §9).
+// 고아 참조 화면 순수 로직 — 히어로(숫자·범위 칩·경우 8종)·카드·상세 창(줄 판정·미리보기 병합·적용 묶음·토스트). 컴포넌트는 렌더만 한다 (design 2026-10-23 §9).
 import { FilePlus2, Lock, Stamp, type LucideIcon } from "lucide-react";
 
-import type { RefAuditData, RefAuditScope, RefCard, RefOutcome, RefSource } from "@/lib/api";
+import type {
+  RefApplyBody,
+  RefApplyResult,
+  RefAuditData,
+  RefAuditScope,
+  RefCard,
+  RefCardLine,
+  RefOutcome,
+  RefPreviewLine,
+  RefSkipReason,
+  RefSource,
+  RefTarget,
+  RefVersionStatus,
+} from "@/lib/api";
 import type { MessageKey } from "@/lib/i18n-messages";
 import {
   OUTCOME_META,
   OUTCOME_ORDER,
+  REMOVE_BLOCKED,
   buildRingGradient,
+  forecastOutcomes,
+  isLineCheckable,
   isPendingOnly,
   summarizeMapRows,
   tallyCard,
@@ -264,4 +280,290 @@ export function getUserCardView(card: RefCard): UserCardView {
     sub: card.sub,
     subKey: card.sub ? null : "refAudit.nameOnly",
   };
+}
+
+// ── 상세 창 ─────────────────────────────────────────────────────────────────
+
+export type RefMode = RefApplyBody["mode"];
+
+type TranslateFn = (key: MessageKey, vars?: Record<string, string | number>) => string;
+
+/** 서버 RefApplyIn.targets 상한 — 미리보기·적용 본문 하나에 담는 줄 수. 바꾸면 백엔드 스키마와 같이 옮긴다. */
+export const REF_BATCH_SIZE = 500;
+
+const NODE_SOURCES: ReadonlySet<RefSource> = new Set<RefSource>(["node_dept", "node_assignee"]);
+
+// 설정 줄의 내용 칸 — 그 값이 놓인 자리(히어로 경우 설명의 "어디"와 같은 문구)
+const WHERE_KEY: Record<RefSource, MessageKey> = {
+  map_owner: "refAudit.case.map_owner.where",
+  map_approver: "refAudit.case.map_approver.where",
+  map_grant: "refAudit.case.map_collab.where",
+  map_collab: "refAudit.case.map_collab.where",
+  owning_dept: "refAudit.case.owning_dept.where",
+  sp_dept: "refAudit.case.sp_dept.where",
+  sp_assignee: "refAudit.case.sp_dept.where",
+  node_dept: "refAudit.case.node_dept.where",
+  node_assignee: "refAudit.case.node_dept.where",
+  group_member: "refAudit.case.group_member.where",
+  group_user: "refAudit.case.group_member.where",
+  category_perm: "refAudit.case.category_perm.where",
+};
+
+const REASON_KEY: Record<NonNullable<RefCardLine["reason"]>, MessageKey> = {
+  in_workflow: "refAudit.reason.in_workflow",
+  request_pending: "refAudit.reason.request_pending",
+  owner_left: "refAudit.reason.owner_left",
+  in_approval: "refAudit.reason.in_approval",
+  framework: "refAudit.reason.framework",
+  not_eligible: "refAudit.reason.not_eligible",
+  group_inactive: "refAudit.reason.group_inactive",
+};
+
+const WARNING_KEY: Record<NonNullable<RefCardLine["warning"]>, MessageKey> = {
+  no_access: "refAudit.warning.no_access",
+  no_new_grant: "refAudit.warning.no_new_grant",
+};
+
+/** 적용이 건너뛴 이유 라벨 — 잠김 사유는 줄 메모와 같은 문구를 쓴다. */
+export const SKIP_REASON_KEY: Record<RefSkipReason, MessageKey> = {
+  ...REASON_KEY,
+  pending: "refAudit.skip.pending",
+  out_of_scope: "refAudit.skip.out_of_scope",
+  already_changed: "refAudit.skip.already_changed",
+};
+
+/** 줄 키 — 합친 카드엔 같은 target_id가 from_value마다 따로 있어 둘을 함께 쓴다. */
+export function getLineKey(line: RefTarget): string {
+  return `${line.target_id}|${line.from_value}`;
+}
+
+/** 미리보기 판정을 줄에 덮는다. 응답에 없는 줄(이미 바뀜·범위 밖)은 스캔 판정을 그대로 둔다. */
+export function mergePreview(lines: RefCardLine[], previewLines: RefPreviewLine[]): RefCardLine[] {
+  const byKey = new Map(previewLines.map((preview) => [getLineKey(preview), preview]));
+  return lines.map((ln) => {
+    const preview = byKey.get(getLineKey(ln));
+    if (!preview) return ln;
+    return {
+      ...ln,
+      outcome: preview.outcome,
+      reason: preview.reason ?? null,
+      notify_to: preview.notify_to ?? null,
+      warning: preview.warning ?? null,
+    };
+  });
+}
+
+export interface LineView {
+  key: string;
+  checkable: boolean;
+  outcome: RefOutcome;      // 칩에 보일 결과 — 제거 모드의 제거 금지 줄은 잠김으로 보인다
+  detailKey: MessageKey;    // 내용 칸: 노드 줄은 노드 수, 설정 줄은 놓인 자리
+  detailCount?: number;
+  reasonKey?: MessageKey;
+  warningKey?: MessageKey;
+  reloadNote: boolean;      // 내 점유 Draft에 바로 쓰는 노드 줄 — 열어 둔 에디터는 새로 고침(설계 §10)
+  recipient?: string;       // 알림 줄의 받는 사람 이름
+  role?: "owner" | "holder";
+}
+
+function isRemoveBlocked(line: RefCardLine, mode: RefMode): boolean {
+  return mode === "remove" && REMOVE_BLOCKED.has(line.source);
+}
+
+/** 상세 창 한 줄에 그릴 값 — 체크 가능 여부·칩 결과·내용·짧은 메모·알림 수신자. */
+export function getLineView(line: RefCardLine, mode: RefMode): LineView {
+  const key = getLineKey(line);
+  const isNode = NODE_SOURCES.has(line.source);
+  const detail: Pick<LineView, "detailKey" | "detailCount"> = isNode
+    ? { detailKey: "refAudit.line.nodes", detailCount: line.count }
+    : { detailKey: WHERE_KEY[line.source] };
+  // 서버가 제거 금지 소스의 제거를 422로 막으므로 그 줄은 고를 수 없게 잠가 둔다
+  if (isRemoveBlocked(line, mode)) {
+    return { key, checkable: false, outcome: "locked", ...detail, reasonKey: "refAudit.cannotRemove", reloadNote: false };
+  }
+  const notifyTo = line.outcome === "notify" ? line.notify_to : null;
+  return {
+    key,
+    checkable: isLineCheckable(line.outcome),
+    outcome: line.outcome,
+    ...detail,
+    reasonKey: line.reason ? REASON_KEY[line.reason] : undefined,
+    warningKey: line.warning ? WARNING_KEY[line.warning] : undefined,
+    reloadNote: isNode && line.outcome === "direct",
+    recipient: notifyTo?.name,
+    role: notifyTo?.role,
+  };
+}
+
+/** 체크된 줄 — 체크할 수 있는 줄 전부에서 사용자가 해제한 줄만 뺀다(판정이 바뀌어도 해제 기록은 남는다). */
+export function getCheckedKeys(lines: RefCardLine[], mode: RefMode, uncheckedKeys: ReadonlySet<string>): Set<string> {
+  const checked = new Set<string>();
+  for (const ln of lines) {
+    const view = getLineView(ln, mode);
+    if (view.checkable && !uncheckedKeys.has(view.key)) checked.add(view.key);
+  }
+  return checked;
+}
+
+function listCheckedLines(lines: RefCardLine[], mode: RefMode, checkedKeys: ReadonlySet<string>): RefCardLine[] {
+  return lines.filter((ln) => checkedKeys.has(getLineKey(ln)) && getLineView(ln, mode).checkable);
+}
+
+/** "적용하면" 예고 — 체크한 줄의 결과별 곳 수와 합계. */
+export function getForecast(
+  lines: RefCardLine[],
+  mode: RefMode,
+  checkedKeys: ReadonlySet<string>,
+): { outcomes: Map<RefOutcome, number>; total: number } {
+  const checked = listCheckedLines(lines, mode, checkedKeys);
+  return { outcomes: forecastOutcomes(checked), total: checked.reduce((sum, ln) => sum + ln.count, 0) };
+}
+
+function listUniqueTargets(lines: RefCardLine[]): RefTarget[] {
+  const targets = new Map<string, RefTarget>();
+  for (const ln of lines) targets.set(getLineKey(ln), { target_id: ln.target_id, from_value: ln.from_value });
+  return [...targets.values()];
+}
+
+function buildBodies(kind: RefCard["kind"], mode: RefMode, toValue: string, targets: RefTarget[]): RefApplyBody[] {
+  const bodies: RefApplyBody[] = [];
+  for (let start = 0; start < targets.length; start += REF_BATCH_SIZE) {
+    bodies.push({
+      kind,
+      mode,
+      ...(mode === "replace" ? { to_value: toValue } : {}),
+      targets: targets.slice(start, start + REF_BATCH_SIZE),
+    });
+  }
+  return bodies;
+}
+
+/**
+ * 미리보기 본문 — 체크와 상관없이 카드의 모든 줄(잠김·게시 대기 포함)을 다시 판정받는다.
+ * 대체인데 아직 대상을 안 골랐으면 없음(스캔 판정을 쓴다). 제거 모드는 제거 금지 소스를 뺀다(서버가 422로 거부).
+ */
+export function buildPreviewBatches(
+  kind: RefCard["kind"],
+  lines: RefCardLine[],
+  mode: RefMode,
+  toValue: string,
+): RefApplyBody[] {
+  if (mode === "replace" && !toValue) return [];
+  return buildBodies(kind, mode, toValue, listUniqueTargets(lines.filter((ln) => !isRemoveBlocked(ln, mode))));
+}
+
+/** 적용 본문 — 체크했고 지금도 체크할 수 있는 줄만, 서버 상한 단위로 나눠 차례로 보낸다. */
+export function buildApplyBatches(
+  kind: RefCard["kind"],
+  lines: RefCardLine[],
+  checkedKeys: ReadonlySet<string>,
+  mode: RefMode,
+  toValue: string,
+): RefApplyBody[] {
+  return buildBodies(kind, mode, toValue, listUniqueTargets(listCheckedLines(lines, mode, checkedKeys)));
+}
+
+/** 체크한 노드 줄 중 내 점유 Draft에 바로 쓰는 줄이 있나 — 적용 확인에 에디터 새로 고침 안내를 붙인다. */
+export function shouldWarnOpenEditor(lines: RefCardLine[], checkedKeys: ReadonlySet<string>): boolean {
+  return lines.some((ln) => checkedKeys.has(getLineKey(ln)) && NODE_SOURCES.has(ln.source) && ln.outcome === "direct");
+}
+
+export interface DialogGroup {
+  key: string;
+  kind: "map" | "group" | "category" | "other";
+  id: number | null;
+  label: string;
+  href: string | null;      // 맵은 에디터, 그룹은 그룹 페이지, 카테고리는 링크 없음
+  role: "editor" | "owner" | null;
+  versionLabel: string | null;
+  versionStatus: RefVersionStatus | null;
+  lines: { line: RefCardLine; index: number }[]; // index = 카드 안 순번(data-id `ref-line-${index}`)
+}
+
+function startDialogGroup(line: RefCardLine): Omit<DialogGroup, "lines"> {
+  const base = { role: null, versionLabel: null, versionStatus: null };
+  if (line.map_id != null) {
+    return {
+      ...base, key: `map:${line.map_id}`, kind: "map", id: line.map_id,
+      label: line.map_name ?? `#${line.map_id}`, href: `/maps/${line.map_id}`,
+    };
+  }
+  if (line.group_id != null) {
+    return {
+      ...base, key: `group:${line.group_id}`, kind: "group", id: line.group_id,
+      label: line.group_name ?? `#${line.group_id}`, href: `/groups/${line.group_id}`,
+    };
+  }
+  if (line.category_id != null) {
+    return {
+      ...base, key: `category:${line.category_id}`, kind: "category", id: line.category_id,
+      label: line.category_name ?? `#${line.category_id}`, href: null,
+    };
+  }
+  return { ...base, key: "other", kind: "other", id: null, label: "", href: null };
+}
+
+/** 줄을 맵·그룹·카테고리별로 묶는다(처음 나온 순서). 맵 머리의 역할·버전은 그 맵 줄에서 가져온다. */
+export function groupDialogLines(lines: RefCardLine[]): DialogGroup[] {
+  const groups = new Map<string, DialogGroup>();
+  lines.forEach((line, index) => {
+    const start = startDialogGroup(line);
+    let group = groups.get(start.key);
+    if (!group) {
+      group = { ...start, lines: [] };
+      groups.set(start.key, group);
+    }
+    group.lines.push({ line, index });
+    group.role ??= line.map_role ?? null;
+    if (group.versionLabel == null && line.version_label) {
+      group.versionLabel = line.version_label;
+      group.versionStatus = line.version_status ?? null;
+    }
+  });
+  return [...groups.values()];
+}
+
+/** 상세 창 머리 — 걸린 맵 수(그룹·카테고리 제외)와 곳 수. */
+export function getDialogMeta(card: RefCard): { maps: number; places: number } {
+  const mapIds = new Set(card.lines.flatMap((ln) => (ln.map_id != null ? [ln.map_id] : [])));
+  return { maps: mapIds.size, places: tallyCard(card).places };
+}
+
+/** 제거 모드는 사람 카드만 — 부서는 대체만 한다(설계 §5). */
+export function canRemoveCard(card: RefCard): boolean {
+  return card.kind === "user";
+}
+
+/** 적용 버튼 — 대체는 악센트 "바꾸기", 제거는 빨간 "지우기". */
+export function getApplyButton(mode: RefMode): { labelKey: MessageKey; tone: "accent" | "error" } {
+  return mode === "remove"
+    ? { labelKey: "refAudit.dlg.applyRemove", tone: "error" }
+    : { labelKey: "refAudit.dlg.applyReplace", tone: "accent" };
+}
+
+/** 적용 결과 토스트 — 묶음 결과를 합쳐 "N곳 반영 · M곳 게시 필요 · K명 알림 · L건 승인 요청", 0인 항목은 뺀다. */
+export function formatAppliedToast(results: RefApplyResult[], t: TranslateFn): string {
+  let applied = 0;
+  let publish = 0;
+  let notified = 0;
+  let approvals = 0;
+  const skipped = new Map<RefSkipReason, number>();
+  for (const result of results) {
+    applied += (result.places.direct ?? 0) + (result.places.checkout ?? 0);
+    publish += result.places.new_draft ?? 0;
+    notified += result.notified;
+    approvals += result.approval_requests;
+    for (const skip of result.skipped) skipped.set(skip.reason, (skipped.get(skip.reason) ?? 0) + 1);
+  }
+  const parts: string[] = [];
+  if (applied > 0) parts.push(t("refAudit.toast.applied", { n: applied }));
+  if (publish > 0) parts.push(t("refAudit.toast.publish", { n: publish }));
+  if (notified > 0) parts.push(t("refAudit.toast.notified", { n: notified }));
+  if (approvals > 0) parts.push(t("refAudit.toast.approvals", { n: approvals }));
+  const skippedTotal = [...skipped.values()].reduce((sum, n) => sum + n, 0);
+  if (skippedTotal > 0) {
+    const reasons = [...skipped].map(([reason, n]) => `${t(SKIP_REASON_KEY[reason])} ${n}`).join(", ");
+    parts.push(`${t("refAudit.toast.skipped", { n: skippedTotal })} (${reasons})`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : t("refAudit.toast.nothing");
 }

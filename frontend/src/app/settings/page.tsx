@@ -322,7 +322,7 @@ export default function SettingsPage() {
               onToast={(message) => showToast({ id: genId(), message })}
             />
           )}
-          {current === "refs" && <RefAuditPage />}
+          {current === "refs" && <RefAuditPage onToast={(message) => showToast({ id: genId(), message })} />}
           {current === "localAccounts" && (
             <LocalAccountTable onToast={(message) => showToast({ id: genId(), message })} />
           )}
