@@ -321,6 +321,27 @@ def test_decide_node_assignee_no_access_warning(source: str, viewable: set[int],
     assert policy.decide(_line(source), _scope("editor"), held, to_value="new.user").warning is None
 
 
+@pytest.mark.parametrize(("grant", "visibility", "to_value", "warning"), [
+    (_grant(role="viewer"), "public", "new.user", "no_new_grant"),  # 공개 맵엔 viewer를 줄 수 없다
+    (_grant(role="viewer"), "private", "new.user", None),
+    (_grant(principal_type="department"), "private", "Dept A", "no_new_grant"),  # 오우닝 부서 = 파생 editor
+    (_grant(principal_type="department"), "private", "Dept B", None),
+])
+def test_decide_grant_replacement_warns_no_new_grant(
+    grant: MapPermission, visibility: str, to_value: str, warning: str | None
+) -> None:
+    m = _map()
+    m.visibility = visibility
+    ctx = _ctx(maps={MAP_ID: m}, grants={GRANT_ID: grant}, to_value=to_value)
+    source = "map_collab" if grant.principal_type == "user" else "map_grant"
+    decision = policy.decide(_grant_line(source), _scope("owner"), ctx, to_value=to_value)
+    assert decision == policy.Decision("direct", warning=warning)
+    # 값 없이(GET)·지우기 모드엔 경고가 없다 — 제거만 일어나는 것이 모드의 뜻이다
+    assert policy.decide(_grant_line(source), _scope("owner"), _ctx(maps={MAP_ID: m}, grants={GRANT_ID: grant})) \
+        == policy.Decision("direct")
+    assert policy.decide(_grant_line(source), _scope("owner"), ctx, mode="remove").warning is None
+
+
 @pytest.mark.parametrize("line", [
     _line("group_member", target_id="group_member:5", map_id=None, group_id=GROUP_ID),
     _line("group_user", target_id="group_user:6", map_id=None, group_id=GROUP_ID),

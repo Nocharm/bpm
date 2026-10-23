@@ -1921,7 +1921,8 @@ RefOutcome = Literal["direct", "checkout", "new_draft", "approval", "notify", "l
 RefLockReason = Literal[
     "in_workflow", "request_pending", "owner_left", "in_approval", "framework", "not_eligible", "group_inactive",
 ]
-RefWarning = Literal["no_access"]
+# no_access: 노드 담당자 대체 값이 그 맵을 못 봄 · no_new_grant: 대체가 평소 줄 수 없는 grant라 옛 grant 제거만 일어남
+RefWarning = Literal["no_access", "no_new_grant"]
 # 노드 줄이 겨냥한 버전 — 작업본 상태 또는 게시본
 RefVersionStatus = Literal["draft", "pending", "approved", "rejected", "published"]
 # 적용이 건너뛴 이유 — 잠김 사유·게시 대기, 그리고 적용 시점 재판정의 범위 밖·이미 바뀜
@@ -2007,11 +2008,14 @@ class RefApplyIn(BaseModel):
     kind: Literal["dept", "user"]
     mode: Literal["replace", "remove"] = "replace"
     to_value: Annotated[str, StringConstraints(max_length=1200)] = ""
-    targets: list[RefTargetIn] = Field(min_length=1)
+    targets: list[RefTargetIn] = Field(min_length=1, max_length=500)
 
 
 class RefPreviewLineOut(BaseModel):
+    """줄 하나의 판정 — 합친 카드는 같은 target_id를 값마다 보내므로 (target_id, from_value)가 키다."""
+
     target_id: str
+    from_value: str
     outcome: RefOutcome
     reason: RefLockReason | None = None
     notify_to: RefNotifyToOut | None = None

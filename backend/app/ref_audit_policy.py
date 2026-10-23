@@ -299,7 +299,12 @@ def decide(
             return replace(decision, warning="no_access")
         return decision
     if line.source in GRANT_SOURCES:
-        return _decide_grant(ctx.grants[_parse_grant_id(line.target_id)], role, m, ctx)
+        grant = ctx.grants[_parse_grant_id(line.target_id)]
+        decision = _decide_grant(grant, role, m, ctx)
+        if replacing and decision.outcome in ACTIONABLE and is_new_grant_refused(grant, m, to_value):
+            # 평소 add_permission이 거부하는 grant라 대체는 옛 grant 제거만 일어난다 — 누르기 전에 알린다
+            return replace(decision, warning="no_new_grant")
+        return decision
     if line.source == "map_owner":
         if role != "owner":
             return Decision("locked", reason="owner_left")
@@ -310,6 +315,13 @@ def decide(
         return Decision("locked", reason="in_approval")  # 승인 tally 보호 — sysadmin도 같은 규칙
     # map_approver·owning_dept·sp_dept·sp_assignee — 오너가 고친다
     return Decision("direct") if role == "owner" else _notify_owner(m, ctx)
+
+
+def is_new_grant_refused(grant: MapPermission, m: ProcessMap, to_value: str | None) -> bool:
+    """대체할 새 grant를 평소 규칙상 줄 수 없는지 — 공개 맵의 viewer(전원 열람), 오우닝 부서(이미 파생 editor)."""
+    if grant.role == "viewer" and m.visibility == "public":
+        return True
+    return grant.principal_type == "department" and to_value == m.owning_department
 
 
 def _decide_grant(grant: MapPermission, role: str | None, m: ProcessMap, ctx: DecisionContext) -> Decision:

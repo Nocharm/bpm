@@ -43,6 +43,7 @@ from app.ref_audit_policy import (
     NotifyTo,
     decide,
     is_line_visible,
+    is_new_grant_refused,
     load_actor_scope,
     load_decision_context,
 )
@@ -50,6 +51,8 @@ from app.schemas import RefApplyIn, RefApplyOut, RefDraftOut, RefSkippedOut
 from app.version_events import record_version_event
 
 CLEANUP_DRAFT_LABEL = "Reference cleanup"
+# target_id pk 상한 — PK 컬럼이 32비트 정수라 넘는 값은 조회 전에 거부한다(postgres는 범위 밖 정수 바인딩이 500)
+MAX_PK = 2**31 - 1
 # target_id의 pk가 맵 id인 소스 — 나머지(grant·그룹 멤버·카테고리 권한)는 그 행의 id
 MAP_PK_SOURCES: frozenset[str] = frozenset({
     "owning_dept", "sp_dept", "node_dept", "map_owner", "map_approver", "sp_assignee", "node_assignee",
@@ -99,7 +102,8 @@ def _parse_targets(body: RefApplyIn) -> list[_Target]:
     targets: dict[tuple[str, str], _Target] = {}
     for target in body.targets:
         source, _, pk = target.target_id.partition(":")
-        if source not in DEPT_SOURCES + USER_SOURCES or not (pk.isascii() and pk.isdigit()):
+        if (source not in DEPT_SOURCES + USER_SOURCES or not (pk.isascii() and pk.isdigit())
+                or int(pk) > MAX_PK):
             raise RemapError(f"invalid target_id {target.target_id!r}")
         if source not in expected:
             raise RemapError(f"{target.target_id} does not belong to kind {body.kind}")
@@ -199,14 +203,17 @@ async def _plan_targets(
     return _Plan(decided=decided, skipped=skipped, ctx=ctx)
 
 
-async def preview_targets(session: AsyncSession, *, actor: str, body: RefApplyIn) -> list[tuple[str, Decision]]:
-    """apply와 같은 검증·판정, 쓰기 없음. 대체 값을 아직 고르지 않았으면(replace인데 빈 값) 값 없이 판정한다."""
+async def preview_targets(session: AsyncSession, *, actor: str, body: RefApplyIn) -> list[tuple[RefLine, Decision]]:
+    """apply와 같은 검증·판정, 쓰기 없음. 대체 값을 아직 고르지 않았으면(replace인데 빈 값) 값 없이 판정한다.
+
+    줄을 그대로 돌려준다 — 합친 카드는 같은 target_id를 값마다 따로 보내므로 응답도 (target_id, from_value)로 짝짓는다.
+    """
     targets = _parse_targets(body)
     to_value = None
     if body.mode == "replace" and body.to_value:
         to_value, _ = await _resolve_to_value(session, body.kind, body.mode, body.to_value)
     plan = await _plan_targets(session, actor=actor, body=body, targets=targets, to_value=to_value)
-    return [(line.target_id, decision) for line, decision in plan.decided]
+    return plan.decided
 
 
 async def apply_targets(session: AsyncSession, *, actor: str, body: RefApplyIn) -> RefApplyOut:
@@ -219,6 +226,7 @@ async def apply_targets(session: AsyncSession, *, actor: str, body: RefApplyIn) 
                     skipped=list(plan.skipped))
     for line, decision in plan.decided:
         await run.apply(line, decision)
+    await run.release_checkouts()
     await run.send_notices()
     return run.build_result()
 
@@ -239,6 +247,7 @@ class _ApplyRun:
         self.drafts: dict[int, int] = {}  # map_id → 이번 적용이 만든 Draft id
         self.approval_requests = 0
         self.notices: dict[str, _Notice] = {}
+        self.grant_map_ids: set[int] = set()  # grant를 지우거나 오너를 바꾼 맵 — 끝에 점유를 재평가한다
 
     async def apply(self, line: RefLine, decision: Decision) -> None:
         outcome = decision.outcome
@@ -256,6 +265,8 @@ class _ApplyRun:
         elif await _apply_line(self.session, line, mode=self.mode, to_id=self.to_id, to_name=self.to_name,
                                actor=self.actor):
             count = line.count
+            if line.source in GRANT_SOURCES or line.source == "map_owner":
+                self.grant_map_ids.add(line.map_id)
         else:
             self.skipped.append((line.target_id, "already_changed"))
             return
@@ -317,6 +328,11 @@ class _ApplyRun:
         })
         entry[line.source] += line.count
         self.places["notify"] = self.places.get("notify", 0) + line.count
+
+    async def release_checkouts(self) -> None:
+        """평소 권한 라우터처럼 grant 변경 뒤 편집권을 잃은 점유자의 체크아웃을 푼다(퇴직 오너가 쥔 Draft 등)."""
+        for map_id in sorted(self.grant_map_ids):
+            await governance.release_checkouts_without_edit_role(self.session, map_id)
 
     async def send_notices(self) -> None:
         """수신자별 1건 — 맵 목록·소스별 곳 수·받는 자격(as: owner|holder)."""
@@ -387,10 +403,8 @@ async def _add_replacement_grant(
         if role_rank(old.role) > role_rank(dup.role):
             dup.role = old.role
         return
-    if old.role == "viewer" and m.visibility == "public":
-        return
-    if old.principal_type == "department" and to_id == m.owning_department:
-        return
+    if is_new_grant_refused(old, m, to_id):
+        return  # 미리보기 판정이 같은 술어로 no_new_grant 경고를 낸다
     session.add(MapPermission(map_id=old.map_id, principal_type=old.principal_type, principal_id=to_id,
                               role=old.role, granted_by=actor))
 

@@ -98,9 +98,9 @@ async def post_ref_audit_preview(
     except RemapError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return RefPreviewOut(lines=[
-        RefPreviewLineOut(target_id=target_id, outcome=d.outcome, reason=d.reason,
-                          notify_to=_to_notify_out(d.notify_to), warning=d.warning)
-        for target_id, d in decisions
+        RefPreviewLineOut(target_id=line.target_id, from_value=line.from_value, outcome=d.outcome,
+                          reason=d.reason, notify_to=_to_notify_out(d.notify_to), warning=d.warning)
+        for line, d in decisions
     ])
 
 

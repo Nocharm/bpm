@@ -370,6 +370,27 @@ def test_apply_skips_already_fixed_line(client: TestClient, enforced: None) -> N
     assert other["skipped"] == [{"target_id": target, "reason": "already_changed"}]
 
 
+def test_apply_skips_pending_line(client: TestClient, enforced: None) -> None:
+    """작업본엔 이미 고쳐져 게시본에만 남은 줄(게시 대기)은 쓸 것이 없다 — skipped reason pending, 게시본 불변."""
+    w = _World()
+
+    async def _arrange(session: AsyncSession) -> tuple[int, int]:
+        session.add_all(w.people())
+        m = await _new_map(session, w, "waiting")
+        session.add(_grant(m, w.actor, "editor"))
+        pub = await _version(session, m.id, "published", departments=[w.stale_leaf])
+        await _version(session, m.id, "draft", departments=[w.live_leaf], holder=w.actor)
+        return m.id, pub.id
+
+    map_id, pub_id = _seed(_arrange)
+    target = f"node_dept:{map_id}"
+
+    body = _apply(client, w.actor, _body("dept", [(target, w.stale_leaf)], to_value=w.live_path))
+
+    assert body["places"] == {} and body["skipped"] == [{"target_id": target, "reason": "pending"}]
+    assert _db(_departments, pub_id) == [w.stale_leaf]
+
+
 def test_apply_skips_target_outside_actor_scope(client: TestClient, enforced: None) -> None:
     """평소 고칠 수 없는 맵의 줄은 out_of_scope로 건너뛰고 아무것도 쓰지 않는다."""
     w = _World()
@@ -432,6 +453,20 @@ def test_apply_collab_editor_by_editor_creates_approval_request(client: TestClie
     assert (req.kind, req.status, req.requested_by) == ("permission_downgrade", "pending", w.actor)
     assert req.payload["permission_id"] == grant_id and req.payload["to_role"] is None
     assert len(_db(_notifications, w.holder, "permission_requested")) == 1
+
+
+def test_apply_collab_editor_remove_by_editor_requests_removal_only(client: TestClient, enforced: None) -> None:
+    """지우기 모드의 승인 경로는 제거 요청만 올린다 — 새 grant는 생기지 않고 옛 grant는 승인 전까지 남는다."""
+    w = _World()
+    map_id, grant_id = _seed_collab(w)
+    before = _db(_grants, map_id)
+
+    body = _apply(client, w.actor, _body("user", [(f"map_collab:{grant_id}", w.gone)], mode="remove"))
+
+    assert body["approval_requests"] == 1 and body["places"] == {"approval": 1}
+    assert _db(_grants, map_id) == before
+    requests = _db(_requests, map_id)
+    assert len(requests) == 1 and requests[0].payload["permission_id"] == grant_id
 
 
 def test_apply_collab_editor_by_owner_direct(client: TestClient, enforced: None) -> None:
@@ -585,6 +620,27 @@ def test_apply_owner_replace_deletes_departed_grant(client: TestClient, enforced
     assert len(notes) == 1 and notes[0].payload["from_name"] == w.gone_name
 
 
+def test_apply_owner_replace_releases_departed_owner_checkout(client: TestClient, enforced: None) -> None:
+    """퇴직 오너가 쥔 Draft는 오너 교체 뒤 점유가 풀린다 — 평소 권한 라우터의 편집권 상실 해제와 같다."""
+    w = _World()
+
+    async def _arrange(session: AsyncSession) -> tuple[int, int]:
+        session.add_all(w.people())
+        m = await _new_map(session, w, "held by departed", owner=w.gone)
+        session.add(_grant(m, w.new, "editor"))
+        await _version(session, m.id, "published")
+        draft = await _version(session, m.id, "draft", holder=w.gone)
+        return m.id, draft.id
+
+    map_id, draft_id = _seed(_arrange)
+
+    body = _apply(client, SYSADMIN, _body("user", [(f"map_owner:{map_id}", w.gone)], to_value=w.new))
+
+    assert body["places"] == {"direct": 1}
+    draft = _db(_version_row, draft_id)
+    assert draft.checked_out_by is None and draft.checked_out_at is None
+
+
 def test_apply_user_settings_lines_direct_for_sysadmin(client: TestClient, enforced: None) -> None:
     """승인자·그룹 멤버·카테고리 권한자·SP 담당자 — sysadmin은 한 요청으로 바로 대체한다(SP 담당자는 직원 이름으로)."""
     w = _World()
@@ -677,6 +733,17 @@ def test_apply_invalid_to_value_422_no_partial(client: TestClient, enforced: Non
     assert (m.owning_department, m.sp_department) == (w.stale_path, w.stale_leaf)
 
 
+def test_apply_rejects_out_of_range_pk_and_too_many_targets(client: TestClient, enforced: None) -> None:
+    """입력 상한 — 32비트 정수를 넘는 pk와 500개를 넘는 대상은 조회 전에 422."""
+    w = _World()
+    huge = _body("dept", [(f"sp_dept:{2**31}", w.stale_leaf)], to_value=w.live_path)
+    many = _body("dept", [(f"sp_dept:{i}", w.stale_leaf) for i in range(1, 502)], to_value=w.live_path)
+
+    for path in ("/api/ref-audit/apply", "/api/ref-audit/preview"):
+        for request in (huge, many):
+            assert client.post(path, headers=_as(SYSADMIN), json=request).status_code == 422
+
+
 # ── 노드 값 쓰기 ──────────────────────────────────────────────────────────
 
 
@@ -743,8 +810,8 @@ def test_preview_reports_not_eligible_owner_target(client: TestClient, enforced:
     editor = _preview(client, SYSADMIN, _body("user", target, to_value=w.new))
     dept_member = _preview(client, SYSADMIN, _body("user", target, to_value=w.member))
 
-    assert outsider == [{"target_id": f"map_owner:{map_id}", "outcome": "locked", "reason": "not_eligible",
-                         "notify_to": None, "warning": None}]
+    assert outsider == [{"target_id": f"map_owner:{map_id}", "from_value": w.gone, "outcome": "locked",
+                         "reason": "not_eligible", "notify_to": None, "warning": None}]
     assert editor[0]["outcome"] == "direct" and dept_member[0]["outcome"] == "direct"
     assert _db(_map_row, map_id).owner_id == w.gone
 
@@ -766,7 +833,34 @@ def test_preview_reports_no_access_warning(client: TestClient, enforced: None) -
     blind = _preview(client, w.actor, _body("user", target, to_value=w.holder))
     seeing = _preview(client, w.actor, _body("user", target, to_value=w.owner))
 
-    assert blind == [{"target_id": f"node_assignee:{map_id}", "outcome": "direct", "reason": None,
-                      "notify_to": None, "warning": "no_access"}]
+    assert blind == [{"target_id": f"node_assignee:{map_id}", "from_value": w.gone_name, "outcome": "direct",
+                      "reason": None, "notify_to": None, "warning": "no_access"}]
     assert seeing[0]["warning"] is None
     assert _db(_assignees, draft_id) == [w.gone_name]
+
+
+def test_preview_warns_no_new_grant_for_refused_replacement(client: TestClient, enforced: None) -> None:
+    """공개 맵 viewer·오우닝 부서 대상 대체는 옛 grant 제거만 일어난다 — 미리보기가 no_new_grant로 미리 알린다."""
+    w = _World()
+
+    async def _arrange(session: AsyncSession) -> dict[str, int]:
+        session.add_all(w.people())
+        public = await _new_map(session, w, "public preview", visibility="public")
+        owning = await _new_map(session, w, "owning preview", owning_department=w.live_path)
+        viewer = _grant(public, w.gone, "viewer")
+        dept = _grant(owning, w.stale_path, "editor", kind="department")
+        session.add_all([viewer, dept])
+        await session.flush()
+        return {"viewer": viewer.id, "dept": dept.id}
+
+    ids = _seed(_arrange)
+    viewer_target = [(f"map_collab:{ids['viewer']}", w.gone)]
+    dept_target = [(f"map_grant:{ids['dept']}", w.stale_path)]
+
+    viewer = _preview(client, w.owner, _body("user", viewer_target, to_value=w.new))
+    dept = _preview(client, w.owner, _body("dept", dept_target, to_value=w.live_path))
+    other_dept = _preview(client, w.owner, _body("dept", dept_target, to_value=f"Live Div {w.tag}"))
+    removing = _preview(client, w.owner, _body("dept", dept_target, mode="remove"))
+
+    assert [(ln["outcome"], ln["warning"]) for ln in viewer + dept] == [("direct", "no_new_grant")] * 2
+    assert other_dept[0]["warning"] is None and removing[0]["warning"] is None
