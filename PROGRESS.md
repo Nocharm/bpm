@@ -3,22 +3,15 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
-## 2026-10-23 — 고아 참조 일반 사용자 오픈 착수 (dev, v1.3.1 예정)
+## 2026-10-23 — v1.3.1 main 머지: 고아 참조 일반 사용자 오픈
 
-- 설계 `docs/design/2026-10-23-orphan-refs-open-design.md`·계획 `docs/superpowers/plans/2026-10-23-orphan-refs-open.md`. 사용자 결정: 줄마다 평소 권한(공통 규칙, sysadmin 포함), 노드는 a·b·c(점유 중이면 알림), 빨간 점은 직접 고칠 줄만, 화면은 그림 설명 + 부서·사용자 카드 그리드(시안 4판).
-- Task 1: 라우터에 박혀 있던 거버넌스 판정(워크플로 참여·보류 다운그레이드·승인 진행·오우닝 부서 소속·요청 알림·제거 요청 생성)을 `app/permissions/governance.py`로 뽑았다. 감사 경로가 같은 함수를 써야 "공통 규칙"이 갈라지지 않는다. 라우터 상태 코드·문구는 그대로.
-- Task 2: 스캔의 노드 줄을 버전 단위에서 맵 단위로(`node_dept:{map_id}`), 고칠 대상은 작업본 W(없으면 게시본). W에선 고쳐졌고 게시본에만 남으면 `pending`(게시 대기). `load_node_targets`/`NodeTarget` 신설, 승인 완료(APPROVED) 작업본이 스캔·홈 배지에서 빠지던 빈틈을 메움. 줄마다 `from_value`를 채워 이후 카드 합치기가 줄별 값을 안다.
-- Task 3: `app/ref_audit_policy.py` — actor 범위(`load_actor_scope`·`is_line_visible`: editor 이상 맵·관리 그룹·임명 위임 카테고리)와 줄별 결과 판정 `decide`(설계 §5·§6 표, 순수 함수). 사실은 `load_decision_context`가 줄 수와 무관한 고정 쿼리로 읽고, 고른 대체 값에 달린 사실(오너 이전 후보·담당자 열람권)도 `to_value`로 미리 읽는다. 리뷰 반영: grant 가드는 `delete_permission` 순서(오너는 대기 요청이 있어도 즉시), 비활성 그룹 줄은 `group_inactive` 잠김, 오너 후보는 `transfer_owner`처럼 명시 grant가 있으면 그 역할로만, 스캔 뒤 사라진 대상의 줄은 `is_line_visible(…, ctx)`가 거른다.
-- Task 4: `GET /api/ref-audit`·`/summary`(`routers/ref_audit.py`, 로그인만 요구, 범위 밖은 403 아닌 빈 목록)와 카드 조립 `app/ref_audit_cards.py`. 부서는 경로·리프 그룹을 리프명으로, 사람은 로그인·이름 그룹을 퇴직 직원 기록의 login으로 합치되(이름이 둘 이상 login을 가리키면 못 찾은 것) 줄마다 `from_value`를 유지한다. 구 `/admin/ref-audit` GET과 읽기 스키마는 제거, remap·notify는 Task 5까지 남김.
-- Task 5: `POST /api/ref-audit/preview`·`/apply`(`app/ref_audit_apply.py`). 검증(종류·제거 금지·대체 값) 실패만 쓰기 전 422, 나머지는 대상 맵 행을 먼저 잠근 뒤 다시 스캔·판정해 범위 밖·이미 바뀐 줄은 건너뛴다. 결과별 쓰기: 설정류 바로·노드는 내 점유/점유 가져오기/`Reference cleanup` 새 Draft(게시본 불변)·Editor의 editor grant 대체는 새 grant 즉시+옛 grant 제거 승인 요청·알림은 수신자별 1건(`as`). 오너 직접 적용은 대기 다운그레이드를 대체(`governance.supersede_pending_downgrades`로 이동). 구 admin remap·notify·`fixable` 제거.
-- Task 6: 프런트 타입·카드 집계. `api.ts`를 새 계약(`RefCard`·`RefAuditData`·결과 7종·잠김 사유·경고·미리보기/적용)으로 교체하고 `lib/ref-audit.ts`는 버킷·곳 수 집계·정렬(게시 대기만 맨 뒤)·맵 줄 요약·링 비율·적용 예고만 가진 순수 함수로 다시 썼다. 알림 `ref_fix_requested`의 맵 항목이 8개 소스 키를 싣게 되어 `sumRefFixCounts`로 합산(옛 알림은 키 4개). 구 sysadmin 패널·카드는 삭제하고 설정 refs 탭 본문은 새 화면(Task 9) 전까지 비운다.
-- Task 7: 빨간 점 길 안내. 상단 바 이름 버튼 우상단 점(메뉴를 열면 "설정" 줄로 이동)과 설정 레일 탭 옆 점이 같은 요약(`useRefAuditSummary`, 적용 뒤 `notifyRefAuditChanged`)을 쓰고, 읽음 상태는 두지 않아 직접 고칠 곳이 남은 동안 켜 둔다. 고아 참조 탭은 조직에서 새 "점검" 분류(everyone)로 옮기고 `?tab=refs` 딥링크·홈 경고 모달 링크를 달았다. 한국어 용어는 Check out으로 통일(R20).
-- Task 8: 페이지 히어로(`components/ref-audit/` 3종). 왼쪽 제목·숫자 3개·범위 칩·다시 스캔, 오른쪽 오늘의 조직도↔데모 맵 SVG 그림(토큰 클래스만, 이름은 중립 표기 i18n)과 그 위 경우별 호버 버튼 8개(어디·누가·대체/제거·주의 한 줄, 설명창은 `glass glass-dense`, 후광은 모션 축소 시 끔). 보이는 값은 `lib/ref-audit-view.ts`에 순수 함수·표로 두고 vitest로만 검증했다(컴포넌트 렌더 테스트 도구 없음). 결과 칩 `RefOutcomeChip`은 알림 라벨이 수신자 역할(오너/점유자)을 따른다.
-- Task 9: 부서·사용자 두 섹션과 카드 그리드(`ref-audit-page`·`ref-dept-card`·`ref-user-card`, 공유 조각 `ref-card-count`·`ref-card-foot`). 카드 보임새는 `lib/ref-audit-view.ts`의 순수 함수(`getDeptCardView`·`getUserCardView`)로 빼 단위 테스트하고 컴포넌트는 렌더만 한다. 사용자 시안 피드백 반영: 아바타 36px·링 3px(카드 최소 128px), 숫자 옆 "곳" 제거·숫자 17/15px. 두 열 분기는 설정 본문 폭 기준 `@[1080px]`(1440 뷰포트에서 2열, 1280에선 쌓임). 게시 대기만 남은 카드는 숫자 대신 모래시계 표식·accent 띠(알약 칩은 좁은 카드에서 이름을 밀어 아이콘만). 요약 훅은 로그아웃 때 점 값을 비워 다음 사용자에게 이전 점이 비치지 않게 했고, 홈 경고 모달 문구에서 "Draft에서 고치세요"를 뺐다.
-- Task 10: 상세 창(`ref-detail-dialog` + 줄 목록 `ref-detail-lines` + 대상 고르기 `ref-detail-target`). 대상·모드를 바꿀 때마다 카드의 모든 줄을 미리보기로 다시 판정받고(마지막 요청만 반영, 제거 모드는 제거 금지 소스를 빼야 422가 안 난다) 체크는 "해제한 줄"만 기억해 판정이 바뀌어도 유지한다. 맵 이름은 같은 탭 에디터 링크, 그룹은 `/groups/{id}`(설정 `?tab=groups`는 딥링크 화이트리스트 밖이고 같은 경로 이동은 탭이 안 바뀐다). 적용은 500줄 묶음을 차례로 보내고 확인 창에 내 점유 Draft면 에디터 새로 고침 안내, 결과는 설정 토스트로 합쳐 보인다(0 항목 생략·건너뛴 이유). 보임새는 `lib/ref-audit-view.ts` 순수 함수로 vitest.
-- Task 11a: 리뷰에서 넘어온 다듬기. 카드는 `overflow-hidden`을 빼 4:3·정사각을 최소 비율로 삼아(aspect-ratio 자동 최소 높이=내용 높이) 긴 한글 이름에서도 잘리지 않고, 그리드는 `items-stretch`로 한 행이 같은 높이(비율 카드의 기본 정렬은 start라 필요). 상세 창 적용은 지금 (모드, 대상)의 미리보기가 도착해야 켜지고(`canApplySelection`) 실패하면 오류+다시 시도, 뒤 묶음이 실패하면 앞 결과를 토스트·재조회로 알리고 창은 열어 둔 채 오류를 보인다. 토스트 건너뜀은 ko "건".
-- Task 11b: 문서·스모크. 매뉴얼 6종·`manual.md`는 고아 참조 문장만 새 위치(설정 → 점검 → 고아 참조)·모두에게 열림·빨간 점·알림 수신자·새 Draft 게시 필요로 고쳤고, spec §7.x는 구 `/api/admin/ref-audit*` 대신 `/api/ref-audit`·`summary`·`preview`·`apply`로 바꿨다. 스모크 `pw-smoke-ref-audit-open.mjs`는 시드를 API로 직접 만들어 Editor·admin.sys 둘 다 점→탭→호버→카드 넘침(긴 이름·9개 폭)→미리보기→적용→토스트→점 갱신을 확인한다. 슬라이드 덱(`docs/manual/slides/content/admin_*.py`)의 탭 위치 문구는 덱 재생성 라운드로 미뤘다.
-- 최종 리뷰 반영: 맵 잠금은 점유·제출과 줄 서지 않아 노드 줄은 쓰기 직전 작업본 행을 잠가 다시 확인(남이 점유·제출했으면 already_changed, 점유 강탈 없음). 맵 잠금은 범위 안 맵만, 없는 대상도 out_of_scope로 답한다. 자기 자신에게 가는 알림은 owner_left 잠김. 범위가 빈 사용자는 스캔 없이 빈 결과, 요약은 상단 바·설정 레일이 공유 구독 하나(`useSyncExternalStore`)로 받는다. 퇴직자 점유 잠김 메모에 sysadmin 인수 안내(토스트는 짧은 라벨), 제거 모드 취소선 굵게, 동사 시작 이름 정리.
+- 아래 두 항목(담당자 오경고 수정·고아 참조 일반 오픈)을 dev → main fast-forward로 올리고 사용자 지정 v1.3.1(규칙상 MINOR면 1.3.0, 사용자 결정). 백엔드·프런트 동시 배포, DB 스키마 변경 없음.
+
+## 2026-10-23 — 고아 참조 일반 사용자 오픈 (dev)
+
+- sysadmin 전용이던 고아 참조 일괄 정리를 모두에게 열었다. 사용자 결정: 줄마다 평소 권한(공통 규칙, sysadmin도 우회 없음), 노드는 내 점유 Draft 바로·빈 Draft 점유·남 점유면 점유자 알림·게시본만이면 새 Draft `Reference cleanup`(게시 필요), 빨간 점은 직접 고칠 줄만(알림 기록 저장 안 함), 화면은 SVG 그림 + 경우별 호버 + 부서(4:3)·사용자(정사각 링 아바타) 카드 + 상세 창(맵 링크·알림 수신자·미리보기). 판정표는 `docs/spec.md` §7.x로 흡수.
+- 구조: 판정은 `app/ref_audit_policy.decide` 한 곳(거버넌스 판정 `app/permissions/governance.py`를 라우터와 공유), 적용 `app/ref_audit_apply.py`는 범위 안 맵 잠금 → 재스캔·재판정 → 작업본 행 잠금·재확인 후 쓰기(점유 강탈 없음) → 편집권 잃은 점유 해제 → 수신자별 알림. 노드 줄은 맵 단위·작업본 대상(승인 완료 작업본 빈틈도 메움). API `/api/ref-audit`·`summary`·`preview`·`apply`, 구 `/api/admin/ref-audit*` 제거. 설정 "점검" 분류(everyone)로 탭 이동, 요약은 공유 구독 하나.
+- 검증: 작업 11개 각각 리뷰 + 전체 최종 리뷰(잠금 보강·범위 0 스캔 생략 반영), 백엔드 2009·프런트 1641, 스모크 `pw-smoke-ref-audit-open.mjs`·시나리오 `pw-scenario-ref-audit-open.mjs`. 남은 것: 관리자 슬라이드 덱 탭 위치 문구(덱 재생성 라운드), 범위가 있는 사용자의 스캔 축소(후속).
 
 ## 2026-10-22 — 담당자 "재직자 명단에 없음" 오경고 수정 (dev)
 
