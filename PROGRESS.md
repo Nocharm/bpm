@@ -8,6 +8,7 @@
 - 설계 `docs/design/2026-10-23-orphan-refs-open-design.md`·계획 `docs/superpowers/plans/2026-10-23-orphan-refs-open.md`. 사용자 결정: 줄마다 평소 권한(공통 규칙, sysadmin 포함), 노드는 a·b·c(점유 중이면 알림), 빨간 점은 직접 고칠 줄만, 화면은 그림 설명 + 부서·사용자 카드 그리드(시안 4판).
 - Task 1: 라우터에 박혀 있던 거버넌스 판정(워크플로 참여·보류 다운그레이드·승인 진행·오우닝 부서 소속·요청 알림·제거 요청 생성)을 `app/permissions/governance.py`로 뽑았다. 감사 경로가 같은 함수를 써야 "공통 규칙"이 갈라지지 않는다. 라우터 상태 코드·문구는 그대로.
 - Task 2: 스캔의 노드 줄을 버전 단위에서 맵 단위로(`node_dept:{map_id}`), 고칠 대상은 작업본 W(없으면 게시본). W에선 고쳐졌고 게시본에만 남으면 `pending`(게시 대기). `load_node_targets`/`NodeTarget` 신설, 승인 완료(APPROVED) 작업본이 스캔·홈 배지에서 빠지던 빈틈을 메움. 줄마다 `from_value`를 채워 이후 카드 합치기가 줄별 값을 안다.
+- Task 3: `app/ref_audit_policy.py` — actor 범위(`load_actor_scope`·`is_line_visible`: editor 이상 맵·관리 그룹·임명 위임 카테고리)와 줄별 결과 판정 `decide`(설계 §5·§6 표, 순수 함수). 사실은 `load_decision_context`가 줄 수와 무관한 고정 쿼리로 읽고, 고른 대체 값에 달린 사실(오너 이전 후보·담당자 열람권)도 `to_value`로 미리 읽는다. 대기 다운그레이드가 걸린 grant는 오너·sysadmin에게도 잠김(표 문자 그대로, 평소 화면은 오너가 직접 지우며 요청을 대체).
 
 ## 2026-10-22 — 담당자 "재직자 명단에 없음" 오경고 수정 (dev)
 
