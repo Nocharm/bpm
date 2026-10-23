@@ -1,4 +1,4 @@
-// 고아 참조 히어로 순수 로직 — 숫자 3개·범위 칩·결과 칩 라벨·경우 8종 표·범례 (design 2026-10-23 §9)
+// 고아 참조 화면 순수 로직 테스트 — 히어로(숫자·범위 칩·경우 8종·범례)·카드·상세 창(줄 판정·미리보기·적용 묶음·토스트) (design 2026-10-23 §9)
 import { describe, expect, it } from "vitest";
 
 import type { RefApplyResult, RefAuditData, RefCard, RefCardLine, RefOutcome, RefSkipReason } from "@/lib/api";
@@ -14,6 +14,7 @@ import {
   SKIP_REASON_KEY,
   buildApplyBatches,
   buildPreviewBatches,
+  canApplySelection,
   canRemoveCard,
   formatAppliedToast,
   getApplyButton,
@@ -322,11 +323,13 @@ describe("card copy", () => {
 // ── 상세 창 ──────────────────────────────────────────────────────────────────
 
 // 실제 t와 같은 치환 — en 문구로 토스트 문장을 확인한다
-const tEn = (key: MessageKey, vars?: Record<string, string | number>): string => {
-  let text = messages.en[key];
+const translate = (lang: "en" | "ko", key: MessageKey, vars?: Record<string, string | number>): string => {
+  let text = messages[lang][key];
   for (const [name, value] of Object.entries(vars ?? {})) text = text.replaceAll(`{${name}}`, String(value));
   return text;
 };
+const tEn = (key: MessageKey, vars?: Record<string, string | number>): string => translate("en", key, vars);
+const tKo = (key: MessageKey, vars?: Record<string, string | number>): string => translate("ko", key, vars);
 
 const applyResult = (over: Partial<RefApplyResult>): RefApplyResult => ({
   places: {}, drafts: [], approval_requests: 0, notified: 0, skipped: [], ...over,
@@ -539,6 +542,27 @@ describe("dialog controls", () => {
   });
 });
 
+describe("canApplySelection", () => {
+  const ready = { total: 3, mode: "replace" as const, toValue: "Team B", isPreviewCurrent: true, isPreviewing: false, isApplying: false };
+
+  it("opens only with a target, a current preview and checked places", () => {
+    expect(canApplySelection(ready)).toBe(true);
+    expect(canApplySelection({ ...ready, mode: "remove", toValue: "" })).toBe(true);
+  });
+
+  it("stays closed without a target, without places, while previewing or applying", () => {
+    expect(canApplySelection({ ...ready, toValue: "" })).toBe(false);
+    expect(canApplySelection({ ...ready, total: 0 })).toBe(false);
+    expect(canApplySelection({ ...ready, isPreviewing: true })).toBe(false);
+    expect(canApplySelection({ ...ready, isApplying: true })).toBe(false);
+  });
+
+  it("stays closed when the preview for this combination is missing, stale or failed", () => {
+    expect(canApplySelection({ ...ready, isPreviewCurrent: false })).toBe(false);
+    expect(canApplySelection({ ...ready, mode: "remove", toValue: "", isPreviewCurrent: false })).toBe(false);
+  });
+});
+
 describe("formatAppliedToast", () => {
   it("sums several batch results and leaves out zero parts", () => {
     const text = formatAppliedToast(
@@ -566,6 +590,14 @@ describe("formatAppliedToast", () => {
     expect(text).toBe("Applied 1 · Skipped 3 (Already changed 2, In approval 1)");
   });
 
+  it("counts skipped lines as cases in ko, not places", () => {
+    const text = formatAppliedToast(
+      [applyResult({ places: { direct: 1 }, skipped: [{ target_id: "a", reason: "already_changed" }] })],
+      tKo,
+    );
+    expect(text).toBe("1곳 반영 · 1건 건너뜀 (이미 바뀜 1)");
+  });
+
   it("says nothing changed when every part is zero", () => {
     expect(formatAppliedToast([applyResult({})], tEn)).toBe(messages.en["refAudit.toast.nothing"]);
   });
@@ -587,7 +619,8 @@ describe("dialog copy", () => {
     const keys = [
       "refAudit.dlg.label", "refAudit.dlg.maps", "refAudit.dlg.places", "refAudit.dlg.pickDept", "refAudit.dlg.pickUser",
       "refAudit.dlg.clearTarget", "refAudit.dlg.erase", "refAudit.dlg.forecast", "refAudit.dlg.noneChecked",
-      "refAudit.dlg.applyReplace", "refAudit.dlg.applyRemove", "refAudit.dlg.previewing", "refAudit.deptReplaceOnly",
+      "refAudit.dlg.applyReplace", "refAudit.dlg.applyRemove", "refAudit.dlg.previewing", "refAudit.dlg.retry",
+      "refAudit.deptReplaceOnly",
       "refAudit.cannotRemove", "refAudit.line.nodes", "refAudit.note.reloadEditor", "refAudit.confirm.replaceTitle",
       "refAudit.confirm.replaceMsg", "refAudit.confirm.removeTitle", "refAudit.confirm.removeMsg",
       "refAudit.confirm.reloadEditor",

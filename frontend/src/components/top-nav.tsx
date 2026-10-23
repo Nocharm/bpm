@@ -366,6 +366,7 @@ export function TopNav() {
           <div ref={menuRef} className="relative">
             <button
               type="button"
+              data-id="nav-user"
               aria-label={user.name}
               className="relative rounded-sm px-2 py-1 text-caption text-ink hover:bg-surface-alt"
               onClick={() => {

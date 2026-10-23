@@ -258,6 +258,7 @@ export default function SettingsPage() {
                 <button
                   key={tab.id}
                   type="button"
+                  data-id={`settings-tab-${tab.id}`}
                   className={`flex items-center rounded-sm px-3 py-1.5 text-left text-caption transition-colors ${
                     current === tab.id
                       ? "bg-accent-tint text-accent"

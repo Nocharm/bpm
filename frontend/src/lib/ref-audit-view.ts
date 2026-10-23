@@ -541,6 +541,21 @@ export function getApplyButton(mode: RefMode): { labelKey: MessageKey; tone: "ac
     : { labelKey: "refAudit.dlg.applyReplace", tone: "accent" };
 }
 
+export interface ApplyGateInput {
+  total: number;            // 체크한 곳 수
+  mode: RefMode;
+  toValue: string;          // 대체 대상 값 - 비면 아직 안 고름
+  isPreviewCurrent: boolean; // 지금 (모드, 대상) 조합의 미리보기가 도착해 줄에 덮여 있나
+  isPreviewing: boolean;
+  isApplying: boolean;
+}
+
+/** 적용 버튼을 켤 수 있나 — 대상(또는 제거 모드)이 정해지고 그 조합의 미리보기가 도착해야 한다. 미리보기가 실패했거나 낡았으면 막는다(스캔 판정만 믿고 적용하지 않는다). */
+export function canApplySelection({ total, mode, toValue, isPreviewCurrent, isPreviewing, isApplying }: ApplyGateInput): boolean {
+  const hasTarget = mode === "remove" || toValue !== "";
+  return total > 0 && hasTarget && isPreviewCurrent && !isPreviewing && !isApplying;
+}
+
 /** 적용 결과 토스트 — 묶음 결과를 합쳐 "N곳 반영 · M곳 게시 필요 · K명 알림 · L건 승인 요청", 0인 항목은 뺀다. */
 export function formatAppliedToast(results: RefApplyResult[], t: TranslateFn): string {
   let applied = 0;

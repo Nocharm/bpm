@@ -1,4 +1,5 @@
 // 고아 참조 페이지 — 히어로 + 부서·사용자 두 섹션(카드 그리드)의 로드·에러·빈 상태. 설정 > 점검 > 고아 참조 탭 본문이다.
+// 카드 그리드는 items-stretch가 필요하다 - 비율(aspect-ratio) 카드는 기본 정렬이 start라 한 행에서 긴 카드만 자란다.
 "use client";
 
 import { Building2, CircleCheck, UserX, type LucideIcon } from "lucide-react";
@@ -96,6 +97,9 @@ export function RefAuditPage({ onToast }: RefAuditPageProps) {
   const page = result?.page ?? null;
   const departments = page ? sortCards(page.departments) : [];
   const users = page ? sortCards(page.users) : [];
+  const openCard = selected
+    ? ([...departments, ...users].find((card) => card.kind === selected.kind && card.key === selected.key) ?? selected)
+    : null;
 
   function handleRescan() {
     setReloadKey((key) => key + 1);
@@ -105,9 +109,10 @@ export function RefAuditPage({ onToast }: RefAuditPageProps) {
     setSelected(card);
   }
 
-  // 적용이 끝나면 창을 닫고 결과를 토스트로 알린 뒤 다시 스캔한다. 재스캔 성공 경로가 notifyRefAuditChanged()로 빨간 점도 갱신한다
-  function handleApplied(results: RefApplyResult[]) {
-    setSelected(null);
+  // 적용이 끝나면 창을 닫고 결과를 토스트로 알린 뒤 다시 스캔한다. 재스캔 성공 경로가 notifyRefAuditChanged()로 빨간 점도 갱신한다.
+  // 뒤 묶음이 실패한 부분 적용(isPartial)은 창을 열어 둬 오류를 보이고, 재스캔 결과의 카드로 줄을 바꿔 끼운다
+  function handleApplied(results: RefApplyResult[], isPartial = false) {
+    if (!isPartial) setSelected(null);
     onToast(formatAppliedToast(results, t));
     setReloadKey((key) => key + 1);
   }
@@ -150,7 +155,7 @@ export function RefAuditPage({ onToast }: RefAuditPageProps) {
           count={departments.length}
         >
           {departments.length > 0 ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(196px,1fr))] gap-3">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(196px,1fr))] items-stretch gap-3">
               {departments.map((card) => (
                 <RefDeptCard key={card.key} card={card} onOpen={handleOpenCard} />
               ))}
@@ -170,7 +175,7 @@ export function RefAuditPage({ onToast }: RefAuditPageProps) {
           count={users.length}
         >
           {users.length > 0 ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-3">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] items-stretch gap-3">
               {users.map((card) => (
                 <RefUserCard key={card.key} card={card} onOpen={handleOpenCard} />
               ))}
@@ -189,10 +194,10 @@ export function RefAuditPage({ onToast }: RefAuditPageProps) {
     <div data-id="ref-audit-page" className="@container flex flex-col gap-5">
       <RefAuditHero page={page} loading={isLoading} onRescan={handleRescan} />
       {body}
-      {selected ? (
+      {openCard ? (
         <RefDetailDialog
-          key={`${selected.kind}:${selected.key}`}
-          card={selected}
+          key={`${openCard.kind}:${openCard.key}`}
+          card={openCard}
           onClose={() => setSelected(null)}
           onApplied={handleApplied}
         />

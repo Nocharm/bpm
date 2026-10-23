@@ -18,6 +18,7 @@ import { OUTCOME_META } from "@/lib/ref-audit";
 import {
   buildApplyBatches,
   buildPreviewBatches,
+  canApplySelection,
   canRemoveCard,
   getApplyButton,
   getCheckedKeys,
@@ -32,7 +33,8 @@ import {
 interface RefDetailDialogProps {
   card: RefCard;
   onClose: () => void;
-  onApplied: (results: RefApplyResult[]) => void; // 적용 묶음마다의 결과 — 페이지가 토스트·재조회를 맡는다
+  // 적용 묶음마다의 결과 - 페이지가 토스트·재조회를 맡는다. isPartial=뒤 묶음이 실패해 창을 열어 둔 채 앞 결과만 알리는 경우
+  onApplied: (results: RefApplyResult[], isPartial?: boolean) => void;
 }
 
 // 미리보기 응답이 어느 (모드, 대상) 조합의 것인지 — 지금 조합과 같을 때만 줄에 덮는다
@@ -49,6 +51,7 @@ export function RefDetailDialog({ card, onClose, onApplied }: RefDetailDialogPro
   const [preview, setPreview] = useState<{ key: string; lines: RefPreviewLine[] } | null>(null);
   const [previewingKey, setPreviewingKey] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [isPreviewFailed, setIsPreviewFailed] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   // 마지막 미리보기 요청 번호 — 늦게 도착한 앞 요청의 응답은 버린다(디바운스 없이 마지막 요청만 반영)
@@ -65,7 +68,14 @@ export function RefDetailDialog({ card, onClose, onApplied }: RefDetailDialogPro
   const applyButton = getApplyButton(mode);
   const isRemove = mode === "remove";
   const canRemove = canRemoveCard(card);
-  const canApply = forecast.total > 0 && (isRemove || toValue !== "") && !isPreviewing && !isApplying;
+  const canApply = canApplySelection({
+    total: forecast.total,
+    mode,
+    toValue,
+    isPreviewCurrent: preview?.key === previewKey,
+    isPreviewing,
+    isApplying,
+  });
 
   const metaParts = [
     card.sub || (card.kind === "user" ? t("refAudit.nameOnly") : ""),
@@ -79,6 +89,7 @@ export function RefDetailDialog({ card, onClose, onApplied }: RefDetailDialogPro
     const key = getPreviewKey(nextMode, nextValue);
     const bodies = buildPreviewBatches(card.kind, card.lines, nextMode, nextValue);
     setError("");
+    setIsPreviewFailed(false);
     if (bodies.length === 0) {
       setPreviewingKey(null);
       return;
@@ -93,6 +104,7 @@ export function RefDetailDialog({ card, onClose, onApplied }: RefDetailDialogPro
       .catch((err: unknown) => {
         if (seq !== previewSeqRef.current) return;
         setError(humanizeApiError(err, t));
+        setIsPreviewFailed(true);
         setPreviewingKey(null);
       });
   }
@@ -139,6 +151,8 @@ export function RefDetailDialog({ card, onClose, onApplied }: RefDetailDialogPro
       setError(humanizeApiError(err, t));
       setIsApplying(false);
       setIsConfirming(false);
+      // 앞 묶음은 이미 반영됐다 - 토스트·재조회·빨간 점을 갱신하고 창은 열어 둔 채 오류를 보인다
+      if (results.length > 0) onApplied(results, true);
       return;
     }
     onApplied(results);
@@ -247,13 +261,23 @@ export function RefDetailDialog({ card, onClose, onApplied }: RefDetailDialogPro
         <RefDetailLines lines={lines} mode={mode} checkedKeys={checkedKeys} onToggle={handleToggle} />
 
         {error ? (
-          <p
+          <div
             data-id="ref-detail-error"
             role="alert"
-            className="mx-5 mb-2 rounded-sm border border-error/30 bg-error/5 px-3 py-2 text-fine text-error"
+            className="mx-5 mb-2 flex items-center gap-2 rounded-sm border border-error/30 bg-error/5 px-3 py-2 text-fine text-error"
           >
-            {error}
-          </p>
+            <p className="min-w-0 flex-1">{error}</p>
+            {isPreviewFailed ? (
+              <button
+                type="button"
+                data-id="ref-detail-retry"
+                onClick={() => requestPreview(mode, toValue)}
+                className="shrink-0 rounded-sm border border-error/30 px-2 py-0.5 text-fine text-error hover:bg-error/10"
+              >
+                {t("refAudit.dlg.retry")}
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2.5 border-t border-divider bg-surface px-5 pb-4 pt-3">

@@ -1,4 +1,5 @@
 // 고아 참조 사용자 카드 — 정사각 가운데 정렬(결과 비율 링 아바타·이름·로그인·곳 수·집계). 설정 > 점검 > 고아 참조 페이지의 사용자 그리드가 쓴다.
+// 정사각은 최소 비율이다 - overflow를 숨기지 않아야 긴 이름에서도 잘리지 않고 같은 행 카드와 함께 자란다(부서 카드와 같은 이유).
 "use client";
 
 import { UserX } from "lucide-react";
@@ -27,7 +28,7 @@ export function RefUserCard({ card, onOpen }: RefUserCardProps) {
       aria-haspopup="dialog"
       aria-label={t("refAudit.card.open", { name: card.label })}
       onClick={() => onOpen(card)}
-      className="relative flex aspect-square min-w-0 flex-col items-center gap-1 overflow-hidden rounded-md border border-hairline bg-surface p-3 text-center transition-[border-color,box-shadow,translate] duration-350 ease-overshoot hover:-translate-y-0.5 hover:border-accent-tint-border hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="relative flex aspect-square min-w-0 flex-col items-center gap-1 rounded-md border border-hairline bg-surface p-3 text-center transition-[border-color,box-shadow,translate] duration-350 ease-overshoot hover:-translate-y-0.5 hover:border-accent-tint-border hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
       <span className="absolute right-[11px] top-2.5">
         <RefCardCount countText={view.countText} size={15} />
