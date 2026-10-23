@@ -13,6 +13,7 @@ import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { useRefAuditSummary } from "@/lib/ref-audit-summary";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { GroupsPanel } from "@/components/groups/groups-panel";
 import { BatchRunsPanel } from "@/components/admin/batch-runs-panel";
@@ -82,7 +83,6 @@ const CATEGORIES: Category[] = [
       { id: "employees", labelKey: "admin.title" },
       { id: "depts", labelKey: "perm.sysadmin.tabDepts" },
       { id: "catalogs", labelKey: "catalog.tab" },
-      { id: "refs", labelKey: "admin.refAuditTab" },
       { id: "localAccounts", labelKey: "localAccount.tab" },
     ],
   },
@@ -100,6 +100,12 @@ const CATEGORIES: Category[] = [
       { id: "tables", labelKey: "db.tablesTab" },
       { id: "batch", labelKey: "batch.tab" },
     ],
+  },
+  {
+    // 점검 — 고아 참조(누구나 자기 범위만, 빨간 점이 상단 바에서 여기로 안내한다). 구 조직 분류의 sysadmin 탭을 대체
+    labelKey: "admin.catChecks",
+    access: "everyone",
+    tabs: [{ id: "refs", labelKey: "admin.refAuditTab" }],
   },
   {
     // 승인큐 — 누구나 접근(추후 개인별 승인 모음 페이지). 현재 큐 내용은 sysadmin만, 그 외는 준비중 안내.
@@ -132,13 +138,15 @@ const CATEGORIES: Category[] = [
 export default function SettingsPage() {
   const { t } = useI18n();
   const user = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
-  // Framework 관리자 패널 딥링크(?tab=framework) — 캠페인 페이지 "관리로 돌아가기"류 진입점용.
+  // 딥링크(?tab=framework|refs) — framework는 캠페인 페이지 "관리로 돌아가기"류, refs는 홈 경고 모달·빨간 점 진입점용.
   // 화이트리스트 값만 허용, 그 외는 기존처럼 첫 가용 탭 폴백에 맡긴다.
   const [activeTab, setActiveTab] = useState<TabId | null>(() => {
     if (typeof window === "undefined") return null;
     const tab = new URLSearchParams(window.location.search).get("tab");
-    return tab === "framework" ? "framework" : null;
+    return tab === "framework" || tab === "refs" ? tab : null;
   });
+  // 고아 참조 탭 옆 빨간 점 — 상단 바와 같은 요약(직접 고칠 곳이 있을 때만)
+  const refActionable = useRefAuditSummary(Boolean(user));
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   // 좌측 nav 승인 큐 배지 건수 — sysadmin만. 큐 탭을 열면 ApprovalQueue가 onCountChange로 갱신.
   const [queueCount, setQueueCount] = useState<number | null>(null);
@@ -262,6 +270,14 @@ export default function SettingsPage() {
                     <span className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1 text-fine text-on-accent">
                       {queueCount}
                     </span>
+                  ) : null}
+                  {/* 고칠 곳이 남은 동안 켜 둔다(읽음 상태 없음) / stays on while fixable refs remain */}
+                  {tab.id === "refs" && refActionable > 0 ? (
+                    <span
+                      data-id="settings-tab-refs-dot"
+                      aria-hidden
+                      className="ml-auto h-2 w-2 shrink-0 rounded-full bg-error ring-2 ring-surface"
+                    />
                   ) : null}
                 </button>
               ))}

@@ -39,6 +39,7 @@ import { useI18n } from "@/lib/i18n";
 import type { Lang, MessageKey } from "@/lib/i18n-messages";
 import { clearLdapToken } from "@/lib/ldap-session";
 import { runGuardedNavigation } from "@/lib/navigation-guard";
+import { useRefAuditSummary } from "@/lib/ref-audit-summary";
 import { FeedbackSidePanel } from "@/components/feedback-side-panel";
 import { InboxBadge } from "@/components/inbox-badge";
 import { NotificationBell } from "@/components/notification-bell";
@@ -153,6 +154,8 @@ export function TopNav() {
     () => null, // 서버 스냅샷 — SSR에서는 유저 없음
   );
   const [open, setOpen] = useState(false);
+  // 고칠 수 있는 고아 참조가 있으면 이름 버튼에 빨간 점 → 메뉴를 열면 "설정" 줄로 옮겨 가 설정 탭까지 안내한다
+  const refActionable = useRefAuditSummary(Boolean(user));
   // 메뉴가 열릴 때만 그려지므로 SSR(서버엔 localStorage 없음)과 첫 렌더 불일치가 없다
   const [isGlassOn, setIsGlassOn] = useState(() => typeof window === "undefined" || isGlassEnabled());
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
@@ -364,7 +367,7 @@ export function TopNav() {
             <button
               type="button"
               aria-label={user.name}
-              className="rounded-sm px-2 py-1 text-caption text-ink hover:bg-surface-alt"
+              className="relative rounded-sm px-2 py-1 text-caption text-ink hover:bg-surface-alt"
               onClick={() => {
                 setOpen((v) => !v);
                 setIsAppearanceOpen(false);
@@ -378,6 +381,13 @@ export function TopNav() {
                 </Tooltip>
               ) : (
                 user.name
+              )}
+              {refActionable > 0 && !open && (
+                <span
+                  data-id="nav-ref-dot"
+                  aria-hidden
+                  className="pointer-events-none absolute -right-0.5 top-0 h-2 w-2 rounded-full bg-error ring-2 ring-surface"
+                />
               )}
             </button>
             {open && (
@@ -393,7 +403,14 @@ export function TopNav() {
                   }}
                 >
                   <Settings size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                  {t("nav.settings")}
+                  <span className="flex-1">{t("nav.settings")}</span>
+                  {refActionable > 0 && (
+                    <span
+                      data-id="nav-settings-ref-dot"
+                      aria-hidden
+                      className="h-2 w-2 shrink-0 rounded-full bg-error ring-2 ring-surface"
+                    />
+                  )}
                 </button>
                 {/* 화면 설정(개인, 브라우저에만 저장) — 유리 효과·강조 색을 왼쪽 플라이아웃으로. 메뉴가 화면 오른쪽 끝이라 왼쪽으로 편다.
                     호버로 열고 클릭으로도 토글(키보드). 래퍼가 플라이아웃까지 감싸 pr-1 다리로 틈에서 닫히지 않게 한다 */}

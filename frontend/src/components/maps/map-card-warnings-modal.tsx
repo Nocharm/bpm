@@ -76,6 +76,16 @@ export function MapCardWarningsModal({ mapId, mapName, warnings, onClose }: MapC
                 <span className="text-fine leading-snug text-ink-secondary">
                   {w.kind === "owning_missing" ? t("home.owningMissingNote") : t("home.staleRefsNote", { n: w.count })}
                 </span>
+                {/* 낡은 참조는 Draft에서 직접 고치는 대신 설정의 고아 참조 탭에서 한꺼번에 바꾼다 */}
+                {w.kind !== "owning_missing" && (
+                  <Link
+                    href="/settings?tab=refs"
+                    data-id="map-warnings-open-refs"
+                    className="mt-1 self-start text-fine text-accent hover:underline"
+                  >
+                    {t("home.staleRefsOpen")} →
+                  </Link>
+                )}
                 <Link
                   href={w.kind === "owning_missing" ? `/maps/${mapId}/settings` : `/maps/${mapId}`}
                   className="mt-1 self-start text-fine text-accent hover:underline"

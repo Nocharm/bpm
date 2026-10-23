@@ -12,6 +12,7 @@
 - Task 4: `GET /api/ref-audit`·`/summary`(`routers/ref_audit.py`, 로그인만 요구, 범위 밖은 403 아닌 빈 목록)와 카드 조립 `app/ref_audit_cards.py`. 부서는 경로·리프 그룹을 리프명으로, 사람은 로그인·이름 그룹을 퇴직 직원 기록의 login으로 합치되(이름이 둘 이상 login을 가리키면 못 찾은 것) 줄마다 `from_value`를 유지한다. 구 `/admin/ref-audit` GET과 읽기 스키마는 제거, remap·notify는 Task 5까지 남김.
 - Task 5: `POST /api/ref-audit/preview`·`/apply`(`app/ref_audit_apply.py`). 검증(종류·제거 금지·대체 값) 실패만 쓰기 전 422, 나머지는 대상 맵 행을 먼저 잠근 뒤 다시 스캔·판정해 범위 밖·이미 바뀐 줄은 건너뛴다. 결과별 쓰기: 설정류 바로·노드는 내 점유/점유 가져오기/`Reference cleanup` 새 Draft(게시본 불변)·Editor의 editor grant 대체는 새 grant 즉시+옛 grant 제거 승인 요청·알림은 수신자별 1건(`as`). 오너 직접 적용은 대기 다운그레이드를 대체(`governance.supersede_pending_downgrades`로 이동). 구 admin remap·notify·`fixable` 제거.
 - Task 6: 프런트 타입·카드 집계. `api.ts`를 새 계약(`RefCard`·`RefAuditData`·결과 7종·잠김 사유·경고·미리보기/적용)으로 교체하고 `lib/ref-audit.ts`는 버킷·곳 수 집계·정렬(게시 대기만 맨 뒤)·맵 줄 요약·링 비율·적용 예고만 가진 순수 함수로 다시 썼다. 알림 `ref_fix_requested`의 맵 항목이 8개 소스 키를 싣게 되어 `sumRefFixCounts`로 합산(옛 알림은 키 4개). 구 sysadmin 패널·카드는 삭제하고 설정 refs 탭 본문은 새 화면(Task 9) 전까지 비운다.
+- Task 7: 빨간 점 길 안내. 상단 바 이름 버튼 우상단 점(메뉴를 열면 "설정" 줄로 이동)과 설정 레일 탭 옆 점이 같은 요약(`useRefAuditSummary`, 적용 뒤 `notifyRefAuditChanged`)을 쓰고, 읽음 상태는 두지 않아 직접 고칠 곳이 남은 동안 켜 둔다. 고아 참조 탭은 조직에서 새 "점검" 분류(everyone)로 옮기고 `?tab=refs` 딥링크·홈 경고 모달 링크를 달았다. 한국어 용어는 Check out으로 통일(R20).
 
 ## 2026-10-22 — 담당자 "재직자 명단에 없음" 오경고 수정 (dev)
 
