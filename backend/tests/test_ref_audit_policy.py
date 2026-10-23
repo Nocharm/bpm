@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import delete, event
 
 from app import ref_audit_policy as policy
 from app.db import SessionLocal, engine
@@ -32,6 +32,7 @@ OWNER = "owner.park"
 HOLDER = "holder.choi"
 GONE = "gone.user"
 GRANT_ID = 7
+GROUP_ID = 5
 SYSADMIN = "policy.admin"
 
 
@@ -91,6 +92,7 @@ def _ctx(**overrides: Any) -> policy.DecisionContext:
         "node_targets": {MAP_ID: _target()},
         "display_names": {OWNER: "Owner Park", HOLDER: "Holder Choi", ACTOR: "Actor Kim"},
         "active_logins": {OWNER, HOLDER, ACTOR},
+        "group_statuses": {GROUP_ID: "active"},
     }
     fields.update(overrides)
     return policy.DecisionContext(**fields)
@@ -130,13 +132,23 @@ def test_decide_collab_departed_in_workflow_locked(grant_role: str, scope: polic
 
 
 @pytest.mark.parametrize("source", ["map_collab", "map_grant"])
-@pytest.mark.parametrize("scope", [_scope("editor"), _scope("owner"), _scope(sysadmin=True)])
-def test_decide_collab_request_pending_locked(source: str, scope: policy.ActorScope) -> None:
+@pytest.mark.parametrize("grant_role", ["editor", "viewer"])
+def test_decide_collab_request_pending_locked(source: str, grant_role: str) -> None:
     principal_type = "user" if source == "map_collab" else "department"
-    ctx = _ctx(grants={GRANT_ID: _grant(principal_type=principal_type)},
+    ctx = _ctx(grants={GRANT_ID: _grant(role=grant_role, principal_type=principal_type)},
                pending_downgrades={(MAP_ID, GRANT_ID)})
-    decision = policy.decide(_grant_line(source), scope, ctx)
+    decision = policy.decide(_grant_line(source), _scope("editor"), ctx)
     assert decision.outcome == "locked" and decision.reason == "request_pending"
+
+
+@pytest.mark.parametrize("source", ["map_collab", "map_grant"])
+@pytest.mark.parametrize("scope", [_scope("owner"), _scope(sysadmin=True)])
+def test_decide_collab_request_pending_owner_direct(source: str, scope: policy.ActorScope) -> None:
+    # 평소 delete_permission처럼 오너의 직접 적용은 대기 요청을 대체한다(적용 단계가 supersede)
+    principal_type = "user" if source == "map_collab" else "department"
+    ctx = _ctx(grants={GRANT_ID: _grant(role="editor", principal_type=principal_type)},
+               pending_downgrades={(MAP_ID, GRANT_ID)})
+    assert policy.decide(_grant_line(source), scope, ctx) == policy.Decision("direct")
 
 
 @pytest.mark.parametrize("scope", [_scope("editor"), _scope("owner"), _scope(sysadmin=True)])
@@ -310,12 +322,24 @@ def test_decide_node_assignee_no_access_warning(source: str, viewable: set[int],
 
 
 @pytest.mark.parametrize("line", [
-    _line("group_member", target_id="group_member:5", map_id=None, group_id=5),
-    _line("group_user", target_id="group_user:6", map_id=None, group_id=5),
+    _line("group_member", target_id="group_member:5", map_id=None, group_id=GROUP_ID),
+    _line("group_user", target_id="group_user:6", map_id=None, group_id=GROUP_ID),
     _line("category_perm", target_id="category_perm:8", map_id=None, category_id=3),
 ])
 def test_decide_group_and_category_lines_direct(line: RefLine) -> None:
     assert policy.decide(line, _scope(None), _ctx()) == policy.Decision("direct")
+
+
+@pytest.mark.parametrize("source", ["group_member", "group_user"])
+@pytest.mark.parametrize(("status", "expected"), [
+    ("pending", policy.Decision("locked", reason="group_inactive")),
+    ("rejected", policy.Decision("locked", reason="group_inactive")),
+    ("active", policy.Decision("direct")),
+])
+def test_decide_group_line_inactive_group_locked(source: str, status: str, expected: policy.Decision) -> None:
+    line = _line(source, target_id=f"{source}:6", map_id=None, group_id=GROUP_ID)
+    ctx = _ctx(group_statuses={GROUP_ID: status})
+    assert policy.decide(line, _scope(sysadmin=True), ctx) == expected
 
 
 def test_decide_rejects_to_value_missing_from_context() -> None:
@@ -570,6 +594,66 @@ def test_load_decision_context_preloads_to_value_facts(client: object, enforced:
 
     empty = asyncio.run(_load(None))
     assert empty.owner_candidate_map_ids == set() and empty.to_value_viewable_map_ids == set()
+
+
+def test_decide_owner_line_owning_member_with_viewer_grant_not_eligible(client: object, enforced: None) -> None:
+    target = f"member.{_uid()}"
+    org = f"Member Division {_uid()}"
+
+    async def _seed() -> tuple[int, int]:
+        async with SessionLocal() as session:
+            session.add(Employee(login_id=target, name="Member", source="local", active=True, org_l1=org))
+            with_viewer = await _new_map(session, "member viewer", owning_department=org)
+            plain = await _new_map(session, "member plain", owning_department=org)
+            session.add(_grant_row(with_viewer, target, "viewer"))
+            await session.commit()
+            return with_viewer.id, plain.id
+
+    with_viewer, plain = asyncio.run(_seed())
+    lines = [_map_line("map_owner", with_viewer), _map_line("map_owner", plain)]
+
+    async def _decide() -> list[policy.Decision]:
+        async with SessionLocal() as session:
+            scope = await policy.load_actor_scope(session, SYSADMIN)
+            ctx = await policy.load_decision_context(session, lines, scope, to_value=target)
+            return [policy.decide(ln, scope, ctx, to_value=target) for ln in lines]
+
+    # transfer_owner: 명시 grant가 있으면 그 역할로만 본다 — viewer grant는 주관 부서 소속이어도 탈락
+    assert asyncio.run(_decide()) == [policy.Decision("locked", reason="not_eligible"), policy.Decision("direct")]
+
+
+def test_vanished_targets_filtered_not_raised(client: object, enforced: None) -> None:
+    async def _seed() -> dict[str, int]:
+        async with SessionLocal() as session:
+            gone = await _new_map(session, "vanishing")
+            bare = await _new_map(session, "no versions")
+            await session.commit()
+            return {"gone": gone.id, "bare": bare.id}
+
+    ids = asyncio.run(_seed())
+    vanished = [
+        _map_line("sp_dept", ids["gone"]), _map_line("map_owner", ids["gone"]),
+        _map_line("node_assignee", ids["gone"]),
+        _line("map_collab", target_id="map_collab:999999999", map_id=ids["bare"]),
+        _map_line("node_dept", ids["bare"]),  # 노드 대상(게시본·작업본)이 없는 맵
+        _line("group_user", target_id="group_user:1", map_id=None, group_id=999999999),
+    ]
+    survivor = _map_line("sp_dept", ids["bare"])
+
+    async def _run() -> tuple[list[bool], list[policy.Decision]]:
+        async with SessionLocal() as session:
+            scope = await policy.load_actor_scope(session, SYSADMIN)
+            await session.execute(delete(ProcessMap).where(ProcessMap.id == ids["gone"]))
+            await session.commit()
+            lines = [*vanished, survivor]
+            ctx = await policy.load_decision_context(session, lines, scope, to_value=SYSADMIN)
+            visible = [ln for ln in lines if policy.is_line_visible(ln, scope, ctx)]
+            return ([policy.is_line_visible(ln, scope, ctx) for ln in lines],
+                    [policy.decide(ln, scope, ctx, to_value=SYSADMIN) for ln in visible])
+
+    flags, decisions = asyncio.run(_run())
+    assert flags == [False] * len(vanished) + [True]
+    assert decisions == [policy.Decision("direct")]
 
 
 def test_load_decision_context_query_count_independent_of_lines(client: object, enforced: None) -> None:

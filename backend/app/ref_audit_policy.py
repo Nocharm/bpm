@@ -19,6 +19,7 @@ from app.models import (
     MapVersion,
     ProcessCategory,
     ProcessMap,
+    UserGroup,
     UserGroupManager,
 )
 from app.orgchart import load_dept_index, resolve_org_path
@@ -79,6 +80,8 @@ class DecisionContext:
     # 판정에 나오는 사람(오너·점유자) 중 재직자의 표시명·login
     display_names: dict[str, str]
     active_logins: set[str]
+    # 그룹 id → status — 멤버십 변경은 active 그룹만(groups._ensure_active)
+    group_statuses: dict[int, str]
     # 고른 대체 값에 달린 사실 — to_value 없이 로드하면 비어 있다
     to_value: str | None = None
     owner_candidate_map_ids: set[int] = field(default_factory=set)
@@ -118,13 +121,33 @@ async def _load_manageable_category_ids(session: AsyncSession, login_id: str, is
     return {cid for cid in admin_ids if levels[cid] > floor}
 
 
-def is_line_visible(line: RefLine, scope: ActorScope) -> bool:
-    """설계 §4 — 맵 줄은 editor 이상, 그룹 줄은 그룹 관리자·sysadmin, 카테고리 줄은 임명 관리자."""
+def is_line_visible(line: RefLine, scope: ActorScope, ctx: DecisionContext | None = None) -> bool:
+    """설계 §4 — 맵 줄은 editor 이상, 그룹 줄은 그룹 관리자·sysadmin, 카테고리 줄은 임명 관리자.
+
+    ctx를 넘기면 스캔 뒤 사라진 대상(맵·grant·노드 대상·그룹)의 줄도 뺀다 — decide는 보이는 줄만 받는다.
+    """
+    if ctx is not None and not _is_line_loaded(line, ctx):
+        return False
     if line.source in GROUP_SOURCES:
         return scope.is_sysadmin or line.group_id in scope.managed_group_ids
     if line.source == "category_perm":
         return line.category_id in scope.manageable_category_ids
     return line.map_id in scope.roles
+
+
+def _is_line_loaded(line: RefLine, ctx: DecisionContext) -> bool:
+    """판정에 쓸 사실이 ctx에 있는지 — 스캔과 로드 사이에 대상이 지워졌으면 False."""
+    if line.source in GROUP_SOURCES:
+        return line.group_id in ctx.group_statuses
+    if line.source == "category_perm":
+        return True
+    if line.map_id not in ctx.maps:
+        return False
+    if line.source in GRANT_SOURCES:
+        return _parse_grant_id(line.target_id) in ctx.grants
+    if line.source in NODE_SOURCES:
+        return line.map_id in ctx.node_targets
+    return True
 
 
 def _parse_grant_id(target_id: str) -> int:
@@ -195,44 +218,55 @@ async def load_decision_context(
     employees = (await session.execute(
         select(Employee.login_id, Employee.name).where(Employee.login_id.in_(people), Employee.active.is_(True))
     )).all()
+    group_ids = sorted({ln.group_id for ln in lines if ln.source in GROUP_SOURCES and ln.group_id is not None})
+    group_statuses = dict((await session.execute(
+        select(UserGroup.id, UserGroup.status).where(UserGroup.id.in_(group_ids))
+    )).all())
 
     ctx = DecisionContext(
         maps=maps, grants=grants, in_approval_map_ids=in_approval, active_approvers=active_approvers,
         pending_downgrades=pending_downgrades, workflow_pairs=workflow_pairs,
         actor_pending_downgrade_map_ids=actor_pending, node_targets=node_targets,
         display_names={login: name or login for login, name in employees},
-        active_logins={login for login, _ in employees}, to_value=to_value or None,
+        active_logins={login for login, _ in employees}, group_statuses=group_statuses,
+        to_value=to_value or None,
     )
     if to_value:
-        owner_maps = [maps[ln.map_id] for ln in lines if ln.source == "map_owner"]
+        # 사라진 맵의 줄은 is_line_visible(ctx=)이 걸러 낸다 — 여기선 남은 맵만 본다
+        owner_maps = [maps[ln.map_id] for ln in lines if ln.source == "map_owner" and ln.map_id in maps]
         if owner_maps:
             ctx.owner_candidate_map_ids = await _load_owner_candidate_map_ids(session, to_value, owner_maps)
-        assignee_maps = [maps[ln.map_id] for ln in lines if ln.source == "node_assignee"]
+        assignee_maps = [maps[ln.map_id] for ln in lines if ln.source == "node_assignee" and ln.map_id in maps]
         if assignee_maps:
             ctx.to_value_viewable_map_ids = set(await load_my_roles(session, to_value, assignee_maps))
     return ctx
 
 
 async def _load_owner_candidate_map_ids(session: AsyncSession, login_id: str, maps: list[ProcessMap]) -> set[int]:
-    """오너 이전 후보인 맵 — transfer_owner·FE owner-candidates와 같은 규칙: 명시 user grant editor 이상 ∪ 주관 부서 소속."""
-    explicit = {
-        map_id for map_id, role in (await session.execute(
-            select(MapPermission.map_id, MapPermission.role).where(
-                MapPermission.map_id.in_([m.id for m in maps]),
-                MapPermission.principal_type == "user",
-                MapPermission.principal_id == login_id,
-            )
-        )).all()
-        if logic.role_rank(role) >= logic.role_rank("editor")
-    }
+    """오너 이전 후보인 맵 — transfer_owner와 같은 규칙.
+
+    명시 user grant가 있으면 그 역할이 editor 이상이어야 하고(viewer grant는 주관 부서 소속이어도 탈락),
+    grant가 없을 때만 주관 부서 소속(파생 editor)이 후보가 된다.
+    """
+    explicit_roles: dict[int, str] = dict((await session.execute(
+        select(MapPermission.map_id, MapPermission.role).where(
+            MapPermission.map_id.in_([m.id for m in maps]),
+            MapPermission.principal_type == "user",
+            MapPermission.principal_id == login_id,
+        )
+    )).all())
     # governance.is_owning_department_member와 같은 판정 — 조직 경로를 한 번만 풀어 맵마다 접두 비교
     emp = await session.get(Employee, login_id)
     org_path = resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
-    members = {
-        m.id for m in maps
-        if m.owning_department and logic.belongs_to_department(org_path, m.owning_department)
-    }
-    return explicit | members
+    candidates: set[int] = set()
+    for m in maps:
+        if m.id in explicit_roles:
+            is_candidate = logic.role_rank(explicit_roles[m.id]) >= logic.role_rank("editor")
+        else:
+            is_candidate = bool(m.owning_department) and logic.belongs_to_department(org_path, m.owning_department)
+        if is_candidate:
+            candidates.add(m.id)
+    return candidates
 
 
 def decide(
@@ -245,7 +279,11 @@ def decide(
     """
     if to_value and to_value != ctx.to_value:
         raise ValueError(f"to_value {to_value!r} was not loaded into the decision context")
-    if line.source in GROUP_SOURCES or line.source == "category_perm":
+    if line.source in GROUP_SOURCES:
+        if ctx.group_statuses[line.group_id] != "active":
+            return Decision("locked", reason="group_inactive")  # groups._ensure_active — pending·rejected는 409
+        return Decision("direct")
+    if line.source == "category_perm":
         return Decision("direct")
     m = ctx.maps[line.map_id]
     if m.mode == "framework":
@@ -275,15 +313,17 @@ def decide(
 
 
 def _decide_grant(grant: MapPermission, role: str | None, m: ProcessMap, ctx: DecisionContext) -> Decision:
-    """사람·부서 grant — 라우터 delete_permission과 같은 가드 순서(오너 grant → 워크플로 참여 → 대기 요청)."""
+    """사람·부서 grant — 라우터 delete_permission과 같은 가드 순서(오너 grant → 워크플로 참여 → 오너 즉시 → 대기 요청)."""
     if grant.role == "owner":
         return Decision("locked", reason="owner_left")  # 오너 grant는 map_owner 줄이 오너 이전으로 고친다
     if grant.principal_type == "user" and (grant.map_id, grant.principal_id) in ctx.workflow_pairs:
         return Decision("locked", reason="in_workflow")
+    if role == "owner":
+        return Decision("direct")  # 오너(sysadmin 포함)의 직접 적용은 대기 요청을 대체한다(_supersede_pending_downgrades)
     if (grant.map_id, grant.id) in ctx.pending_downgrades:
         return Decision("locked", reason="request_pending")
     # 대체도 옛 grant는 사라진다 — 제거와 같은 다운그레이드 규칙(editor 제거는 오너가 아니면 승인)
-    if role == "owner" or not logic.requires_downgrade_approval(grant.role, None):
+    if not logic.requires_downgrade_approval(grant.role, None):
         return Decision("direct")
     if not ctx.active_approvers.get(grant.map_id):
         return _notify_owner(m, ctx)  # 재직 승인자가 없으면 요청이 영영 대기 — 바로 고칠 수 있는 오너에게
