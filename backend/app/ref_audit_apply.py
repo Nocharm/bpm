@@ -135,10 +135,12 @@ async def _resolve_to_value(session: AsyncSession, kind: str, mode: str, to_valu
     return to_value, (emp.name if emp and emp.name else to_value)
 
 
-async def _lock_target_maps(session: AsyncSession, targets: list[_Target]) -> None:
-    """대상 맵 행을 id 순으로 먼저 잠근다 — create_version과 같은 잠금이라 동시 적용이 Draft를 둘 만들지 않는다.
+async def _lock_target_maps(session: AsyncSession, targets: list[_Target], scope: ActorScope) -> None:
+    """내 범위 안 대상 맵 행만 id 순으로 먼저 잠근다 — create_version과 같은 잠금이라 동시 적용이 Draft를 둘 만들지 않는다.
 
-    잠근 뒤에 스캔·판정하므로 판정이 곧 적용 시점 상태다(그 사이 점유·최신 버전이 바뀌었으면 바뀐 상태로 판정한다).
+    범위 밖 맵은 본문에 있어도 잠그지 않는다(그 줄은 판정에서 out_of_scope로 빠진다). 맵 잠금이 줄 세우는 것은
+    버전 생성·게시·오너 이전·grant 추가 같은 맵 단위 변경뿐이다. 점유·제출·그래프 PUT은 맵 행을 잠그지 않으므로
+    노드 줄은 쓰기 직전에 작업본 행을 따로 잠가 다시 확인한다(`_ApplyRun._lock_working_version`).
     """
     map_ids = {t.pk for t in targets if t.source in MAP_PK_SOURCES}
     grant_ids = [t.pk for t in targets if t.source in GRANT_SOURCES]
@@ -146,12 +148,15 @@ async def _lock_target_maps(session: AsyncSession, targets: list[_Target]) -> No
         map_ids.update((await session.scalars(
             select(MapPermission.map_id).where(MapPermission.id.in_(grant_ids))
         )).all())
-    for map_id in sorted(map_ids):
+    for map_id in sorted(map_ids & scope.roles.keys()):
         await session.get(ProcessMap, map_id, with_for_update=True, populate_existing=True)
 
 
 async def _classify_missing(session: AsyncSession, target: _Target, scope: ActorScope) -> str:
-    """스캔에 없는 대상 — 그 자리(맵·그룹·카테고리)가 내 범위면 이미 바뀐 것, 아니면 범위 밖. 행이 사라졌으면 이미 바뀐 것."""
+    """스캔에 없는 대상 — 그 자리(맵·그룹·카테고리)가 내 범위면 이미 바뀐 것, 아니면 범위 밖.
+
+    행이 없는 대상도 범위 밖으로 답한다 — 범위 밖 자리가 있는지 없는지를 응답으로 가려낼 수 없게.
+    """
     stub = RefLine(source=target.source, count=0, target_id=target.target_id)
     if target.source in MAP_PK_SOURCES:
         stub.map_id = target.pk
@@ -166,15 +171,14 @@ async def _classify_missing(session: AsyncSession, target: _Target, scope: Actor
             select(CategoryPermission.category_id).where(CategoryPermission.id == target.pk)
         )
     if stub.map_id is None and stub.group_id is None and stub.category_id is None:
-        return "already_changed"
+        return "out_of_scope"
     return "already_changed" if is_line_visible(stub, scope) else "out_of_scope"
 
 
 async def _plan_targets(
-    session: AsyncSession, *, actor: str, body: RefApplyIn, targets: list[_Target], to_value: str | None
+    session: AsyncSession, *, scope: ActorScope, body: RefApplyIn, targets: list[_Target], to_value: str | None
 ) -> _Plan:
     """다시 스캔해 요청한 줄만 판정한다 — 스캔에 없거나 범위 밖인 대상은 쓰지 않고 건너뛴다."""
-    scope = await load_actor_scope(session, actor)
     dept_groups, user_groups = await scan_refs(session)
     scanned = {
         (line.target_id, line.from_value): line
@@ -212,16 +216,18 @@ async def preview_targets(session: AsyncSession, *, actor: str, body: RefApplyIn
     to_value = None
     if body.mode == "replace" and body.to_value:
         to_value, _ = await _resolve_to_value(session, body.kind, body.mode, body.to_value)
-    plan = await _plan_targets(session, actor=actor, body=body, targets=targets, to_value=to_value)
+    scope = await load_actor_scope(session, actor)
+    plan = await _plan_targets(session, scope=scope, body=body, targets=targets, to_value=to_value)
     return plan.decided
 
 
 async def apply_targets(session: AsyncSession, *, actor: str, body: RefApplyIn) -> RefApplyOut:
-    """검증(422) → 대상 맵 잠금 → 다시 판정 → 결과별 쓰기 → 수신자별 알림. 한 트랜잭션이고 commit은 라우터."""
+    """검증(422) → 범위 안 대상 맵 잠금 → 다시 판정 → 결과별 쓰기 → 수신자별 알림. 한 트랜잭션이고 commit은 라우터."""
     targets = _parse_targets(body)
     to_id, to_name = await _resolve_to_value(session, body.kind, body.mode, body.to_value)
-    await _lock_target_maps(session, targets)
-    plan = await _plan_targets(session, actor=actor, body=body, targets=targets, to_value=to_id or None)
+    scope = await load_actor_scope(session, actor)
+    await _lock_target_maps(session, targets, scope)
+    plan = await _plan_targets(session, scope=scope, body=body, targets=targets, to_value=to_id or None)
     run = _ApplyRun(session, actor=actor, mode=body.mode, to_id=to_id, to_name=to_name, ctx=plan.ctx,
                     skipped=list(plan.skipped))
     for line, decision in plan.decided:
@@ -248,6 +254,7 @@ class _ApplyRun:
         self.approval_requests = 0
         self.notices: dict[str, _Notice] = {}
         self.grant_map_ids: set[int] = set()  # grant를 지우거나 오너를 바꾼 맵 — 끝에 점유를 재평가한다
+        self.working_checks: dict[int, bool] = {}  # 작업본 id → 이번 적용에서 잠그고 확인한 결과(같은 맵의 다음 줄이 재사용)
 
     async def apply(self, line: RefLine, decision: Decision) -> None:
         outcome = decision.outcome
@@ -259,6 +266,9 @@ class _ApplyRun:
             return
         if line.source in NODE_SOURCES:
             count = await self._write_node_line(line, outcome)
+            if count is None:
+                self.skipped.append((line.target_id, "already_changed"))
+                return
         elif outcome == "approval":
             await self._request_grant_removal(line)
             count = line.count
@@ -272,8 +282,11 @@ class _ApplyRun:
             return
         self.places[outcome] = self.places.get(outcome, 0) + count
 
-    async def _write_node_line(self, line: RefLine, outcome: str) -> int:
-        """§6 — 내 점유 작업본(direct)·점유 가져오기(checkout)·게시본을 복제한 새 Draft(new_draft). 게시본엔 쓰지 않는다."""
+    async def _write_node_line(self, line: RefLine, outcome: str) -> int | None:
+        """§6 — 내 점유 작업본(direct)·점유 가져오기(checkout)·게시본을 복제한 새 Draft(new_draft). 게시본엔 쓰지 않는다.
+
+        작업본이 판정 때와 달라졌으면(남이 점유·제출) 쓰지 않고 None — 호출부가 already_changed로 건너뛴다.
+        """
         target = self.ctx.node_targets[line.map_id]
         if outcome == "new_draft":
             if line.map_id not in self.drafts:
@@ -281,12 +294,29 @@ class _ApplyRun:
             version_id = self.drafts[line.map_id]
         else:
             version_id = target.working_id
-            if outcome == "checkout":
-                # 판정이 점유 없는 작업본에만 checkout을 낸다(남의 점유는 notify) — 평소 acquire_checkout과 같은 상태
-                version = await self.session.get(MapVersion, version_id)
-                version.checked_out_by, version.checked_out_at = self.actor, now_kst()
+            if version_id not in self.working_checks:
+                self.working_checks[version_id] = await self._lock_working_version(version_id, outcome)
+            if not self.working_checks[version_id]:
+                return None
         return await write_node_values(self.session, version_id, line.source, line.from_value, self.to_name,
                                        self.mode)
+
+    async def _lock_working_version(self, version_id: int, outcome: str) -> bool:
+        """작업본 행을 잠그고 판정 때 상태 그대로인지 확인한다 — 맞으면 checkout은 여기서 점유를 가져온다.
+
+        맵 잠금은 점유(acquire_checkout)·제출(_lock_workflow_version)·그래프 PUT과 줄 서지 않는다. 그래서 잠근 행으로
+        다시 읽어(populate_existing) 편집 가능 상태이고 점유가 direct=actor·checkout=없음일 때만 쓴다(남의 점유를
+        빼앗거나 결재 중 버전에 쓰지 않는다). 행 잠금은 커밋까지 유지돼 같은 작업본의 다음 줄은 이 결과를 재사용한다.
+        """
+        version = await self.session.get(MapVersion, version_id, with_for_update=True, populate_existing=True)
+        if version is None or not workflow.is_editable_status(version.status):
+            return False
+        if outcome == "direct":
+            return version.checked_out_by == self.actor
+        if version.checked_out_by is not None:
+            return False
+        version.checked_out_by, version.checked_out_at = self.actor, now_kst()  # 평소 acquire_checkout과 같은 상태
+        return True
 
     async def _create_cleanup_draft(self, map_id: int, published_id: int) -> int:
         """create_version과 같은 생성 — 게시본 복제, created 이벤트, 점유=actor. 맵 행은 이미 잠겨 있다."""
@@ -318,8 +348,6 @@ class _ApplyRun:
         self.approval_requests += 1
 
     def _queue_notice(self, line: RefLine, to: NotifyTo) -> None:
-        if to.id == self.actor:
-            return  # 오너 폴백(created_by)이 actor 자신인 맵 — 자기에게는 알리지 않는다
         notice = self.notices.setdefault(to.id, _Notice(role=to.role))
         if to.role == "owner":
             notice.role = "owner"

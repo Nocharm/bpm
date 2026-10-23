@@ -105,11 +105,11 @@ async def build_cards(
             card.sub = sub
         card.lines.extend(card_lines)
     for card in cards.values():
-        card.lines.sort(key=_line_sort_key)
+        card.lines.sort(key=_get_line_sort_key)
     return sorted(cards.values(), key=lambda c: (c.label.lower(), c.key))
 
 
-def _line_sort_key(card_line: CardLine) -> tuple[str, str, str]:
+def _get_line_sort_key(card_line: CardLine) -> tuple[str, str, str]:
     line = card_line.line
     return (line.map_name or line.group_name or line.category_name or "", line.source, line.target_id)
 
@@ -200,8 +200,13 @@ async def count_scope(session: AsyncSession, scope: ActorScope) -> ScopeCounts:
 
 
 async def load_audit_cards(session: AsyncSession, login_id: str) -> AuditCards:
-    """actor 기준 전체 파이프라인 — 스캔 → 범위 안 줄만 판정 사실 로드 → 카드. GET·summary·(후속) preview가 공유한다."""
+    """actor 기준 전체 파이프라인 — 스캔 → 범위 안 줄만 판정 사실 로드 → 카드. GET·summary·(후속) preview가 공유한다.
+
+    범위가 비었으면(고칠 맵·관리 그룹·임명 카테고리 없음) 스캔하지 않는다 — 대다수 사용자의 빨간 점 조회가 DB 전체를 읽지 않게.
+    """
     scope = await load_actor_scope(session, login_id)
+    if not (scope.roles or scope.managed_group_ids or scope.manageable_category_ids):
+        return AuditCards(scope=scope, departments=[], users=[])
     dept_groups, user_groups = await scan_refs(session)
     visible = [ln for group in dept_groups + user_groups for ln in group.lines if is_line_visible(ln, scope)]
     if not visible:

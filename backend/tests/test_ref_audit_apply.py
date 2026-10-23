@@ -8,9 +8,10 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import ref_audit_apply
 from app.clock import KST
 from app.db import SessionLocal
 from app.models import (
@@ -28,7 +29,9 @@ from app.models import (
     UserGroupMember,
     VersionEvent,
 )
-from app.ref_audit_apply import write_node_values
+from app.ref_audit_apply import _lock_target_maps, _parse_targets, write_node_values
+from app.ref_audit_policy import load_actor_scope
+from app.schemas import RefApplyIn
 from app.settings import settings
 
 SYSADMIN = "apply.admin"
@@ -346,6 +349,73 @@ def test_apply_redecides_when_checkout_taken_meanwhile(client: TestClient, enfor
     assert _db(_departments, draft_id) == [w.stale_leaf]
 
 
+@pytest.mark.parametrize(("seed_holder", "change"), [
+    (None, {"checked_out_by": "holder"}),      # checkout 판정 뒤 남이 점유 — 빼앗지 않는다
+    (None, {"status": "pending"}),             # checkout 판정 뒤 제출됨
+    ("actor", {"status": "pending"}),          # direct 판정 뒤 내가 제출함 — 결재 중 버전에 쓰지 않는다
+    ("actor", {"checked_out_by": "holder"}),   # direct 판정 뒤 sysadmin이 점유를 넘겨받음
+])
+def test_apply_rechecks_working_version_between_decision_and_write(
+    client: TestClient, enforced: None, monkeypatch: pytest.MonkeyPatch,
+    seed_holder: str | None, change: dict[str, str],
+) -> None:
+    """맵 잠금은 점유·제출과 줄 서지 않는다 — 판정과 쓰기 사이에 작업본이 바뀌면 잠근 행으로 다시 보고 건너뛴다."""
+    w = _World()
+    people = {"actor": w.actor, "holder": w.holder}
+
+    async def _arrange(session: AsyncSession) -> tuple[int, int]:
+        session.add_all(w.people())
+        m = await _new_map(session, w, "recheck")
+        session.add(_grant(m, w.actor, "editor"))
+        draft = await _version(session, m.id, "draft", departments=[w.stale_leaf],
+                               holder=people.get(seed_holder or ""))
+        return m.id, draft.id
+
+    map_id, draft_id = _seed(_arrange)
+    values = {key: people.get(value, value) for key, value in change.items()}
+    original_load = ref_audit_apply.load_decision_context
+
+    async def _change_after_facts(session: AsyncSession, lines: list[Any], scope: Any, **kw: Any) -> Any:
+        ctx = await original_load(session, lines, scope, **kw)
+        # 다른 트랜잭션의 커밋을 흉내 낸다 — identity map을 건드리지 않고 행만 바꾼다
+        await session.execute(update(MapVersion).where(MapVersion.id == draft_id).values(**values)
+                              .execution_options(synchronize_session=False))
+        return ctx
+
+    monkeypatch.setattr(ref_audit_apply, "load_decision_context", _change_after_facts)
+    target = f"node_dept:{map_id}"
+
+    body = _apply(client, w.actor, _body("dept", [(target, w.stale_leaf)], to_value=w.live_path))
+
+    assert body["places"] == {} and body["skipped"] == [{"target_id": target, "reason": "already_changed"}]
+    assert _db(_departments, draft_id) == [w.stale_leaf]
+    version = _db(_version_row, draft_id)
+    expected_holder = values.get("checked_out_by", people.get(seed_holder or ""))
+    assert (version.status, version.checked_out_by) == (values.get("status", "draft"), expected_holder)
+
+
+def test_apply_two_node_lines_share_one_checkout(client: TestClient, enforced: None) -> None:
+    """같은 작업본의 노드 줄 둘이 모두 checkout 판정이면 첫 줄이 가져온 점유를 둘째 줄이 그대로 쓴다."""
+    w = _World()
+    other_name = f"탈퇴 {w.tag}"
+
+    async def _arrange(session: AsyncSession) -> tuple[int, int]:
+        session.add_all(w.people())
+        m = await _new_map(session, w, "two checkout")
+        session.add(_grant(m, w.actor, "editor"))
+        draft = await _version(session, m.id, "draft", assignees=[w.gone_name, other_name])
+        return m.id, draft.id
+
+    map_id, draft_id = _seed(_arrange)
+    target = f"node_assignee:{map_id}"
+
+    body = _apply(client, w.actor, _body("user", [(target, w.gone_name), (target, other_name)], to_value=w.new))
+
+    assert body["places"] == {"checkout": 2} and body["skipped"] == []
+    assert _db(_assignees, draft_id) == [w.new_name, w.new_name]
+    assert _db(_version_row, draft_id).checked_out_by == w.actor
+
+
 def test_apply_skips_already_fixed_line(client: TestClient, enforced: None) -> None:
     """이미 고쳐진 줄·값이 다른 줄은 already_changed로 건너뛴다 — 422가 아니다."""
     w = _World()
@@ -413,6 +483,65 @@ def test_apply_skips_target_outside_actor_scope(client: TestClient, enforced: No
     assert sorted(s["reason"] for s in body["skipped"]) == ["out_of_scope"] * 3
     assert _db(_map_row, map_id).sp_department == w.stale_leaf
     assert _db(_departments, draft_id) == [w.stale_leaf]
+
+
+def test_apply_missing_target_reads_as_out_of_scope(client: TestClient, enforced: None) -> None:
+    """없는 대상과 범위 밖 대상은 같은 이유로 건너뛴다 — 응답으로 남의 자리가 있는지 가려낼 수 없게."""
+    w = _World()
+
+    async def _arrange(session: AsyncSession) -> int:
+        session.add_all(w.people())
+        m = await _new_map(session, w, "someone else's")
+        gone_grant = _grant(m, w.gone, "editor")
+        session.add(gone_grant)
+        await session.flush()
+        return gone_grant.id
+
+    other_grant_id = _seed(_arrange)
+
+    body = _apply(client, w.actor, _body("user", [
+        (f"map_collab:{other_grant_id}", w.gone), ("map_collab:2147480000", w.gone),
+        ("group_user:2147480000", w.gone), ("category_perm:2147480000", w.gone),
+    ], to_value=w.new))
+
+    assert body["places"] == {}
+    assert [s["reason"] for s in body["skipped"]] == ["out_of_scope"] * 4
+
+
+def test_lock_target_maps_locks_only_maps_in_scope(client: TestClient, enforced: None) -> None:
+    """요청 본문의 아무 맵이나 잠그지 않는다 — 내 범위 안 맵(grant 줄은 그 grant의 맵)만 잠근다."""
+    w = _World()
+
+    async def _arrange(session: AsyncSession) -> tuple[int, int, int, int]:
+        session.add_all(w.people())
+        mine = await _new_map(session, w, "lock mine")
+        other = await _new_map(session, w, "lock other")
+        mine_grant, other_grant = _grant(mine, w.gone, "editor"), _grant(other, w.gone, "editor")
+        session.add_all([_grant(mine, w.actor, "editor"), mine_grant, other_grant])
+        await session.flush()
+        return mine.id, other.id, mine_grant.id, other_grant.id
+
+    mine_id, other_id, mine_grant_id, other_grant_id = _seed(_arrange)
+    body = RefApplyIn(**_body("user", [
+        (f"sp_assignee:{mine_id}", w.gone_name), (f"sp_assignee:{other_id}", w.gone_name),
+        (f"map_collab:{mine_grant_id}", w.gone), (f"map_collab:{other_grant_id}", w.gone),
+    ], to_value=w.new))
+
+    async def _locked_map_ids(session: AsyncSession) -> list[int]:
+        locked: list[int] = []
+        original_get = session.get
+
+        async def _recording_get(entity: Any, ident: Any, **kw: Any) -> Any:
+            if entity is ProcessMap and kw.get("with_for_update"):
+                locked.append(ident)
+            return await original_get(entity, ident, **kw)
+
+        session.get = _recording_get  # type: ignore[method-assign]  # 이 세션 인스턴스의 잠금 호출만 기록한다
+        scope = await load_actor_scope(session, w.actor)
+        await _lock_target_maps(session, _parse_targets(body), scope)
+        return locked
+
+    assert _db(_locked_map_ids) == [mine_id]
 
 
 # ── 설정류 줄 ─────────────────────────────────────────────────────────────

@@ -39,7 +39,7 @@ def _to_notify_out(notify_to: NotifyTo | None) -> RefNotifyToOut | None:
     return RefNotifyToOut(id=notify_to.id, name=notify_to.name, role=notify_to.role) if notify_to else None
 
 
-def _to_line_out(card_line: CardLine) -> RefCardLineOut:
+def _build_line_out(card_line: CardLine) -> RefCardLineOut:
     line, decision = card_line.line, card_line.decision
     return RefCardLineOut(
         source=line.source, target_id=line.target_id, from_value=line.from_value, count=line.count,
@@ -53,10 +53,10 @@ def _to_line_out(card_line: CardLine) -> RefCardLineOut:
     )
 
 
-def _to_card_out(card: RefCard) -> RefCardOut:
+def _build_card_out(card: RefCard) -> RefCardOut:
     return RefCardOut(
         kind=card.kind, key=card.key, label=card.label, sub=card.sub,
-        lines=[_to_line_out(cl) for cl in card.lines],
+        lines=[_build_line_out(cl) for cl in card.lines],
     )
 
 
@@ -69,8 +69,8 @@ async def get_ref_audit(
     audit = await load_audit_cards(session, login_id)
     scope = await count_scope(session, audit.scope)
     return RefAuditOut(
-        departments=[_to_card_out(c) for c in audit.departments],
-        users=[_to_card_out(c) for c in audit.users],
+        departments=[_build_card_out(c) for c in audit.departments],
+        users=[_build_card_out(c) for c in audit.users],
         scope=RefAuditScopeOut(maps=scope.maps, groups=scope.groups, categories=scope.categories),
         generated_at=now_kst(),
     )

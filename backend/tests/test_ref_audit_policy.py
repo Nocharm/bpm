@@ -306,6 +306,20 @@ def test_decide_notify_falls_back_to_creator_when_owner_unset() -> None:
     assert policy.decide(_line("sp_dept"), _scope("editor"), ctx).notify_to == OWNER_NOTICE
 
 
+@pytest.mark.parametrize("line", [
+    _line("map_approver"), _line("owning_dept"), _line("sp_dept"), _line("sp_assignee"), _grant_line(),
+])
+@pytest.mark.parametrize("owner", [
+    {"owner_id": None, "created_by": ACTOR},
+    {"owner_id": ACTOR, "created_by": OWNER},
+])
+def test_decide_notify_to_actor_self_locked_owner_left(line: RefLine, owner: dict[str, None | str]) -> None:
+    """알림 수신자가 actor 자신이면(오너 미지정 맵의 생성자 등) 고칠 다른 사람이 없다 — 알림이 아니라 잠김."""
+    ctx = _ctx(maps={MAP_ID: _map(**owner)}, active_approvers={MAP_ID: []})
+    decision = policy.decide(line, _scope("editor"), ctx)
+    assert decision == policy.Decision("locked", reason="owner_left")
+
+
 @pytest.mark.parametrize(("source", "viewable", "warning"), [
     ("node_assignee", set(), "no_access"),
     ("node_assignee", {MAP_ID}, None),

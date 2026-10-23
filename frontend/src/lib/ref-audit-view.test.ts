@@ -598,6 +598,19 @@ describe("formatAppliedToast", () => {
     expect(text).toBe("1곳 반영 · 1건 건너뜀 (이미 바뀜 1)");
   });
 
+  it("keeps the in_workflow skip label short while the line note carries the takeover hint", () => {
+    const text = formatAppliedToast(
+      [applyResult({ skipped: [{ target_id: "a", reason: "in_workflow" }] })],
+      tEn,
+    );
+    expect(text).toBe("Skipped 1 (Checked out or submitted 1)");
+    expect(messages.en["refAudit.reason.in_workflow"]).toContain("system admin");
+    expect(messages.ko["refAudit.reason.in_workflow"]).toContain("sysadmin");
+    for (const lang of ["en", "ko"] as const) {
+      expect(messages[lang]["refAudit.reason.in_workflow"]).not.toContain("—");
+    }
+  });
+
   it("says nothing changed when every part is zero", () => {
     expect(formatAppliedToast([applyResult({})], tEn)).toBe(messages.en["refAudit.toast.nothing"]);
   });

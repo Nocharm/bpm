@@ -1,9 +1,10 @@
 "use client";
 
-// 고아 참조 빨간 점 소스 — 직접 고칠 수 있는 곳 수(summary.actionable). 상단 바·설정 레일이 같은 훅을 쓰고,
-// 적용 직후 notifyRefAuditChanged()로 창 이벤트를 쏘면 마운트된 구독자가 다시 받는다 (design 2026-10-23 §9).
+// 고아 참조 빨간 점 소스 — 직접 고칠 수 있는 곳 수(summary.actionable). 상단 바·설정 레일이 같은 훅을 쓰되 조회는
+// 모듈 저장소 하나가 공유한다(구독자가 몇이든 요청 1번). 적용 직후 notifyRefAuditChanged()로 창 이벤트를 쏘면
+// 공유 구독이 다시 받는다 (design 2026-10-23 §9).
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 import { getRefAuditSummary } from "@/lib/api";
 
@@ -38,17 +39,47 @@ export function subscribeRefAuditSummary(onValue: (actionable: number) => void):
   };
 }
 
-/** 빨간 점 숫자 — enabled(로그인)일 때만 조회한다. 꺼져 있으면 0. */
+// 공유 저장소 — 첫 구독자가 조회 구독을 열고 마지막 구독자가 닫는다
+let sharedActionable = 0;
+const listeners = new Set<() => void>();
+let stopSharedFetch: (() => void) | null = null;
+
+function setSharedActionable(actionable: number): void {
+  sharedActionable = actionable;
+  for (const listener of listeners) listener();
+}
+
+function subscribeSharedSummary(listener: () => void): () => void {
+  listeners.add(listener);
+  if (listeners.size === 1) stopSharedFetch = subscribeRefAuditSummary(setSharedActionable);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size > 0) return;
+    stopSharedFetch?.();
+    stopSharedFetch = null;
+    // 로그아웃으로 모두 꺼지면 비워 둔다 - 다음 사용자의 첫 응답 전에 이전 사용자의 점이 비치지 않게
+    sharedActionable = 0;
+  };
+}
+
+function subscribeNothing(): () => void {
+  return () => {};
+}
+
+function getSharedActionable(): number {
+  return sharedActionable;
+}
+
+function getServerActionable(): number {
+  return 0;
+}
+
+/** 빨간 점 숫자 — enabled(로그인)일 때만 공유 구독에 참여한다. 꺼져 있으면 0. */
 export function useRefAuditSummary(enabled: boolean): number {
-  const [actionable, setActionable] = useState(0);
-  useEffect(() => {
-    if (!enabled) return undefined;
-    const stop = subscribeRefAuditSummary(setActionable);
-    // 로그아웃으로 꺼질 때 비워 둔다 - 다음 사용자의 첫 응답 전에 이전 사용자의 점이 비치지 않게
-    return () => {
-      stop();
-      setActionable(0);
-    };
-  }, [enabled]);
+  const actionable = useSyncExternalStore(
+    enabled ? subscribeSharedSummary : subscribeNothing,
+    getSharedActionable,
+    getServerActionable,
+  );
   return enabled ? actionable : 0;
 }

@@ -300,7 +300,7 @@ def decide(
         return decision
     if line.source in GRANT_SOURCES:
         grant = ctx.grants[_parse_grant_id(line.target_id)]
-        decision = _decide_grant(grant, role, m, ctx)
+        decision = _decide_grant(grant, role, m, ctx, scope.login_id)
         if replacing and decision.outcome in ACTIONABLE and is_new_grant_refused(grant, m, to_value):
             # 평소 add_permission이 거부하는 grant라 대체는 옛 grant 제거만 일어난다 — 누르기 전에 알린다
             return replace(decision, warning="no_new_grant")
@@ -314,7 +314,7 @@ def decide(
     if line.source == "map_approver" and line.map_id in ctx.in_approval_map_ids:
         return Decision("locked", reason="in_approval")  # 승인 tally 보호 — sysadmin도 같은 규칙
     # map_approver·owning_dept·sp_dept·sp_assignee — 오너가 고친다
-    return Decision("direct") if role == "owner" else _notify_owner(m, ctx)
+    return Decision("direct") if role == "owner" else _notify_owner(m, ctx, scope.login_id)
 
 
 def is_new_grant_refused(grant: MapPermission, m: ProcessMap, to_value: str | None) -> bool:
@@ -324,7 +324,9 @@ def is_new_grant_refused(grant: MapPermission, m: ProcessMap, to_value: str | No
     return grant.principal_type == "department" and to_value == m.owning_department
 
 
-def _decide_grant(grant: MapPermission, role: str | None, m: ProcessMap, ctx: DecisionContext) -> Decision:
+def _decide_grant(
+    grant: MapPermission, role: str | None, m: ProcessMap, ctx: DecisionContext, actor: str
+) -> Decision:
     """사람·부서 grant — 라우터 delete_permission과 같은 가드 순서(오너 grant → 워크플로 참여 → 오너 즉시 → 대기 요청)."""
     if grant.role == "owner":
         return Decision("locked", reason="owner_left")  # 오너 grant는 map_owner 줄이 오너 이전으로 고친다
@@ -338,7 +340,7 @@ def _decide_grant(grant: MapPermission, role: str | None, m: ProcessMap, ctx: De
     if not logic.requires_downgrade_approval(grant.role, None):
         return Decision("direct")
     if not ctx.active_approvers.get(grant.map_id):
-        return _notify_owner(m, ctx)  # 재직 승인자가 없으면 요청이 영영 대기 — 바로 고칠 수 있는 오너에게
+        return _notify_owner(m, ctx, actor)  # 재직 승인자가 없으면 요청이 영영 대기 — 바로 고칠 수 있는 오너에게
     return Decision("approval")
 
 
@@ -363,9 +365,12 @@ def _decide_node(line: RefLine, scope: ActorScope, ctx: DecisionContext) -> Deci
     return Decision("notify", notify_to=NotifyTo(id=holder, name=ctx.display_names[holder], role="holder"))
 
 
-def _notify_owner(m: ProcessMap, ctx: DecisionContext) -> Decision:
-    """오너(owner_id, 없으면 created_by)에게 알림 — 재직 오너가 없으면 잠김."""
+def _notify_owner(m: ProcessMap, ctx: DecisionContext, actor: str) -> Decision:
+    """오너(owner_id, 없으면 created_by)에게 알림 — 재직 오너가 없거나 그 오너가 actor 자신이면 잠김.
+
+    owner_id가 비어 created_by로 떨어진 actor는 오너 역할이 아니라 고칠 수 없고, 자기에게 알려도 고칠 사람이 없다.
+    """
     owner = m.owner_id or m.created_by
-    if not owner or owner not in ctx.active_logins:
+    if not owner or owner not in ctx.active_logins or owner == actor:
         return Decision("locked", reason="owner_left")
     return Decision("notify", notify_to=NotifyTo(id=owner, name=ctx.display_names[owner], role="owner"))

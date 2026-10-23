@@ -7,7 +7,9 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import ref_audit_cards
 from app.db import SessionLocal
 from app.models import (
     Employee,
@@ -18,6 +20,7 @@ from app.models import (
     ProcessMap,
     UserGroup,
 )
+from app.ref_audit import RefGroup
 from app.settings import settings
 
 SYSADMIN = "api.admin"
@@ -166,6 +169,37 @@ def test_viewer_only_user_sees_empty_page(client: TestClient, enforced: None) ->
     assert body["departments"] == [] and body["users"] == []
     assert body["scope"] == {"maps": 0, "groups": 0, "categories": 0}
     assert client.get("/api/ref-audit/summary", headers=_as(viewer)).json() == {"actionable": 0}
+
+
+def test_empty_scope_summary_skips_the_scan(
+    client: TestClient, enforced: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """범위가 빈 사용자(뷰어뿐)의 빨간 점 조회는 DB 전체 스캔을 하지 않는다 — 범위가 있는 사용자만 스캔한다."""
+    tag = _uid()
+    viewer, editor, stale = f"view.{tag}", f"ed.{tag}", f"Gone Team {tag}"
+
+    async def _seed() -> None:
+        async with SessionLocal() as session:
+            m = await _new_map(session, "viewed", owner=f"own.{tag}", sp_department=stale)
+            session.add_all([_actor(viewer), _actor(editor), _grant(m, viewer, "viewer"), _grant(m, editor, "editor")])
+            await session.commit()
+
+    asyncio.run(_seed())
+    scans: list[int] = []
+    original_scan = ref_audit_cards.scan_refs
+
+    async def _counting_scan(session: AsyncSession) -> tuple[list[RefGroup], list[RefGroup]]:
+        scans.append(1)
+        return await original_scan(session)
+
+    monkeypatch.setattr(ref_audit_cards, "scan_refs", _counting_scan)
+
+    assert client.get("/api/ref-audit/summary", headers=_as(viewer)).json() == {"actionable": 0}
+    assert _get_audit(client, viewer)["departments"] == []
+    assert scans == []
+
+    client.get("/api/ref-audit/summary", headers=_as(editor))
+    assert scans == [1]
 
 
 def test_scope_counts_for_sysadmin_match_live_rows(client: TestClient, enforced: None) -> None:

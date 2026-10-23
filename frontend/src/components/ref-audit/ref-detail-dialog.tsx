@@ -222,7 +222,7 @@ export function RefDetailDialog({ card, onClose, onApplied }: RefDetailDialogPro
         <div className="flex flex-wrap items-center gap-2.5 border-y border-divider bg-surface-pearl px-5 py-3">
           <span
             data-id="ref-detail-from"
-            className={`inline-flex h-[34px] min-w-0 max-w-full items-center gap-1.5 rounded-sm border border-dashed border-warn bg-warn/10 px-3 text-caption-strong text-warn ${isRemove ? "line-through" : ""}`}
+            className={`inline-flex h-[34px] min-w-0 max-w-full items-center gap-1.5 rounded-sm border border-dashed border-warn bg-warn/10 px-3 text-caption-strong text-warn ${isRemove ? "line-through decoration-2" : ""}`}
           >
             {card.kind === "dept" ? (
               <Building2 size={14} strokeWidth={1.5} className="shrink-0" aria-hidden />

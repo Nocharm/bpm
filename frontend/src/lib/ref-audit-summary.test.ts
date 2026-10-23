@@ -131,4 +131,36 @@ describe("useRefAuditSummary", () => {
       root.unmount();
     });
   });
+
+  it("shares one fetch between several mounted users (top bar and settings rail)", async () => {
+    getRefAuditSummary.mockResolvedValueOnce({ actionable: 2 }).mockResolvedValueOnce({ actionable: 1 });
+    const seen: Record<string, number> = {};
+    function Probe({ name }: { name: string }) {
+      seen[name] = useRefAuditSummary(true);
+      return null;
+    }
+    const root = createRoot(document.createElement("div"));
+
+    await act(async () => {
+      root.render(createElement("div", null, createElement(Probe, { name: "nav" }), createElement(Probe, { name: "rail" })));
+      await flush();
+    });
+    expect(getRefAuditSummary).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual({ nav: 2, rail: 2 });
+
+    await act(async () => {
+      notifyRefAuditChanged();
+      await flush();
+    });
+    expect(getRefAuditSummary).toHaveBeenCalledTimes(2);
+    expect(seen).toEqual({ nav: 1, rail: 1 });
+
+    await act(async () => {
+      root.unmount();
+    });
+    // 마지막 구독자가 떠나면 공유 구독도 닫힌다 - 이후 이벤트는 조회하지 않는다
+    notifyRefAuditChanged();
+    await flush();
+    expect(getRefAuditSummary).toHaveBeenCalledTimes(2);
+  });
 });

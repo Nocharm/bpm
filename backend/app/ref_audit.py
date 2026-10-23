@@ -251,7 +251,7 @@ class _Groups:
         return groups
 
 
-def _node_version_roles(ctx: ScanContext) -> dict[int, tuple[int, bool]]:
+def _get_node_version_roles(ctx: ScanContext) -> dict[int, tuple[int, bool]]:
     """스캔할 노드 버전 id → (맵 id, 작업본 여부) — 소프트삭제 맵은 뺀다."""
     roles: dict[int, tuple[int, bool]] = {}
     for map_id, target in ctx.node_targets.items():
@@ -269,7 +269,7 @@ async def _count_stale_node_values(
     session: AsyncSession, ctx: ScanContext, stale_values: Callable[[str, str], Iterable[str]]
 ) -> tuple[dict[tuple[int, str], int], dict[tuple[int, str], int]]:
     """(맵, 낡은 값) → 노드 수 — (게시본, 작업본) 따로. stale_values(부서, 담당자)가 노드 하나의 낡은 값 목록을 낸다."""
-    roles = _node_version_roles(ctx)
+    roles = _get_node_version_roles(ctx)
     published: dict[tuple[int, str], int] = {}
     working: dict[tuple[int, str], int] = {}
     if not roles:

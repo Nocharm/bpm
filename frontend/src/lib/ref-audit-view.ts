@@ -107,16 +107,16 @@ export function splitCaption(text: string): [string, string] {
   return best < 0 ? [text, ""] : [text.slice(0, best), text.slice(best + 1)];
 }
 
-function toPercent(value: number, total: number): number {
+function getPercent(value: number, total: number): number {
   return Math.round((value / total) * 10000) / 100;
 }
 
-function atPoint(x: number, y: number): { x: number; y: number } {
-  return { x: toPercent(x, HERO_VIEWBOX.width), y: toPercent(y, HERO_VIEWBOX.height) };
+function getPointPercent(x: number, y: number): { x: number; y: number } {
+  return { x: getPercent(x, HERO_VIEWBOX.width), y: getPercent(y, HERO_VIEWBOX.height) };
 }
 
-function atChipCorner(chip: (typeof SETTINGS_CHIPS)[number]): { x: number; y: number } {
-  return atPoint(chip.x + chip.w, SETTINGS_CHIP_Y);
+function getChipCornerPercent(chip: (typeof SETTINGS_CHIPS)[number]): { x: number; y: number } {
+  return getPointPercent(chip.x + chip.w, SETTINGS_CHIP_Y);
 }
 
 // ── 경우 8종 ────────────────────────────────────────────────────────────────
@@ -141,42 +141,42 @@ export interface RefAuditCase {
 /** 그림 위 경우별 호버 도움말 8종 — 설계 §5 소스별 규칙 표를 한 줄로 줄인 것. */
 export const REF_AUDIT_CASES: readonly RefAuditCase[] = [
   {
-    id: "map_owner", ...atChipCorner(SETTINGS_CHIPS[0]), tipV: "down", tipH: "center",
+    id: "map_owner", ...getChipCornerPercent(SETTINGS_CHIPS[0]), tipV: "down", tipH: "center",
     labelKey: "refAudit.case.map_owner.label", whereKey: "refAudit.case.map_owner.where", whoKey: "refAudit.who.owner",
     replace: true, remove: false, note: { icon: Lock, key: "refAudit.case.map_owner.note" },
   },
   {
-    id: "map_approver", ...atChipCorner(SETTINGS_CHIPS[1]), tipV: "down", tipH: "center",
+    id: "map_approver", ...getChipCornerPercent(SETTINGS_CHIPS[1]), tipV: "down", tipH: "center",
     labelKey: "refAudit.case.map_approver.label", whereKey: "refAudit.case.map_approver.where", whoKey: "refAudit.who.owner",
     replace: true, remove: true, note: { icon: Lock, key: "refAudit.case.map_approver.note" },
   },
   {
-    id: "map_collab", ...atChipCorner(SETTINGS_CHIPS[2]), tipV: "down", tipH: "end",
+    id: "map_collab", ...getChipCornerPercent(SETTINGS_CHIPS[2]), tipV: "down", tipH: "end",
     labelKey: "refAudit.case.map_collab.label", whereKey: "refAudit.case.map_collab.where", whoKey: "refAudit.who.editor",
     replace: true, remove: "people", note: { icon: Stamp, key: "refAudit.case.map_collab.note" },
   },
   {
-    id: "owning_dept", ...atChipCorner(SETTINGS_CHIPS[3]), tipV: "down", tipH: "end",
+    id: "owning_dept", ...getChipCornerPercent(SETTINGS_CHIPS[3]), tipV: "down", tipH: "end",
     labelKey: "refAudit.case.owning_dept.label", whereKey: "refAudit.case.owning_dept.where", whoKey: "refAudit.who.owner",
     replace: true, remove: false,
   },
   {
-    id: "node_dept", ...atPoint(584, 106), tipV: "down", tipH: "center",
+    id: "node_dept", ...getPointPercent(584, 106), tipV: "down", tipH: "center",
     labelKey: "refAudit.case.node_dept.label", whereKey: "refAudit.case.node_dept.where", whoKey: "refAudit.who.editor",
     replace: true, remove: "assignee", note: { icon: FilePlus2, key: "refAudit.case.node_dept.note" },
   },
   {
-    id: "sp_dept", ...atPoint(736, 106), tipV: "down", tipH: "end",
+    id: "sp_dept", ...getPointPercent(736, 106), tipV: "down", tipH: "end",
     labelKey: "refAudit.case.sp_dept.label", whereKey: "refAudit.case.sp_dept.where", whoKey: "refAudit.who.owner",
     replace: true, remove: "assignee",
   },
   {
-    id: "group_member", ...atPoint(524, 206), tipV: "up", tipH: "center",
+    id: "group_member", ...getPointPercent(524, 206), tipV: "up", tipH: "center",
     labelKey: "refAudit.case.group_member.label", whereKey: "refAudit.case.group_member.where", whoKey: "refAudit.who.groupAdmin",
     replace: true, remove: "people",
   },
   {
-    id: "category_perm", ...atPoint(752, 206), tipV: "up", tipH: "end",
+    id: "category_perm", ...getPointPercent(752, 206), tipV: "up", tipH: "end",
     labelKey: "refAudit.case.category_perm.label", whereKey: "refAudit.case.category_perm.where", whoKey: "refAudit.who.categoryAdmin",
     replace: true, remove: true,
   },
@@ -324,9 +324,10 @@ const WARNING_KEY: Record<NonNullable<RefCardLine["warning"]>, MessageKey> = {
   no_new_grant: "refAudit.warning.no_new_grant",
 };
 
-/** 적용이 건너뛴 이유 라벨 — 잠김 사유는 줄 메모와 같은 문구를 쓴다. */
+/** 적용이 건너뛴 이유 라벨 — 잠김 사유는 줄 메모와 같은 문구를 쓰되, 안내 문장이 붙은 in_workflow만 토스트용 짧은 라벨. */
 export const SKIP_REASON_KEY: Record<RefSkipReason, MessageKey> = {
   ...REASON_KEY,
+  in_workflow: "refAudit.skip.in_workflow",
   pending: "refAudit.skip.pending",
   out_of_scope: "refAudit.skip.out_of_scope",
   already_changed: "refAudit.skip.already_changed",
