@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-23 — 고아 참조 일반 사용자 오픈 착수 (dev, v1.3.1 예정)
+
+- 설계 `docs/design/2026-10-23-orphan-refs-open-design.md`·계획 `docs/superpowers/plans/2026-10-23-orphan-refs-open.md`. 사용자 결정: 줄마다 평소 권한(공통 규칙, sysadmin 포함), 노드는 a·b·c(점유 중이면 알림), 빨간 점은 직접 고칠 줄만, 화면은 그림 설명 + 부서·사용자 카드 그리드(시안 4판).
+
 ## 2026-10-22 — 담당자 "재직자 명단에 없음" 오경고 수정 (dev)
 
 - 피커로 고른 재직자도 캔버스 노드에 경고 배지가 떴다. 에디터가 `buildNodeRefCheck`에 `Map.values()` 이터레이터를 넘기는데 부서 리프 수집이 먼저 소비해 담당자 색인이 비어 있었다(2026-09-10 `025e2975`부터). 함수 안에서 배열로 굳혀 두 번 돈다. 회귀 테스트는 에디터와 같은 이터레이터 입력, 브라우저에서 되돌림 전후 배지 유무로 확인.
