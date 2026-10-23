@@ -163,8 +163,9 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 - **적용**(`app/framework_slots.py apply_slot_change`): 데이터 변경 + 홈 L5 캔버스 draft 노드 재지정(대체·후계자 삭제, 엣지 유지) + `retired_to_map_id` 계보 + `framework_slot_events` 이력 + `fw_slot_applied` 알림. 해제·삭제 노드는 링크를 끊지 않고 미싱 룩으로 표시, 확정 게이트 `stale_link`가 잡는다.
 - **가드**: `mode='normal'`만 슬롯 보유. 슬롯 맵의 `DELETE /maps/{id}`·`copy retire_source`는 409 → slot-changes. 임포트는 승인 없이 그대로(부트스트랩), 미배치 taskId 엣지는 플레이스홀더 노드로.
 
-### 7.x 고아 참조 감사 (2026-09-09)
+### 7.x 고아 참조 감사 (2026-09-09, 일반 사용자 오픈 2026-10-23)
 
-- **대상 12곳**: 부서 경로 3(맵 부서 권한·그룹 부서 멤버·오우닝) + 리프 2(SP 지정 부서·노드 담당부서) + 사용자 login 5(오너·협업자·승인자·그룹 user 멤버·카테고리 권한자) + 이름 2(SP 담당자·노드 담당자). 유효 집합은 active 직원 기준(`app/ref_audit.py load_valid_sets`). 노드는 게시본+최신 드래프트만.
-- **온디맨드**: 저장 테이블 없음. `GET /api/admin/ref-audit`(sysadmin)·`POST …/remap`(체크한 `target_id`만 replace/remove, 값이 바뀐 라인은 `skipped`)·`POST …/notify`(오너당 1건 `ref_fix_requested`). 오너 교체는 `owner_assigned` 알림. `GET /api/maps`의 `stale_ref_count`가 홈 배지·Issues 필터 소스.
-- **불변식**: 노드 필드(`node_dept`·`node_assignee`)는 관리자가 못 고친다(드래프트 필요) — 캐치·알림만. 오너·오우닝·SP 부서는 remove 불가. 이름 기반 참조는 이름이 그룹 키(동명이인 1명 active면 유효).
+- **대상 12곳**: 부서 경로 3(맵 부서 권한·그룹 부서 멤버·오우닝) + 리프 2(SP 지정 부서·노드 담당부서) + 사용자 login 5(오너·협업자·승인자·그룹 user 멤버·카테고리 권한자) + 이름 2(SP 담당자·노드 담당자). 유효 집합은 active 직원 기준(`app/ref_audit.py load_valid_sets`). 노드는 맵 단위 한 줄이고 고칠 대상은 작업본(없으면 게시본).
+- **API**(로그인만 요구, 범위 밖은 403이 아니라 빈 목록): `GET /api/ref-audit`(actor 범위의 부서·사용자 카드, 줄마다 `outcome`·`reason`·`notify_to`)·`GET /api/ref-audit/summary`(`actionable`=직접 고칠 곳 수, 빨간 점 소스)·`POST /api/ref-audit/preview`(쓰기 없는 판정)·`POST /api/ref-audit/apply`(다시 판정 후 결과별 적용·알림, 한 트랜잭션). 구 `/api/admin/ref-audit*`(sysadmin 전용 remap·notify)는 제거했다. 오너 교체는 `owner_assigned`, 못 고치는 줄은 수신자별 `ref_fix_requested` 1건. `GET /api/maps`의 `stale_ref_count`가 홈 배지·Issues 필터 소스인 것은 그대로.
+- **불변식**: 판정은 `app/ref_audit_policy.py decide` 한 곳이고 sysadmin도 같은 규칙이다(결재 중 승인자 변경 금지·Owner 아닌 Editor 제거는 승인 요청·남의 점유 강탈 없음·게시본 직접 수정 없음, 노드는 점유한 작업본이나 새 Draft `Reference cleanup`에 쓴다). 오너·오우닝·SP 부서는 remove 불가, 부서 카드는 대체만. 이름 기반 참조는 이름이 그룹 키(동명이인 1명 active면 유효).
+- 화면(설정 › 점검 › 고아 참조, 빨간 점)·결과 7종·소스별 판정표: [`design/2026-10-23-orphan-refs-open-design.md`](design/2026-10-23-orphan-refs-open-design.md).

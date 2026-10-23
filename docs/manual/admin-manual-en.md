@@ -42,7 +42,7 @@ All admin surfaces live under **Settings**. The left rail shows extra categories
 | **AI prompts** | Settings → Content | Manage overrides of the built-in AI prompts (see section 12) |
 | **Employees** | Settings → Directory | Org directory table: HR-webhook full sync, sysadmin tags, CSV export |
 | **Departments** | Settings → Directory | Org-basis department table, department heads and exposed positions, CSV export |
-| **Orphaned refs** | Settings → Directory | Scans 12 places for department, assignee, and user references missing from the org chart; check-based bulk replace/remove; bundled owner notifications (see section 7) |
+| **Orphaned refs** | Settings → Checks | Open to everyone (each person sees only what they can normally change); card-based replace/remove with a per-place preview; notifications to whoever can fix the rest (see section 7) |
 | **Catalogs** | Settings → Directory | Manages the autocomplete lists for node **Role** and **System** (canonical spelling + aliases), CSV import. Editing is sysadmin-only (see section 7) |
 | **Local Accounts** | Settings → Directory | ldap auth mode only. Local login accounts for external consultants (see section 7) |
 | **Framework** | Settings → Framework | Work-framework category management (Manage / Status views), admin appointment, interview JSON import. Pilot stage (see section 13). Delegated category admins get the same screen scoped to their subtree |
@@ -146,13 +146,15 @@ Each entry shows the requester and context; decide with Approve / Reject (this q
 - **Department-head determination**: heads are determined from EDW position (FRNM) data collected via webhook and shown with a **Manager** tag on the department-head chain. The position pass only runs when both the EDW webhook (`N8N_POSITION_URL`) and AD (employee-number mapping) are configured.
 - **Exposed positions**: a card on the Employees tab lets you check which collected EDW titles are shown as a person's position across the app (defaults: 그룹장·파트장·팀장·센터장). This is an app setting saved from the screen, not an env variable.
 
-### Orphaned reference audit (Settings → Directory → Orphaned refs)
+### Orphaned reference audit (Settings → Checks → Orphaned refs)
 
-Finds and cleans up, in one place, every reference to a **department, assignee, or user that is no longer in the org chart** after a reorg or departure (replaces the old "Missing departments" tab).
+Finds and cleans up, in one place, every reference to a **department, assignee, or user that is no longer in the org chart** after a reorg or departure. The tab is open to **everyone**, and each person sees only the places they can normally change. Sysadmins use the same tab under the same rules, with no bypass.
 
-- **Rescan**: scans 12 places on demand (node departments and assignees, subprocess designation departments and assignees, map owners, collaborators, and approvers, owning departments, user-group members, category admins, group requests, and so on). Results are grouped **by value** (a vanished department path, a departed person, ...); expanding a group lists its reference lines (map, version, node, role) with checkboxes.
-- **Bulk replace / remove**: **replace** the checked lines with a current department or person, or **remove** them. Node fields (department, assignee) need a draft edit, so they are only shown here and are fixed in the editor.
-- **Owner notification, owner replacement**: send the owners of affected maps a **Stale refs fix request** notification, one per owner with the map list attached, and assign a new owner when the owner has left (an **Owner assigned** notification).
+- **Scope and the red dot**: the **red dot** on the name button, the Settings menu row, and the tab is on while the viewer can still fix something directly. Places that only need a notification, are locked, or wait for a publish do not turn it on. There is no read state, and the dot goes out when nothing fixable is left.
+- **Cards**: one card per vanished name (department cards, person cards). Hover a case icon in the top illustration (owner, approver, collaborators, owning department, node, SP designation, group, category) to see who can fix it and whether replace and remove apply. A department can only be replaced, and owners, owning departments, and SP departments cannot be removed.
+- **Replace / remove with a preview**: open a card and pick the target to see the result for every place (applies now, check out and apply, new draft, approval request, notify, locked, awaiting publish). Uncheck the places you want to skip, then apply. The result is decided again at write time, so a place that changed in the meantime is skipped.
+- **Same rules as the everyday screens**: an approver cannot be changed while the version is in approval, sysadmins included. Removing an editor who is not the owner raises the usual permission-downgrade **approval request**. Another person's checkout is never taken over, and that person is notified instead. A published version is never edited directly. The fix goes into a new draft named **Reference cleanup** and takes effect after it is published.
+- **Notifications**: places the viewer cannot fix are bundled into one **Stale refs fix request** notification per recipient (owner or checkout holder), with the map list attached. Sending again is not blocked. Replacing a departed owner sends an **Owner assigned** notification.
 - On the user side the affected map cards get a **Stale refs badge**, the home **Issues** filter collects them, and the department/assignee icons on editor nodes turn the warning color.
 
 ### Catalogs: Role and System lists (Settings → Directory → Catalogs)
