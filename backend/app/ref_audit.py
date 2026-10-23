@@ -1,6 +1,7 @@
-"""고아 참조 감사 — 현 조직에 없는 부서·사용자를 참조하는 12곳 온디맨드 스캔·일괄 재지정·오너 알림.
+"""고아 참조 감사 스캔 — 현 조직에 없는 부서·사용자를 참조하는 12곳을 온디맨드로 찾는다.
 
-설계: 2026-09-09-ref-audit-design.md (git history). 저장 테이블 없음 — 호출 시점에 계산한다.
+설계: 2026-09-09-ref-audit-design.md (git history), 2026-10-23-orphan-refs-open. 저장 테이블 없음 — 호출 시점에 계산한다.
+줄별 판정은 `ref_audit_policy`, 카드 조립은 `ref_audit_cards`, 미리보기·적용은 `ref_audit_apply`.
 """
 
 from collections.abc import Callable, Iterable
@@ -10,7 +11,6 @@ from typing import Literal
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clock import now as now_kst
 from app.models import (
     CategoryPermission,
     Employee,
@@ -24,7 +24,6 @@ from app.models import (
     UserGroupMember,
 )
 from app.orgchart import load_valid_org_prefixes
-from app.permissions.logic import role_rank
 from app.workflow import (
     APPROVED,
     CONFIRMED,
@@ -33,7 +32,6 @@ from app.workflow import (
     PENDING,
     PUBLISHED,
     REJECTED,
-    create_notifications,
 )
 
 Source = Literal[
@@ -46,10 +44,8 @@ USER_SOURCES: tuple[str, ...] = (
     "map_owner", "map_collab", "map_approver", "group_user", "category_perm",
     "sp_assignee", "node_assignee",
 )
-# 노드 필드는 드래프트에서만 고칠 수 있다 — 캐치·알림 전용
-FIXABLE: dict[str, bool] = {s: s not in ("node_dept", "node_assignee") for s in DEPT_SOURCES + USER_SOURCES}
-# 오너가 직접 고쳐야 하는(또는 고칠 수 있는) 소스 — 홈 배지 집계·알림 대상
-OWNER_ACTIONABLE: frozenset[str] = frozenset({"node_dept", "node_assignee", "sp_dept", "sp_assignee"})
+# 제거 모드가 없는 소스 — 오너·주관 부서·SP 부서는 대체만 된다
+REMOVE_BLOCKED: frozenset[str] = frozenset({"map_owner", "owning_dept", "sp_dept"})
 
 
 @dataclass
@@ -63,7 +59,6 @@ class ValidSets:
 @dataclass
 class RefLine:
     source: str
-    fixable: bool
     count: int
     target_id: str
     map_id: int | None = None
@@ -228,7 +223,7 @@ def _map_line(ctx: ScanContext, source: str, m: ProcessMap, target_id: str, *,
               pending: bool = False, target: NodeTarget | None = None) -> RefLine:
     owner = m.owner_id or m.created_by
     return RefLine(
-        source=source, fixable=FIXABLE[source], count=count, target_id=target_id,
+        source=source, count=count, target_id=target_id,
         map_id=m.id, map_name=m.name, owner_id=owner,
         owner_name=ctx.owner_names.get(owner) if owner else None,
         version_id=version_id, version_status=version_status, pending=pending,
@@ -238,7 +233,7 @@ def _map_line(ctx: ScanContext, source: str, m: ProcessMap, target_id: str, *,
 
 
 class _Groups:
-    """(value, value_kind) → RefGroup 누적기. 출력은 value 순, 라인은 (fixable desc, map_name, source)."""
+    """(value, value_kind) → RefGroup 누적기. 출력은 value 순, 라인은 (맵·그룹 이름, source)."""
 
     def __init__(self, kind: str) -> None:
         self.kind = kind
@@ -252,7 +247,7 @@ class _Groups:
     def finish(self) -> list[RefGroup]:
         groups = sorted(self._by_key.values(), key=lambda g: (g.value, g.value_kind))
         for group in groups:
-            group.lines.sort(key=lambda ln: (not ln.fixable, ln.map_name or ln.group_name or "", ln.source))
+            group.lines.sort(key=lambda ln: (ln.map_name or ln.group_name or "", ln.source))
         return groups
 
 
@@ -340,7 +335,7 @@ async def scan_dept_refs(session: AsyncSession, valid: ValidSets, ctx: ScanConte
         if not member.member_id or member.member_id in valid.dept_paths:
             continue
         groups.add(member.member_id, "path", RefLine(
-            source="group_member", fixable=True, count=1, target_id=f"group_member:{member.id}",
+            source="group_member", count=1, target_id=f"group_member:{member.id}",
             group_id=member.group_id, group_name=group_name,
         ))
 
@@ -394,7 +389,7 @@ async def scan_user_refs(session: AsyncSession, valid: ValidSets, ctx: ScanConte
         if not member.member_id or member.member_id in valid.user_ids:
             continue
         groups.add(member.member_id, "login", RefLine(
-            source="group_user", fixable=True, count=1, target_id=f"group_user:{member.id}",
+            source="group_user", count=1, target_id=f"group_user:{member.id}",
             group_id=member.group_id, group_name=group_name,
         ))
 
@@ -409,7 +404,7 @@ async def scan_user_refs(session: AsyncSession, valid: ValidSets, ctx: ScanConte
         if not perm.principal_id or perm.principal_id in valid.user_ids:
             continue
         groups.add(perm.principal_id, "login", RefLine(
-            source="category_perm", fixable=True, count=1, target_id=f"category_perm:{perm.id}",
+            source="category_perm", count=1, target_id=f"category_perm:{perm.id}",
             category_id=perm.category_id, category_name=category_name,
         ))
 
@@ -470,256 +465,3 @@ async def count_stale_refs_by_map(
                 map_id = map_by_vid[version_id]
                 counts[map_id] = counts.get(map_id, 0) + stale
     return counts
-
-
-class RemapError(ValueError):
-    """요청 전체를 거부하는 검증 실패 — 라우터가 422로 변환."""
-
-
-@dataclass
-class NotifyResult:
-    recipients: int
-    maps: int
-    skipped_maps: list[dict] = field(default_factory=list)
-
-
-async def send_fix_requests(session: AsyncSession, target_ids: list[str], actor: str) -> NotifyResult:
-    """오너 액션 대상 라인을 맵→오너로 묶어 오너당 알림 1건. 오너 없음/퇴직은 skipped. commit은 호출자."""
-    for target_id in target_ids:
-        source = target_id.partition(":")[0]
-        if source not in OWNER_ACTIONABLE:
-            raise RemapError(f"{source} is not owner-actionable")
-    wanted = set(target_ids)
-    valid = await load_valid_sets(session)
-    ctx = await load_scan_context(session)
-    lines = [ln for group in (await scan_dept_refs(session, valid, ctx)) + (await scan_user_refs(session, valid, ctx))
-             for ln in group.lines if ln.target_id in wanted and ln.map_id is not None]
-    per_map: dict[int, dict] = {}
-    for ln in lines:
-        entry = per_map.setdefault(ln.map_id, {
-            "id": ln.map_id, "name": ln.map_name or "", "node_dept": 0, "node_assignee": 0,
-            "sp_dept": 0, "sp_assignee": 0, "_owner": ln.owner_id,
-        })
-        entry[ln.source] += ln.count
-    by_owner: dict[str, list[dict]] = {}
-    skipped: list[dict] = []
-    for entry in per_map.values():
-        owner = entry.pop("_owner")
-        if not owner or owner not in valid.user_ids:
-            skipped.append({"id": entry["id"], "name": entry["name"], "reason": "owner_missing"})
-            continue
-        by_owner.setdefault(owner, []).append(entry)
-    actor_emp = await session.get(Employee, actor)
-    actor_name = actor_emp.name if actor_emp and actor_emp.name else actor
-    for owner, maps in by_owner.items():
-        await create_notifications(
-            session, [owner], type="ref_fix_requested",
-            message=f"{actor_name} asked you to fix stale department/assignee references in {len(maps)} map(s)",
-            payload={"actor": actor, "actor_name": actor_name, "count": len(maps), "maps": maps},
-        )
-    return NotifyResult(recipients=len(by_owner), maps=sum(len(v) for v in by_owner.values()), skipped_maps=skipped)
-
-
-@dataclass
-class RemapResult:
-    applied: dict[str, int] = field(default_factory=dict)
-    skipped: list[str] = field(default_factory=list)
-
-    def hit(self, source: str) -> None:
-        self.applied[source] = self.applied.get(source, 0) + 1
-
-
-REMOVE_BLOCKED: frozenset[str] = frozenset({"map_owner", "owning_dept", "sp_dept"})
-
-
-def _parse_target(target_id: str) -> tuple[str, int]:
-    source, _, pk = target_id.partition(":")
-    if source not in FIXABLE or not pk.isdigit():
-        raise RemapError(f"invalid target_id {target_id!r}")
-    if not FIXABLE[source]:
-        raise RemapError(f"{source} is not fixable")
-    return source, int(pk)
-
-
-def _leaf(path: str) -> str:
-    return path.rsplit("/", 1)[-1]
-
-
-async def _resolve_to_value(session: AsyncSession, kind: str, mode: str, to_value: str) -> tuple[str, str]:
-    """(to_id, to_name) — dept는 (경로, 리프), user는 (login, 직원 name). remove면 ("", "")."""
-    if mode == "remove":
-        return "", ""
-    valid = await load_valid_sets(session)
-    if kind == "dept":
-        if to_value not in valid.dept_paths:
-            raise RemapError("to_value is not a current department path")
-        return to_value, _leaf(to_value)
-    if to_value not in valid.user_ids:
-        raise RemapError("to_value is not an active employee")
-    emp = await session.get(Employee, to_value)
-    return to_value, (emp.name if emp and emp.name else to_value)
-
-
-async def _replace_owner(session: AsyncSession, m: ProcessMap, to_login: str, actor: str) -> None:
-    """퇴직 오너 → 새 오너. transfer_owner와 결과 상태 동일(owner grant 정확히 1개) + owner_assigned 알림."""
-    old_owner = m.owner_id
-    grants = (await session.scalars(select(MapPermission).where(
-        MapPermission.map_id == m.id, MapPermission.principal_type == "user"))).all()
-    new_grant = None
-    for grant in grants:
-        if grant.principal_id == old_owner:
-            await session.delete(grant)
-        elif grant.principal_id == to_login:
-            new_grant = grant
-        elif grant.role == "owner":
-            grant.role = "editor"
-    if new_grant is None:
-        session.add(MapPermission(map_id=m.id, principal_type="user", principal_id=to_login,
-                                  role="owner", granted_by=actor))
-    else:
-        new_grant.role = "owner"
-    m.owner_id = to_login
-    m.consultant_owner_pending = False
-    actor_emp = await session.get(Employee, actor)
-    old_emp = await session.get(Employee, old_owner) if old_owner else None
-    actor_name = actor_emp.name if actor_emp and actor_emp.name else actor
-    from_name = old_emp.name if old_emp and old_emp.name else (old_owner or "")
-    await create_notifications(
-        session, [to_login], type="owner_assigned", map_id=m.id,
-        message=f"{actor_name} made you the owner of '{m.name}' (previous owner {from_name} has left)",
-        payload={"map_name": m.name, "actor": actor, "actor_name": actor_name, "from_name": from_name},
-    )
-
-
-async def _apply_line(session: AsyncSession, source: str, pk: int, *, from_value: str, mode: str,
-                      to_id: str, to_name: str, actor: str, result: RemapResult, target_id: str) -> None:
-    if mode == "remove" and source in REMOVE_BLOCKED:
-        raise RemapError(f"{source} cannot be removed")
-
-    if source in ("map_grant", "map_collab"):
-        grant = await session.get(MapPermission, pk)
-        if grant is None or grant.principal_id != from_value:
-            result.skipped.append(target_id)
-            return
-        if source == "map_collab" and grant.role == "owner":
-            result.skipped.append(target_id)  # 오너 grant는 map_owner 절차가 담당
-            return
-        if mode == "remove":
-            await session.delete(grant)
-        else:
-            dup = await session.scalar(select(MapPermission).where(
-                MapPermission.map_id == grant.map_id, MapPermission.principal_type == grant.principal_type,
-                MapPermission.principal_id == to_id))
-            if dup is not None:
-                if role_rank(grant.role) > role_rank(dup.role):
-                    dup.role = grant.role
-                await session.delete(grant)
-            else:
-                grant.principal_id = to_id
-        result.hit(source)
-        return
-
-    if source in ("group_member", "group_user"):
-        member = await session.get(UserGroupMember, pk)
-        if member is None or member.member_id != from_value:
-            result.skipped.append(target_id)
-            return
-        if mode == "remove":
-            await session.delete(member)
-        else:
-            dup = await session.scalar(select(UserGroupMember).where(
-                UserGroupMember.group_id == member.group_id, UserGroupMember.member_type == member.member_type,
-                UserGroupMember.member_id == to_id))
-            if dup is not None:
-                await session.delete(member)
-            else:
-                member.member_id = to_id
-        result.hit(source)
-        return
-
-    if source == "category_perm":
-        perm = await session.get(CategoryPermission, pk)
-        if perm is None or perm.principal_id != from_value:
-            result.skipped.append(target_id)
-            return
-        if mode == "remove":
-            await session.delete(perm)
-        else:
-            dup = await session.scalar(select(CategoryPermission).where(
-                CategoryPermission.category_id == perm.category_id, CategoryPermission.principal_type == "user",
-                CategoryPermission.principal_id == to_id))
-            if dup is not None:
-                await session.delete(perm)
-            else:
-                perm.principal_id = to_id
-        result.hit(source)
-        return
-
-    if source == "map_approver":
-        approver = await session.get(MapApprover, (pk, from_value))
-        if approver is None:
-            result.skipped.append(target_id)
-            return
-        if mode == "remove":
-            await session.delete(approver)
-        else:
-            dup = await session.get(MapApprover, (pk, to_id))
-            if dup is not None:
-                await session.delete(approver)
-            else:
-                await session.delete(approver)
-                await session.flush()
-                session.add(MapApprover(map_id=pk, user_id=to_id, assigned_by=actor))
-        result.hit(source)
-        return
-
-    # 이하 맵 컬럼 계열 — pk = map_id
-    m = await session.get(ProcessMap, pk)
-    if m is None:
-        result.skipped.append(target_id)
-        return
-    if source == "owning_dept":
-        if m.owning_department != from_value:
-            result.skipped.append(target_id)
-            return
-        m.owning_department = to_id
-    elif source == "sp_dept":
-        if m.sp_department != from_value:
-            result.skipped.append(target_id)
-            return
-        m.sp_department = to_name
-        m.sp_changed_by, m.sp_changed_at = actor, now_kst()
-    elif source == "sp_assignee":
-        names = split_names(m.sp_assignee)
-        if from_value not in names:
-            result.skipped.append(target_id)
-            return
-        kept = [n for n in names if n != from_value]
-        if mode == "replace" and to_name not in kept:
-            kept.append(to_name)
-        m.sp_assignee = ", ".join(kept)
-        m.sp_changed_by, m.sp_changed_at = actor, now_kst()
-    elif source == "map_owner":
-        if m.owner_id != from_value:
-            result.skipped.append(target_id)
-            return
-        await _replace_owner(session, m, to_id, actor)
-    result.hit(source)
-
-
-async def apply_remap(session: AsyncSession, *, kind: str, from_value: str, mode: str, to_value: str,
-                      target_ids: list[str], actor: str) -> RemapResult:
-    """검증은 적용 전 전부(target 파싱·대상 존재·remove 금지) → 라인별 적용. commit은 호출자."""
-    parsed = [_parse_target(t) for t in target_ids]
-    expected = DEPT_SOURCES if kind == "dept" else USER_SOURCES
-    for (source, _), target_id in zip(parsed, target_ids):
-        if source not in expected:
-            raise RemapError(f"{target_id} does not belong to kind {kind}")
-        if mode == "remove" and source in REMOVE_BLOCKED:
-            raise RemapError(f"{source} cannot be removed")
-    to_id, to_name = await _resolve_to_value(session, kind, mode, to_value)
-    result = RemapResult()
-    for (source, pk), target_id in zip(parsed, target_ids):
-        await _apply_line(session, source, pk, from_value=from_value, mode=mode, to_id=to_id,
-                          to_name=to_name, actor=actor, result=result, target_id=target_id)
-    return result

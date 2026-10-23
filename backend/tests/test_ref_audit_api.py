@@ -305,5 +305,30 @@ def test_summary_counts_only_actionable_places(client: TestClient, enforced: Non
 
 
 def test_admin_ref_audit_routes_removed(client: TestClient, enforced: None) -> None:
-    """관리 전용 조회 경로는 사라졌다 — 새 경로가 로그인만 요구하는 대체다."""
+    """관리 전용 경로 3개는 사라졌다 — 새 경로(조회·미리보기·적용)가 로그인만 요구하는 대체다."""
     assert client.get("/api/admin/ref-audit", headers=_as(SYSADMIN)).status_code == 404
+    old_bodies = {
+        "/api/admin/ref-audit/remap": {"kind": "dept", "from_value": "Gone", "to_value": "", "target_ids": ["sp_dept:1"]},
+        "/api/admin/ref-audit/notify": {"target_ids": ["sp_dept:1"]},
+    }
+    for path, body in old_bodies.items():
+        status = client.post(path, headers=_as(SYSADMIN), json=body).status_code
+        # 라우트가 없으면 404·405 — 본문 검증(422)까지 갔다면 아직 살아 있는 것이다
+        assert status // 100 != 2 and status != 422, (path, status)
+
+
+def test_user_card_login_without_employee_shows_login_as_sub(client: TestClient, enforced: None) -> None:
+    """직원 기록이 없는 로그인 그룹도 부가정보에 로그인을 보인다 — 이름이 곧 로그인이라도 '로그인 카드'임을 드러낸다."""
+    tag = _uid()
+    ghost = f"ghost.{tag}"
+
+    async def _seed() -> None:
+        async with SessionLocal() as session:
+            await _new_map(session, "ghost owner", owner=ghost)
+            await session.commit()
+
+    asyncio.run(_seed())
+
+    card = _card(_get_audit(client, SYSADMIN)["users"], ghost)
+
+    assert (card["label"], card["sub"]) == (ghost, ghost)

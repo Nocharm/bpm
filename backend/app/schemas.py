@@ -1918,6 +1918,17 @@ RefSource = Literal[
 
 
 RefOutcome = Literal["direct", "checkout", "new_draft", "approval", "notify", "locked", "pending"]
+RefLockReason = Literal[
+    "in_workflow", "request_pending", "owner_left", "in_approval", "framework", "not_eligible", "group_inactive",
+]
+RefWarning = Literal["no_access"]
+# 노드 줄이 겨냥한 버전 — 작업본 상태 또는 게시본
+RefVersionStatus = Literal["draft", "pending", "approved", "rejected", "published"]
+# 적용이 건너뛴 이유 — 잠김 사유·게시 대기, 그리고 적용 시점 재판정의 범위 밖·이미 바뀜
+RefSkipReason = Literal[
+    "in_workflow", "request_pending", "owner_left", "in_approval", "framework", "not_eligible", "group_inactive",
+    "pending", "out_of_scope", "already_changed",
+]
 
 
 class RefNotifyToOut(BaseModel):
@@ -1936,16 +1947,16 @@ class RefCardLineOut(BaseModel):
     from_value: str
     count: int
     outcome: RefOutcome
-    reason: str | None = None
+    reason: RefLockReason | None = None
     notify_to: RefNotifyToOut | None = None
-    warning: str | None = None
+    warning: RefWarning | None = None
     map_id: int | None = None
     map_name: str | None = None
     map_role: Literal["editor", "owner"] | None = None
     version_id: int | None = None
     version_label: str | None = None
     # 노드 줄 전용 — 작업본을 겨냥하면 그 상태(draft·rejected·pending·approved), 게시본이면 "published"
-    version_status: str | None = None
+    version_status: RefVersionStatus | None = None
     group_id: int | None = None
     group_name: str | None = None
     category_id: int | None = None
@@ -1983,35 +1994,52 @@ class RefAuditSummaryOut(BaseModel):
     actionable: int
 
 
-class RefRemapIn(BaseModel):
-    """체크한 라인만 from_value → to_value 치환(replace) 또는 제거(remove)."""
+class RefTargetIn(BaseModel):
+    """고를 줄 하나 — 카드 줄의 target_id와 그 줄의 원래 값(같은 target_id가 값마다 따로 있을 수 있다)."""
+
+    target_id: Annotated[str, StringConstraints(min_length=3, max_length=100)]
+    from_value: Annotated[str, StringConstraints(min_length=1, max_length=1200)]
+
+
+class RefApplyIn(BaseModel):
+    """미리보기·적용 공통 본문 — 고른 줄을 to_value로 대체하거나(replace) 지운다(remove)."""
 
     kind: Literal["dept", "user"]
-    from_value: Annotated[str, StringConstraints(min_length=1, max_length=1200)]
     mode: Literal["replace", "remove"] = "replace"
     to_value: Annotated[str, StringConstraints(max_length=1200)] = ""
-    target_ids: list[Annotated[str, StringConstraints(min_length=3, max_length=100)]] = Field(min_length=1)
+    targets: list[RefTargetIn] = Field(min_length=1)
 
 
-class RefRemapOut(BaseModel):
-    applied: dict[str, int]  # source → 처리 행 수
-    skipped: list[str]       # 값이 이미 바뀐 target_id
+class RefPreviewLineOut(BaseModel):
+    target_id: str
+    outcome: RefOutcome
+    reason: RefLockReason | None = None
+    notify_to: RefNotifyToOut | None = None
+    warning: RefWarning | None = None
 
 
-class RefNotifyIn(BaseModel):
-    target_ids: list[Annotated[str, StringConstraints(min_length=3, max_length=100)]] = Field(min_length=1)
+class RefPreviewOut(BaseModel):
+    """적용 시점과 같은 판정 — 쓰기 없음. 범위 밖·이미 바뀐 줄은 싣지 않는다."""
+
+    lines: list[RefPreviewLineOut]
 
 
-class RefNotifySkippedOut(BaseModel):
-    id: int
-    name: str
-    reason: Literal["owner_missing"]
+class RefDraftOut(BaseModel):
+    map_id: int
+    version_id: int
 
 
-class RefNotifyOut(BaseModel):
-    recipients: int
-    maps: int
-    skipped_maps: list[RefNotifySkippedOut]
+class RefSkippedOut(BaseModel):
+    target_id: str
+    reason: RefSkipReason
+
+
+class RefApplyOut(BaseModel):
+    places: dict[str, int]  # 결과(direct·checkout·new_draft·approval·notify) → 곳 수
+    drafts: list[RefDraftOut]  # 새로 만든 Draft — 게시해야 반영된다
+    approval_requests: int
+    notified: int  # 알림 수신자 수
+    skipped: list[RefSkippedOut]
 
 
 class AdminDirectoryOut(BaseModel):

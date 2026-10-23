@@ -38,7 +38,6 @@ from app.orgchart import (
     resolve_org_path,
 )
 from app.permissions.logic import is_sysadmin
-from app import ref_audit
 from app.settings import settings
 from app.schemas import (
     AdminDeptOut,
@@ -52,10 +51,6 @@ from app.schemas import (
     NotificationBulkDeleteOut,
     NotificationPurgeGroupOut,
     NotificationPurgeIn,
-    RefNotifyIn,
-    RefNotifyOut,
-    RefRemapIn,
-    RefRemapOut,
     TableDataOut,
     TableInfoOut,
 )
@@ -157,41 +152,6 @@ def _require_sysadmin(login_id: str) -> None:
     """공통 게이트 — sysadmin 아니면 403 / Shared gate: 403 unless sysadmin."""
     if not is_sysadmin(login_id):
         raise HTTPException(status_code=403, detail="sysadmin required")
-
-
-@router.post("/ref-audit/remap", response_model=RefRemapOut)
-async def post_ref_remap(
-    payload: RefRemapIn,
-    login_id: str = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> RefRemapOut:
-    """sysadmin 전용 — 체크한 라인만 replace/remove. 검증 실패는 전체 422(부분 적용 없음)."""
-    _require_sysadmin(login_id)
-    try:
-        result = await ref_audit.apply_remap(
-            session, kind=payload.kind, from_value=payload.from_value, mode=payload.mode,
-            to_value=payload.to_value, target_ids=payload.target_ids, actor=login_id,
-        )
-    except ref_audit.RemapError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    await session.commit()
-    return RefRemapOut(applied=result.applied, skipped=result.skipped)
-
-
-@router.post("/ref-audit/notify", response_model=RefNotifyOut)
-async def post_ref_notify(
-    payload: RefNotifyIn,
-    login_id: str = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> RefNotifyOut:
-    """sysadmin 전용 — 노드/SP 낡은 참조를 맵 오너에게 오너당 1건으로 묶어 알린다."""
-    _require_sysadmin(login_id)
-    try:
-        result = await ref_audit.send_fix_requests(session, payload.target_ids, login_id)
-    except ref_audit.RemapError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    await session.commit()
-    return RefNotifyOut(recipients=result.recipients, maps=result.maps, skipped_maps=result.skipped_maps)
 
 
 @router.get("/batch-runs", response_model=list[BatchRunOut])

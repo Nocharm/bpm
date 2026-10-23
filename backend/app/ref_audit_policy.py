@@ -319,7 +319,7 @@ def _decide_grant(grant: MapPermission, role: str | None, m: ProcessMap, ctx: De
     if grant.principal_type == "user" and (grant.map_id, grant.principal_id) in ctx.workflow_pairs:
         return Decision("locked", reason="in_workflow")
     if role == "owner":
-        return Decision("direct")  # 오너(sysadmin 포함)의 직접 적용은 대기 요청을 대체한다(_supersede_pending_downgrades)
+        return Decision("direct")  # 오너(sysadmin 포함)의 직접 적용은 대기 요청을 대체한다(governance.supersede_pending_downgrades)
     if (grant.map_id, grant.id) in ctx.pending_downgrades:
         return Decision("locked", reason="request_pending")
     # 대체도 옛 grant는 사라진다 — 제거와 같은 다운그레이드 규칙(editor 제거는 오너가 아니면 승인)

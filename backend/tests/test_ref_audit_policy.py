@@ -44,7 +44,7 @@ def _line(source: str, *, target_id: str | None = None, pending: bool = False,
           category_id: int | None = None) -> RefLine:
     """테스트 줄 — RefLine 생성을 한 곳에 모은다(필드 변경 시 여기만 고친다)."""
     return RefLine(
-        source=source, fixable=True, count=1, target_id=target_id or f"{source}:{MAP_ID}",
+        source=source, count=1, target_id=target_id or f"{source}:{MAP_ID}",
         map_id=map_id, group_id=group_id, category_id=category_id, pending=pending, from_value=GONE,
     )
 

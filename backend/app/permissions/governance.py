@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
-from app.models import ApprovalRequest, Employee, MapPermission, MapVersion
+from app.models import ApprovalRequest, Employee, MapPermission, MapVersion, ProcessMap, _now
 from app.orgchart import load_dept_index, resolve_org_path
 from app.permissions import logic
 
@@ -40,6 +40,28 @@ async def find_pending_downgrade(
     )
     return next(
         (r for r in rows.all() if r.payload.get("permission_id") == permission_id), None
+    )
+
+
+async def supersede_pending_downgrades(
+    session: AsyncSession, map_id: int, permission_id: int, *, actor: str
+) -> None:
+    """직접 적용이 pending 다운그레이드를 무효화 — rename supersede 선례(maps._supersede_pending_rename)."""
+    req = await find_pending_downgrade(session, map_id, permission_id)
+    if req is None:
+        return
+    req.status = "superseded"
+    req.decided_by = actor
+    req.decided_at = _now()
+    found_map = await session.get(ProcessMap, map_id)
+    map_name = found_map.name if found_map is not None else f"map {map_id}"
+    await workflow.create_notifications(
+        session,
+        [req.requested_by],
+        type="permission_superseded",
+        map_id=map_id,
+        message=f"Your permission change request on '{map_name}' was superseded - the owner applied a change directly",
+        payload={"map_name": map_name, "reason": "direct"},
     )
 
 

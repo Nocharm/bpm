@@ -135,10 +135,10 @@ def _describe_dept_group(group: RefGroup) -> tuple[str, str, str]:
 
 
 def _describe_user_group(group: RefGroup, identities: dict[tuple[str, str], _Identity]) -> tuple[str, str, str]:
-    """(key, label, sub) — 신원을 찾으면 key=login·label=이름·sub=login, 못 찾으면 값 그대로."""
+    """(key, label, sub) — 신원을 찾으면 key=login·label=이름·sub=login, 못 찾으면 값 그대로(로그인 그룹은 sub도 로그인)."""
     identity = identities.get((group.value_kind, group.value))
     if identity is None:
-        return group.value, group.value, ""
+        return group.value, group.value, group.value if group.value_kind == "login" else ""
     return identity.key, identity.label, identity.key
 
 

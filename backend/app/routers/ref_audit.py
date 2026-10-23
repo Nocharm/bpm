@@ -1,14 +1,16 @@
-"""고아 참조 감사 조회 API — 로그인한 누구나 자기 범위의 카드·요약을 본다(설계 2026-10-23 §8).
+"""고아 참조 감사 API — 로그인한 누구나 자기 범위의 카드·요약을 보고, 고른 줄을 미리보고 적용한다(설계 2026-10-23 §8).
 
-범위·결과 판정은 서버가 줄마다 정한다. 권한이 없는 사용자는 403이 아니라 빈 목록을 받는다.
+범위·결과 판정은 서버가 줄마다 정한다. 권한이 없는 사용자는 403이 아니라 빈 목록을 받고,
+범위 밖 줄의 적용은 건너뛴다(skipped). 검증 실패(대상 아님·제거 금지·대체 값 무효)만 422.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session
+from app.ref_audit_apply import RemapError, apply_targets, preview_targets
 from app.ref_audit_cards import (
     CardLine,
     RefCard,
@@ -16,25 +18,33 @@ from app.ref_audit_cards import (
     count_scope,
     load_audit_cards,
 )
+from app.ref_audit_policy import NotifyTo
 from app.schemas import (
+    RefApplyIn,
+    RefApplyOut,
     RefAuditOut,
     RefAuditScopeOut,
     RefAuditSummaryOut,
     RefCardLineOut,
     RefCardOut,
     RefNotifyToOut,
+    RefPreviewLineOut,
+    RefPreviewOut,
 )
 
 router = APIRouter(prefix="/api/ref-audit", tags=["ref-audit"])
 
 
+def _to_notify_out(notify_to: NotifyTo | None) -> RefNotifyToOut | None:
+    return RefNotifyToOut(id=notify_to.id, name=notify_to.name, role=notify_to.role) if notify_to else None
+
+
 def _to_line_out(card_line: CardLine) -> RefCardLineOut:
     line, decision = card_line.line, card_line.decision
-    notify_to = decision.notify_to
     return RefCardLineOut(
         source=line.source, target_id=line.target_id, from_value=line.from_value, count=line.count,
         outcome=decision.outcome, reason=decision.reason, warning=decision.warning,
-        notify_to=RefNotifyToOut(id=notify_to.id, name=notify_to.name, role=notify_to.role) if notify_to else None,
+        notify_to=_to_notify_out(decision.notify_to),
         map_id=line.map_id, map_name=line.map_name, map_role=card_line.map_role,
         version_id=line.version_id, version_label=card_line.version_label,
         version_status=card_line.version_status,
@@ -74,3 +84,36 @@ async def get_ref_audit_summary(
     """빨간 점 소스 — 내가 직접 고칠 수 있는 줄(알림·잠김·게시 대기 제외)의 곳 수 합."""
     audit = await load_audit_cards(session, login_id)
     return RefAuditSummaryOut(actionable=count_actionable(audit.departments + audit.users))
+
+
+@router.post("/preview", response_model=RefPreviewOut)
+async def post_ref_audit_preview(
+    payload: RefApplyIn,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> RefPreviewOut:
+    """적용과 같은 본문으로 줄별 결과만 — 쓰기 없음. 상세 창이 대상·모드를 바꿀 때마다 부른다."""
+    try:
+        decisions = await preview_targets(session, actor=login_id, body=payload)
+    except RemapError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return RefPreviewOut(lines=[
+        RefPreviewLineOut(target_id=target_id, outcome=d.outcome, reason=d.reason,
+                          notify_to=_to_notify_out(d.notify_to), warning=d.warning)
+        for target_id, d in decisions
+    ])
+
+
+@router.post("/apply", response_model=RefApplyOut)
+async def post_ref_audit_apply(
+    payload: RefApplyIn,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> RefApplyOut:
+    """다시 판정해 결과별로 적용 — 한 트랜잭션. 검증 실패는 쓰기 전에 요청 전체 422."""
+    try:
+        result = await apply_targets(session, actor=login_id, body=payload)
+    except RemapError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return result
