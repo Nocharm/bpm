@@ -7,6 +7,9 @@
 // 전제: backend를 DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys 로, frontend를 BACKEND_URL=<backend> 로 기동.
 //       시드는 이 스크립트가 API로 직접 만든다(맵 이름 접두 "RA smoke" - 시작·끝에 지운다). reset_db 금지.
 //       산출물은 저장소 루트 .shots/ref-audit-open-*.png (gitignore).
+// 주의: 로컬 개발 시드가 필요하다(woojin.choi, 부서 Logistics Team·Support Team, 사람 Yerin Jang, 시드 맵의 오우닝 부서 Management Center/IT Office/System Team).
+//       API_URL 뒤 DB에 `RA smoke` 맵을 만들고 영구 삭제하므로 운영·공용 DB가 아닌 스크래치 DB 사본에서 돌린다.
+//       적용 뒤 actionable이 정확히 6 줄어드는지 보므로 다른 변경이 동시에 일어나지 않는 DB여야 한다.
 import { mkdirSync } from "node:fs";
 
 import { chromium } from "playwright-core";
