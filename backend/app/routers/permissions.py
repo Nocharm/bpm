@@ -21,9 +21,8 @@ from app.framework_slots import (
     remaining_sides,
     validate_slot_change,
 )
-from app.models import ApprovalRequest, Employee, MapPermission, MapVersion, ProcessMap, _now
-from app.orgchart import load_dept_index, resolve_org_path
-from app.permissions import logic
+from app.models import ApprovalRequest, MapPermission, MapVersion, ProcessMap, _now
+from app.permissions import governance, logic
 from app.permissions.access import (
     assert_map_role,
     get_effective_role,
@@ -105,18 +104,7 @@ async def _assert_user_not_in_workflow(
     """
     if grant.principal_type != "user":
         return
-    versions = await session.scalars(
-        select(MapVersion).where(MapVersion.map_id == map_id)
-    )
-    blocked = any(
-        (v.checked_out_by == grant.principal_id and workflow.is_editable_status(v.status))
-        or (
-            v.submitted_by == grant.principal_id
-            and v.status in (workflow.PENDING, workflow.APPROVED)
-        )
-        for v in versions.all()
-    )
-    if blocked:
+    if await governance.is_in_active_workflow(session, map_id, grant.principal_id):
         raise HTTPException(
             status_code=409,
             detail="collaborator is in an active version workflow - resolve the checkout or approval first",
@@ -282,7 +270,7 @@ async def update_permission(
     # 오너(=sysadmin 포함, effective_role 단계에서 owner로 해석)는 다운그레이드 승인 없이 즉시 적용
     actor_role = await get_effective_role(session, user, map_id)
     if logic.requires_downgrade_approval(grant.role, new_role) and actor_role != "owner":
-        if await _find_pending_downgrade(session, map_id, permission_id) is not None:
+        if await governance.find_pending_downgrade(session, map_id, permission_id) is not None:
             raise HTTPException(
                 status_code=409, detail="a change request for this grant is already pending"
             )
@@ -300,7 +288,7 @@ async def update_permission(
             status="pending",
         )
         session.add(req)
-        await _notify_permission_request(
+        await governance.notify_permission_request(
             session,
             map_id=map_id,
             map_name=found_map.name,
@@ -340,26 +328,13 @@ async def delete_permission(
     # 오너(=sysadmin 포함)는 editor 제거 승인 없이 즉시 삭제
     actor_role = await get_effective_role(session, user, map_id)
     if logic.requires_downgrade_approval(grant.role, None) and actor_role != "owner":
-        if await _find_pending_downgrade(session, map_id, permission_id) is not None:
+        if await governance.find_pending_downgrade(session, map_id, permission_id) is not None:
             raise HTTPException(
                 status_code=409, detail="a change request for this grant is already pending"
             )
         found_map = await _get_map_or_404(session, map_id)
-        req = ApprovalRequest(
-            map_id=map_id,
-            kind="permission_downgrade",
-            payload={
-                "permission_id": permission_id,
-                "principal_type": grant.principal_type,
-                "principal_id": grant.principal_id,
-                "from_role": grant.role,
-                "to_role": None,
-            },
-            requested_by=user,
-            status="pending",
-        )
-        session.add(req)
-        await _notify_permission_request(
+        req = await governance.build_removal_request(session, grant=grant, requested_by=user)
+        await governance.notify_permission_request(
             session,
             map_id=map_id,
             map_name=found_map.name,
@@ -385,27 +360,11 @@ async def _get_grant_or_404(
     return grant
 
 
-async def _find_pending_downgrade(
-    session: AsyncSession, map_id: int, permission_id: int
-) -> ApprovalRequest | None:
-    """같은 grant 대상 pending 다운그레이드 요청 — payload 가 JSON 이라 파이썬에서 필터(맵당 소량)."""
-    rows = await session.scalars(
-        select(ApprovalRequest).where(
-            ApprovalRequest.map_id == map_id,
-            ApprovalRequest.kind == "permission_downgrade",
-            ApprovalRequest.status == "pending",
-        )
-    )
-    return next(
-        (r for r in rows.all() if r.payload.get("permission_id") == permission_id), None
-    )
-
-
 async def _supersede_pending_downgrades(
     session: AsyncSession, map_id: int, permission_id: int, *, actor: str
 ) -> None:
     """직접 적용이 pending 다운그레이드를 무효화 — rename supersede 선례(maps._supersede_pending_rename)."""
-    req = await _find_pending_downgrade(session, map_id, permission_id)
+    req = await governance.find_pending_downgrade(session, map_id, permission_id)
     if req is None:
         return
     req.status = "superseded"
@@ -424,19 +383,6 @@ async def _supersede_pending_downgrades(
 
 
 # ── B. Owner transfer ─────────────────────────────────────────
-
-
-async def _is_owning_department_member(
-    session: AsyncSession, login_id: str, owning_department: str | None
-) -> bool:
-    """오우닝 부서(하위 포함) 소속 여부 — effective_role 의 파생 editor 판정과 같은 접두 규칙."""
-    if not owning_department:
-        return False
-    emp = await session.get(Employee, login_id)
-    if emp is None:
-        return False
-    emp_org_path = resolve_org_path(emp, await load_dept_index(session))
-    return logic.belongs_to_department(emp_org_path, owning_department)
 
 
 @router.post(
@@ -471,7 +417,7 @@ async def transfer_owner(
         (g for g in grants if g.principal_type == "user" and g.principal_id == new_owner),
         None,
     )
-    if new_owner_grant is None and await _is_owning_department_member(
+    if new_owner_grant is None and await governance.is_owning_department_member(
         session, new_owner, found_map.owning_department
     ):
         new_owner_grant = MapPermission(
@@ -555,7 +501,7 @@ async def request_visibility_change(
         status="pending",
     )
     session.add(req)
-    await _notify_permission_request(
+    await governance.notify_permission_request(
         session,
         map_id=map_id,
         map_name=found_map.name,
@@ -854,26 +800,6 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
                     status_code=409, detail="request preconditions changed - withdraw and re-request"
                 ) from exc
         await apply_slot_change(session, plan, req.decided_by or req.requested_by, request_id=req.id)
-
-
-async def _notify_permission_request(
-    session: AsyncSession, *, map_id: int, map_name: str, requested_by: str, kind: str
-) -> None:
-    """승인 지연 요청 발생 → 활성 승인자에게 벨 알림 (요청자 제외, design 2026-07-16)."""
-    requester_name = await workflow.get_display_name(session, requested_by)
-    what = "a visibility change" if kind == "visibility_change" else "a permission change"
-    recipients = [
-        a for a in await workflow.load_active_approvers(session, map_id) if a != requested_by
-    ]
-    await workflow.create_notifications(
-        session,
-        recipients,
-        type="permission_requested",
-        map_id=map_id,
-        message=f"{requester_name} requested {what} on '{map_name}'",
-        payload={"map_name": map_name, "actor": requested_by,
-                 "actor_name": requester_name, "kind": kind},
-    )
 
 
 async def _notify_permission_decision(

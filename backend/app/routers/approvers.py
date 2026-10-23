@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import workflow
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import MapApprover, MapVersion, ProcessMap
+from app.models import MapApprover, ProcessMap
+from app.permissions import governance
 from app.permissions.access import get_effective_role
 from app.permissions.deps import require_map_role
 from app.schemas import ApproversUpdate
@@ -63,15 +63,7 @@ async def set_approvers(
 
     # 승인 진행 중(pending/approved 버전 존재)엔 승인자 변경 금지 — 진행 중 변경은 승인 tally를
     # 깨뜨려 오류를 유발. 승인자 편집은 워크플로 시작 전(draft/rejected 등)에만 허용.
-    in_flight = await session.scalar(
-        select(MapVersion.id)
-        .where(
-            MapVersion.map_id == map_id,
-            MapVersion.status.in_([workflow.PENDING, workflow.APPROVED]),
-        )
-        .limit(1)
-    )
-    if in_flight is not None:
+    if await governance.has_version_in_approval(session, map_id):
         raise HTTPException(
             status_code=409,
             detail="cannot change approvers while a version is under approval",

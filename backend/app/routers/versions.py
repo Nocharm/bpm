@@ -15,6 +15,7 @@ from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
 from app.kb import embed_client, indexing
 from app.orgchart import load_dept_index
+from app.permissions import governance
 from app.permissions.access import (
     get_effective_role,
     get_eligible_users,
@@ -29,7 +30,6 @@ from app.models import (
     Edge,
     Employee,
     Group,
-    MapPermission,
     MapVersion,
     Node,
     ProcessMap,
@@ -407,7 +407,7 @@ async def acquire_checkout(
         raise HTTPException(
             status_code=409, detail=f"version is {version.status} - not editable"
         )
-    if await _find_own_pending_downgrade(session, version.map_id, user) is not None:
+    if await governance.has_own_pending_downgrade(session, version.map_id, user):
         raise HTTPException(
             status_code=409,
             detail="your permission change is pending approval - cannot take checkout",
@@ -664,27 +664,6 @@ async def _is_waiting_for_confirm_decision(session: AsyncSession, map_id: int, u
     return category_id is None or not await is_direct_l5_admin(session, user, category_id)
 
 
-async def _find_own_pending_downgrade(
-    session: AsyncSession, map_id: int, user: str
-) -> ApprovalRequest | None:
-    """호출자 본인 grant 에 걸린 pending 다운그레이드 — 워크플로 상호 배제 역방향 (R2).
-
-    permissions 모듈 헬퍼를 함수-로컬 import(순환 회피, _apply_request 선례).
-    """
-    grant = await session.scalar(
-        select(MapPermission).where(
-            MapPermission.map_id == map_id,
-            MapPermission.principal_type == "user",
-            MapPermission.principal_id == user,
-        )
-    )
-    if grant is None:
-        return None
-    from app.routers.permissions import _find_pending_downgrade
-
-    return await _find_pending_downgrade(session, map_id, grant.id)
-
-
 @router.post("/versions/{version_id}/submit", response_model=VersionOut)
 async def submit_version(
     version_id: int,
@@ -705,7 +684,7 @@ async def submit_version(
     # 점유는 남았지만 편집권을 잃은 사용자(제거된 협업자)는 제출하지 못한다 (B-6)
     if await get_effective_role(session, user, version.map_id) not in EDIT_ROLES:
         raise HTTPException(status_code=403, detail="editor or owner required to submit")
-    if await _find_own_pending_downgrade(session, version.map_id, user) is not None:
+    if await governance.has_own_pending_downgrade(session, version.map_id, user):
         raise HTTPException(
             status_code=409,
             detail="your permission change is pending approval - cannot submit",
