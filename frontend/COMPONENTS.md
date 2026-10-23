@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 309개 · 2026-10-23 기준
+총 314개 · 2026-10-23 기준
 
 ## components/
 
@@ -355,9 +355,14 @@
 
 | 파일 | 컴포넌트 | 역할 | 사용처 |
 |------|----------|------|--------|
-| `ref-audit-hero.tsx` | `RefAuditHero` | 고아 참조 페이지 히어로 | (미사용) |
+| `ref-audit-hero.tsx` | `RefAuditHero` | 고아 참조 페이지 히어로 | `components/ref-audit/ref-audit-page.tsx` |
 | `ref-audit-illustration.tsx` | `RefAuditIllustration` | 고아 참조 설명 그림 | `components/ref-audit/ref-audit-hero.tsx` |
+| `ref-audit-page.tsx` | `RefAuditPage` | 고아 참조 페이지 | `app/settings/page.tsx` |
+| `ref-card-count.tsx` | `RefCardCount` | 고아 참조 카드 오른쪽 위 곳 수 | `components/ref-audit/ref-dept-card.tsx`, `components/ref-audit/ref-user-card.tsx` |
+| `ref-card-foot.tsx` | `RefCardFoot` | 고아 참조 카드 아래 집계 한 줄 | `components/ref-audit/ref-dept-card.tsx`, `components/ref-audit/ref-user-card.tsx` |
+| `ref-dept-card.tsx` | `RefDeptCard` | 고아 참조 부서 카드 | `components/ref-audit/ref-audit-page.tsx` |
 | `ref-outcome-chip.tsx` | `RefOutcomeChip` | 고아 참조 결과 칩 한 개 | `components/ref-audit/ref-audit-hero.tsx` |
+| `ref-user-card.tsx` | `RefUserCard` | 고아 참조 사용자 카드 | `components/ref-audit/ref-audit-page.tsx` |
 
 ## components/settings/
 

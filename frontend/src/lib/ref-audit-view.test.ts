@@ -10,9 +10,12 @@ import {
   REF_AUDIT_CASES,
   REF_AUDIT_LEGEND,
   SETTINGS_CHIPS,
+  getDeptCardView,
   getHeroStats,
+  getMapRowKind,
   getOutcomeLabelKey,
   getScopeChips,
+  getUserCardView,
   splitCaption,
 } from "@/lib/ref-audit-view";
 
@@ -156,5 +159,147 @@ describe("refAudit copy", () => {
         if (key.startsWith("refAudit.")) expect(text, `${lang} ${key}`).not.toContain("—");
       }
     }
+  });
+});
+
+describe("getDeptCardView", () => {
+  const moreLabel = (rest: number) => `외 ${rest}개 맵`;
+
+  it("keeps up to two map rows as they are", () => {
+    const view = getDeptCardView(
+      card("dept", "Team B", [
+        line({ map_id: 1, map_name: "Map A", count: 3 }),
+        line({ map_id: 2, map_name: "Map B", count: 1 }),
+      ]),
+      moreLabel,
+    );
+    expect(view.mapRows.map((r) => [r.label, r.count, r.isMore])).toEqual([["Map A", 3, false], ["Map B", 1, false]]);
+  });
+
+  it("folds three or more maps into the top row plus an 'N more' row", () => {
+    const view = getDeptCardView(
+      card("dept", "Team B", [
+        line({ map_id: 1, map_name: "Map A", count: 5 }),
+        line({ map_id: 2, map_name: "Map B", count: 2 }),
+        line({ map_id: 3, map_name: "Map C", count: 1 }),
+        line({ map_id: 4, map_name: "Map D", count: 1 }),
+      ]),
+      moreLabel,
+    );
+    expect(view.mapRows).toHaveLength(2);
+    expect(view.mapRows[1]).toMatchObject({ label: "외 3개 맵", count: 4, isMore: true });
+  });
+
+  it("shows the plain place count with no unit text", () => {
+    const view = getDeptCardView(card("dept", "Team B", [line({ count: 3 }), line({ map_id: 2, count: 4, outcome: "notify" })]));
+    expect(view.places).toBe(7);
+    expect(view.countText).toBe("7");
+    expect(view.countText).toMatch(/^\d+$/);
+  });
+
+  it("marks a card whose places are all awaiting publish and swaps the number for the marker", () => {
+    const view = getDeptCardView(card("dept", "Team B", [line({ count: 2, outcome: "pending" }), line({ map_id: 2, count: 1, outcome: "pending" })]));
+    expect(view.isPendingOnly).toBe(true);
+    expect(view.countText).toBeNull();
+    const mixed = getDeptCardView(card("dept", "Team B", [line({ count: 2, outcome: "pending" }), line({ map_id: 2, count: 1 })]));
+    expect(mixed.isPendingOnly).toBe(false);
+    expect(mixed.countText).toBe("3");
+  });
+
+  it("builds bar segments and foot items from the non-empty buckets in fix, notify, lock, pend order", () => {
+    const view = getDeptCardView(
+      card("dept", "Team B", [
+        line({ count: 1, outcome: "pending" }),
+        line({ map_id: 2, count: 3, outcome: "direct" }),
+        line({ map_id: 3, count: 2, outcome: "locked" }),
+      ]),
+    );
+    expect(view.bar).toEqual([
+      { bucket: "fix", weight: 3 },
+      { bucket: "lock", weight: 2 },
+      { bucket: "pend", weight: 1 },
+    ]);
+    expect(view.foot.map((f) => [f.bucket, f.count, f.labelKey])).toEqual([
+      ["fix", 3, "refAudit.foot.fix"],
+      ["lock", 2, "refAudit.foot.lock"],
+      ["pend", 1, "refAudit.foot.pend"],
+    ]);
+  });
+
+  it("carries the parent path from the card sub", () => {
+    expect(getDeptCardView({ ...card("dept", "Team B", [line({})]), sub: "HQ › Division 1" }).parentPath).toBe("HQ › Division 1");
+  });
+});
+
+describe("getMapRowKind", () => {
+  it("tells map, group, category and the folded row apart for the icon", () => {
+    const view = getDeptCardView(
+      card("dept", "Team B", [
+        line({ map_id: 1, map_name: "Map A", count: 9 }),
+        line({ map_id: null, map_name: null, group_id: 4, group_name: "Reviewers", count: 1 }),
+      ]),
+    );
+    expect(view.mapRows.map(getMapRowKind)).toEqual(["map", "group"]);
+    const cat = getDeptCardView(
+      card("dept", "Team B", [line({ map_id: null, map_name: null, category_id: 7, category_name: "L3 Sales", count: 1 })]),
+    );
+    expect(cat.mapRows.map(getMapRowKind)).toEqual(["category"]);
+    const many = getDeptCardView(
+      card("dept", "Team B", [
+        line({ map_id: 1, count: 3 }),
+        line({ map_id: 2, count: 2 }),
+        line({ map_id: 3, count: 1 }),
+      ]),
+    );
+    expect(many.mapRows.map(getMapRowKind)).toEqual(["map", "more"]);
+  });
+});
+
+describe("getUserCardView", () => {
+  it("uses the first character of the name as the avatar initial, uppercase for Latin", () => {
+    expect(getUserCardView(card("user", "홍길동", [line({})])).initial).toBe("홍");
+    expect(getUserCardView(card("user", "alice kim", [line({})])).initial).toBe("A");
+    expect(getUserCardView(card("user", "", [line({})])).initial).toBe("?");
+  });
+
+  it("builds a conic-gradient ring from the outcome ratio", () => {
+    const view = getUserCardView(
+      card("user", "User A", [line({ count: 1, outcome: "direct" }), line({ map_id: 2, count: 1, outcome: "notify" })]),
+    );
+    expect(view.ringGradient).toContain("conic-gradient");
+    expect(view.ringGradient).toContain("var(--color-added) 0% 50%");
+    expect(view.ringGradient).toContain("var(--color-warn) 50% 100%");
+  });
+
+  it("shows the login, or the 'name only' key when there is none", () => {
+    expect(getUserCardView({ ...card("user", "User A", [line({})]), sub: "usera" })).toMatchObject({ sub: "usera", subKey: null });
+    expect(getUserCardView({ ...card("user", "User A", [line({})]), sub: "" })).toMatchObject({ sub: "", subKey: "refAudit.nameOnly" });
+  });
+
+  it("shows the plain place count and the pending-only marker like the department card", () => {
+    const view = getUserCardView(card("user", "User A", [line({ count: 2 }), line({ map_id: 2, count: 3, outcome: "locked" })]));
+    expect(view.countText).toBe("5");
+    expect(view.isPendingOnly).toBe(false);
+    expect(view.foot.map((f) => f.bucket)).toEqual(["fix", "lock"]);
+    const pend = getUserCardView(card("user", "User A", [line({ count: 2, outcome: "pending" })]));
+    expect(pend.isPendingOnly).toBe(true);
+    expect(pend.countText).toBeNull();
+  });
+});
+
+describe("card copy", () => {
+  it("has en and ko text for the card and section keys without an em dash", () => {
+    const keys = [
+      "refAudit.moreMaps", "refAudit.nameOnly", "refAudit.foot.fix", "refAudit.foot.notify", "refAudit.foot.lock",
+      "refAudit.foot.pend", "refAudit.card.open", "refAudit.section.depts.title", "refAudit.section.depts.sub",
+      "refAudit.section.users.title", "refAudit.section.users.sub", "refAudit.section.none", "refAudit.empty",
+    ] as const;
+    for (const key of keys) {
+      for (const lang of ["en", "ko"] as const) {
+        expect(messages[lang][key], `${lang} ${key}`).toBeTruthy();
+      }
+    }
+    expect(messages.en["refAudit.moreMaps"]).toBe("+{n} more maps");
+    expect(messages.ko["refAudit.moreMaps"]).toBe("외 {n}개 맵");
   });
 });

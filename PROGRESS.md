@@ -14,6 +14,7 @@
 - Task 6: 프런트 타입·카드 집계. `api.ts`를 새 계약(`RefCard`·`RefAuditData`·결과 7종·잠김 사유·경고·미리보기/적용)으로 교체하고 `lib/ref-audit.ts`는 버킷·곳 수 집계·정렬(게시 대기만 맨 뒤)·맵 줄 요약·링 비율·적용 예고만 가진 순수 함수로 다시 썼다. 알림 `ref_fix_requested`의 맵 항목이 8개 소스 키를 싣게 되어 `sumRefFixCounts`로 합산(옛 알림은 키 4개). 구 sysadmin 패널·카드는 삭제하고 설정 refs 탭 본문은 새 화면(Task 9) 전까지 비운다.
 - Task 7: 빨간 점 길 안내. 상단 바 이름 버튼 우상단 점(메뉴를 열면 "설정" 줄로 이동)과 설정 레일 탭 옆 점이 같은 요약(`useRefAuditSummary`, 적용 뒤 `notifyRefAuditChanged`)을 쓰고, 읽음 상태는 두지 않아 직접 고칠 곳이 남은 동안 켜 둔다. 고아 참조 탭은 조직에서 새 "점검" 분류(everyone)로 옮기고 `?tab=refs` 딥링크·홈 경고 모달 링크를 달았다. 한국어 용어는 Check out으로 통일(R20).
 - Task 8: 페이지 히어로(`components/ref-audit/` 3종). 왼쪽 제목·숫자 3개·범위 칩·다시 스캔, 오른쪽 오늘의 조직도↔데모 맵 SVG 그림(토큰 클래스만, 이름은 중립 표기 i18n)과 그 위 경우별 호버 버튼 8개(어디·누가·대체/제거·주의 한 줄, 설명창은 `glass glass-dense`, 후광은 모션 축소 시 끔). 보이는 값은 `lib/ref-audit-view.ts`에 순수 함수·표로 두고 vitest로만 검증했다(컴포넌트 렌더 테스트 도구 없음). 결과 칩 `RefOutcomeChip`은 알림 라벨이 수신자 역할(오너/점유자)을 따른다.
+- Task 9: 부서·사용자 두 섹션과 카드 그리드(`ref-audit-page`·`ref-dept-card`·`ref-user-card`, 공유 조각 `ref-card-count`·`ref-card-foot`). 카드 보임새는 `lib/ref-audit-view.ts`의 순수 함수(`getDeptCardView`·`getUserCardView`)로 빼 단위 테스트하고 컴포넌트는 렌더만 한다. 사용자 시안 피드백 반영: 아바타 36px·링 3px(카드 최소 128px), 숫자 옆 "곳" 제거·숫자 17/15px. 두 열 분기는 설정 본문 폭 기준 `@[1080px]`(1440 뷰포트에서 2열, 1280에선 쌓임). 게시 대기만 남은 카드는 숫자 대신 모래시계 표식·accent 띠(알약 칩은 좁은 카드에서 이름을 밀어 아이콘만). 요약 훅은 로그아웃 때 점 값을 비워 다음 사용자에게 이전 점이 비치지 않게 했고, 홈 경고 모달 문구에서 "Draft에서 고치세요"를 뺐다.
 
 ## 2026-10-22 — 담당자 "재직자 명단에 없음" 오경고 수정 (dev)
 

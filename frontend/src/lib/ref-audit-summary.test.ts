@@ -1,4 +1,6 @@
 // 고아 참조 빨간 점 요약 구독 — 마운트 즉시 조회·창 이벤트 재조회·실패 0·해제 후 무반응 (design 2026-10-23 §9)
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getRefAuditSummary = vi.fn<() => Promise<{ actionable: number }>>();
@@ -8,6 +10,7 @@ import {
   REF_AUDIT_CHANGED_EVENT,
   notifyRefAuditChanged,
   subscribeRefAuditSummary,
+  useRefAuditSummary,
 } from "@/lib/ref-audit-summary";
 
 const flush = async () => {
@@ -86,5 +89,46 @@ describe("subscribeRefAuditSummary", () => {
     await flush();
     expect(onValue.mock.calls.map((c) => c[0])).toEqual([0]);
     stop();
+  });
+});
+
+describe("useRefAuditSummary", () => {
+  beforeEach(() => {
+    getRefAuditSummary.mockReset();
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  it("does not flash the previous user's count when re-enabled after a logout", async () => {
+    getRefAuditSummary.mockResolvedValue({ actionable: 4 });
+    const rendered: number[] = [];
+    function Probe({ enabled }: { enabled: boolean }) {
+      rendered.push(useRefAuditSummary(enabled));
+      return null;
+    }
+    const root = createRoot(document.createElement("div"));
+
+    await act(async () => {
+      root.render(createElement(Probe, { enabled: true }));
+      await flush();
+    });
+    expect(rendered.at(-1)).toBe(4);
+
+    await act(async () => {
+      root.render(createElement(Probe, { enabled: false }));
+    });
+    expect(rendered.at(-1)).toBe(0);
+
+    // 다음 사용자의 첫 응답이 오기 전 렌더 - 이전 값 4가 비치면 안 된다
+    getRefAuditSummary.mockReturnValue(new Promise(() => {}));
+    rendered.length = 0;
+    await act(async () => {
+      root.render(createElement(Probe, { enabled: true }));
+    });
+    expect(rendered).not.toContain(4);
+    expect(rendered.at(-1)).toBe(0);
+
+    await act(async () => {
+      root.unmount();
+    });
   });
 });

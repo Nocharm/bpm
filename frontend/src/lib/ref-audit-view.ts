@@ -1,9 +1,19 @@
 // 고아 참조 히어로 순수 로직 — 숫자 3개·범위 칩·결과 칩 라벨·그림 위 경우 8종 표. 컴포넌트는 렌더만 한다 (design 2026-10-23 §9).
 import { FilePlus2, Lock, Stamp, type LucideIcon } from "lucide-react";
 
-import type { RefAuditData, RefAuditScope, RefOutcome, RefSource } from "@/lib/api";
+import type { RefAuditData, RefAuditScope, RefCard, RefOutcome, RefSource } from "@/lib/api";
 import type { MessageKey } from "@/lib/i18n-messages";
-import { OUTCOME_META, OUTCOME_ORDER, tallyCard } from "@/lib/ref-audit";
+import {
+  OUTCOME_META,
+  OUTCOME_ORDER,
+  buildRingGradient,
+  isPendingOnly,
+  summarizeMapRows,
+  tallyCard,
+  type Bucket,
+  type CardTally,
+  type MapRow,
+} from "@/lib/ref-audit";
 
 export interface HeroStats {
   departments: number; // 부서 카드 수
@@ -155,3 +165,103 @@ export const REF_AUDIT_CASES: readonly RefAuditCase[] = [
     replace: true, remove: true,
   },
 ];
+
+// ── 부서·사용자 카드 ─────────────────────────────────────────────────────────
+
+const BUCKET_ORDER: readonly Bucket[] = ["fix", "notify", "lock", "pend"];
+
+export const BUCKET_LABEL_KEY: Record<Bucket, MessageKey> = {
+  fix: "refAudit.foot.fix",
+  notify: "refAudit.foot.notify",
+  lock: "refAudit.foot.lock",
+  pend: "refAudit.foot.pend",
+};
+
+export interface BarSegment {
+  bucket: Bucket;
+  weight: number; // 곳 수 — 막대 조각의 flex 비율
+}
+
+export interface CardFootItem {
+  bucket: Bucket;
+  labelKey: MessageKey;
+  count: number;
+}
+
+export type MapRowKind = "map" | "group" | "category" | "more";
+
+/** 맵 줄 아이콘 갈래 — summarizeMapRows의 key 접두(`map:`·`group:`·`category:`)와 접은 줄을 가른다. */
+export function getMapRowKind(row: MapRow): MapRowKind {
+  if (row.isMore) return "more";
+  if (row.key.startsWith("group:")) return "group";
+  if (row.key.startsWith("category:")) return "category";
+  return "map";
+}
+
+function getBarSegments(tally: CardTally): BarSegment[] {
+  return BUCKET_ORDER.filter((bucket) => tally[bucket] > 0).map((bucket) => ({ bucket, weight: tally[bucket] }));
+}
+
+function getFootItems(tally: CardTally): CardFootItem[] {
+  return BUCKET_ORDER.filter((bucket) => tally[bucket] > 0).map((bucket) => ({
+    bucket,
+    labelKey: BUCKET_LABEL_KEY[bucket],
+    count: tally[bucket],
+  }));
+}
+
+/** 카드 오른쪽 위 숫자 — 곳 수만 담고 단위 글자는 붙이지 않는다. 게시 대기만 남았으면 숫자 대신 표식(null). */
+function getCountText(tally: CardTally): string | null {
+  return isPendingOnly(tally) ? null : String(tally.places);
+}
+
+export interface DeptCardView {
+  mapRows: MapRow[];    // 걸린 맵 최대 2줄(3개 이상이면 둘째 줄이 "외 N개 맵")
+  places: number;
+  countText: string | null;
+  isPendingOnly: boolean;
+  bar: BarSegment[];
+  foot: CardFootItem[];
+  parentPath: string;   // 상위 경로("본부 › 부서 1"), 없으면 ""
+}
+
+/** 부서 카드 한 장에 그릴 값 — formatMore는 "외 N개 맵" 문구(번역)를 호출부가 정한다. */
+export function getDeptCardView(card: RefCard, formatMore?: (rest: number) => string): DeptCardView {
+  const tally = tallyCard(card);
+  return {
+    mapRows: summarizeMapRows(card, formatMore),
+    places: tally.places,
+    countText: getCountText(tally),
+    isPendingOnly: isPendingOnly(tally),
+    bar: getBarSegments(tally),
+    foot: getFootItems(tally),
+    parentPath: card.sub,
+  };
+}
+
+export interface UserCardView {
+  initial: string;
+  ringGradient: string;
+  places: number;
+  countText: string | null;
+  isPendingOnly: boolean;
+  foot: CardFootItem[];
+  sub: string;                // 로그인, 없으면 ""
+  subKey: MessageKey | null;  // 로그인이 없으면 "이름만 남음" 문구 키
+}
+
+/** 사용자 카드 한 장에 그릴 값. 이니셜은 이름 첫 글자(서로게이트 쌍 안전, 라틴은 대문자). */
+export function getUserCardView(card: RefCard): UserCardView {
+  const tally = tallyCard(card);
+  const firstChar = Array.from(card.label.trim())[0];
+  return {
+    initial: firstChar ? firstChar.toUpperCase() : "?",
+    ringGradient: buildRingGradient(tally),
+    places: tally.places,
+    countText: getCountText(tally),
+    isPendingOnly: isPendingOnly(tally),
+    foot: getFootItems(tally),
+    sub: card.sub,
+    subKey: card.sub ? null : "refAudit.nameOnly",
+  };
+}

@@ -32,6 +32,7 @@ import { CatalogsPanel } from "@/components/settings/catalogs-panel";
 import { KbManagePanel } from "@/components/settings/kb-manage-panel";
 import { ManualManagePanel } from "@/components/settings/manual-manage-panel";
 import { DashboardPanel } from "@/components/settings/dashboard-panel";
+import { RefAuditPage } from "@/components/ref-audit/ref-audit-page";
 
 // ── 탭/카테고리 정의 / Tabs grouped into categories ────────────────
 
@@ -321,7 +322,7 @@ export default function SettingsPage() {
               onToast={(message) => showToast({ id: genId(), message })}
             />
           )}
-          {/* refs 탭 본문 자리 - 새 고아 참조 화면(RefAuditPage)이 들어오기 전까지 비워 둔다 */}
+          {current === "refs" && <RefAuditPage />}
           {current === "localAccounts" && (
             <LocalAccountTable onToast={(message) => showToast({ id: genId(), message })} />
           )}

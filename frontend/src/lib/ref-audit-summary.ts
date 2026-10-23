@@ -43,7 +43,12 @@ export function useRefAuditSummary(enabled: boolean): number {
   const [actionable, setActionable] = useState(0);
   useEffect(() => {
     if (!enabled) return undefined;
-    return subscribeRefAuditSummary(setActionable);
+    const stop = subscribeRefAuditSummary(setActionable);
+    // 로그아웃으로 꺼질 때 비워 둔다 - 다음 사용자의 첫 응답 전에 이전 사용자의 점이 비치지 않게
+    return () => {
+      stop();
+      setActionable(0);
+    };
   }, [enabled]);
   return enabled ? actionable : 0;
 }

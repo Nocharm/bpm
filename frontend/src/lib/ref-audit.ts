@@ -132,7 +132,8 @@ export function tallyCard(card: RefCard): CardTally {
   return tally;
 }
 
-function isPendingOnly(tally: CardTally): boolean {
+/** 곳이 있고 전부 게시 대기 — 카드가 "게시 대기" 표식으로 뒤에 정렬된다. */
+export function isPendingOnly(tally: CardTally): boolean {
   return tally.places > 0 && tally.pend === tally.places;
 }
 
