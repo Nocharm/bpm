@@ -47,8 +47,8 @@ export interface MapRow {
 // 서버 REMOVE_BLOCKED와 같은 집합 — 지울 수 없는 소스(오너·주관 부서·SP 부서)
 export const REMOVE_BLOCKED: ReadonlySet<RefSource> = new Set<RefSource>(["map_owner", "owning_dept", "sp_dept"]);
 
-// 결과 표시 순서 — 적용 예고 칩·범례가 이 순서를 따른다
-const OUTCOME_ORDER: readonly RefOutcome[] = [
+// 결과 표시 순서 — 적용 예고 칩·히어로 범례가 이 순서를 따른다
+export const OUTCOME_ORDER: readonly RefOutcome[] = [
   "direct", "checkout", "new_draft", "approval", "notify", "locked", "pending",
 ];
 

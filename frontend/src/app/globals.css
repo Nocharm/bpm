@@ -1822,3 +1822,35 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
     opacity: 0;
   }
 }
+
+/* 고아 참조 히어로 경우 버튼 후광 — 가만히 있을 땐 천천히 번지고, 호버·키보드 포커스 중엔 멈춘다.
+   모션 축소 설정이면 후광을 아예 그리지 않는다(버튼 자체는 그대로 보인다). */
+@keyframes ref-case-halo {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.9;
+  }
+  70%,
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+.ref-case-halo::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 9999px;
+  border: 1.5px solid var(--color-accent-tint-border);
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ref-case-halo::after {
+    animation: ref-case-halo 2.6s ease-out infinite;
+  }
+  .ref-case-halo:hover::after,
+  .ref-case-halo:focus-visible::after {
+    animation: none;
+  }
+}
