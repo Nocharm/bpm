@@ -52,7 +52,6 @@ from app.schemas import (
     NotificationBulkDeleteOut,
     NotificationPurgeGroupOut,
     NotificationPurgeIn,
-    RefAuditOut,
     RefNotifyIn,
     RefNotifyOut,
     RefRemapIn,
@@ -158,17 +157,6 @@ def _require_sysadmin(login_id: str) -> None:
     """공통 게이트 — sysadmin 아니면 403 / Shared gate: 403 unless sysadmin."""
     if not is_sysadmin(login_id):
         raise HTTPException(status_code=403, detail="sysadmin required")
-
-
-@router.get("/ref-audit", response_model=RefAuditOut)
-async def get_ref_audit(
-    login_id: str = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> RefAuditOut:
-    """sysadmin 전용 — 현 조직에 없는 부서·사용자를 참조하는 12곳 온디맨드 스캔 (design 2026-09-09)."""
-    _require_sysadmin(login_id)
-    departments, users = await ref_audit.scan_refs(session)
-    return RefAuditOut(departments=departments, users=users, generated_at=now_kst())
 
 
 @router.post("/ref-audit/remap", response_model=RefRemapOut)

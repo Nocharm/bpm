@@ -1917,40 +1917,70 @@ RefSource = Literal[
 ]
 
 
-class RefLineOut(BaseModel):
-    """참조 라인 — target_id는 remap/notify가 되돌려주는 행 키('{source}:{pk}')."""
+RefOutcome = Literal["direct", "checkout", "new_draft", "approval", "notify", "locked", "pending"]
 
-    model_config = ConfigDict(from_attributes=True)
+
+class RefNotifyToOut(BaseModel):
+    """notify 줄의 수신자 — role은 오너/점유자 구분(알림 payload `as`와 같은 값)."""
+
+    id: str
+    name: str
+    role: Literal["owner", "holder"]
+
+
+class RefCardLineOut(BaseModel):
+    """카드 줄 — target_id는 적용이 되돌려주는 행 키('{source}:{pk}'), from_value는 줄이 속한 원래 그룹의 값."""
 
     source: RefSource
-    fixable: bool
-    count: int
     target_id: str
+    from_value: str
+    count: int
+    outcome: RefOutcome
+    reason: str | None = None
+    notify_to: RefNotifyToOut | None = None
+    warning: str | None = None
     map_id: int | None = None
     map_name: str | None = None
-    owner_id: str | None = None
-    owner_name: str | None = None
+    map_role: Literal["editor", "owner"] | None = None
+    version_id: int | None = None
+    version_label: str | None = None
+    # 노드 줄 전용 — 작업본을 겨냥하면 그 상태(draft·rejected·pending·approved), 게시본이면 "published"
+    version_status: str | None = None
     group_id: int | None = None
     group_name: str | None = None
     category_id: int | None = None
     category_name: str | None = None
-    version_id: int | None = None
-    version_status: str | None = None
 
 
-class RefGroupOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class RefCardOut(BaseModel):
+    """같은 대상(부서 리프·사람)을 참조하는 줄들의 묶음 — 화면 카드 하나."""
 
     kind: Literal["dept", "user"]
-    value: str
-    value_kind: Literal["path", "leaf", "login", "name"]
-    lines: list[RefLineOut]
+    key: str
+    label: str
+    sub: str
+    lines: list[RefCardLineOut]
+
+
+class RefAuditScopeOut(BaseModel):
+    """히어로 "범위" 칩 — 내가 고칠 수 있는 맵·그룹·카테고리 수."""
+
+    maps: int
+    groups: int
+    categories: int
 
 
 class RefAuditOut(BaseModel):
-    departments: list[RefGroupOut]
-    users: list[RefGroupOut]
+    departments: list[RefCardOut]
+    users: list[RefCardOut]
+    scope: RefAuditScopeOut
     generated_at: datetime
+
+
+class RefAuditSummaryOut(BaseModel):
+    """빨간 점 소스 — 직접 고칠 수 있는 줄의 곳 수 합."""
+
+    actionable: int
 
 
 class RefRemapIn(BaseModel):

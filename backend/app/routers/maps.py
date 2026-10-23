@@ -253,8 +253,7 @@ async def list_maps(
         ).all()
     }
 
-    # 낡은 참조 집계 — 감사 탭과 동일한 스캔 대상(게시본 + 최신 드래프트, 최신 버전 상태와 무관) + SP 지정값
-    # (audit tab과 홈 배지가 다른 대상을 세면 숫자가 어긋난다 — ref_audit.load_target_versions로 단일화, design 2026-09-09)
+    # 낡은 참조 집계 — 맵의 게시본·작업본 각각의 낡은 값 + SP 지정값(감사 화면은 actor의 맵 단위 줄을 세어 의도적으로 다르다, 설계 2026-10-23 §10)
     target_versions = await ref_audit.load_target_versions(session)
     stale_version_ids: dict[int, list[int]] = {
         m.id: [vid for vid, _status in target_versions[m.id]]

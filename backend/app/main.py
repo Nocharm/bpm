@@ -51,6 +51,7 @@ from app.routers import (
     notices,
     notifications,
     permissions,
+    ref_audit,
     slot_changes,
     versions,
 )
@@ -168,6 +169,7 @@ app.include_router(library.router)
 app.include_router(local_accounts.router)
 app.include_router(permissions.router)
 app.include_router(groups.router)
+app.include_router(ref_audit.router)
 
 
 @app.get("/api/health")
