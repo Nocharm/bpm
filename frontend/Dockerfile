@@ -1,14 +1,14 @@
 # 서버(사내 71번)는 Docker Hub 차단 — 베이스 이미지는 amd64 tar로 반입(docker load)한다(docs/deploy/deploy.md §0).
 # `# syntax=` 지시어 금지: 빌드마다 docker/dockerfile 프런트엔드 이미지를 레지스트리에서 찾아 프룬 뒤 빌드가 죽는다. 내장 파서로 충분.
-# 정확한 패치 버전으로 고정한다: 서버는 반입한 tar가 곧 버전이라 `22-alpine` 같은 유동 태그는 옛 tar로 조용히 빌드된다.
-# 22.23.4 = 2026-10-21 보안 릴리스. 올릴 때는 FROM 세 줄과 서버 tar 반입(deploy.md §0)을 같이 바꾼다.
-FROM node:22.23.4-alpine AS deps
+# 정확한 패치 버전으로 고정한다: 서버는 반입한 tar가 곧 버전이라 `24-alpine` 같은 유동 태그는 옛 tar로 조용히 빌드된다.
+# 24.22.1 = 2026-10-20 보안 릴리스(24 LTS, 지원 종료 2028-04-30, 로컬 개발과 같은 메이저). 올릴 때는 FROM 세 줄과 서버 tar 반입(deploy.md §0)을 같이 바꾼다.
+FROM node:24.22.1-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
 
-FROM node:22.23.4-alpine AS builder
+FROM node:24.22.1-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -16,7 +16,7 @@ COPY . .
 RUN npm run build
 
 # standalone 산출물만 담은 런타임 이미지 (next.config.ts output: "standalone")
-FROM node:22.23.4-alpine AS runner
+FROM node:24.22.1-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
