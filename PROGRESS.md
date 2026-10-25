@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-26 — 프런트 Node 22.23.4 고정(보안 릴리스) (dev)
+
+- 보안 패치 요청(22.x는 22.23.4 이상, 2026-10-21 보안 릴리스)으로 프런트 베이스를 `node:22-alpine` → `node:22.23.4-alpine` 고정. 서버는 Docker Hub 차단이라 반입 tar가 곧 버전인데, 유동 태그면 옛 tar(로컬 캐시는 22.23.3)로 조용히 빌드돼 패치가 빠지는 걸 확인할 길이 없다. 고정하면 tar 미반입 시 빌드가 실패해 드러난다. 서버엔 `node:24-bookworm-slim`만 남아 있어(22-alpine 프룬) 새 tar 반입이 필요하다(`deploy.md` §0).
+
 ## 2026-10-23 — v1.3.1 main 머지: 고아 참조 일반 사용자 오픈
 
 - 아래 두 항목(담당자 오경고 수정·고아 참조 일반 오픈)을 dev → main fast-forward로 올리고 사용자 지정 v1.3.1(규칙상 MINOR면 1.3.0, 사용자 결정). 백엔드·프런트 동시 배포, DB 스키마 변경 없음.
