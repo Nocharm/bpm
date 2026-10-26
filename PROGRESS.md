@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-26 — dev 모드 검증 스택 권한 적용 스위치 (dev)
+
+- 임시 아이디로 로그인하는 서버 검증 스택(AUTH_MODE=dev)에서 모든 계정이 관리자로 보였다. dev 모드는 `DEV_ENFORCE_PERMISSIONS`가 꺼져 있으면 전원 sysadmin인데, compose backend `environment:`에 이 변수가 없어 env 파일 값이 컨테이너에 닿지 않았다(CSV_MANUAL_URL과 같은 함정). 매핑을 추가(기본 false라 운영 무영향), 검증 스택은 env 파일에 `DEV_ENFORCE_PERMISSIONS=true`+`BPM_SYSADMINS=<임시 아이디>`.
+
 ## 2026-10-26 — v1.3.2 main 머지: 프런트 Node 24.22.1
 
 - 아래 항목(Node 24.22.1 고정)을 dev → main fast-forward로 올리고 PATCH(화면 변경 없는 런타임 교체)로 v1.3.2. 미배포 v1.3.1·v1.2.0과 함께 한 번에 배포한다. 서버는 `node:24.22.1-alpine` tar 선반입 필요. 2026-10-26 운영 배포 완료(main·dev 모두, frontend `node -v` v24.22.1, 사용자 확인).

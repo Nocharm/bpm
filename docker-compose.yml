@@ -47,6 +47,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-processmap}:${POSTGRES_PASSWORD:?set in .env}@db:5432/${POSTGRES_DB:-processmap}
       AUTH_ENABLED: ${AUTH_ENABLED:-true}
       AUTH_MODE: ${AUTH_MODE:-}
+      # dev 모드(임시 아이디 로그인) 스택에서만 의미 — false면 전원 sysadmin, true면 BPM_SYSADMINS 외엔 실제 역할
+      DEV_ENFORCE_PERMISSIONS: ${DEV_ENFORCE_PERMISSIONS:-false}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-}
       AUTH_JWT_TTL_HOURS: ${AUTH_JWT_TTL_HOURS:-8}
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
