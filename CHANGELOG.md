@@ -4,6 +4,12 @@
 **main 머지마다 버전을 올리고 `vX.Y.Z` 태그를 단다**(규칙: [`rules/common/git.md`](rules/common/git.md) "On Main Merge — 서비스 버전").
 상세 작업 로그는 [`PROGRESS.md`](PROGRESS.md), 사용자 공지는 [`docs/notices/`](docs/notices/).
 
+## v1.3.3 — 2026-10-26 (운영 배포 대기)
+
+- 프런트 의존성 보안 업데이트: **Next.js 16.2.9 → 16.4.3**(인증 없는 원격 코드 실행·정적 페이지 캐시 오염·SSRF 등 공개 취약점 수정), **DOMPurify 3.4.17**(매뉴얼 HTML 정화), 하위 패키지는 `npm audit` 자동 수정. `npm audit` 17건 → 2건(exceljs의 uuid 보통 2건: exceljs가 v4만 써서 취약 함수에 닿지 않고, 고치려면 exceljs를 3.x로 내려야 해 유지). 화면·기능 변경은 없다.
+- 서버 검증 스택(임시 아이디로 로그인하는 dev 모드)에서 일반 사용자 화면을 볼 수 있게 `DEV_ENFORCE_PERMISSIONS`를 backend 컨테이너로 넘긴다(종전엔 compose가 넘기지 않아 모든 계정이 관리자). 기본값 false라 운영(keycloak·ldap)은 그대로.
+- 배포 메모: Node 베이스는 v1.3.2와 같아(`node:24.22.1-alpine`) tar 반입이 필요 없다. 의존성이 바뀌어 프런트 `npm ci`가 다시 돈다(npm 레지스트리 접속 필요). 검증 스택은 그 스택의 env 파일에 `DEV_ENFORCE_PERMISSIONS=true`·`BPM_SYSADMINS=<관리자로 쓸 임시 아이디>`를 넣고 올린다. DB 스키마 변경 없음.
+
 ## v1.3.2 — 2026-10-26 (`49494a9b`, 운영 배포됨 2026-10-26: main·dev 모두, frontend Node v24.22.1 확인)
 
 - 프런트 실행 환경을 Node 22 → **Node 24.22.1**(2026-10-20 보안 릴리스, 24 LTS 지원 종료 2028-04-30)로 올리고 패치 버전까지 고정했다(`node:24.22.1-alpine`). 사내 보안 패치 요청(22.x는 22.23.4 이상)의 같은 날 릴리스로 같은 취약점 7건과 24 전용 1건이 고쳐져 있다. 22는 2027-04-30에 지원이 끝나 이번에 옮겼고, 로컬 개발도 24라 배포 런타임과 메이저가 같아졌다. 화면·기능 변경은 없다.
