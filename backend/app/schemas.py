@@ -1962,6 +1962,8 @@ class RefCardLineOut(BaseModel):
     group_name: str | None = None
     category_id: int | None = None
     category_name: str | None = None
+    # 노드 줄 전용 — 그 버전에서 이 값을 가진 노드 제목(정렬, 상한 ref_audit.NODE_TITLE_LIMIT, 곳 수는 count)
+    node_titles: list[str] = []
 
 
 class RefCardOut(BaseModel):

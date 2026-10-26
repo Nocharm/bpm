@@ -1,18 +1,15 @@
-// 고아 참조 페이지 — 히어로 + 부서·사용자 두 섹션(카드 그리드)의 로드·에러·빈 상태. 설정 > 점검 > 고아 참조 탭 본문이다.
-// 카드 그리드는 items-stretch가 필요하다 - 비율(aspect-ratio) 카드는 기본 정렬이 start라 한 행에서 긴 카드만 자란다.
+// 고아 참조 페이지 — 히어로 + 부서·사용자 두 섹션(검색·쪽 나눔 카드 그리드)의 로드·에러·빈 상태. 설정 > 점검 > 고아 참조 탭 본문이다.
 "use client";
 
-import { Building2, CircleCheck, UserX, type LucideIcon } from "lucide-react";
+import { CircleCheck } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { RefAuditHero } from "@/components/ref-audit/ref-audit-hero";
-import { RefDeptCard } from "@/components/ref-audit/ref-dept-card";
+import { RefCardSection } from "@/components/ref-audit/ref-card-section";
 import { RefDetailDialog } from "@/components/ref-audit/ref-detail-dialog";
-import { RefUserCard } from "@/components/ref-audit/ref-user-card";
 import { getRefAudit, type RefApplyResult, type RefAuditData, type RefCard } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
-import type { MessageKey } from "@/lib/i18n-messages";
 import { sortCards } from "@/lib/ref-audit";
 import { notifyRefAuditChanged } from "@/lib/ref-audit-summary";
 import { formatAppliedToast } from "@/lib/ref-audit-view";
@@ -22,47 +19,6 @@ interface ScanResult {
   key: number;
   page: RefAuditData | null;
   error: unknown;
-}
-
-interface SectionProps {
-  dataId: string;
-  icon: LucideIcon;
-  round?: boolean;
-  titleKey: MessageKey;
-  subKey: MessageKey;
-  count: number;
-  children: ReactNode;
-}
-
-function Section({ dataId, icon: Icon, round, titleKey, subKey, count, children }: SectionProps) {
-  const { t } = useI18n();
-  return (
-    <section
-      data-id={dataId}
-      className="flex min-w-0 flex-col gap-3.5 rounded-lg border border-hairline bg-surface-pearl px-[18px] pb-[18px] pt-4"
-    >
-      <header className="flex items-center gap-3">
-        <span
-          className={`grid size-9 shrink-0 place-items-center border border-warn/40 bg-warn/10 text-warn ${round ? "rounded-full" : "rounded-sm"}`}
-        >
-          <Icon size={18} strokeWidth={1.5} aria-hidden />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="flex items-center gap-2 text-body-strong text-ink">
-            {t(titleKey)}
-            <span
-              data-id={`${dataId}-count`}
-              className="rounded-full border border-hairline bg-surface px-2 text-fine font-normal leading-5 text-ink-tertiary"
-            >
-              {count}
-            </span>
-          </span>
-          <span className="text-fine text-ink-tertiary">{t(subKey)}</span>
-        </span>
-      </header>
-      {children}
-    </section>
-  );
 }
 
 interface RefAuditPageProps {
@@ -147,45 +103,8 @@ export function RefAuditPage({ onToast }: RefAuditPageProps) {
   } else {
     body = (
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 @[1080px]:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <Section
-          dataId="ref-audit-depts"
-          icon={Building2}
-          titleKey="refAudit.section.depts.title"
-          subKey="refAudit.section.depts.sub"
-          count={departments.length}
-        >
-          {departments.length > 0 ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(196px,1fr))] items-stretch gap-3">
-              {departments.map((card) => (
-                <RefDeptCard key={card.key} card={card} onOpen={handleOpenCard} />
-              ))}
-            </div>
-          ) : (
-            <p data-id="ref-audit-depts-none" className="py-4 text-center text-caption text-ink-tertiary">
-              {t("refAudit.section.none")}
-            </p>
-          )}
-        </Section>
-        <Section
-          dataId="ref-audit-users"
-          icon={UserX}
-          round
-          titleKey="refAudit.section.users.title"
-          subKey="refAudit.section.users.sub"
-          count={users.length}
-        >
-          {users.length > 0 ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] items-stretch gap-3">
-              {users.map((card) => (
-                <RefUserCard key={card.key} card={card} onOpen={handleOpenCard} />
-              ))}
-            </div>
-          ) : (
-            <p data-id="ref-audit-users-none" className="py-4 text-center text-caption text-ink-tertiary">
-              {t("refAudit.section.none")}
-            </p>
-          )}
-        </Section>
+        <RefCardSection kind="dept" cards={departments} onOpen={handleOpenCard} />
+        <RefCardSection kind="user" cards={users} onOpen={handleOpenCard} />
       </div>
     );
   }

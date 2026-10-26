@@ -46,6 +46,8 @@ USER_SOURCES: tuple[str, ...] = (
 )
 # 제거 모드가 없는 소스 — 오너·주관 부서·SP 부서는 대체만 된다
 REMOVE_BLOCKED: frozenset[str] = frozenset({"map_owner", "owning_dept", "sp_dept"})
+# 노드 줄이 싣는 노드 제목 상한(상세 창 호버 목록) — 곳 수(count)는 그대로 세고 제목만 자른다. 한 맵에 수백 노드가 걸려도 응답이 커지지 않게
+NODE_TITLE_LIMIT = 20
 
 
 @dataclass
@@ -76,6 +78,8 @@ class RefLine:
     # 노드 줄 전용 — 그 맵 작업본의 상태·점유자(작업본이 없으면 None). 줄별 결과 판정이 읽는다
     working_status: str | None = None
     checked_out_by: str | None = None
+    # 노드 줄 전용 — 그 버전에서 이 값을 가진 노드 제목(정렬, NODE_TITLE_LIMIT까지). 빈 제목은 끝 노드 등
+    node_titles: list[str] = field(default_factory=list)
     # 이 줄이 속한 그룹의 값 — 스캔이 모든 소스의 줄에 채운다(카드로 합쳐도 줄마다 적용 대상 값을 안다)
     from_value: str = ""
 
@@ -220,7 +224,8 @@ async def load_scan_context(session: AsyncSession) -> ScanContext:
 
 def _map_line(ctx: ScanContext, source: str, m: ProcessMap, target_id: str, *,
               count: int = 1, version_id: int | None = None, version_status: str | None = None,
-              pending: bool = False, target: NodeTarget | None = None) -> RefLine:
+              pending: bool = False, target: NodeTarget | None = None,
+              node_titles: list[str] | None = None) -> RefLine:
     owner = m.owner_id or m.created_by
     return RefLine(
         source=source, count=count, target_id=target_id,
@@ -229,6 +234,7 @@ def _map_line(ctx: ScanContext, source: str, m: ProcessMap, target_id: str, *,
         version_id=version_id, version_status=version_status, pending=pending,
         working_status=target.working_status if target else None,
         checked_out_by=target.checked_out_by if target else None,
+        node_titles=node_titles or [],
     )
 
 
@@ -265,30 +271,34 @@ def _get_node_version_roles(ctx: ScanContext) -> dict[int, tuple[int, bool]]:
     return roles
 
 
-async def _count_stale_node_values(
+async def _collect_stale_nodes(
     session: AsyncSession, ctx: ScanContext, stale_values: Callable[[str, str], Iterable[str]]
-) -> tuple[dict[tuple[int, str], int], dict[tuple[int, str], int]]:
-    """(맵, 낡은 값) → 노드 수 — (게시본, 작업본) 따로. stale_values(부서, 담당자)가 노드 하나의 낡은 값 목록을 낸다."""
+) -> tuple[dict[tuple[int, str], list[str]], dict[tuple[int, str], list[str]]]:
+    """(맵, 낡은 값) → 그 값을 가진 노드 제목(노드마다 하나, 길이=노드 수) — (게시본, 작업본) 따로.
+
+    stale_values(부서, 담당자)가 노드 하나의 낡은 값 목록을 낸다.
+    """
     roles = _get_node_version_roles(ctx)
-    published: dict[tuple[int, str], int] = {}
-    working: dict[tuple[int, str], int] = {}
+    published: dict[tuple[int, str], list[str]] = {}
+    working: dict[tuple[int, str], list[str]] = {}
     if not roles:
         return published, working
     rows = (
         await session.execute(
-            select(Node.version_id, Node.department, Node.assignee).where(Node.version_id.in_(list(roles)))
+            select(Node.version_id, Node.department, Node.assignee, Node.title)
+            .where(Node.version_id.in_(list(roles)))
         )
     ).all()
-    for version_id, department, assignee in rows:
+    for version_id, department, assignee, title in rows:
         map_id, is_working = roles[version_id]
         bucket = working if is_working else published
         for value in stale_values(department, assignee):
-            bucket[(map_id, value)] = bucket.get((map_id, value), 0) + 1
+            bucket.setdefault((map_id, value), []).append(title or "")
     return published, working
 
 
 def _add_node_lines(groups: _Groups, ctx: ScanContext, source: str, value_kind: str,
-                    published: dict[tuple[int, str], int], working: dict[tuple[int, str], int]) -> None:
+                    published: dict[tuple[int, str], list[str]], working: dict[tuple[int, str], list[str]]) -> None:
     """(맵, 값)당 노드 줄 하나 — 고칠 대상은 작업본, 작업본이 없으면 게시본.
 
     작업본에도 있으면 작업본 기준 곳 수. 작업본이 있는데 값이 게시본에만 남았으면 이미 고쳐진 것이라
@@ -298,13 +308,13 @@ def _add_node_lines(groups: _Groups, ctx: ScanContext, source: str, value_kind: 
         target = ctx.node_targets[map_id]
         m = ctx.maps[map_id]
         if (map_id, value) in working:
-            version_id, count, pending = target.working_id, working[(map_id, value)], False
+            version_id, titles, pending = target.working_id, working[(map_id, value)], False
         else:
-            version_id, count, pending = target.published_id, published[(map_id, value)], target.working_id is not None
+            version_id, titles, pending = target.published_id, published[(map_id, value)], target.working_id is not None
         groups.add(value, value_kind, _map_line(
-            ctx, source, m, f"{source}:{map_id}", count=count, version_id=version_id,
+            ctx, source, m, f"{source}:{map_id}", count=len(titles), version_id=version_id,
             version_status="draft" if version_id == target.working_id else "published",
-            pending=pending, target=target,
+            pending=pending, target=target, node_titles=sorted(titles)[:NODE_TITLE_LIMIT],
         ))
 
 
@@ -351,7 +361,7 @@ async def scan_dept_refs(session: AsyncSession, valid: ValidSets, ctx: ScanConte
     def stale_departments(department: str, _assignee: str) -> list[str]:
         return [department] if department and department not in valid.dept_leaves else []
 
-    published, working = await _count_stale_node_values(session, ctx, stale_departments)
+    published, working = await _collect_stale_nodes(session, ctx, stale_departments)
     _add_node_lines(groups, ctx, "node_dept", "leaf", published, working)
     return groups.finish()
 
@@ -416,7 +426,7 @@ async def scan_user_refs(session: AsyncSession, valid: ValidSets, ctx: ScanConte
     def stale_assignees(_department: str, assignee: str) -> list[str]:
         return [name for name in split_names(assignee) if name not in valid.user_names]
 
-    published, working = await _count_stale_node_values(session, ctx, stale_assignees)
+    published, working = await _collect_stale_nodes(session, ctx, stale_assignees)
     _add_node_lines(groups, ctx, "node_assignee", "name", published, working)
     return groups.finish()
 

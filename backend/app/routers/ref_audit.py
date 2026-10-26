@@ -50,6 +50,7 @@ def _build_line_out(card_line: CardLine) -> RefCardLineOut:
         version_status=card_line.version_status,
         group_id=line.group_id, group_name=line.group_name,
         category_id=line.category_id, category_name=line.category_name,
+        node_titles=line.node_titles,
     )
 
 

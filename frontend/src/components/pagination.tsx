@@ -9,20 +9,23 @@ export function Pagination({
   pageSize,
   page,
   onPage,
+  dataId,
 }: {
   total: number;
   pageSize: number;
   page: number;
   onPage: (page: number) => void;
+  dataId?: string; // 래퍼 data-id, 버튼은 `${dataId}-prev`·`${dataId}-next`
 }) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   if (pageCount <= 1) {
     return null;
   }
   return (
-    <div className="flex items-center justify-end gap-2 text-fine text-ink-secondary">
+    <div data-id={dataId} className="flex items-center justify-end gap-2 text-fine text-ink-secondary">
       <button
         type="button"
+        data-id={dataId ? `${dataId}-prev` : undefined}
         disabled={page <= 1}
         onClick={() => onPage(page - 1)}
         className="rounded-sm border border-hairline p-1 hover:bg-surface-alt disabled:opacity-40"
@@ -34,6 +37,7 @@ export function Pagination({
       </span>
       <button
         type="button"
+        data-id={dataId ? `${dataId}-next` : undefined}
         disabled={page >= pageCount}
         onClick={() => onPage(page + 1)}
         className="rounded-sm border border-hairline p-1 hover:bg-surface-alt disabled:opacity-40"

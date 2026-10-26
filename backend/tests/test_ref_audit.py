@@ -107,6 +107,7 @@ def test_node_lines_one_per_map_targeting_working_version(client: TestClient) ->
     assert line.count == 1
     assert line.pending is False and line.working_status == "draft"
     assert line.from_value == GONE_LEAF
+    assert line.node_titles == ["n0"]  # Draft 노드 제목만 — 게시본 n0·n1은 섞이지 않는다
 
 
 def test_node_line_pending_when_only_published_has_value(client: TestClient) -> None:
@@ -121,8 +122,21 @@ def test_node_line_pending_when_only_published_has_value(client: TestClient) -> 
     assert line.pending is True
     assert line.version_id == pub_id and line.version_status == "published"
     assert line.count == 2
+    assert line.node_titles == ["n0", "n1"]  # 게시 대기 줄은 게시본 노드 제목
     assert line.target_id == f"node_dept:{map_id}"
     assert line.working_status == "draft"
+
+
+def test_node_line_titles_sorted_and_capped(client: TestClient) -> None:
+    """노드 제목은 정렬해 상한까지만 싣고, 곳 수는 상한과 무관하게 전부 센다."""
+    total = ref_audit.NODE_TITLE_LIMIT + 5
+    map_id, _ = asyncio.run(_seed_node_versions([("published", [GONE_LEAF] * total)]))
+
+    (line,) = _scan_node_dept_lines(map_id)
+
+    assert line.count == total
+    assert len(line.node_titles) == ref_audit.NODE_TITLE_LIMIT
+    assert line.node_titles == sorted(f"n{i}" for i in range(total))[: ref_audit.NODE_TITLE_LIMIT]
 
 
 def test_node_line_without_working_version_is_not_pending(client: TestClient) -> None:

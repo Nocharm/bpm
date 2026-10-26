@@ -1,4 +1,5 @@
 // 고아 참조 부서 카드 — 4:3 가로형(윗변 띠·각진 점선 타일·이름·상위 경로·곳 수·걸린 맵 2줄·결과 막대·집계). 설정 > 점검 > 고아 참조 페이지의 부서 그리드가 쓴다.
+// 모서리는 2px로 거의 각지게 — 윗변 띠가 둥글게 휘지 않는다(사용자 결정 2026-10-26).
 // 4:3은 최소 비율이다 - overflow를 숨기지 않아야 aspect-ratio의 자동 최소 높이가 내용 높이가 되어, 긴 이름이 줄바꿈해도 잘리지 않고 같은 행 카드와 함께 자란다.
 "use client";
 
@@ -43,11 +44,11 @@ export function RefDeptCard({ card, onOpen }: RefDeptCardProps) {
       aria-haspopup="dialog"
       aria-label={t("refAudit.card.open", { name: card.label })}
       onClick={() => onOpen(card)}
-      className={`relative flex aspect-[4/3] min-w-0 flex-col gap-1 rounded-md border border-t-[3px] border-hairline bg-surface px-3.5 pb-3 pt-2.5 text-left transition-[border-color,box-shadow,translate] duration-350 ease-overshoot hover:-translate-y-0.5 hover:border-x-accent-tint-border hover:border-b-accent-tint-border hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${isPend ? "border-t-accent-tint-border" : "border-t-warn/40"}`}
+      className={`relative flex aspect-[4/3] min-w-0 flex-col gap-1 rounded-[2px] border border-t-[3px] border-hairline bg-surface px-3.5 pb-3 pt-2.5 text-left transition-[border-color,box-shadow,translate] duration-350 ease-overshoot hover:-translate-y-0.5 hover:border-x-accent-tint-border hover:border-b-accent-tint-border hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${isPend ? "border-t-accent-tint-border" : "border-t-warn/40"}`}
     >
       <span className="flex items-start gap-2.5">
         <span
-          className={`grid size-8 shrink-0 place-items-center rounded-sm border border-dashed ${isPend ? "border-accent-tint-border bg-accent-tint text-accent" : "border-warn/40 bg-warn/10 text-warn"}`}
+          className={`grid size-8 shrink-0 place-items-center rounded-[2px] border border-dashed ${isPend ? "border-accent-tint-border bg-accent-tint text-accent" : "border-warn/40 bg-warn/10 text-warn"}`}
         >
           {isPend ? <PendingIcon size={16} strokeWidth={1.5} aria-hidden /> : <Building2 size={16} strokeWidth={1.5} aria-hidden />}
         </span>

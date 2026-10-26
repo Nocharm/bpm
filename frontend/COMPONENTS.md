@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 317개 · 2026-10-23 기준
+총 318개 · 2026-10-26 기준
 
 ## components/
 
@@ -122,7 +122,7 @@
 | `node-summary-modal.tsx` | `NodeSummaryModal` | 노드 더블클릭 편집 모달 | `app/maps/[mapId]/page.tsx` |
 | `notification-bell.tsx` | `NotificationBell` | 인앱 알림 벨 | `components/top-nav.tsx` |
 | `org-info-modal.tsx` | `OrgInfoModal` | 조직 정보 모달 | `components/dept-pill.tsx`, `components/maps/map-detail-card.tsx`, `components/permissions/collaborators-panel.tsx`, `components/process-library-panel.tsx` |
-| `pagination.tsx` | `Pagination` | 간단 페이지네이션 | `app/feedback/page.tsx`, `components/notices/notices-manage-panel.tsx` |
+| `pagination.tsx` | `Pagination` | 간단 페이지네이션 | `app/feedback/page.tsx`, `components/notices/notices-manage-panel.tsx`, `components/ref-audit/ref-card-section.tsx` |
 | `param-icons.ts` | - | 수행 지표(Metrics) 아이콘 단일 소스 | `app/maps/[mapId]/compare/page.tsx`, `components/export-column-picker.tsx`, `components/group-bulk-modal.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/maps/map-fallback-notes.tsx`, `components/node-metrics-card.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/process-node.tsx`, `components/subprocess-inspector-card.tsx`, `components/subprocess-preview-peek.tsx`, `components/subprocess-usage-tab.tsx` |
 | `param-input.tsx` | `ParamInput` | 숫자 파라미터 공용 입력 | `components/group-bulk-modal.tsx`, `components/interview/params-table-dialog.tsx`, `components/node-metrics-card.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/permissions/subprocess-designation-panel.tsx` |
 | `person-hover-card.tsx` | `PersonHoverCard`, `PersonInfoPopup` | 인물 카드 | `app/inbox/page.tsx`, `components/approval-panel.tsx`, `components/assignee-pills.tsx`, `components/maps/framework-drill.tsx`, `components/maps/map-card.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/version-timeline.tsx`, `components/org-info-modal.tsx`, `components/permissions/collaborators-panel.tsx`, `components/permissions/subprocess-designation-panel.tsx`, `components/permissions/versions-publish-panel.tsx` |
@@ -159,7 +159,7 @@
 | `time-pills.tsx` | `TimePills` | 카드 시각 표시 | `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/notices/page.tsx`, `components/feedback-detail-modal.tsx`, `components/feedback-notes-flyout.tsx` |
 | `toast-stack.tsx` | `ToastStack` | 우상단(Nav 아래) 토스트 스택 | `app/feedback/page.tsx`, `app/groups/[groupId]/page.tsx`, `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/page.tsx`, `app/maps/[mapId]/settings/page.tsx`, `app/notices/page.tsx`, `app/page.tsx`, `app/settings/page.tsx`, `components/admin/approval-queue.tsx`, `components/feedback-side-panel.tsx`, `components/groups/groups-panel.tsx`, `components/map-settings/checkout-requests-panel.tsx`, `components/permissions/pending-approvals-panel.tsx` |
 | `toggle-chip.tsx` | `ToggleChip` | 켜짐/꺼짐 아이콘 칩 | `components/compare-png-export-modal.tsx`, `components/png-export-modal.tsx` |
-| `tooltip.tsx` | `Tooltip` | 호버 툴팁 | `app/manual/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/admin/framework-panel.tsx`, `components/admin/import-report/file-card.tsx`, `components/admin/import-report/report-bits.tsx`, `components/csv-import-tab.tsx`, `components/editor-toolbar.tsx`, `components/info-tip.tsx`, `components/inspector-panel.tsx`, `components/maps/dashboard-map-row.tsx`, `components/maps/dashboard-profile.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/recent-events-card.tsx`, `components/node-metrics-card.tsx`, `components/notices/notices-manage-panel.tsx`, `components/permissions/pending-approvals-panel.tsx`, `components/ref-audit/ref-detail-dialog.tsx`, `components/subprocess-inspector-card.tsx`, `components/subprocess-node-banner.tsx`, `components/subprocess-usage-tab.tsx`, `components/top-nav.tsx` |
+| `tooltip.tsx` | `Tooltip` | 호버 툴팁 | `app/manual/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/admin/framework-panel.tsx`, `components/admin/import-report/file-card.tsx`, `components/admin/import-report/report-bits.tsx`, `components/csv-import-tab.tsx`, `components/editor-toolbar.tsx`, `components/info-tip.tsx`, `components/inspector-panel.tsx`, `components/maps/dashboard-map-row.tsx`, `components/maps/dashboard-profile.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/recent-events-card.tsx`, `components/node-metrics-card.tsx`, `components/notices/notices-manage-panel.tsx`, `components/permissions/pending-approvals-panel.tsx`, `components/ref-audit/ref-detail-dialog.tsx`, `components/ref-audit/ref-detail-lines.tsx`, `components/subprocess-inspector-card.tsx`, `components/subprocess-node-banner.tsx`, `components/subprocess-usage-tab.tsx`, `components/top-nav.tsx` |
 | `top-nav.tsx` | `TopNav` | 전역 네비게이션 바 | `app/layout.tsx` |
 | `url-label-field.tsx` | `UrlLabelField` | URL+라벨 공용 편집 필드 | `app/maps/[mapId]/page.tsx` |
 | `user-hover-card.tsx` | `UserHoverCard` | 유저 호버 카드 | `components/admin/import-report/person-pill.tsx`, `components/map-ownership-section.tsx`, `components/user-pill.tsx` |
@@ -360,12 +360,13 @@
 | `ref-audit-page.tsx` | `RefAuditPage` | 고아 참조 페이지 | `app/settings/page.tsx` |
 | `ref-card-count.tsx` | `RefCardCount` | 고아 참조 카드 오른쪽 위 곳 수 | `components/ref-audit/ref-dept-card.tsx`, `components/ref-audit/ref-user-card.tsx` |
 | `ref-card-foot.tsx` | `RefCardFoot` | 고아 참조 카드 아래 집계 한 줄 | `components/ref-audit/ref-dept-card.tsx`, `components/ref-audit/ref-user-card.tsx` |
-| `ref-dept-card.tsx` | `RefDeptCard` | 고아 참조 부서 카드 | `components/ref-audit/ref-audit-page.tsx` |
+| `ref-card-section.tsx` | `RefCardSection` | 고아 참조 카드 섹션 | `components/ref-audit/ref-audit-page.tsx` |
+| `ref-dept-card.tsx` | `RefDeptCard` | 고아 참조 부서 카드 | `components/ref-audit/ref-card-section.tsx` |
 | `ref-detail-dialog.tsx` | `RefDetailDialog` | 고아 참조 상세 창 | `components/ref-audit/ref-audit-page.tsx` |
 | `ref-detail-lines.tsx` | `RefDetailLines` | 고아 참조 상세 창 본문 | `components/ref-audit/ref-detail-dialog.tsx` |
 | `ref-detail-target.tsx` | `RefDetailTarget` | 고아 참조 상세 창의 바꿀 대상 고르기 | `components/ref-audit/ref-detail-dialog.tsx` |
 | `ref-outcome-chip.tsx` | `RefOutcomeChip` | 고아 참조 결과 칩 한 개 | `components/ref-audit/ref-audit-hero.tsx`, `components/ref-audit/ref-detail-dialog.tsx`, `components/ref-audit/ref-detail-lines.tsx` |
-| `ref-user-card.tsx` | `RefUserCard` | 고아 참조 사용자 카드 | `components/ref-audit/ref-audit-page.tsx` |
+| `ref-user-card.tsx` | `RefUserCard` | 고아 참조 사용자 카드 | `components/ref-audit/ref-card-section.tsx` |
 
 ## components/settings/
 

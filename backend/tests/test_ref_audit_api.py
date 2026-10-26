@@ -119,6 +119,7 @@ def test_get_ref_audit_editor_scope_and_outcomes(client: TestClient, enforced: N
     assert sp_line["from_value"] == stale and sp_line["version_id"] is None
     node_line = by_source["node_dept"]
     assert node_line["outcome"] == "direct" and node_line["count"] == 2
+    assert node_line["node_titles"] == ["n0", "n1"] and sp_line["node_titles"] == []
     assert node_line["version_id"] == ids["draft"] and node_line["version_label"] == ids["label"]
     assert node_line["version_status"] == "draft"
 

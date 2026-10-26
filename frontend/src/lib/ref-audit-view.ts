@@ -16,6 +16,7 @@ import type {
   RefVersionStatus,
 } from "@/lib/api";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { filterByQuery } from "@/lib/search";
 import {
   OUTCOME_META,
   OUTCOME_ORDER,
@@ -282,6 +283,38 @@ export function getUserCardView(card: RefCard): UserCardView {
   };
 }
 
+// ── 카드 섹션(검색·페이징) ──────────────────────────────────────────────────
+
+/** 섹션 한 쪽에 보이는 카드 행 수 상한 — 넘치면 다음 쪽으로 넘긴다(사용자 결정 2026-10-26: 최대 3줄). */
+export const REF_GRID_ROWS = 3;
+
+/** CSS `repeat(auto-fill, minmax(minWidth, 1fr))`가 만드는 열 수 — 폭을 재기 전(0)엔 1열. */
+export function getGridColumns(width: number, minWidth: number, gap: number): number {
+  return Math.max(1, Math.floor((width + gap) / (minWidth + gap)));
+}
+
+/** 이름과 부가 줄(부서 상위 경로·로그인)로 카드를 거른다 — 부분일치·초성, 검색어가 있으면 맞춘 정도 순(lib/search). */
+export function filterRefCards(cards: RefCard[], query: string): RefCard[] {
+  return filterByQuery(cards, query, (card) => [
+    { field: "label", text: card.label },
+    { field: "sub", text: card.sub },
+  ]).map((hit) => hit.item);
+}
+
+export interface PageSlice<T> {
+  items: T[];
+  page: number;      // 1부터. 범위 밖 요청은 끝 쪽으로 당긴다(재스캔·검색으로 카드가 줄었을 때)
+  pageCount: number;
+}
+
+/** 한 쪽에 보일 항목 — page는 범위 안으로 당겨 돌려준다. */
+export function getPageSlice<T>(items: T[], page: number, pageSize: number): PageSlice<T> {
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+  const current = Math.min(Math.max(1, page), pageCount);
+  const start = (current - 1) * pageSize;
+  return { items: items.slice(start, start + pageSize), page: current, pageCount };
+}
+
 // ── 상세 창 ─────────────────────────────────────────────────────────────────
 
 export type RefMode = RefApplyBody["mode"];
@@ -365,6 +398,19 @@ export interface LineView {
   reloadNote: boolean;      // 내 점유 Draft에 바로 쓰는 노드 줄 — 열어 둔 에디터는 새로 고침(설계 §10)
   recipient?: string;       // 알림 줄의 받는 사람 이름
   role?: "owner" | "holder";
+  nodeTitles: NodeTitlesView | null; // 노드 줄의 "노드 N개" 호버 목록
+}
+
+export interface NodeTitlesView {
+  titles: string[]; // 빈 제목("")은 끝 노드 등 — 컴포넌트가 "(제목 없음)"으로 그린다
+  rest: number;     // 서버 상한에 잘려 못 실은 노드 수(곳 수 - 받은 제목 수)
+}
+
+/** 노드 줄 호버 목록 — 서버가 실은 제목과 나머지 수. 노드 줄이 아니거나 제목이 없으면 null. */
+function getNodeTitlesView(line: RefCardLine): NodeTitlesView | null {
+  const titles = line.node_titles ?? [];
+  if (!NODE_SOURCES.has(line.source) || titles.length === 0) return null;
+  return { titles, rest: Math.max(0, line.count - titles.length) };
 }
 
 function isRemoveBlocked(line: RefCardLine, mode: RefMode): boolean {
@@ -379,8 +425,11 @@ export function getLineView(line: RefCardLine, mode: RefMode): LineView {
     ? { detailKey: "refAudit.line.nodes", detailCount: line.count }
     : { detailKey: WHERE_KEY[line.source] };
   // 서버가 제거 금지 소스의 제거를 422로 막으므로 그 줄은 고를 수 없게 잠가 둔다
+  const nodeTitles = getNodeTitlesView(line);
   if (isRemoveBlocked(line, mode)) {
-    return { key, checkable: false, outcome: "locked", ...detail, reasonKey: "refAudit.cannotRemove", reloadNote: false };
+    return {
+      key, checkable: false, outcome: "locked", ...detail, reasonKey: "refAudit.cannotRemove", reloadNote: false, nodeTitles,
+    };
   }
   const notifyTo = line.outcome === "notify" ? line.notify_to : null;
   return {
@@ -393,6 +442,7 @@ export function getLineView(line: RefCardLine, mode: RefMode): LineView {
     reloadNote: isNode && line.outcome === "direct",
     recipient: notifyTo?.name,
     role: notifyTo?.role,
+    nodeTitles,
   };
 }
 

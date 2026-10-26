@@ -1,6 +1,6 @@
 // 고아 참조 오픈 감사 스모크 — Editor 사용자와 admin.sys 각각: 상단 이름 점 → 메뉴 설정 줄 점 → 설정 > 점검 탭 점 →
-// 경우 아이콘 호버 설명창 → 카드 넘침 검사(긴 이름·여러 폭) → 부서 카드 대체(대상 선택·미리보기 칩·적용·토스트) →
-// 사용자 카드 대체/제거 → 카드·점 갱신. 콘솔 에러 0.
+// 섹션 최대 3줄·쪽 넘김 → 섹션 검색으로 시드 카드 찾기 → 경우 아이콘 호버 설명창 → 카드 넘침 검사(긴 이름·여러 폭) →
+// 부서 카드 대체(노드 호버 제목·대상 선택·미리보기 칩·적용·토스트) → 사용자 카드 대체/제거 → 카드·점 갱신. 콘솔 에러 0.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3047 API_URL=http://localhost:8048 node scripts/pw-smoke-ref-audit-open.mjs
 //   bash       KEEP=1 BASE_URL=... node scripts/pw-smoke-ref-audit-open.mjs   (KEEP=1이면 시드 맵을 지우지 않는다)
 //   PowerShell $env:BASE_URL="http://localhost:3047"; $env:API_URL="http://localhost:8048"; node scripts\pw-smoke-ref-audit-open.mjs
@@ -102,6 +102,18 @@ async function findClippedCards(page) {
   });
 }
 
+// 섹션 그리드의 카드 행 수 - 한 쪽은 최대 3줄이다
+async function countCardRows(page, sectionId) {
+  return page.evaluate((id) => {
+    const cards = document.querySelectorAll(`[data-id="${id}"] button[data-id^="ref-card-"]`);
+    return new Set([...cards].map((card) => Math.round(card.getBoundingClientRect().top))).size;
+  }, sectionId);
+}
+
+async function getFirstCardId(page, sectionId) {
+  return page.locator(`[data-id="${sectionId}"] button[data-id^="ref-card-"]`).first().getAttribute("data-id");
+}
+
 // 같은 행 카드의 높이가 같은지 - 그리드 행이 늘어나도 한 줄은 가지런해야 한다
 async function findUnevenRows(page) {
   return page.evaluate(() => {
@@ -156,10 +168,25 @@ async function runPhase({ phase, user, deptTarget, personMode, personTarget, isP
     check(`[${phase}] Checks category listed`, (await page.getByText("Checks", { exact: true }).count()) > 0);
     await page.locator('[data-id="settings-tab-refs"]').click();
     await page.locator('[data-id="ref-audit-page"]').waitFor({ timeout: 15000 });
+    await page.locator('[data-id="ref-audit-depts-search"]').waitFor({ timeout: 20000 });
+    for (const section of ["ref-audit-depts", "ref-audit-users"]) {
+      const rows = await countCardRows(page, section);
+      check(`[${phase}] ${section} shows at most 3 card rows`, rows >= 1 && rows <= 3, `rows=${rows}`);
+      const next = page.locator(`[data-id="${section}-pager-next"]`);
+      if (await next.count()) {
+        const first = await getFirstCardId(page, section);
+        await next.click();
+        check(`[${phase}] ${section} next page shows other cards`, (await getFirstCardId(page, section)) !== first);
+        await page.locator(`[data-id="${section}-pager-prev"]`).click();
+      }
+    }
+    await shot("2-page");
+    // 시드 카드는 뒤 쪽에 있을 수 있다 - 섹션 검색으로 첫 쪽에 올린다
+    await page.locator('[data-id="ref-audit-depts-search"]').fill(LONG_DEPT);
+    await page.locator('[data-id="ref-audit-users-search"]').fill(LONG_PERSON);
     await deptCard(page).waitFor({ timeout: 20000 });
     await userCard(page).waitFor({ timeout: 20000 });
-    check(`[${phase}] long-name department and person cards rendered`, true);
-    await shot("2-page");
+    check(`[${phase}] section search finds the long-name department and person cards`, true);
 
     // 3) 경우 아이콘 호버 -> 설명창
     const caseButton = page.locator('[data-id="ref-case-node_dept"]');
@@ -195,6 +222,14 @@ async function runPhase({ phase, user, deptTarget, personMode, personTarget, isP
     check(`[${phase}] apply is disabled until a target is picked`, await applyButton.isDisabled());
     check(`[${phase}] department card has no remove mode`, await page.locator('[data-id="ref-detail-mode-remove"]').isDisabled());
     await shot("5a-dept-dialog");
+    // 노드 줄 "Nodes N"에 마우스를 올리면 노드 제목 목록
+    await dialog.locator('[data-id^="ref-line-nodes-"]').first().hover();
+    const nodesTip = page.locator('[data-id="ref-line-nodes-tip"]');
+    await nodesTip.waitFor({ timeout: 3000 });
+    const nodesTipText = (await nodesTip.innerText()).replace(/\s+/g, " ");
+    check(`[${phase}] node count hover lists the node titles`, nodesTipText.includes("Check"), nodesTipText);
+    await shot("5a1-node-hover");
+    await page.mouse.move(5, 5);
     // 미리보기 요청이 실패하는 동안엔 오류를 보이고 적용을 막는다 - 다시 시도하면 풀린다
     let isPreviewBroken = isPreviewFailureChecked;
     isFailureInjected = isPreviewFailureChecked;

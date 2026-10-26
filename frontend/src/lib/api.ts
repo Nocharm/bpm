@@ -1972,6 +1972,7 @@ export interface RefCardLine {
   group_name?: string | null;
   category_id?: number | null;
   category_name?: string | null;
+  node_titles?: string[]; // 노드 줄 전용 — 그 버전에서 이 값을 가진 노드 제목(정렬, 서버 상한 20, 곳 수는 count)
 }
 
 /** 같은 대상(부서 리프·사람)을 참조하는 줄들의 묶음 — 화면 카드 하나. */

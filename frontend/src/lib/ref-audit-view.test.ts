@@ -16,12 +16,14 @@ import {
   buildPreviewBatches,
   canApplySelection,
   canRemoveCard,
+  filterRefCards,
   formatAppliedToast,
   getApplyButton,
   getCheckedKeys,
   getDeptCardView,
   getDialogMeta,
   getForecast,
+  getGridColumns,
   getLineKey,
   getLineView,
   groupDialogLines,
@@ -30,6 +32,7 @@ import {
   getHeroStats,
   getMapRowKind,
   getOutcomeLabelKey,
+  getPageSlice,
   getScopeChips,
   getUserCardView,
   splitCaption,
@@ -361,7 +364,46 @@ describe("getLineKey / mergePreview", () => {
   });
 });
 
+describe("card section search and paging", () => {
+  it("counts the columns CSS auto-fill makes, one column before the width is measured", () => {
+    expect(getGridColumns(0, 196, 12)).toBe(1);
+    expect(getGridColumns(612, 196, 12)).toBe(3); // 3열 = 196*3 + 12*2
+    expect(getGridColumns(611, 196, 12)).toBe(2);
+    expect(getGridColumns(420, 128, 12)).toBe(3);
+  });
+
+  it("filters cards by name or sub line, including Korean initial consonants", () => {
+    const cards = [
+      { ...card("dept", "재무팀", []), sub: "경영지원본부" },
+      { ...card("user", "Gone Person", []), sub: "gone.user" },
+      card("user", "김민수", []),
+    ];
+    expect(filterRefCards(cards, "").map((c) => c.label)).toEqual(["재무팀", "Gone Person", "김민수"]);
+    expect(filterRefCards(cards, "gone.u").map((c) => c.label)).toEqual(["Gone Person"]);
+    expect(filterRefCards(cards, "ㄱㅁㅅ").map((c) => c.label)).toEqual(["김민수"]);
+    expect(filterRefCards(cards, "경영").map((c) => c.label)).toEqual(["재무팀"]);
+    expect(filterRefCards(cards, "없는 이름")).toEqual([]);
+  });
+
+  it("slices one page and pulls an out-of-range page back to the last one", () => {
+    const items = Array.from({ length: 7 }, (_, i) => i);
+    expect(getPageSlice(items, 1, 3)).toEqual({ items: [0, 1, 2], page: 1, pageCount: 3 });
+    expect(getPageSlice(items, 3, 3)).toEqual({ items: [6], page: 3, pageCount: 3 });
+    expect(getPageSlice(items, 9, 3)).toEqual({ items: [6], page: 3, pageCount: 3 });
+    expect(getPageSlice([], 2, 3)).toEqual({ items: [], page: 1, pageCount: 1 });
+  });
+});
+
 describe("getLineView", () => {
+  it("carries node titles for the hover list with the count the server cut off", () => {
+    const view = getLineView(line({ source: "node_dept", count: 23, node_titles: ["A", "", "B"] }), "replace");
+    expect(view.nodeTitles).toEqual({ titles: ["A", "", "B"], rest: 20 });
+    const removeBlocked = getLineView(line({ source: "node_dept", count: 2, node_titles: ["A", "B"] }), "remove");
+    expect(removeBlocked.nodeTitles).toEqual({ titles: ["A", "B"], rest: 0 });
+    expect(getLineView(line({ source: "node_assignee", count: 2 }), "replace").nodeTitles).toBeNull();
+    expect(getLineView(line({ source: "sp_dept", node_titles: ["A"] }), "replace").nodeTitles).toBeNull();
+  });
+
   it("disables the checkbox of a locked line and explains why", () => {
     const view = getLineView(line({ outcome: "locked", reason: "in_approval" }), "replace");
     expect(view).toMatchObject({ checkable: false, outcome: "locked", reasonKey: "refAudit.reason.in_approval" });
