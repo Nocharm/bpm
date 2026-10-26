@@ -274,6 +274,7 @@ export function TopNav() {
               } catch {
                 /* 무시 */
               }
+              // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- 의도된 전체 리로드(위 주석)
               window.location.assign("/");
             }}
           >

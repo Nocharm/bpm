@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-26 — 프런트 의존성 취약점 정리: Next 16.4.3·DOMPurify 3.4.17 (dev)
+
+- `npm audit` 17건(운영 10·개발 7) → 2건. Next 16.2.9가 핵심이었다(인증 없는 RCE·캐시 오염 등 20여 건, 우리 앱은 미들웨어·서버 액션·`use cache`·`next/og`·`next/image`를 안 쓰지만 `/_next/image`는 기본으로 열려 있고 페이지가 정적 생성) → 16.4.3(+eslint-config-next). DOMPurify 3.4.17(매뉴얼 HTML 정화, 문제 옵션은 미사용), 나머지는 `npm audit fix`. 남긴 2건은 exceljs의 uuid(v4만 써서 취약 함수 미도달, 고치려면 exceljs 3.x로 내려야 함).
+- 새 린트 규칙(`no-location-assign-relative-destination`)이 잡은 2곳은 의도된 전체 리로드라 이유를 단 예외로. `next dev`가 다시 쓰는 `frontend/AGENTS.md` 머리 블록도 커밋. `pw-smoke-node-modal-tiles`의 시스템 칸 검사는 2026-09-14 카탈로그 규칙(목록 밖 값=Other+원문 메모) 이전 기대값이라 실패한다(이번 변경과 무관, 미수정).
+
 ## 2026-10-26 — dev 모드 검증 스택 권한 적용 스위치 (dev)
 
 - 임시 아이디로 로그인하는 서버 검증 스택(AUTH_MODE=dev)에서 모든 계정이 관리자로 보였다. dev 모드는 `DEV_ENFORCE_PERMISSIONS`가 꺼져 있으면 전원 sysadmin인데, compose backend `environment:`에 이 변수가 없어 env 파일 값이 컨테이너에 닿지 않았다(CSV_MANUAL_URL과 같은 함정). 매핑을 추가(기본 false라 운영 무영향), 검증 스택은 env 파일에 `DEV_ENFORCE_PERMISSIONS=true`+`BPM_SYSADMINS=<임시 아이디>`.
