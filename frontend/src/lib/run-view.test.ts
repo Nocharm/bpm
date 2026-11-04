@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError, type FlatNode, type GraphEdge, type RunDetail, type RunNodeState } from "@/lib/api";
 import { messages, type MessageKey } from "@/lib/i18n-messages";
 import type { RunGraph } from "@/lib/run-graph";
-import { buildMapVersionHref, buildRunHref, readRunIdParam } from "@/lib/run-links";
+import { buildMapVersionHref, buildRunHref, readRunIdParam, readVersionIdParam } from "@/lib/run-links";
 import {
   applyRunEdgeKind,
   buildRunScopeStates,
@@ -375,5 +375,13 @@ describe("run links", () => {
     expect(readRunIdParam("?run=abc")).toBeNull();
     expect(readRunIdParam("?run=0")).toBeNull();
     expect(readRunIdParam("?run=1.5")).toBeNull();
+  });
+
+  it("reads the version to land on when leaving a run by URL", () => {
+    expect(readVersionIdParam("version=100")).toBe(100);
+    expect(readVersionIdParam("?version=100&run=7")).toBe(100);
+    expect(readVersionIdParam("run=7")).toBeNull();
+    expect(readVersionIdParam("version=x")).toBeNull();
+    expect(readVersionIdParam("version=-3")).toBeNull();
   });
 });

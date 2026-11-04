@@ -64,14 +64,6 @@ export function RunBar({ session, loadError, onToast, onClose, onOpenCurrentVers
             <span data-id="run-bar-error" className="min-w-0 truncate text-ink-secondary">
               {loadError}
             </span>
-            <button
-              type="button"
-              data-id="run-bar-close"
-              className="ml-auto shrink-0 rounded-sm border border-hairline bg-surface px-2 py-0.5 text-fine text-ink hover:bg-surface-alt"
-              onClick={onClose}
-            >
-              {t("run.bar.close")}
-            </button>
           </>
         ) : (
           <>
@@ -79,6 +71,15 @@ export function RunBar({ session, loadError, onToast, onClose, onOpenCurrentVers
             <span className="text-ink-tertiary">{t("run.bar.loading")}</span>
           </>
         )}
+        {/* 읽는 중에도 나갈 수 있게 — 느린 응답을 기다리지 않고 맵 화면으로 */}
+        <button
+          type="button"
+          data-id="run-bar-close"
+          className="ml-auto shrink-0 rounded-sm border border-hairline bg-surface px-2 py-0.5 text-fine text-ink hover:bg-surface-alt"
+          onClick={onClose}
+        >
+          {t("run.bar.close")}
+        </button>
       </div>
     );
   }
@@ -90,13 +91,15 @@ export function RunBar({ session, loadError, onToast, onClose, onOpenCurrentVers
 /**
  * 떠 있는 팝오버 닫기 — 바깥 누름·Esc. 안쪽 누름은 React 이벤트로 표시한다: 포털로 뜬 피커 목록도 React 트리를 따라
  * 팝오버 뿌리까지 버블하므로 DOM contains로는 놓치는 클릭을 잡는다. 창(window) 버블 리스너는 React 처리 뒤에 판단한다.
- * 돌려준 함수를 팝오버(와 트리거) 뿌리의 onPointerDown에 단다.
+ * 돌려준 함수를 팝오버(와 트리거) 뿌리의 onPointerDown에 단다. 트리거를 눌러 열 때 남은 표시는 열면서 지운다 — 남겨 두면
+ * 열린 뒤 첫 바깥 누름을 안쪽으로 오인해 두 번 눌러야 닫혔다.
  */
 function usePopoverDismiss(isOpen: boolean, close: () => void): () => void {
   const insideRef = useRef(false);
   const handleClose = useEffectEvent(close);
   useEffect(() => {
     if (!isOpen) return;
+    insideRef.current = false;
     const handleDown = () => {
       if (!insideRef.current) handleClose();
       insideRef.current = false;
@@ -560,6 +563,7 @@ function RunShareDialog({ mapId, starter, onClose, onShare }: RunShareDialogProp
                 <UserPill loginId={loginId} />
                 <button
                   type="button"
+                  data-id={`run-share-participant-remove-${loginId}`}
                   aria-label={t("run.bar.removeParticipant")}
                   title={t("run.bar.removeParticipant")}
                   className="rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
@@ -580,6 +584,7 @@ function RunShareDialog({ mapId, starter, onClose, onShare }: RunShareDialogProp
         <div className="flex justify-end gap-2">
           <button
             type="button"
+            data-id="run-share-cancel"
             className="rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
             onClick={onClose}
           >

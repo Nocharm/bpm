@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 
 import { listEligibleApprovers, type DirectoryUser } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import { PrincipalPicker } from "@/components/permissions/principal-picker";
 
@@ -19,27 +20,35 @@ interface RunParticipantPickerProps {
 export function RunParticipantPicker({ mapId, excludeIds, onPick }: RunParticipantPickerProps) {
   const { t } = useI18n();
   const [eligible, setEligible] = useState<DirectoryUser[]>([]);
+  // 후보 읽기 실패 문구 — "볼 수 있는 사람이 없어요"와 구분해 보인다. 피커를 열 때 다시 읽어 성공하면 지운다
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     listEligibleApprovers(mapId)
       .then((users) => {
-        if (active) setEligible(users);
+        if (!active) return;
+        setEligible(users);
+        setLoadError(null);
       })
       .catch((err: unknown) => {
-        // 후보를 못 읽으면 빈 목록(emptyLabel)으로 남는다 — 열 때 다시 읽는다
         console.warn("run participant candidates failed", { mapId, err });
+        if (active) setLoadError(humanizeApiError(err, t));
       });
     return () => {
       active = false;
     };
-  }, [mapId]);
+  }, [mapId, t]);
 
   const refreshEligible = () => {
     listEligibleApprovers(mapId)
-      .then(setEligible)
+      .then((users) => {
+        setEligible(users);
+        setLoadError(null);
+      })
       .catch((err: unknown) => {
         console.warn("run participant candidates refresh failed", { mapId, err });
+        setLoadError(humanizeApiError(err, t));
       });
   };
 
@@ -55,17 +64,24 @@ export function RunParticipantPicker({ mapId, excludeIds, onPick }: RunParticipa
   const userDepartments = Object.fromEntries(eligible.map((user) => [user.id, user.department]));
 
   return (
-    <PrincipalPicker
-      users={pickerUsers}
-      departments={[]}
-      groups={[]}
-      excludeIds={new Set(excludeIds)}
-      userDepartments={userDepartments}
-      onOpen={refreshEligible}
-      emptyLabel={t("run.start.pickerEmpty")}
-      onSelect={(option) => {
-        if (option.principalType === "user") onPick(option.principalId);
-      }}
-    />
+    <div className="flex flex-col gap-1">
+      <PrincipalPicker
+        users={pickerUsers}
+        departments={[]}
+        groups={[]}
+        excludeIds={new Set(excludeIds)}
+        userDepartments={userDepartments}
+        onOpen={refreshEligible}
+        emptyLabel={loadError ?? t("run.start.pickerEmpty")}
+        onSelect={(option) => {
+          if (option.principalType === "user") onPick(option.principalId);
+        }}
+      />
+      {loadError !== null && (
+        <p data-id="run-participant-picker-error" className="text-fine text-error">
+          {loadError}
+        </p>
+      )}
+    </div>
   );
 }

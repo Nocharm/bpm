@@ -1,7 +1,8 @@
 // 실행 진입·새 실행 창·실행 바 스모크 — 헤더 Run(Draft에선 꺼짐) → 새 실행(공유·참여자 2명) → 실행 화면 이동 →
 // 실행 바 진행 0/n·참여자·버전 필 잠금 → 영구 보존 토글 → 중단(확인) → 중단 줄·다시 열기 → 닫기(주소에서 run 빠짐)·뒤로 가기로
-// 다시 실행 모드(주소 동기화) → 없는 실행(오류 줄·닫기) → 실행 삭제 → 나만 → 공유 전환·참여자 더하기/빼기 →
-// 지난 게시본 실행(안내 단계·안내 줄·현재 버전 열기) → 개인 상한(409) 창 안 정리 목록. 콘솔 에러 0.
+// 다시 실행 모드(주소 동기화) → 없는 실행(오류 줄·닫기)·읽는 중 닫기 → 실행 삭제 → 나만 → 공유 전환·참여자 더하기/빼기 →
+// 지난 게시본 실행(안내 단계·안내 줄·현재 버전 열기·다른 버전으로 뒤로 가기) → 개인 상한(409) 창 안 정리 목록.
+// 실행 바의 두 팝오버(⋯·참여자)는 마우스로 열고 바깥 한 번 클릭으로 닫히는지 본다. 콘솔 에러 0.
 // 실행(frontend/ 에서):
 //   bash       BASE_URL=http://localhost:3047 API_URL=http://localhost:8048 node scripts/pw-smoke-run-start.mjs
 //   PowerShell $env:BASE_URL="http://localhost:3047"; $env:API_URL="http://localhost:8048"; node scripts\pw-smoke-run-start.mjs
@@ -112,7 +113,7 @@ try {
     await dialog.locator(`[data-id="run-start-participant-${person.id}"]`).waitFor();
   }
   await page.locator('[data-id="run-start-name"]').click(); // 피커 목록 닫기
-  check("dialog: two participants picked", (await dialog.locator('[data-id^="run-start-participant-"]').count()) === 2);
+  check("dialog: two participants picked", (await dialog.locator('span[data-id^="run-start-participant-"]').count()) === 2);
   await page.screenshot({ path: `${OUT}/run-start.png` });
 
   // 3) 실행 시작 → 실행 화면
@@ -147,6 +148,13 @@ try {
   await page.keyboard.press("Escape");
   await page.locator('[data-id="run-menu-pop"]').waitFor({ state: "detached" });
 
+  // 4b) ⋯ 메뉴 — 마우스로 열고 바깥 한 번 클릭으로 닫힌다(열 때 남은 안쪽 표시가 첫 바깥 클릭을 삼키지 않게)
+  await page.locator('[data-id="run-bar-more"]').click();
+  await page.locator('[data-id="run-bar-menu"]').waitFor();
+  await page.locator('[data-id="run-bar-name"]').click();
+  await page.locator('[data-id="run-bar-menu"]').waitFor({ state: "detached", timeout: 2000 });
+  check("more menu: one outside click closes it", (await page.locator('[data-id="run-bar-menu"]').count()) === 0);
+
   // 5) 중단(확인 한 단계) → 중단 줄 + 다시 열기
   await page.locator('[data-id="run-bar-more"]').click();
   await page.locator('[data-id="run-bar-stop"]').click();
@@ -176,6 +184,20 @@ try {
   await page.locator('[data-id="run-bar-close"]').click();
   await page.waitForURL((url) => !url.searchParams.has("run"));
   check("missing run: closed", (await runBar.count()) === 0);
+
+  // 7b) 읽는 중에도 닫기 — 실행 상세 응답을 늦춰 불러오는 중 줄에서 바로 나간다
+  await page.route(/\/api\/runs\/\d+$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+    await route.continue().catch((err) => console.warn("delayed run route ended", String(err)));
+  });
+  await page.goto(`${BASE}/maps/${MAP_ID}?version=${published.id}&run=${runId}`);
+  await page.locator('[data-id="run-bar"][data-state="loading"]').waitFor();
+  check("loading: close action shown", (await page.locator('[data-id="run-bar"] [data-id="run-bar-close"]').count()) === 1);
+  await page.locator('[data-id="run-bar-close"]').click();
+  await page.waitForURL((url) => !url.searchParams.has("run"));
+  await runBar.waitFor({ state: "detached" });
+  check("loading: closed before the run arrived", (await runBar.count()) === 0);
+  await page.unroute(/\/api\/runs\/\d+$/);
 
   // 8) 실행 삭제(확인) — 맵 화면으로 돌아온다
   if (!KEEP) {
@@ -226,8 +248,20 @@ try {
   await peoplePop.locator(`[data-id="run-bar-participant-${personB.id}"]`).waitFor({ state: "detached" });
   check("participants: removed", true);
   check("participants: starter has no remove", (await peoplePop.locator(`[data-id="run-bar-participant-remove-${ADMIN}"]`).count()) === 0);
+  await page.locator('[data-id="run-bar-name"]').click();
+  await peoplePop.waitFor({ state: "detached", timeout: 2000 });
+  check("participants: one outside click closes the popover", (await peoplePop.count()) === 0);
+  // 마우스로 막 열고 곧바로 바깥 한 번 — 피커를 거치지 않은 경우도 닫혀야 한다
+  await page.locator('[data-id="run-bar-participants-edit"]').click();
+  await peoplePop.waitFor();
+  await page.locator('[data-id="run-bar-progress"]').click();
+  await peoplePop.waitFor({ state: "detached", timeout: 2000 });
+  check("participants: fresh open closes on one outside click", (await peoplePop.count()) === 0);
+  await page.locator('[data-id="run-bar-participants-edit"]').click();
+  await peoplePop.waitFor();
   await page.keyboard.press("Escape");
   await peoplePop.waitFor({ state: "detached" });
+  check("participants: Esc closes the popover", true);
 
   // 10) 지난 게시본 — 안내 단계 → 지난 게시본으로 계속 → 안내 줄 → 현재 버전 열어 보기
   const oldMap = await api("GET", `/maps/${OLD_MAP_ID}`);
@@ -256,6 +290,26 @@ try {
   check(
     "old: open current leaves the run on the published version",
     new URL(page.url()).searchParams.get("version") === String(oldPublished.id),
+  );
+  const oldRunId = createdRunIds.at(-1);
+
+  // 10b) 다른 버전으로 뒤로 가기 — 게시본 화면에서 지난 게시본 실행을 연 뒤 뒤로 가면 실행을 나오고 게시본으로 돌아온다
+  await runMenu.click();
+  await page.locator(`[data-id="run-menu-row-${oldRunId}"]`).click();
+  await page.waitForURL((url) => url.searchParams.get("run") === String(oldRunId));
+  await page.locator('[data-id="run-bar-old-version"]').waitFor();
+  await page.goBack();
+  await page.waitForURL((url) => !url.searchParams.has("run"));
+  await runBar.waitFor({ state: "detached" });
+  await page.waitForFunction(
+    (title) => document.querySelector('[data-id="editor-readonly-notice"]')?.textContent?.includes(title),
+    "Published",
+    { timeout: 5000 },
+  );
+  check(
+    "back: leaving a run lands on the URL's version",
+    new URL(page.url()).searchParams.get("version") === String(oldPublished.id) &&
+      ((await page.locator('[data-id="editor-readonly-notice"]').textContent()) ?? "").includes("Published"),
   );
 
   // 11) 개인 상한 — API로 상한까지 채운 뒤 화면에서 만들면 창 안에 정리할 실행 목록, 중단하면 다시 시작

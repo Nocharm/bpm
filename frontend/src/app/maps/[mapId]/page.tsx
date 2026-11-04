@@ -3672,6 +3672,20 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (nextVersionId !== null && nextVersionId !== versionId) void switchVersion(nextVersionId);
     });
   };
+  // 주소 동기화(RunUrlSync) 입구 — 뒤로 가기 등으로 `?run=`이 빠지면 주소의 버전으로 화면을 맞춘다. 실행 바 닫기는
+  // runId를 먼저 비우고 버전도 맞춰 두므로 여기서는 아무것도 하지 않는다(runId가 이미 null)
+  const handleRunUrlChange = (nextRunId: number | null, urlVersionId: number | null) => {
+    const isLeavingByUrl = nextRunId === null && runId !== null;
+    setRunId(nextRunId);
+    if (
+      isLeavingByUrl &&
+      urlVersionId !== null &&
+      urlVersionId !== versionId &&
+      versions.some((v) => v.id === urlVersionId)
+    ) {
+      void switchVersion(urlVersionId);
+    }
+  };
 
   // 타임라인 '이 버전으로 가기' — 편집 중이면 VersionPill과 동일한 전환 확인 모달을 거친다 (feedback 2026-08-14)
   const [goVersionPrompt, setGoVersionPrompt] = useState<VersionSummary | null>(null);
@@ -12765,7 +12779,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       )}
       {/* 실행 주소 동기화 — useSearchParams 구독이라 이 조각만 Suspense로 감싼다 */}
       <Suspense fallback={null}>
-        <RunUrlSync onRunIdChange={setRunId} />
+        <RunUrlSync onRunIdChange={handleRunUrlChange} />
       </Suspense>
       {runStartOpen && versionId !== null && (
         <RunStartDialog

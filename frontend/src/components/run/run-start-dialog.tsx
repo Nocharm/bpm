@@ -4,7 +4,7 @@
 // 지난 게시본을 고르면 만들기 전에 "현재 게시본이 아니에요" 한 단계를 거치고, 열린 실행 상한(409)에 막히면 창 안에
 // 내가 정리할 수 있는 실행(개인=여러 맵의 내 개인 실행, 공유=이 맵에서 내가 시작한 공유 실행)을 중단 버튼과 함께 보인다.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, X } from "lucide-react";
 
@@ -70,6 +70,9 @@ export function RunStartDialog({ mapId, versions, currentVersionId, onClose, onC
   const [cap, setCap] = useState<CapState | null>(null);
   // 상한 목록에서 하나라도 중단했으면 다시 시작해 보라고 안내한다
   const [hasFreed, setHasFreed] = useState(false);
+  // 중단 요청 중인 실행 — 그동안 중단 버튼을 모두 꺼 두 번 누름이 두 번 보내지 않게
+  const [stoppingId, setStoppingId] = useState<number | null>(null);
+  const stoppingRef = useRef(false);
 
   const selected = runnable.find((version) => version.id === versionId) ?? null;
   const trimmedName = name.trim();
@@ -140,6 +143,10 @@ export function RunStartDialog({ mapId, versions, currentVersionId, onClose, onC
   };
 
   const handleStop = async (runId: number) => {
+    // 렌더를 기다리지 않는 가드 — 같은 틱의 두 번째 누름도 막는다
+    if (stoppingRef.current) return;
+    stoppingRef.current = true;
+    setStoppingId(runId);
     try {
       await stopRun(runId);
       setCap((prev) => (prev?.rows ? { ...prev, rows: prev.rows.filter((row) => row.runId !== runId) } : prev));
@@ -147,6 +154,9 @@ export function RunStartDialog({ mapId, versions, currentVersionId, onClose, onC
       setHasFreed(true);
     } catch (err) {
       setError(humanizeRunError(err, t));
+    } finally {
+      stoppingRef.current = false;
+      setStoppingId(null);
     }
   };
 
@@ -248,6 +258,7 @@ export function RunStartDialog({ mapId, versions, currentVersionId, onClose, onC
                         <UserPill loginId={loginId} />
                         <button
                           type="button"
+                          data-id={`run-start-participant-remove-${loginId}`}
                           aria-label={t("run.start.removeParticipant")}
                           title={t("run.start.removeParticipant")}
                           className="rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
@@ -299,7 +310,8 @@ export function RunStartDialog({ mapId, versions, currentVersionId, onClose, onC
                         <button
                           type="button"
                           data-id={`run-start-cap-stop-${row.runId}`}
-                          className="shrink-0 rounded-sm border border-error/40 px-2 py-0.5 text-fine text-error hover:bg-error/10"
+                          disabled={stoppingId !== null}
+                          className="shrink-0 rounded-sm border border-error/40 px-2 py-0.5 text-fine text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-40"
                           onClick={() => void handleStop(row.runId)}
                         >
                           {t("run.start.capStop")}
