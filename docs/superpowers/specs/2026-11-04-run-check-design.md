@@ -1,6 +1,6 @@
 # 실행 체크(Run) 설계
 
-> 2026-11-04 브레인스토밍 결과. 화면 목업: https://claude.ai/artifact/5ngxKm5G4JJ8go5MesCH3C (v6, 문구는 한국어 목업). 목업은 사용자가 원격으로 폰에서 검토하느라 폰 폭으로 그렸을 뿐이고, 제품은 데스크톱 전용이다(§2).
+> 2026-11-04 브레인스토밍 결과. 화면 목업: https://claude.ai/artifact/5ngxKm5G4JJ8go5MesCH3C (v8, 문구는 한국어 목업). 목업은 사용자가 원격으로 폰에서 검토하느라 폰 폭으로 그렸을 뿐이고, 제품은 데스크톱 전용이다(§2).
 > 표기: **[결정]** = 사용자가 정한 것, **[판단]** = 설계자가 정하고 사용자에게 보인 것(뒤집을 수 있음), **[빌더]** = 구현자가 정할 것.
 
 ## 1. 무엇과 왜
@@ -22,7 +22,6 @@
 - 감사 근거·증적 **[결정]**. 그래서 오래 들고 있지 않는다.
 - 사진·파일 첨부 **[판단]** (용량이 가장 빨리 느는 곳).
 - 노드별 담당자 지정·강제 **[판단]**. 노드의 기존 `assignee`/`assignee_role`은 보여 줄 수는 있어도 실행 권한과 묶지 않는다.
-- 홈 화면의 맵을 가로지르는 "내 실행" 목록 **[판단]**. 진입은 맵의 실행 버튼과 알림 딥링크.
 - L5 연계 캔버스(framework 맵)에서의 실행 **[판단]**. 게시(published)가 아니라 확정(confirmed) 트랙이라 대상이 아니다.
 - 실행 통계 대시보드. 한 줄 요약을 남기는 데서 멈춘다.
 
@@ -123,6 +122,7 @@
 - **끄기 [판단]**: 실행 메뉴에서 실행별로 알림 끄기(참여자별 설정).
 - **결재 알림 보호 [판단]**: 인당 100개 캡을 넘어 지울 때 실행 알림(run 계열 유형)을 먼저, 오래된 순으로 지운다. 실행 알림이 하나도 안 남았을 때만 지금처럼 다른 알림을 지운다. `create_notifications`의 트리밍 한 곳만 바뀌고 테이블·종 아이콘·미읽음 배지는 그대로다. 기존 유형의 동작이 바뀌지 않는 것을 테스트로 고정한다.
 - 새 알림 유형은 payload · FE `lib/notification-format.ts` KNOWN_TYPES · i18n · 아이콘 4곳을 같이 등록한다. 클릭하면 그 실행으로 딥링크.
+- **알림 종류 "실행" [판단]**: `lib/notification-categories.ts`에 `run` 카테고리를 더해 인박스 카테고리 필과 홈 알림 목록의 종류 메뉴(§4.8)가 같이 쓴다(i18n `inbox.cat.run`).
 
 ### 4.6 보존과 정리
 
@@ -142,6 +142,26 @@
 - 실행은 맵 그래프와 별도 테이블에 저장한다. 노드 색·버전·비교·확정 판정·내보내기·서명 어디에도 들어가지 않는다 **[판단]**.
 - 실행은 `version_id` + 그 버전의 노드 id·엣지 id를 가리킨다. 게시본은 바뀌지 않으므로 id가 안정적이다(노드 id는 전역 PK).
 
+### 4.8 홈 대시보드 [결정, 2026-11-04: A안]
+
+홈(맵 탭)에서 맵을 고르지 않았을 때 오른쪽에 보이는 개인 대시보드(`components/maps/home-dashboard.tsx`)의 활동 타일 줄을 바꾼다. 아래 카드 6개(최근 열어본 · 업무 체계 · 내 부서 · 내 문서 · 결재 대기 · 최근 변경)의 배치는 그대로다.
+
+- **타일 5칸 [결정]**: 결재 대기 · 내가 낸 요청 · Check out 중 버전 · **진행 중 실행**(새로) · **알림 · 피드백**(지금의 "미읽음 알림"과 "내 피드백" 두 칸을 합침).
+- **펼침 [결정]**: 진행 중 실행 타일과 알림·피드백 타일은 다른 화면으로 가지 않고, 누르면 타일 줄 바로 아래에 목록이 펼쳐진다. 지금 Check out 타일이 점유 목록을 펼치는 방식(`useClosingKeys` 아코디언)과 같다. 다시 누르면 접힌다. 한 번에 하나만 펼친다(Check out 목록 포함): 다른 타일을 누르면 그 목록으로 바뀐다 **[판단]**. 펼친 타일은 눌린 상태(`aria-pressed`, 틴트 배경)로 보인다. 개수가 0인 타일은 펼치지 않는다(Check out 타일과 같음) **[판단]**.
+- **진행 중 실행 타일 [판단]**: 큰 숫자는 내가 참여한 진행 중 실행 수(개인 + 참여자인 공유, 맵 합산). 아랫줄은 "문제 n · 곧 중단 n"을 경고색으로, 둘 다 0이면 평소 문구.
+- **실행 목록 [결정: 정렬·거르기 / 판단: 항목]**:
+  - 줄: 실행 이름, 작은 줄 맨 앞에 상태 글씨("문제: 노드 이름" · "32일 그대로 · 8일 뒤 자동 중단" · "다음: 노드 이름", 노드가 여럿이면 "외 n"), 맵 이름, 나만 / 공유 n명, 오른쪽에 진행(완료 / 전체 + 막대)과 마지막 손댄 때. 상태 글씨를 맨 앞에 둬서 폭이 좁아도 상태는 잘리지 않는다. 줄을 누르면 그 맵의 실행 화면이 바로 열린다(§5 URL 실행 id 딥링크). 끝난 실행은 나오지 않는다(맵의 모든 실행 창에서 본다). 길면 칸 안에서 스크롤한다.
+  - 거르기: 필 한 줄, 하나만 고른다. 전체 · 문제 · 곧 중단 · 공유 · 나만, 각 개수. "곧 중단"은 방치 30일 알림을 넘긴 실행(자동 중단까지 10일 이내, §4.6).
+  - 정렬: 메뉴(`MenuSelect`). 급한 순(기본: 문제 → 곧 중단 → 나머지, 같은 묶음 안에서는 최근 손댄 순) · 최근 활동 순 · 진행률 낮은 순 · 맵 이름 순(ko 로케일 비교).
+  - 거르기 결과가 없으면 "조건에 맞는 진행 중 실행이 없어요". 아래에 "끝난 실행은 각 맵의 모든 실행 창에서 봐요" 한 줄.
+- **알림 · 피드백 타일 [결정]**: 큰 숫자는 미읽음 알림 수(옆에 작은 "미읽음"), 아랫줄은 "피드백 진행 중 n"(내 피드백 중 완료가 아닌 것: 초안 · 작업중). 누르면 펼친 칸이 **왼쪽 알림 · 오른쪽 내 피드백** 두 목록으로 나뉜다 **[결정]**. 칸 폭이 좁으면 위아래로 쌓는다 **[판단]**.
+  - 왼쪽 알림 **[판단]**: 미읽음(기본) · 전체 필 + 종류 메뉴(전체 · 실행 · 버전 · Check out · 권한 · 서브프로세스 · 공지, §4.5). 최신 순 고정. 줄은 안 읽음 점, 종류 칩(실행은 테마색), 제목, 본문 한 줄(`notification-format.ts`의 같은 렌더), 시간. 누르면 읽음으로 바꾸고, 실행 알림은 그 실행 화면으로, 나머지는 인박스의 그 알림(`/inbox?notification=<id>`)으로 간다. 아래에 "모두 읽음"(`markAllNotificationsRead`)과 "알림 탭에서 전체 보기 →"(`/inbox`).
+  - 오른쪽 내 피드백 **[판단]**: 진행 중(기본, 초안 · 작업중) · 전체 필 + 종류 메뉴(전체 · 버그 · 제안 · 문의 · 기타). 최근 갱신 순 고정. 줄은 종류 칩, 본문 한 줄, "답글 있음 · 시간", 오른쪽 상태 칩(초안 · 작업중 · 완료). 누르면 피드백 화면의 그 상세 창(`/feedback?feedback=<id>`). 아래에 "+ 새 피드백"(지금의 피드백 쓰기 패널 `openFeedbackPanel`)과 "피드백 화면 →"(`/feedback`).
+  - 지금 두 타일이 하던 페이지 이동(`/inbox`, `/feedback` 지연 이동)은 위 아래 링크로 옮긴다.
+- **기억 [판단]**: 각 목록의 거르기·정렬·종류 선택은 브라우저 localStorage에 기억한다(내보내기 열 선택 `bpm.exportColumns.*`와 같은 방식, 키 접두 `bpm.home.`). 펼침 여부는 기억하지 않는다. 읽기·쓰기는 실패해도 기본값으로 동작한다.
+- **데이터 [판단 + 빌더]**: 실행 수·문제 수·곧 중단 수와 실행 줄은 Check out 목록처럼 `/me/dashboard` 응답(`backend/app/routers/me_dashboard.py` `MeDashboardActivityOut`·목록 필드)에 싣는다. 개인 10개 상한과 참여한 공유 실행이라 작다 **[판단]**. 알림·피드백 목록은 펼칠 때 기존 API로 부른다 **[판단]**. 몇 줄까지 싣고 어떻게 잘라 부를지는 **[빌더]**.
+- **바뀌는 곳**: `components/maps/dashboard-activity-tiles.tsx`(타일 5칸·펼침 칸), `home-dashboard.tsx`, `lib/api.ts` `MeDashboard` 타입, BE `me_dashboard.py`, `lib/notification-categories.ts`, i18n `home.dash.*`·`inbox.cat.run`, 컴포넌트 카탈로그 재생성(`node scripts/build-component-catalog.mjs`). 펼침 칸의 목록 조각은 Check out 목록 줄(`HoverLinkedRow`)과 인박스 필(`IconPillFilter`)을 재활용할 수 있는지 먼저 본다.
+
 ## 5. 빌더에게 맡기는 것
 
 - 테이블 설계(실행 · 참여자 · 노드 상태 · 코멘트 · 로그 · 요약 필드), 인덱스, API 모양. 제약은 §4.2의 "작게 저장"과 §4.6의 정리 단위.
@@ -154,7 +174,8 @@
 
 ## 6. 참고
 
-- 목업: https://claude.ai/artifact/5ngxKm5G4JJ8go5MesCH3C (v6). 상태 계산 `derive()`, 엣지 종류 `getEdgeKind()`, 팔레트 `buildStatusPalette()`/`buildEdgePalette()`, 동작 `runAction()`(취소 막기 `findTouchedAfter()`, 하위프로세스 동기화 `syncSubprocess()`, 완료 뒤 다음 노드 선택), 버튼 줄 `buildBarHtml()`·`buildPopHtml()`·`placeBar()`, 먼저 끝낼 단계 `getFrontier()`.
+- 목업: https://claude.ai/artifact/5ngxKm5G4JJ8go5MesCH3C (v8). 상태 계산 `derive()`, 엣지 종류 `getEdgeKind()`, 팔레트 `buildStatusPalette()`/`buildEdgePalette()`, 동작 `runAction()`(취소 막기 `findTouchedAfter()`, 하위프로세스 동기화 `syncSubprocess()`, 완료 뒤 다음 노드 선택), 버튼 줄 `buildBarHtml()`·`buildPopHtml()`·`placeBar()`, 먼저 끝낼 단계 `getFrontier()`. 홈 대시보드는 `HD_RUN_FILTERS`·`HD_RUN_SORTS`(거르기·정렬 정의), `renderHdRun()`·`renderHdNoti()`.
+- 홈 대시보드: `frontend/src/components/maps/dashboard-activity-tiles.tsx`(Check out 펼침 선례), `backend/app/routers/me_dashboard.py`, 인박스 `?notification=`·피드백 `?feedback=` 딥링크(`app/inbox/page.tsx`·`app/feedback/page.tsx`).
 - 에디터 포커싱: `frontend/src/app/maps/[mapId]/page.tsx` `revealNodeIfOffscreen`·`getFocusAnchorZoom`·`focusLinkedNode`(선택 + 노출), Tab 흐름 이동(`onFlowKey`, 임베드 자식 선택 포함).
 - 권한: `backend/app/permissions/logic.py` `effective_role`, `backend/app/permissions/access.py` `get_effective_role`·`get_eligible_users`.
 - 알림: `backend/app/workflow.py` `create_notifications`·`NOTIFICATION_CAP`, FE `lib/notification-format.ts`.
