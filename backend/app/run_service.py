@@ -13,7 +13,7 @@ from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
-from app import clock, workflow
+from app import clock, run_notify, workflow
 from app.app_settings import get_run_limits
 from app.models import (
     Edge,
@@ -321,8 +321,8 @@ async def create_run(session: AsyncSession, map_id: int, user: str, body: RunCre
     run = Run(map_id=map_id, version_id=body.version_id, name=body.name, scope=body.scope, starter=user)
     session.add(run)
     await session.flush()
-    # 초대 알림은 Task 6이 이 지점에 붙는다
     session.add_all(RunParticipant(run_id=run.id, login_id=login) for login in [user, *invited])
+    await run_notify.notify_invited(session, run, user, invited)
     await session.commit()
     await session.refresh(run)
     return run
@@ -346,7 +346,7 @@ _ENTERING_ACTIONS = ("start", "complete", "problem")
 
 @dataclass
 class ActionOutcome:
-    """동작 결과 — 알림(Task 6)이 읽는다. loop는 역행 갈래로 되감은 것이라 단계 완료로 세지 않는다."""
+    """동작 결과 — 어떤 알림을 보낼지 가른다. loop는 역행 갈래로 되감은 것이라 단계 완료로 세지 않는다."""
 
     kind: Literal["changed", "loop"]
     node_title: str
@@ -669,6 +669,19 @@ async def _finish_if_done(ctx: _ActionContext) -> bool:
     return True
 
 
+async def _notify_outcome(session: AsyncSession, run: Run, user: str, body: RunActionIn, outcome: ActionOutcome) -> None:
+    """공유 실행의 다른 참여자에게 알린다 — 완료·문제·해결·실행 끝. 시작·시작 취소·완료 취소·루프는 알림이 없다 (design §4.5)."""
+    if outcome.kind == "changed":
+        if body.action == "complete":
+            await run_notify.notify_step_done(session, run, user, outcome.node_title, scope_path=body.scope_path)
+        elif body.action == "problem":
+            await run_notify.notify_problem(session, run, user, body.scope_path, body.node_id, outcome.node_title)
+        elif body.action == "resolve":
+            await run_notify.notify_resolved(session, run, user, body.scope_path, body.node_id, outcome.node_title)
+    if outcome.finished:
+        await run_notify.notify_finished(session, run, user)
+
+
 async def apply_run_action(session: AsyncSession, run: Run, user: str, body: RunActionIn) -> ActionOutcome:
     """노드 동작 하나를 서버가 다시 판정해 적용하고 커밋한다 — 호출자는 실행 행을 잠근 채 부른다(공유 실행 동시 변경)."""
     if run.status != "open":
@@ -700,5 +713,7 @@ async def apply_run_action(session: AsyncSession, run: Run, user: str, body: Run
     finished = await _finish_if_done(ctx)
     run.last_activity_at = ctx.now
     run.idle_warned_at = None
+    outcome = ActionOutcome(kind=kind, node_title=node.title, finished=finished)
+    await _notify_outcome(session, run, user, body, outcome)  # 상태 변경과 같은 트랜잭션 — 알림만 남고 변경이 사라지는 일이 없다
     await session.commit()
-    return ActionOutcome(kind=kind, node_title=node.title, finished=finished)
+    return outcome

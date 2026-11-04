@@ -1,7 +1,7 @@
 """실행 체크(Run) 관리 — 코멘트·참여자·나만→공유 전환·중단/다시 열기/삭제·보존·알림 끄기. 라우터(`routers/runs.py`)가 얇게 부른다.
 
 설계: docs/superpowers/specs/2026-11-04-run-check-design.md §4.4(개인·공유와 권한)·§4.6(보존과 정리).
-동작 하나가 함수 하나다 — 알림(Task 6)은 각 함수의 커밋 직전 지점에 붙는다. 보기 규칙·상한·범위 해석은 `run_service`를,
+동작 하나가 함수 하나다 — 알림(`run_notify`)은 각 함수의 커밋 직전에 같은 트랜잭션으로 보낸다. 보기 규칙·상한·범위 해석은 `run_service`를,
 하위 범위 보이기는 `run_access`를 그대로 쓴다. 호출자(라우터)는 실행 행을 잠근 채(`load_visible_run(lock=True)`) 부른다.
 """
 
@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import clock
+from app import clock, run_notify
 from app.app_settings import get_run_limits
 from app.models import ProcessMap, Run, RunComment, RunEvent, RunParticipant
 from app.run_access import get_visible_scope_paths, is_scope_visible
@@ -129,6 +129,7 @@ async def create_run_comment(session: AsyncSession, run: Run, user: str, body: R
         run_id=run.id, scope_path=body.scope_path, node_id=body.node_id, author=user, body=body.body, created_at=now
     )
     session.add(comment)
+    await run_notify.attach_problem_note(session, run, user, body.scope_path, body.node_id, body.body)
     _touch_activity(run, now)
     await session.commit()
     return comment
@@ -194,7 +195,7 @@ async def share_run(session: AsyncSession, run: Run, user: str, body: RunShareIn
     run.scope = "shared"
     session.add_all(RunParticipant(run_id=run.id, login_id=login) for login in invited)
     _touch_activity(run, clock.now())
-    # 초대 알림은 Task 6이 이 지점에 붙는다
+    await run_notify.notify_invited(session, run, user, invited)
     await session.commit()
 
 
@@ -215,7 +216,7 @@ async def update_run_participants(session: AsyncSession, run: Run, user: str, bo
             delete(RunParticipant).where(RunParticipant.run_id == run.id, RunParticipant.login_id.in_(removed))
         )
     session.add_all(RunParticipant(run_id=run.id, login_id=login) for login in added)
-    # 초대 알림은 Task 6이 이 지점에 붙는다
+    await run_notify.notify_invited(session, run, user, added)
     await session.commit()
 
 
@@ -234,7 +235,7 @@ async def stop_run(session: AsyncSession, run: Run, user: str) -> None:
     run.summarize_after = await _get_summarize_after(session, run, now)
     _touch_activity(run, now)
     session.add(RunEvent(run_id=run.id, actor=user, action="stop", created_at=now))
-    # 중단 알림은 Task 6이 이 지점에 붙는다
+    await run_notify.notify_stopped(session, run, user)
     await session.commit()
 
 
