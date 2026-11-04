@@ -70,12 +70,21 @@ function getScopeDepth(scopePath: string): number {
 
 /**
  * 실행이 아직 고정하지 않은 하위 범위(펼쳐서 보기만 한 하위 맵)의 상태 — 기록이 없다. 호스트를 들어가지 않고
- * 바로 완료했거나 호스트가 건너뜀이면 남은 단계는 건너뜀이다(BE `_assert_hosts_reachable`과 같은 판정).
+ * 바로 완료했으면 남은 단계는 건너뜀이다(BE `_assert_hosts_reachable`과 같은 판정).
  * 범위 경로는 바깥 범위에서 호스트의 노드 키와 같다.
  */
 function buildUnpinnedScopeState(scopePath: string, statusByKey: ReadonlyMap<string, RunNodeStatus>, isStopped: boolean): RunScopeState {
+  return createEmptyScopeState(isStopped || statusByKey.get(scopePath) === "done");
+}
+
+// 막힌 호스트 상태 → 그 하위 범위의 연결선 종류(R22) — 대기면 앞이 안 끝남, 건너뜀이면 건너뜀(흐르는 점 없음)
+const BLOCKED_EDGE_KIND: Readonly<Record<"waiting" | "skipped", RunEdgeKind>> = { waiting: "fut", skipped: "skip" };
+
+/** 하위 범위의 호스트가 대기·건너뜀이면 그 상태(서버도 그 아래 동작을 409로 막는다), 아니면 null. 최상위는 늘 null. */
+function getBlockedHostStatus(scopePath: string, statusByKey: ReadonlyMap<string, RunNodeStatus>): "waiting" | "skipped" | null {
+  if (scopePath === "") return null;
   const host = statusByKey.get(scopePath);
-  return createEmptyScopeState(isStopped || host === "done" || host === "skipped");
+  return host === "waiting" || host === "skipped" ? host : null;
 }
 
 /** 범위 경로 → 그래프(최상위 `""`)에서 노드 상태·연결선 종류를 노드 키로. 그래프가 아직 없는 범위는 건너뛴다. */
@@ -92,11 +101,17 @@ export function buildRunView(detail: RunDetail, graphs: ReadonlyMap<string, RunG
   for (const [scopePath, graph] of ordered) {
     const state = states.get(scopePath) ?? buildUnpinnedScopeState(scopePath, statusByKey, isStopped);
     const statuses = deriveRunStatuses(graph, state);
+    // 호스트가 대기·건너뜀인 하위 맵은 기록과 무관하게 시작 노드 말고 전부 그 상태로 읽힌다(R22). 바깥부터 돌아서
+    // 손자 맵은 이미 대기·건너뜀이 된 하위 호스트를 보고 같은 규칙을 탄다
+    const blocked = getBlockedHostStatus(scopePath, statusByKey);
+    const nodeTypeById = new Map(graph.nodes.map((node) => [node.id, node.nodeType]));
     for (const [nodeId, status] of Object.entries(statuses)) {
-      statusByKey.set(toRunNodeKey(scopePath, nodeId), status);
+      const shown = blocked !== null && nodeTypeById.get(nodeId) !== "start" ? blocked : status;
+      statusByKey.set(toRunNodeKey(scopePath, nodeId), shown);
     }
     for (const edge of graph.edges) {
-      edgeKindByKey.set(toRunNodeKey(scopePath, edge.id), getRunEdgeKind(graph, state, statuses, edge));
+      const kind = blocked !== null ? BLOCKED_EDGE_KIND[blocked] : getRunEdgeKind(graph, state, statuses, edge);
+      edgeKindByKey.set(toRunNodeKey(scopePath, edge.id), kind);
     }
     if (scopePath === "") progress = countRunProgress(graph, state);
   }

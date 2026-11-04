@@ -1333,7 +1333,7 @@ const RUN_BADGE: Partial<Record<RunNodeStatus, { icon: LucideIcon; color: string
   active: { icon: Play, color: "var(--color-accent)", filled: true },
   done: { icon: Check, color: "var(--color-run-done)" },
   problem: { icon: AlertTriangle, color: "var(--color-run-problem)" },
-  waiting: { icon: Lock, color: "var(--color-run-wait-ink)" },
+  waiting: { icon: Lock, color: "var(--color-run-wait-badge)" },
 };
 
 // 실행 모드 노드 오른쪽 위 14px 원 — 상태 이름은 툴팁

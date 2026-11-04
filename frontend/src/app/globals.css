@@ -96,6 +96,8 @@
   --color-run-wait-ink: color-mix(in srgb, var(--color-accent) 6%, #a3a3ad);
   --color-run-wait-fill: color-mix(in srgb, var(--color-accent) 6%, #f1f1f4);
   --color-run-wait-stroke: color-mix(in srgb, var(--color-accent) 6%, #cfcfd8);
+  /* 대기 배지 바탕 — wait-ink 위 흰 자물쇠는 2.6:1이라 잉크 쪽으로 눌러 비텍스트 대비 3:1 이상(대비 가드 pw-verify-accent-contrast) */
+  --color-run-wait-badge: color-mix(in srgb, var(--color-run-wait-ink) 80%, var(--color-ink));
   --color-run-skip-ink: color-mix(in srgb, var(--color-accent) 6%, #b5b5be);
   --color-run-skip-fill: color-mix(in srgb, var(--color-accent) 6%, #f3f3f5);
   --color-run-skip-stroke: color-mix(in srgb, var(--color-accent) 6%, #d9d9e0);

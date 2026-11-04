@@ -22,6 +22,7 @@ const PAIRS = [
   ["차트 승인 막대 / 흰 바탕", "var(--color-chart-approved)", "#ffffff", 3],
   ["SP stroke / SP fill", "var(--color-subprocess)", "color-mix(in srgb, var(--color-subprocess) 18%, white)", 3],
   ["SP stroke / 라이트 캔버스", "var(--color-subprocess)", "var(--color-canvas)", 3],
+  ["실행 대기 배지 흰 자물쇠", "var(--color-on-accent)", "var(--color-run-wait-badge)", 3],
   // 다크 면(L5 새벽 하늘 — 86% 그라데이션 위 흰 거터, 하단이 가장 밝아 최악)
   ["선택 링(sky) / L5 하늘 하단", "var(--color-accent-sky)", "#52545d", 3],
   ["선택 링(sky) / L5 하늘 상단", "var(--color-accent-sky)", "#3b455d", 3],

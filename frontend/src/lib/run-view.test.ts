@@ -158,6 +158,43 @@ describe("buildRunView", () => {
     expect(view.edgeKindByKey.get("h/x1")).toBe("skip");
   });
 
+  it("reads every step under a waiting host as waiting, nested maps included, with no flowing path", () => {
+    // 최상위 h는 a가 진행 가능이라 대기, h 안의 g(하위프로세스) 아래 손자 맵까지 같은 규칙
+    const child = makeRunGraph(
+      [["s2", "start"], ["g", "subprocess"], ["e2", "end"]],
+      [["x1", "s2", "g"], ["x2", "g", "e2"]],
+    );
+    const grandchild = makeRunGraph([["s3", "start"], ["c", "process"]], [["y1", "s3", "c"]]);
+    const view = buildRunView(makeDetail(), new Map([["", ROOT], ["h", child], ["h/g", grandchild]]));
+    expect(view.statusByKey.get("h")).toBe("waiting");
+    expect(view.statusByKey.get("h/g")).toBe("waiting");
+    expect(view.statusByKey.get("h/e2")).toBe("waiting");
+    expect(view.statusByKey.get("h/g/c")).toBe("waiting");
+    expect(view.statusByKey.get("h/s2")).toBe("done");
+    expect(view.edgeKindByKey.get("h/x1")).toBe("fut");
+    expect(view.edgeKindByKey.get("h/g/y1")).toBe("fut");
+    const childKinds = [...view.edgeKindByKey].filter(([key]) => key.startsWith("h/")).map(([, kind]) => kind);
+    expect(childKinds).not.toContain("now");
+  });
+
+  it("reads every step under a skipped host as skipped, even pinned ones", () => {
+    // 최상위: s → d(판단) → h | c, 판단에서 c를 골라 h가 건너뜀
+    const root = makeRunGraph(
+      [["s", "start"], ["d", "decision"], ["h", "subprocess"], ["c", "process"], ["e", "end"]],
+      [["r1", "s", "d"], ["ry", "d", "h"], ["rn", "d", "c"], ["r2", "h", "e"], ["r3", "c", "e"]],
+    );
+    const detail = makeDetail({
+      states: [makeState("", "d", "done", { chosen_edge_id: "rn" }), makeState("h", "b", "done")],
+      scopes: [{ scope_path: "h", version_id: 200, closed: false }],
+    });
+    const view = buildRunView(detail, new Map([["", root], ["h", SUB]]));
+    expect(view.statusByKey.get("h")).toBe("skipped");
+    expect(view.statusByKey.get("h/b")).toBe("skipped");
+    expect(view.statusByKey.get("h/e2")).toBe("skipped");
+    expect(view.edgeKindByKey.get("h/x1")).toBe("skip");
+    expect(view.edgeKindByKey.get("h/x2")).toBe("skip");
+  });
+
   it("leaves out scopes whose graph has not arrived", () => {
     const detail = makeDetail({
       states: [makeState("h", "b", "done")],
