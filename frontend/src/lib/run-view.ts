@@ -1,0 +1,204 @@
+// 실행 체크(Run) 화면 파생 — 실행 상세와 범위별 그래프에서 노드 상태·연결선 종류·진행률을 노드 키로 모은다(렌더 전용).
+// 노드 키는 에디터 임베드 id(`embedId`)와 같은 꼴(`{범위}/{노드}`, 최상위는 노드 id)이라 displayNodes·styledEdges가
+// 노드·연결선 id로 바로 찾는다. 상태 계산은 lib/run-graph. 설계: docs/superpowers/specs/2026-11-04-run-check-design.md §4.3.
+
+import { MarkerType, type Edge } from "@xyflow/react";
+
+import { getApiErrorDetail, type FlatNode, type GraphEdge, type RunDetail } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
+import type { MessageKey } from "@/lib/i18n-messages";
+import {
+  countRunProgress,
+  deriveRunStatuses,
+  getRunEdgeKind,
+  toRunGraph,
+  type RunEdgeKind,
+  type RunGraph,
+  type RunNodeStatus,
+  type RunScopeState,
+} from "@/lib/run-graph";
+import { EMBED_SEP, embedId } from "@/lib/subprocess-embed";
+
+type TFunc = (key: MessageKey, vars?: Record<string, string | number>) => string;
+
+export interface RunView {
+  statusByKey: Map<string, RunNodeStatus>;
+  edgeKindByKey: Map<string, RunEdgeKind>;
+  progress: { done: number; total: number };
+}
+
+export function toRunNodeKey(scopePath: string, nodeId: string): string {
+  return scopePath ? embedId(scopePath, nodeId) : nodeId;
+}
+
+/** 노드 키 → 범위 경로 + 노드 id(마지막 구분자 기준). 구분자가 없으면 최상위. */
+export function splitRunNodeKey(key: string): { scopePath: string; nodeId: string } {
+  const cut = key.lastIndexOf(EMBED_SEP);
+  return cut < 0 ? { scopePath: "", nodeId: key } : { scopePath: key.slice(0, cut), nodeId: key.slice(cut + EMBED_SEP.length) };
+}
+
+function createEmptyScopeState(closed: boolean): RunScopeState {
+  return { manual: {}, choice: {}, exit: {}, closed };
+}
+
+/** 상태 행·고정 범위 → 범위별 엔진 입력. 최상위(`""`)는 늘 있다. 중단된 실행은 모든 범위가 닫혀 남은 단계가 건너뜀. */
+export function buildRunScopeStates(detail: RunDetail): Map<string, RunScopeState> {
+  const isStopped = detail.status === "stopped";
+  const states = new Map<string, RunScopeState>([["", createEmptyScopeState(isStopped)]]);
+  const ensureState = (scopePath: string): RunScopeState => {
+    const found = states.get(scopePath);
+    if (found) return found;
+    const created = createEmptyScopeState(isStopped);
+    states.set(scopePath, created);
+    return created;
+  };
+  for (const scope of detail.scopes) {
+    ensureState(scope.scope_path).closed = scope.closed || isStopped;
+  }
+  for (const row of detail.states) {
+    const state = ensureState(row.scope_path);
+    state.manual[row.node_id] = row.status;
+    if (row.chosen_edge_id !== null) state.choice[row.node_id] = row.chosen_edge_id;
+    if (row.exit_key !== null) state.exit[row.node_id] = row.exit_key;
+  }
+  return states;
+}
+
+function getScopeDepth(scopePath: string): number {
+  return scopePath === "" ? 0 : scopePath.split(EMBED_SEP).length;
+}
+
+/**
+ * 실행이 아직 고정하지 않은 하위 범위(펼쳐서 보기만 한 하위 맵)의 상태 — 기록이 없다. 호스트를 들어가지 않고
+ * 바로 완료했거나 호스트가 건너뜀이면 남은 단계는 건너뜀이다(BE `_assert_hosts_reachable`과 같은 판정).
+ * 범위 경로는 바깥 범위에서 호스트의 노드 키와 같다.
+ */
+function buildUnpinnedScopeState(scopePath: string, statusByKey: ReadonlyMap<string, RunNodeStatus>, isStopped: boolean): RunScopeState {
+  const host = statusByKey.get(scopePath);
+  return createEmptyScopeState(isStopped || host === "done" || host === "skipped");
+}
+
+/** 범위 경로 → 그래프(최상위 `""`)에서 노드 상태·연결선 종류를 노드 키로. 그래프가 아직 없는 범위는 건너뛴다. */
+export function buildRunView(detail: RunDetail, graphs: ReadonlyMap<string, RunGraph>): RunView {
+  const states = buildRunScopeStates(detail);
+  const isStopped = detail.status === "stopped";
+  const statusByKey = new Map<string, RunNodeStatus>();
+  const edgeKindByKey = new Map<string, RunEdgeKind>();
+  let progress = detail.progress;
+  // 바깥 범위부터 — 고정 안 된 하위 범위는 호스트 상태를 먼저 알아야 한다
+  const ordered = [...graphs].sort(
+    ([a], [b]) => getScopeDepth(a) - getScopeDepth(b) || (a < b ? -1 : a > b ? 1 : 0),
+  );
+  for (const [scopePath, graph] of ordered) {
+    const state = states.get(scopePath) ?? buildUnpinnedScopeState(scopePath, statusByKey, isStopped);
+    const statuses = deriveRunStatuses(graph, state);
+    for (const [nodeId, status] of Object.entries(statuses)) {
+      statusByKey.set(toRunNodeKey(scopePath, nodeId), status);
+    }
+    for (const edge of graph.edges) {
+      edgeKindByKey.set(toRunNodeKey(scopePath, edge.id), getRunEdgeKind(graph, state, statuses, edge));
+    }
+    if (scopePath === "") progress = countRunProgress(graph, state);
+  }
+  return { statusByKey, edgeKindByKey, progress };
+}
+
+function stripScopePrefix(scopePath: string, id: string): string {
+  const prefix = scopePath + EMBED_SEP;
+  return scopePath && id.startsWith(prefix) ? id.slice(prefix.length) : id;
+}
+
+function appendTo<V>(groups: Map<string, V[]>, key: string, value: V): void {
+  const group = groups.get(key);
+  if (group) group.push(value);
+  else groups.set(key, [value]);
+}
+
+/**
+ * 에디터 합성 트리(fullGraph: 루트 + 펼친 하위 맵, 임베드 id `{호스트}/{원래 id}`) → 범위별 실행 그래프(원래 id).
+ * 하위 범위의 그래프는 합성 트리가 끼운 것(실행이 고정한 버전이 있으면 그것)을 그대로 쓴다.
+ */
+export function splitRunScopeGraphs(composite: {
+  nodes: readonly FlatNode[];
+  edges: readonly GraphEdge[];
+}): Map<string, RunGraph> {
+  const scopeOfNode = new Map<string, string>();
+  const nodesByScope = new Map<string, FlatNode[]>();
+  for (const node of composite.nodes) {
+    const scopePath = node.parent_node_id ?? "";
+    scopeOfNode.set(node.id, scopePath);
+    appendTo(nodesByScope, scopePath, { ...node, id: stripScopePrefix(scopePath, node.id) });
+  }
+  const edgesByScope = new Map<string, GraphEdge[]>();
+  for (const edge of composite.edges) {
+    const scopePath = scopeOfNode.get(edge.source_node_id);
+    if (scopePath === undefined) continue; // 출발이 합성 트리에 없는 연결선 — 실행 계산에서도 빠진다
+    appendTo(edgesByScope, scopePath, {
+      ...edge,
+      id: stripScopePrefix(scopePath, edge.id),
+      source_node_id: stripScopePrefix(scopePath, edge.source_node_id),
+      target_node_id: stripScopePrefix(scopePath, edge.target_node_id),
+    });
+  }
+  return new Map(
+    [...nodesByScope].map(([scopePath, nodes]) => [
+      scopePath,
+      toRunGraph({ nodes, edges: edgesByScope.get(scopePath) ?? [], groups: [] }),
+    ]),
+  );
+}
+
+// 연결선 종류별 선 — 목업 buildEdgePalette() 공식을 globals.css 토큰으로 옮긴 것. 굵은 선은 지나온·지금·문제 길.
+// 캔버스(applyRunEdgeKind)와 범례 견본(components/run/run-legend)이 같이 쓴다
+export const RUN_EDGE_LOOK: Readonly<Record<RunEdgeKind, { stroke: string; strokeWidth: number }>> = {
+  past: { stroke: "var(--color-run-done)", strokeWidth: 2 },
+  now: { stroke: "var(--color-run-edge-now-base)", strokeWidth: 2 },
+  prob: { stroke: "var(--color-run-problem)", strokeWidth: 2 },
+  fut: { stroke: "var(--color-run-edge-fut)", strokeWidth: 1.5 },
+  skip: { stroke: "var(--color-run-edge-skip)", strokeWidth: 1.5 },
+};
+
+/**
+ * 실행 모드 연결선 모양 — 종류별 선·화살표 색, 지금 갈 길만 `data.runFlow`(흐르는 점, multiline-edge). 편집 화면의
+ * 행진 점선(animated)은 끈다. 종류가 없는 연결선(펼침 게이트웨이 등)은 그대로 둔다.
+ */
+export function applyRunEdgeKind(edge: Edge, kind: RunEdgeKind | undefined): Edge {
+  if (kind === undefined) return edge;
+  const look = RUN_EDGE_LOOK[kind];
+  return {
+    ...edge,
+    animated: false,
+    style: {
+      ...edge.style,
+      stroke: look.stroke,
+      strokeWidth: look.strokeWidth,
+      ...(kind === "skip" ? { strokeDasharray: "4 4", opacity: 0.5 } : {}),
+    },
+    markerEnd: { type: MarkerType.ArrowClosed, color: look.stroke },
+    data: { ...edge.data, runFlow: kind === "now" },
+  };
+}
+
+// 서버 실행 에러 detail(영어 고정 문구, BE app/run_service.py ERR_*) → i18n. 전방일치
+const RUN_ERROR_KEYS: [string, MessageKey][] = [
+  ["action not allowed in this state", "run.err.stale"],
+  ["open solo run limit reached", "run.err.soloCap"],
+  ["open shared run limit reached", "run.err.sharedCap"],
+  ["keep limit reached", "run.err.keepCap"],
+  ["cannot view the subprocess map", "run.err.subAccess"],
+  ["subprocess map has no published version", "run.err.subNotPublished"],
+  ["subprocess map is unavailable", "run.err.subUnavailable"],
+  ["run is not open", "run.err.notOpen"],
+  // 하위 맵 기록이 있는 하위프로세스 취소 — 확인 후 cascade로 다시 보내는 흐름은 버튼 줄(Task 12)이 맡는다
+  ["subprocess has progress", "run.err.subProgress"],
+];
+const TOUCHED_AFTER_PREFIX = "later steps already changed: ";
+
+export function humanizeRunError(err: unknown, t: TFunc): string {
+  const detail = getApiErrorDetail(err);
+  if (detail.startsWith(TOUCHED_AFTER_PREFIX)) {
+    return t("run.err.touchedAfter", { title: detail.slice(TOUCHED_AFTER_PREFIX.length) });
+  }
+  const hit = RUN_ERROR_KEYS.find(([prefix]) => detail.startsWith(prefix));
+  return hit ? t(hit[1]) : humanizeApiError(err, t);
+}

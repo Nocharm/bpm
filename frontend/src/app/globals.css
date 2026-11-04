@@ -86,6 +86,24 @@
   --color-branch-yes: #6f93cc;
   --color-branch-no: #cf7e84;
 
+  /* 실행 체크(Run) 상태 색 — 목업 buildStatusPalette()·buildEdgePalette() 공식 그대로(design 2026-11-04 run-check §4.3).
+     완료·문제는 의미색에 악센트 22%(더 섞으면 플럼 테마에서 문제와 진행 중이 가까워진다), 대기·건너뜀 회색은 악센트 쪽으로 6% */
+  --color-run-done: color-mix(in srgb, var(--color-added) 78%, var(--color-accent));
+  --color-run-done-fill: color-mix(in srgb, var(--color-run-done) 13%, white);
+  --color-run-problem: color-mix(in srgb, var(--color-error) 78%, var(--color-accent));
+  --color-run-problem-fill: color-mix(in srgb, var(--color-run-problem) 10%, white);
+  --color-run-active-fill: color-mix(in srgb, var(--color-accent) 16%, white);
+  --color-run-wait-ink: color-mix(in srgb, var(--color-accent) 6%, #a3a3ad);
+  --color-run-wait-fill: color-mix(in srgb, var(--color-accent) 6%, #f1f1f4);
+  --color-run-wait-stroke: color-mix(in srgb, var(--color-accent) 6%, #cfcfd8);
+  --color-run-skip-ink: color-mix(in srgb, var(--color-accent) 6%, #b5b5be);
+  --color-run-skip-fill: color-mix(in srgb, var(--color-accent) 6%, #f3f3f5);
+  --color-run-skip-stroke: color-mix(in srgb, var(--color-accent) 6%, #d9d9e0);
+  /* 연결선 — 앞이 안 끝남(옅은 테마 회색)·건너뜀(흐린 회색)·지금 갈 길의 옅은 바탕선(점은 악센트로 흐른다) */
+  --color-run-edge-fut: color-mix(in srgb, var(--color-accent) 8%, #b4b4be);
+  --color-run-edge-skip: #c4c4cc;
+  --color-run-edge-now-base: color-mix(in srgb, var(--color-accent) 38%, white);
+
   /* Fonts */
   --font-text: "Pretendard Variable", Pretendard, -apple-system, "SF Pro Text", system-ui, sans-serif;
   --font-display: "Pretendard Variable", Pretendard, -apple-system, "SF Pro Display", system-ui, sans-serif;
@@ -1103,6 +1121,28 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
   stroke-width: 3.5 !important;
   filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-accent-canvas) 70%, transparent))
     drop-shadow(0 0 5px color-mix(in srgb, var(--color-accent-canvas) 30%, transparent));
+}
+
+/* 실행 모드 "지금 갈 길"의 흐르는 점 — 길이 0 대시 + 둥근 끝 = 점, 오프셋을 줄이면 화살표 방향으로 흐른다
+   (multiline-edge가 data.runFlow인 연결선에 같은 경로를 한 번 더 그린다, design 2026-11-04 run-check §4.3 E1) */
+.bpm-run-flow {
+  stroke: var(--color-accent);
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-dasharray: 0.01 10;
+  fill: none;
+  pointer-events: none;
+  animation: bpm-run-flow 0.9s linear infinite;
+}
+@keyframes bpm-run-flow {
+  to {
+    stroke-dashoffset: -10.01;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bpm-run-flow {
+    animation: none;
+  }
 }
 
 /* 핸들 스타일은 page.tsx의 raw <style>로 이전 — Turbopack이 dev에서 .react-flow__node 셀렉터

@@ -100,6 +100,8 @@ function renderEdge(props: EdgeProps, resolved: EdgePathResult) {
     <>
       {/* data-label-x/y — 해석기 라벨 앵커(플로우 좌표). 라벨이 없어도 실려 인라인 라벨 편집기가 같은 점에 붙는다 */}
       <BaseEdge path={path} markerEnd={markerEnd} style={style} data-label-x={labelX} data-label-y={labelY} />
+      {/* 실행 모드 "지금 갈 길" — 같은 경로 위로 악센트 점이 흐른다(globals.css .bpm-run-flow, lib/run-view applyRunEdgeKind) */}
+      {data?.runFlow === true ? <path className="bpm-run-flow" d={path} /> : null}
       {pulse ? <EdgePulseDot path={path} pulse={pulse} travel={pulseTravel} /> : null}
       {label || carryItems.length > 0 ? (
         <EdgeLabelPortal>

@@ -55,6 +55,7 @@ import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
+import { RunLegend } from "@/components/run/run-legend";
 import { UrlLabelField } from "@/components/url-label-field";
 import { AttributeReadRows } from "@/components/attribute-read-rows";
 import { FallbackHint } from "@/components/fallback-hint";
@@ -351,6 +352,9 @@ import { buildNodeRefCheck } from "@/lib/node-ref-warnings";
 import { runGuardedNavigation, setNavigationGuard } from "@/lib/navigation-guard";
 import { listSaveBlockers } from "@/lib/save-blockers";
 import { useClosingKeys } from "@/lib/use-closing-keys";
+import { readRunIdParam } from "@/lib/run-links";
+import { applyRunEdgeKind, buildRunView, splitRunScopeGraphs } from "@/lib/run-view";
+import { useRepairRunNodeInternals, useRunSession } from "@/lib/use-run-session";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import {
   GATEWAY_PREFIX,
@@ -1401,8 +1405,14 @@ function MapEditor({ mapId }: { mapId: number }) {
     currentVersion.status !== "rejected";
   // 뷰어 권한 사용자는 항상 읽기 전용 — 서버 산정 my_role 기준 / viewer role is always read-only
   const isViewer = myRole === "viewer";
+  // 실행 체크(Run) 모드 — ?run=<id>로 열면 실행의 게시본 위에 상태 색·연결선만 그리는 읽기 전용 캔버스.
+  // 실행 상태는 훅(lib/use-run-session)이 들고 페이지 편집 상태와 섞지 않는다. runId는 맵 상세 로드 체인이 URL에서 읽는다
+  const [runId, setRunId] = useState<number | null>(null);
+  const runSession = useRunSession(runId, showToast);
+  const runMode = runSession !== null;
+  const [runLegendOpen, setRunLegendOpen] = useState(false);
   // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
-  const readOnly = isViewer || (checkout !== null && !checkout.mine) || statusLocksEditing;
+  const readOnly = isViewer || (checkout !== null && !checkout.mine) || statusLocksEditing || runMode;
   // 읽기 전용 배너 — 사유별 톤/아이콘/타이틀+설명 (우선순위: 뷰어 > 타인 점유 > 버전 상태).
   // 점유자는 디렉터리 표시명으로 해석(이름 우선·id 보조). 상태 타이틀은 한/영 모두 영어 고정.
   const checkoutHolder = checkout !== null && !checkout.mine ? checkout.checked_out_by : null;
@@ -1631,6 +1641,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
     return set;
   }, [expandedInline, scopes]);
+  // 실행 모드 — 실행이 고정한 하위 범위 그래프(범위 경로 = 합성 호스트 id). 링크 해석보다 먼저 끼운다
+  const runScopeGraphs = runSession?.scopeGraphs ?? null;
   // 합성 트리 — 루트 평면 그래프 + 펼친/드릴인 하위프로세스의 링크맵 resolved를 합성 parent_node_id 자식으로 끼움.
   // 기존 fullGraph 소비자(materialize·inlineComposition·조상컨텍스트·펼침 한도 등)는 그대로 이 값을 읽는다.
   const fullGraph = useMemo<VersionGraph | null>(() => {
@@ -1639,11 +1651,21 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
     const rootFlat = rootGraph.nodes.map((n) => ({ ...n, parent_node_id: null }));
     const getEmbed = (node: FlatNode): Graph | null => {
+      const pinned = runScopeGraphs?.get(node.id);
+      if (pinned) {
+        return pinned;
+      }
       const k = linkKey(node);
       return k ? (resolvedCache.get(k) ?? null) : null;
     };
     return buildCompositeTree(rootFlat, rootGraph.edges, hostsToEmbed, getEmbed);
-  }, [rootGraph, hostsToEmbed, resolvedCache]);
+  }, [rootGraph, hostsToEmbed, resolvedCache, runScopeGraphs]);
+  // 실행 모드 렌더 파생 — 범위별 노드 상태·연결선 종류(lib/run-view). 실행 상세·합성 트리가 바뀔 때만 다시 계산
+  const runDetail = runSession?.detail ?? null;
+  const runView = useMemo(
+    () => (runDetail && fullGraph ? buildRunView(runDetail, splitRunScopeGraphs(fullGraph)) : null),
+    [runDetail, fullGraph],
+  );
   useEffect(() => {
     fullGraphRef.current = fullGraph;
   }, [fullGraph]);
@@ -2875,6 +2897,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           setVersionId(initialId ?? detail.versions[0].id);
           setScopes([{ kind: "root", title: detail.name }]);
           setActiveIndex(0);
+          // 실행 체크 딥링크 — ?run=<id>면 실행 모드(비동기 콜백이라 set-state-in-effect 아님)
+          setRunId(readRunIdParam(window.location.search));
         }
       } catch (err) {
         if (active) {
@@ -3622,6 +3646,14 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [saveCurrentScope, mapName, t],
   );
+  // 실행 모드 — 캔버스를 실행의 기준 버전에 맞춘다(링크의 ?version=이 빠졌거나 다른 버전일 때)
+  const runVersionId = runDetail?.version_id ?? null;
+  useEffect(() => {
+    if (runVersionId === null || versionId === null || runVersionId === versionId) return;
+    if (!versions.some((v) => v.id === runVersionId)) return;
+    // 콜백으로 미룬다 — 이펙트 본문 동기 setState 금지(lessons react-ts-patterns §3), 전환은 같은 값이면 무해
+    void Promise.resolve().then(() => switchVersion(runVersionId));
+  }, [runVersionId, versionId, versions, switchVersion]);
 
   // 타임라인 '이 버전으로 가기' — 편집 중이면 VersionPill과 동일한 전환 확인 모달을 거친다 (feedback 2026-08-14)
   const [goVersionPrompt, setGoVersionPrompt] = useState<VersionSummary | null>(null);
@@ -8054,7 +8086,11 @@ function MapEditor({ mapId }: { mapId: number }) {
         gmpPreview !== null && gmpPreview.nodeId === node.id
           ? { ...withIoHighlight, data: { ...withIoHighlight.data, gmp: gmpPreview.gmp, color: gmpPreview.color } }
           : withIoHighlight;
-      const injected = injectSubEnds(withGmpPreview);
+      // 실행 모드 — 노드 키(임베드 id와 같은 꼴)로 실행 상태를 얹는다(렌더 전용, lib/run-view)
+      const runStatus = runView?.statusByKey.get(node.id);
+      const withRunStatus =
+        runStatus === undefined ? withGmpPreview : { ...withGmpPreview, data: { ...withGmpPreview.data, runStatus } };
+      const injected = injectSubEnds(withRunStatus);
       if (liveOverlay !== null) {
         const live = liveOverlay.get(node.id);
         if (live !== undefined) {
@@ -8110,10 +8146,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     gmpPreview,
     renderYOffsets,
     dragYOffsets,
+    runView,
   ]);
   useEffect(() => {
     displayNodesRef.current = displayNodes; // 동결 드래그 프레임의 스토어 echo 베이스(#R2)
   }, [displayNodes]);
+  // 실행 상태가 첫 측정과 겹쳐 도착하면 RF가 핸들 경계를 잃는다 — 실행 모드에서만 빠진 노드를 다시 잰다
+  useRepairRunNodeInternals(displayNodes, runMode);
   useEffect(() => {
     generalDragLive.clear(); // 모듈 캐시 — 리마운트 잔존 방지
     setDropTarget(null);
@@ -8156,6 +8195,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     // 후방 우선(edge-in). liftDim: 강조 시 반투명(자식 dim·게이트웨이)을 해제해 또렷하게.
     // 라벨 알약도 선과 같은 색으로 강조(highlightEdgeLabel) — 선택 라벨은 CSS 선택색과 짝(2026-09-29).
     const applyFlowHighlight = (edge: Edge, liftDim = false): Edge => {
+      // 실행 모드 — 흐름 강조 대신 실행 연결선 종류별 선(지금 갈 길만 점이 흐른다, lib/run-view)
+      if (runView) {
+        return applyRunEdgeKind(edge, runView.edgeKindByKey.get(edge.id));
+      }
       // 엣지 선택 시 selectedId는 비어 흐름 강조와 겹치지 않는다 — 선택 라벨이 우선.
       if (edge.id === selectedEdgeId) {
         return highlightEdgeLabel(edge, "selected");
@@ -8231,8 +8274,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     // 형제 갈래 하나만 선택하면 같은 묶음의 나머지는 이번 회차 뒤 정지, 소스 노드 선택은 강조+배속,
     // L5 차콜 하늘 위에선 밝은 점(사용자 결정 2026-10-02)
     const selectedPulseGroup = selectedEdgeId ? pulses.get(selectedEdgeId)?.group : undefined;
+    // 실행 모드는 설계용 흐름 펄스를 끈다 — 지금 갈 길의 흐르는 점과 섞이지 않게(design run-check §4.3)
     const withPulse = (list: Edge[]): Edge[] =>
-      pulses.size === 0
+      pulses.size === 0 || runView
         ? list
         : list.map((edge) => {
             const pulse = pulses.get(edge.id);
@@ -8323,7 +8367,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ),
     );
     return finishEdges([...currentStyled, ...childStyled, ...gatewayStyled]);
-  }, [edges, nodes, layoutNodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, yOffsets, edgeCarry, printView]);
+  }, [edges, nodes, layoutNodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, yOffsets, edgeCarry, printView, runView]);
   // 흐름 점 범례(우하단 노드 표시 정보 카드) — 펄스가 붙은 엣지가 하나라도 있을 때만
   const hasFlowPulse = styledEdges.some((edge) => isEdgePulse(edge.data?.pulse));
 
@@ -10250,6 +10294,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSelectedEdgeId(null);
                       }}
                       onNodeDoubleClick={(_, node) => {
+                        // 실행 모드는 노드 요약 모달을 열지 않는다 — 노드 동작은 실행 버튼 줄이 맡는다
+                        if (runMode) {
+                          return;
+                        }
                         // 더블클릭 = 요약/편집 모달 — subprocess 포함(딥뷰 드릴인 대신, 프레임 변동 제거 F4).
                         // 드릴인은 임베드 자식 더블클릭·펼침 토글 경로로 유지. 타이틀 더블클릭은 이름 편집(비-subprocess).
                         setSelectedId(node.id);
@@ -10283,6 +10331,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                         openMenu(event, "pane", null);
                       }}
                       onNodeContextMenu={(event, node) => {
+                        // 실행 모드는 편집 메뉴를 열지 않는다(브라우저 메뉴도 막는다)
+                        if (runMode) {
+                          event.preventDefault();
+                          return;
+                        }
                         // 인라인 자식(읽기전용)도 메뉴를 연다 — 빌더가 "(읽기전용)" 안내 1항목을 내려
                         // 액션 불가를 인지시킴(아웃라인 자식 행 우클릭과 동일 경로·동일 결과).
                         setSelectedId(node.id);
@@ -10454,12 +10507,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <ViewportPortal>
                         {/* 선택 노드 추종 테두리 — 노드 사이를 슬라이드 */}
                         <NodeSelectionRing />
-                        {/* 단일 선택 노드 하단의 통합 액션 바 — 펼치기/링크/그룹 나가기 */}
-                        <NodeActionBar
-                          readOnly={readOnly}
-                          onLeaveGroups={leaveGroups}
-                          onOpenLink={setLinkPreviewUrl}
-                        />
+                        {/* 단일 선택 노드 하단의 통합 액션 바 — 펼치기/링크/그룹 나가기. 실행 모드는 실행 버튼 줄이 대신한다 */}
+                        {!runMode && (
+                          <NodeActionBar
+                            readOnly={readOnly}
+                            onLeaveGroups={leaveGroups}
+                            onOpenLink={setLinkPreviewUrl}
+                          />
+                        )}
                         {inlineComposition && (
                           <InlineRegionBands
                             regions={inlineComposition.regions}
@@ -10561,6 +10616,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                           `color-mix(in srgb, ${resolveNodeStroke(n.data.color, n.data.nodeType)} 38%, white)`
                         }
                       />
+                      {/* 실행 범례 — 실행 모드에서 흐름 펄스 범례 대신(펄스가 꺼져 NodeDisplayFloat 범례도 사라진다) */}
+                      {runMode && (
+                        <RunLegend open={runLegendOpen} onToggle={() => setRunLegendOpen((open) => !open)} />
+                      )}
                       {/* 줌 필 옆 노드 표시 정보 플로팅 — 인스펙터 섹션과 같은 상태·핸들러(동기화) */}
                       <CanvasZoomScale
                         onFit={fitScopeTopLeft}

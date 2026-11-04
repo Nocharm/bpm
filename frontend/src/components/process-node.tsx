@@ -22,6 +22,7 @@ import {
   ChevronUp,
   CircleArrowUp,
   ArrowLeftRight,
+  Check,
   CornerDownRight,
   Flag,
   Info,
@@ -70,6 +71,7 @@ import { FrameworkPeekPill, FrameworkPeekTrigger } from "@/components/framework-
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
 import { getOutputGroups, type OutputGroup } from "@/lib/output-rules";
 import { ParallelExitIcon } from "@/lib/parallel-icon";
+import type { RunNodeStatus } from "@/lib/run-graph";
 import {
   collectNodeWarnings,
   hasAssigneeWarning,
@@ -1326,6 +1328,33 @@ function CopyDragBadge({ className = "-right-2 -top-2" }: { className?: string }
   );
 }
 
+// 실행 상태 배지 — 진행 중 ▶·완료 ✓·문제 !·대기 자물쇠(목업 BADGE), 진행 가능·건너뜀은 색만으로 충분해 없다
+const RUN_BADGE: Partial<Record<RunNodeStatus, { icon: LucideIcon; color: string; filled?: boolean }>> = {
+  active: { icon: Play, color: "var(--color-accent)", filled: true },
+  done: { icon: Check, color: "var(--color-run-done)" },
+  problem: { icon: AlertTriangle, color: "var(--color-run-problem)" },
+  waiting: { icon: Lock, color: "var(--color-run-wait-ink)" },
+};
+
+// 실행 모드 노드 오른쪽 위 14px 원 — 상태 이름은 툴팁
+function RunStatusBadge({ status, className = "-right-1.5 -top-1.5" }: { status: RunNodeStatus; className?: string }) {
+  const { t } = useI18n();
+  const badge = RUN_BADGE[status];
+  if (!badge) return null;
+  const Icon = badge.icon;
+  return (
+    <span
+      data-id="run-node-badge"
+      data-run-status={status}
+      title={t(`run.status.${status}`)}
+      className={`bpm-node-badge absolute ${className} flex h-3.5 w-3.5 items-center justify-center rounded-full border border-surface text-on-accent`}
+      style={{ background: badge.color }}
+    >
+      <Icon size={9} strokeWidth={1.5} fill={badge.filled ? "currentColor" : "none"} aria-hidden />
+    </span>
+  );
+}
+
 const SUBPROCESS_IN_SIDES: { side: SubprocessInSide; position: Position }[] = [
   { side: "left", position: Position.Left },
   { side: "right", position: Position.Right },
@@ -1596,6 +1625,26 @@ function externalSpNodeStyle(color: string): CSSProperties {
   } as unknown as CSSProperties;
 }
 
+// 실행 상태별 채움·테두리 — 목업 buildStatusPalette() 그대로(토큰 globals.css --color-run-*).
+// 진행 가능은 흰 채움 + 악센트 점선 테두리(목업·범례와 같이 진행 중과 구분), 대기·건너뜀은 테마 쪽 회색
+const RUN_NODE_LOOK: Record<RunNodeStatus, { stroke: string; fill: string }> = {
+  waiting: { stroke: "var(--color-run-wait-stroke)", fill: "var(--color-run-wait-fill)" },
+  ready: { stroke: "var(--color-accent)", fill: "var(--color-surface)" },
+  active: { stroke: "var(--color-accent)", fill: "var(--color-run-active-fill)" },
+  done: { stroke: "var(--color-run-done)", fill: "var(--color-run-done-fill)" },
+  problem: { stroke: "var(--color-run-problem)", fill: "var(--color-run-problem-fill)" },
+  skipped: { stroke: "var(--color-run-skip-stroke)", fill: "var(--color-run-skip-fill)" },
+};
+
+// 실행 모드 노드 바디 — 노드 색·diff·SP 상태보다 앞선다(실행 화면에선 상태가 유일한 신호). 범례 견본도 같은 값을 쓴다
+export function runNodeStyle(status: RunNodeStatus): CSSProperties {
+  const look = RUN_NODE_LOOK[status];
+  const style = nodeStyle(look.stroke, look.fill);
+  if (status === "ready") return { ...style, borderStyle: "dashed" };
+  if (status === "skipped") return { ...style, opacity: 0.55 };
+  return style;
+}
+
 // 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
 // isConnectable — 노드 레벨 connectable(임베드 자식 false)이 여기로 전달됨. Handle에 명시 forward 필수 (F3).
 export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<AppNode>) {
@@ -1651,7 +1700,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
   // 출처 배지 경로 — 외부 L6는 라이브 파생(spOriginPath), 플레이스홀더는 저장된 출처 L5 (design §10.1)
   const originPath =
     data.spOriginPath ?? (spPlaceholder ? (data.placeholderCategoryPath ?? null) : null);
-  const style = diff
+  const style = data.runStatus
+    ? runNodeStyle(data.runStatus)
+    : diff
     ? diffNodeStyle(diff)
     : data.diffMuted
       ? mutedNodeStyle()
@@ -1930,6 +1981,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         ) : null}
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
+        {data.runStatus && <RunStatusBadge status={data.runStatus} />}
         {data.spUrl && <UrlBadge url={data.spUrl} />}
         <NodeWarningBadge data={data} />
         {/* 미지정 상태는 점선 바디+배너가 신호 — 코너 삼각 배지는 제거, 잠금 배지도 그동안 억제 (2026-08-30 통일) */}
@@ -1994,6 +2046,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         {/* 배지는 박스 진짜 코너로 — 마름모 내접 3줄 제목을 가리지 않게 아래·바깥으로 이동(#5) */}
         {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} className="right-0 top-0" />}
+        {data.runStatus && <RunStatusBadge status={data.runStatus} className="right-3 top-3" />}
         {data.url && <UrlBadge url={data.url} className="bottom-0 left-0" />}
         <NodeWarningBadge data={data} className="bottom-0 right-0" />
         {showCopyBadge && <CopyDragBadge className="right-3 top-3" />}
@@ -2075,6 +2128,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       )}
       {data.hasDescendantChange && <DescendantChangeBadge />}
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
+      {/* 시작·끝은 흐름이 지나가며 계산되는 노드라 배지 없이 색만(목업과 같다) */}
+      {data.runStatus && !isTerminal && <RunStatusBadge status={data.runStatus} />}
       {data.url && <UrlBadge url={data.url} />}
       <NodeWarningBadge data={data} />
       {showCopyBadge && <CopyDragBadge />}

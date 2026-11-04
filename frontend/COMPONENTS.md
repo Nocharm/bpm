@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 318개 · 2026-10-26 기준
+총 319개 · 2026-11-04 기준
 
 ## components/
 
@@ -130,7 +130,7 @@
 | `png-print-panel.tsx` | `PngPrintPanel` | Word 인쇄 크기 패널 | `components/compare-png-export-modal.tsx`, `components/png-export-modal.tsx` |
 | `popover-action-bar.tsx` | `PopoverActionBar` | 소형 입력 팝오버 공용 푸터 | `components/fallback-hint.tsx`, `components/maps/map-notes-section.tsx`, `components/node-summary-modal.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/role-tile.tsx`, `components/permissions/sp-field-popover.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/permissions/subprocess-designation-panel.tsx`, `components/subprocess-usage-tab.tsx` |
 | `process-library-panel.tsx` | `ProcessLibraryPanel` | 프로세스 라이브러리 패널 | `app/maps/[mapId]/page.tsx` |
-| `process-node.tsx` | `ProcessNode` |   | `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/compare-png-export-modal.tsx`, `components/framework-interview/relations-canvas.tsx`, `components/interview/choice-card.tsx`, `components/interview/interview-preview.tsx`, `components/png-export-modal.tsx`, `components/pulse-legend.tsx`, `components/scope-preview.tsx`, `components/subprocess-preview-peek.tsx` |
+| `process-node.tsx` | `ProcessNode` |   | `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/compare-png-export-modal.tsx`, `components/framework-interview/relations-canvas.tsx`, `components/interview/choice-card.tsx`, `components/interview/interview-preview.tsx`, `components/png-export-modal.tsx`, `components/pulse-legend.tsx`, `components/run/run-legend.tsx`, `components/scope-preview.tsx`, `components/subprocess-preview-peek.tsx` |
 | `prompt-dialog.tsx` | `PromptDialog` | 플로팅 입력 모달 | `app/maps/[mapId]/page.tsx`, `components/admin/framework-panel.tsx` |
 | `providers.tsx` | `Providers` |   | `app/layout.tsx` |
 | `pulse-legend.tsx` | `PulseLegend` | 흐름 점 범례 | `components/node-display-float.tsx` |
@@ -367,6 +367,12 @@
 | `ref-detail-target.tsx` | `RefDetailTarget` | 고아 참조 상세 창의 바꿀 대상 고르기 | `components/ref-audit/ref-detail-dialog.tsx` |
 | `ref-outcome-chip.tsx` | `RefOutcomeChip` | 고아 참조 결과 칩 한 개 | `components/ref-audit/ref-audit-hero.tsx`, `components/ref-audit/ref-detail-dialog.tsx`, `components/ref-audit/ref-detail-lines.tsx` |
 | `ref-user-card.tsx` | `RefUserCard` | 고아 참조 사용자 카드 | `components/ref-audit/ref-card-section.tsx` |
+
+## components/run/
+
+| 파일 | 컴포넌트 | 역할 | 사용처 |
+|------|----------|------|--------|
+| `run-legend.tsx` | `RunLegend` | 실행 범례 | `app/maps/[mapId]/page.tsx` |
 
 ## components/settings/
 

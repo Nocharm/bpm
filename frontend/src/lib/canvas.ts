@@ -9,6 +9,7 @@ import type { IoDiffSummary } from "@/lib/io-diff";
 import { genId } from "@/lib/id";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { getEdgeLabelText, sortLayoutEdges, splitForwardEdges } from "@/lib/layout-graph";
+import type { RunNodeStatus } from "@/lib/run-graph";
 import {
   isSubprocessEndHandle,
   isSubprocessInHandle,
@@ -177,6 +178,8 @@ export type NodeData = {
   // 캠페인 연결 캔버스 전용 옵트인 — 아직 맵이 없는 L6 카드를 그리는 표면이라 "링크 미지정" 배너를 끈다.
   // 기본(미전달)은 기존 동작 유지 — 에디터·비교·미리보기는 배너가 실제 조치 신호다.
   hideLinkBanner?: boolean;
+  // 실행 모드 전용 — 이 노드의 실행 상태(채움·테두리·배지). 렌더 시 주입, 퍼시스트 안 함 (lib/run-view)
+  runStatus?: RunNodeStatus;
 };
 
 export type AppNode = Node<NodeData>;
