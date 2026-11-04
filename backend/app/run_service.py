@@ -29,7 +29,7 @@ from app.models import (
 )
 from app.permissions.access import get_effective_role, get_eligible_users
 from app.permissions.logic import role_rank
-from app.run_access import get_hidden_scope_paths, is_hidden_scope
+from app.run_access import get_visible_scope_paths, is_scope_visible
 from app.run_graph import (
     ACTIONABLE_TYPES,
     RunGraph,
@@ -210,14 +210,14 @@ async def _can_keep(session: AsyncSession, run: Run, user: str) -> bool:
 
 async def build_run_detail(session: AsyncSession, run: Run, user: str) -> RunDetailOut:
     row = await build_run_row(session, run, user)
-    hidden = await get_hidden_scope_paths(session, run, user)  # 볼 수 없는 하위 맵의 노드 id·제목은 싣지 않는다
+    visible = await get_visible_scope_paths(session, run, user)  # 볼 수 있다고 확인된 하위 범위만 싣는다(기본 가림)
     states = await session.scalars(select(RunNodeState).where(RunNodeState.run_id == run.id).order_by(RunNodeState.id))
     scopes = await session.scalars(select(RunScope).where(RunScope.run_id == run.id).order_by(RunScope.id))
     return RunDetailOut(
         **row.model_dump(),
-        states=[RunNodeStateOut.model_validate(s) for s in states.all() if not is_hidden_scope(s.scope_path, hidden)],
-        scopes=[RunScopeOut.model_validate(s) for s in scopes.all() if not is_hidden_scope(s.scope_path, hidden)],
-        comment_counts=[c for c in await _count_comments(session, run.id) if not is_hidden_scope(c.scope_path, hidden)],
+        states=[RunNodeStateOut.model_validate(s) for s in states.all() if is_scope_visible(s.scope_path, visible)],
+        scopes=[RunScopeOut.model_validate(s) for s in scopes.all() if is_scope_visible(s.scope_path, visible)],
+        comment_counts=[c for c in await _count_comments(session, run.id) if is_scope_visible(c.scope_path, visible)],
         can_act=_is_actor(run, {p.login_id for p in row.participants}, user),
         can_manage=run.starter == user,
         can_keep=await _can_keep(session, run, user),
@@ -462,16 +462,17 @@ def _find_actionable(graph: RunGraph, node_id: str) -> RunGraphNode:
     return node
 
 
-async def _assert_hosts_reachable(ctx: _ActionContext, scope_paths: list[str], pinned_before: set[str]) -> None:
-    """하위 범위는 호스트에 닿은 뒤에만 밟는다 — 대기·건너뜀 호스트, 들어가지 않고 바로 완료한 호스트는 409.
+async def _assert_hosts_reachable(ctx: _ActionContext, scope_paths: list[str], pinned_before: dict[str, bool]) -> None:
+    """하위 범위는 호스트에 닿은 뒤에만, 닫히지 않았을 때만 밟는다 — 아니면 409. pinned_before: 경로 → closed.
 
     막지 않으면 앞 단계가 남은 호스트가 하위 범위 완료로 자동 완료된다. 바로 완료한 호스트의 하위 맵은
-    남은 단계가 건너뜀이라(design §4.2) 나중에 처음 들어가 밟을 수 없다.
+    남은 단계가 건너뜀이라(design §4.2) 처음 들어가 밟을 수 없고, 닫힌 범위(그 아래 범위 포함)는 읽기 전용이다(R9).
     """
     for path in scope_paths:
         parent_path, host_id = _split_scope(path)
         host_status = (await _derive_scope(ctx, parent_path))[1][host_id]
-        if host_status in ("waiting", "skipped") or (host_status == "done" and path not in pinned_before):
+        is_unentered_done = host_status == "done" and path not in pinned_before
+        if host_status in ("waiting", "skipped") or is_unentered_done or pinned_before.get(path):
             raise HTTPException(status_code=409, detail=ERR_BAD_STATE)
 
 
@@ -552,13 +553,16 @@ async def _clear_child_scopes(session: AsyncSession, run_id: int, child_path: st
 
 
 async def _close_unfinished_child(session: AsyncSession, run_id: int, child_path: str) -> None:
-    """하위프로세스를 바로 완료하면 덜 밟은 하위 범위를 닫는다 — 남은 단계는 건너뜀이 된다."""
-    scope = await _load_scope_row(session, run_id, child_path)
-    if scope is None or scope.closed:
-        return
-    child_graph = await load_version_graph(session, scope.version_id)
-    if not is_run_scope_finished(derive_run_statuses(child_graph, await load_scope_state(session, run_id, child_path))):
-        scope.closed = True
+    """하위프로세스를 바로 완료하면 덜 밟은 하위 범위(그 아래 범위 포함)를 닫는다 — 남은 단계는 건너뜀이 된다."""
+    scopes = await session.scalars(
+        select(RunScope).where(RunScope.run_id == run_id, _is_under_scope(RunScope.scope_path, child_path))
+    )
+    for scope in scopes.all():
+        if scope.closed:
+            continue
+        graph = await load_version_graph(session, scope.version_id)
+        if not is_run_scope_finished(derive_run_statuses(graph, await load_scope_state(session, run_id, scope.scope_path))):
+            scope.closed = True
 
 
 async def _rewind_loop(ctx: _ActionContext, scope_path: str, back_edge_id: str) -> None:
@@ -672,7 +676,8 @@ async def apply_run_action(session: AsyncSession, run: Run, user: str, body: Run
     logins = await session.scalars(select(RunParticipant.login_id).where(RunParticipant.run_id == run.id))
     if not _is_actor(run, set(logins.all()), user):
         raise HTTPException(status_code=403, detail=ERR_PARTICIPANT_ONLY)
-    pinned_before = set((await session.scalars(select(RunScope.scope_path).where(RunScope.run_id == run.id))).all())
+    pinned = await session.execute(select(RunScope.scope_path, RunScope.closed).where(RunScope.run_id == run.id))
+    pinned_before = {path: closed for path, closed in pinned.all()}
     # 하위 범위는 처음 건드릴 때 버전을 고정한다 — 거절되면 커밋하지 않으므로 고정도 남지 않는다
     chain = await _resolve_scope_chain(session, run, body.scope_path, user, pin=True)
     graphs = {path: await load_version_graph(session, version_id) for path, version_id in chain}

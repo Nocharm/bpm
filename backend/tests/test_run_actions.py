@@ -11,10 +11,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.db import SessionLocal
-from app.models import ProcessMap, Run, RunComment, RunEvent
+from app.models import ProcessMap, Run, RunComment, RunEvent, RunScope
 from app.run_graph import RunScopeState, derive_run_statuses
 from app.run_service import load_version_graph
-from tests.run_helpers import as_user, load_case_graph, republish_map, seed_published_map
+from tests.run_helpers import OWNING_DEPARTMENT, as_user, load_case_graph, republish_map, seed_published_map
 
 _names = itertools.count(1)
 
@@ -228,6 +228,19 @@ def test_problem_resolve_and_unstart(client: TestClient, monkeypatch: pytest.Mon
     assert _rejected(_act(client, run, a, "undo")) == (409, "action not allowed in this state")
 
 
+def test_problem_completes_but_done_cannot_become_problem(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seeded = _seed(client, monkeypatch, "linear", "problem complete")
+    a = seeded["ids"]["a"]
+    run = _create_run(client, seeded)
+    _ok(_act(client, run, a, "problem"))
+
+    assert _states(_ok(_act(client, run, a, "complete"))) == {a: "done"}  # 문제에서 바로 완료
+    # 완료에서 문제로 가는 길은 없다 — 완료 취소 뒤 다시 표시한다 (design §4.2)
+    assert _rejected(_act(client, run, a, "problem")) == (409, "action not allowed in this state")
+
+
 def test_loop_choice_resets_body(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     seeded = _seed(client, monkeypatch, "loop", "loop")
     ids = seeded["ids"]
@@ -257,18 +270,44 @@ def test_loop_clears_subprocess_scope_in_body(client: TestClient, monkeypatch: p
     assert (detail["states"], detail["scopes"]) == ([], [])
 
 
-def test_nested_subprocess_chain(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    grandchild = _seed(client, monkeypatch, "linear", "nested grandchild", designate=True)
+def test_unpinned_scope_rows_are_hidden_from_everyone(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    parent, child = _seed_sp_pair(client, monkeypatch, "unpinned hidden", host_shape="loop", host_id="w")
+    w, child_a = parent["ids"]["w"], child["ids"]["a"]
+    run = _create_run(client, parent, scope="shared")
+    _ok(_act(client, run, child_a, "complete", scope_path=w))
+
+    async def _comment(session) -> None:
+        session.add(RunComment(run_id=run["id"], scope_path=w, node_id=child_a, author=run["starter"], body="note"))
+
+    _write_db(_comment)
+    assert _get_detail(client, run)["comment_counts"] == [{"scope_path": w, "node_id": child_a, "count": 1}]
+    _ok(_act(client, run, w, "complete"))
+    _ok(_act(client, run, parent["ids"]["r"], "complete", edge_id=parent["ids"]["h3"]))  # 루프가 고정을 지운다
+
+    # 고정이 없어 어느 맵인지 확인할 수 없는 범위는 참여자에게도 바깥 사람에게도 싣지 않는다(기본 가림)
+    for viewer in (run["starter"], "unpinned.outsider"):
+        seen = _get_detail(client, run, viewer)
+        assert (seen["states"], seen["scopes"], seen["comment_counts"]) == ([], [], [])
+
+
+def _seed_nested(client: TestClient, monkeypatch: pytest.MonkeyPatch, label: str) -> tuple[dict, dict, dict]:
+    """3단 — 바깥(sp_exits의 q) → 중간(linear의 b가 하위프로세스) → 손자(linear). (바깥, 중간, 손자)."""
+    grandchild = _seed(client, monkeypatch, "linear", f"{label} grandchild", designate=True)
     middle_graph = load_case_graph("linear")
     next(n for n in middle_graph["nodes"] if n["id"] == "b").update(
         node_type="subprocess", linked_map_id=grandchild["map_id"]
     )
     middle = seed_published_map(
-        client, monkeypatch, graph=middle_graph, name=_unique("nested middle"), designate=True
+        client, monkeypatch, graph=middle_graph, name=_unique(f"{label} middle"), designate=True
     )
     top_graph = load_case_graph("sp_exits")
     next(n for n in top_graph["nodes"] if n["id"] == "q").update(linked_map_id=middle["map_id"])
-    top = seed_published_map(client, monkeypatch, graph=top_graph, name=_unique("nested top"))
+    top = seed_published_map(client, monkeypatch, graph=top_graph, name=_unique(f"{label} top"))
+    return top, middle, grandchild
+
+
+def test_nested_subprocess_chain(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    top, middle, grandchild = _seed_nested(client, monkeypatch, "nested")
     q, mid_b = top["ids"]["q"], middle["ids"]["b"]
     inner = f"{q}/{mid_b}"
     run = _create_run(client, top)
@@ -406,6 +445,8 @@ def test_outer_unstart_cascade(client: TestClient, monkeypatch: pytest.MonkeyPat
     detail = _ok(_act(client, run, q, "unstart", cascade=True))
 
     assert detail["states"] == []
+    # 고정 버전은 남아 다시 들어가도 같은 하위 맵을 밟는다
+    assert detail["scopes"] == [{"scope_path": q, "version_id": child["version_id"], "closed": False}]
 
 
 def test_child_undo_reopens_host_unless_outer_touched(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -449,6 +490,49 @@ def test_child_scope_of_directly_completed_host_is_rejected(
     assert _rejected(res) == (409, "action not allowed in this state")
 
 
+def test_closed_child_scope_is_read_only(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    parent, child = _seed_sp_pair(client, monkeypatch, "closed read only")
+    q, child_a = parent["ids"]["q"], child["ids"]["a"]
+    finished = _create_run(client, parent)  # 닫힌 범위에 완료 단계가 남은 실행
+    _ok(_act(client, finished, child_a, "complete", scope_path=q))
+    _ok(_act(client, finished, q, "complete", exit_key="__primary__"))
+    flagged = _create_run(client, parent)  # 닫힌 범위에 문제 단계가 남은 실행
+    _ok(_act(client, flagged, child_a, "problem", scope_path=q))
+    assert _ok(_act(client, flagged, q, "complete", exit_key="__primary__"))["scopes"][0]["closed"] is True
+
+    # 닫힌 범위의 완료·문제는 기록으로만 남는다 — 되돌리거나 해결·완료하지 않는다 (R9)
+    read_only = (409, "action not allowed in this state")
+    assert _rejected(_act(client, finished, child_a, "undo", scope_path=q)) == read_only
+    assert _rejected(_act(client, flagged, child_a, "resolve", scope_path=q)) == read_only
+    assert _rejected(_act(client, flagged, child_a, "complete", scope_path=q)) == read_only
+    assert _states(_get_detail(client, flagged), q) == {child_a: "problem"}
+
+
+def test_scope_nested_under_closed_scope_is_read_only(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    top, middle, grandchild = _seed_nested(client, monkeypatch, "closed nested")
+    q, mid_b = top["ids"]["q"], middle["ids"]["b"]
+    inner = f"{q}/{mid_b}"
+    run = _create_run(client, top)
+    _ok(_act(client, run, middle["ids"]["a"], "complete", scope_path=q))
+    _ok(_act(client, run, grandchild["ids"]["a"], "complete", scope_path=inner))
+
+    detail = _ok(_act(client, run, q, "complete", exit_key="__primary__"))
+
+    # 바깥 호스트를 바로 완료하면 덜 밟은 아래 범위까지 모두 닫힌다
+    assert {s["scope_path"]: s["closed"] for s in detail["scopes"]} == {q: True, inner: True}
+    read_only = (409, "action not allowed in this state")
+    assert _rejected(_act(client, run, grandchild["ids"]["a"], "undo", scope_path=inner)) == read_only
+
+    async def _reopen_inner(session) -> None:
+        # 아래 범위를 함께 닫기 전에 남은 기록처럼 — 바깥 범위가 닫힌 것만으로도 읽기 전용이어야 한다
+        scope = await session.scalar(select(RunScope).where(RunScope.run_id == run["id"], RunScope.scope_path == inner))
+        scope.closed = False
+
+    _write_db(_reopen_inner)
+    assert _rejected(_act(client, run, grandchild["ids"]["a"], "undo", scope_path=inner)) == read_only
+    assert _states(_get_detail(client, run), q)[mid_b] == "active"  # 닫힌 범위 안 호스트를 다시 쓰지 않았다
+
+
 def test_scope_path_rules(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     parent, _child = _seed_sp_pair(client, monkeypatch, "scope rules")
     a = parent["ids"]["a"]
@@ -466,7 +550,7 @@ def test_subprocess_map_without_published_version_is_rejected(
 ) -> None:
     # 게시본 없이 Draft만 있는 맵 — 링크 해석이 Draft로 내려가도 실행은 들어가지 않는다(편집으로 노드 id가 바뀐다)
     draft_only = client.post(
-        "/api/maps", json={"owning_department": "Owning Anchor Division", "name": _unique("draft child")}
+        "/api/maps", json={"owning_department": OWNING_DEPARTMENT, "name": _unique("draft child")}
     )
     assert draft_only.status_code == 201, draft_only.text
     graph = load_case_graph("sp_exits")
