@@ -97,7 +97,8 @@ function RunPanelBody({ runs, prefs, onPrefs }: DashboardRunPanelProps) {
           }}
         />
       </div>
-      <ul data-id="home-run-list" className="max-h-60 overflow-y-auto">
+      {/* 목록 높이는 화면 높이에 맞춰 줄인다 — sticky 상단 안이라 짧은 화면에서도 아래 안내 줄이 붙은 채 보이게(상한 15rem) */}
+      <ul data-id="home-run-list" className="max-h-[clamp(5rem,calc(100dvh_-_24rem),15rem)] overflow-y-auto">
         {shown.length === 0 ? (
           <li data-id="home-run-empty" className="px-3 py-4 text-center text-fine text-ink-muted">
             {t("home.dash.runs.empty")}
@@ -140,16 +141,24 @@ function RunPanelBody({ runs, prefs, onPrefs }: DashboardRunPanelProps) {
   );
 }
 
-// 작은 줄 — 상태 글씨(문제 빨강 · 곧 중단 경고 · 다음 악센트) · 맵 이름 · 나만/공유 n명
+// 작은 줄 — 상태 글씨(문제 빨강 · 곧 중단 경고 · 다음 악센트) · 맵 이름 · 나만/공유 n명(나를 포함한 참여자 수)
 function RunSubLine({ run, t }: { run: MeDashboardRun; t: Translate }) {
-  const idleText = t("home.dash.runs.stateIdle", { d: run.idle_days, s: run.stop_in_days });
-  const scopeText = run.scope === "shared" ? t("home.dash.runs.shared", { n: run.participant_count }) : t("home.dash.runs.solo");
+  const idleText = formatIdleText(run, t);
+  const scopeText =
+    run.scope === "shared"
+      ? t(run.participant_count === 1 ? "home.dash.runs.sharedOne" : "home.dash.runs.shared", { n: run.participant_count })
+      : t("home.dash.runs.solo");
   return (
     <span className="min-w-0 truncate text-fine text-ink-tertiary">
       {run.state_kind === "idle" ? (
-        <span data-id="home-run-state" className="font-semibold text-warn">{idleText}</span>
+        <span data-id={`home-run-state-${run.run_id}`} className="font-semibold text-warn">
+          {idleText}
+        </span>
       ) : (
-        <span data-id="home-run-state" className={`font-semibold ${run.state_kind === "problem" ? "text-run-problem" : "text-accent"}`}>
+        <span
+          data-id={`home-run-state-${run.run_id}`}
+          className={`font-semibold ${run.state_kind === "problem" ? "text-run-problem" : "text-accent"}`}
+        >
           {formatTitledState(run, t)}
         </span>
       )}
@@ -157,12 +166,24 @@ function RunSubLine({ run, t }: { run: MeDashboardRun; t: Translate }) {
       {run.state_kind === "problem" && run.is_idle && (
         <>
           {" · "}
-          <span className="font-semibold text-warn">{idleText}</span>
+          <span data-id={`home-run-idle-${run.run_id}`} className="font-semibold text-warn">
+            {idleText}
+          </span>
         </>
       )}
       {` · ${run.map_name} · ${scopeText}`}
     </span>
   );
+}
+
+// 방치 글씨 — "32일 그대로 · 8일 뒤 자동 중단". 남은 날이 0이면(오늘 밤 정리 잡이 멈춘다) "곧 자동 중단", 영어는 1 day/N days
+function formatIdleText(run: MeDashboardRun, t: Translate): string {
+  const idle = t(run.idle_days === 1 ? "home.dash.runs.idleForOne" : "home.dash.runs.idleFor", { d: run.idle_days });
+  const stop =
+    run.stop_in_days <= 0
+      ? t("home.dash.runs.stopsSoon")
+      : t(run.stop_in_days === 1 ? "home.dash.runs.stopsInOne" : "home.dash.runs.stopsIn", { s: run.stop_in_days });
+  return `${idle} · ${stop}`;
 }
 
 // "문제: 노드" · "다음: 노드"(+ "외 n") — 볼 수 없는 하위 맵 노드는 제목이 빈 문자열이라 종류 글씨만

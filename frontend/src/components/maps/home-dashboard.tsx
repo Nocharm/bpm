@@ -39,6 +39,9 @@ export function HomeDashboard({
   const { t } = useI18n();
   const [data, setData] = useState<MeDashboard | null>(null);
   const [loadError, setLoadError] = useState(false);
+  // 알림 칸이 읽어 온·읽음 처리한 미읽음 수 — 대시보드 응답보다 최신이면 프로필 배지와 타일을 같이 맞춘다
+  const [liveUnread, setLiveUnread] = useState<number | null>(null);
+  const unread = liveUnread ?? data?.activity.unread_notifications ?? 0;
   useEffect(() => {
     let active = true;
     void getMeDashboard()
@@ -56,13 +59,13 @@ export function HomeDashboard({
         data-id="home-dashboard-top"
         className="sticky -top-4 z-10 -mx-4 -mt-4 flex flex-col gap-3.5 bg-surface-alt/85 px-4 pb-3 pt-4 backdrop-blur-[3px] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-5 after:bg-gradient-to-b after:from-surface-alt/80 after:to-transparent"
       >
-        {me && <DashboardProfile me={me} activity={data?.activity ?? null} onFilterMine={onFilterMine} />}
+        {me && <DashboardProfile me={me} activity={data?.activity ?? null} unread={unread} onFilterMine={onFilterMine} />}
         {loadError && (
           <p data-id="home-dashboard-error" className="rounded-sm border border-notice-border bg-notice px-3 py-1.5 text-fine text-ink-secondary">
             {t("home.dash.loadError")}
           </p>
         )}
-        {!loadError && <DashboardActivityTiles data={data} onSelect={onSelect} />}
+        {!loadError && <DashboardActivityTiles data={data} unread={unread} onUnreadChange={setLiveUnread} onSelect={onSelect} />}
       </div>
       {/* 2열은 같은 높이(stretch) — 섹션 자체가 SECTION_CAP으로 상한을 갖는다(dashboard-section.tsx) */}
       <div className="grid grid-cols-1 gap-2.5 @[42rem]:grid-cols-2">

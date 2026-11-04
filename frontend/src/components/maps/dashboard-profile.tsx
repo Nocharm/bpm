@@ -15,7 +15,8 @@ import { Tooltip } from "@/components/tooltip";
 
 interface DashboardProfileProps {
   me: Me;
-  activity: MeDashboardActivity | null; // 도착 전 null — 알림 배지·직전 로그인 자리는 스켈레톤
+  activity: MeDashboardActivity | null; // 도착 전 null — 직전 로그인 자리는 스켈레톤
+  unread: number; // 알림 배지 — 홈 대시보드가 알림 칸의 최신 수(모두 읽음 포함)로 맞춰 내려 준다
   onFilterMine: () => void; // 좌측 목록 권한 필터를 owner로
 }
 
@@ -34,14 +35,13 @@ export function DashboardProfile(props: DashboardProfileProps) {
   );
 }
 
-function ProfileBody({ me, activity, onFilterMine }: DashboardProfileProps) {
+function ProfileBody({ me, activity, unread, onFilterMine }: DashboardProfileProps) {
   const { t } = useI18n();
   const segments = (me.org_path ?? "").split("/").filter(Boolean);
   const leaf = segments.at(-1) ?? me.department;
   // 전체 경로는 필의 title로만 — 긴 경로가 이름 아래 한 줄을 차지하지 않게 말단만 필 (사용자 지시 2026-09-11)
   const fullPath = segments.join(" / ");
   const isFrameworkAdmin = (me.category_admin_root_ids?.length ?? 0) > 0;
-  const unread = activity?.unread_notifications ?? 0;
   const { toggle } = useDelayedNav();
   const go = (href: string, dest: string) => toggle(href, t("home.dash.navGoing", { dest }));
   return (

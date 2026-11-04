@@ -280,35 +280,35 @@ describe("run notifications", () => {
   it("run_invited - 제목=맵 이름, 본문에 행위자·실행 이름", () => {
     const view = formatNotification(makeRun("run_invited", {}), ko);
     expect(view.title).toBe("시험 일탈 관리");
-    expect(view.body).toBe("박서연 님이 '11월 점검' 실행에 초대했어요");
+    expect(view.body).toBe("박서연님이 '11월 점검' 실행에 초대했어요");
   });
 
   it("run_steps_done - 1명이면 단일 문구, 2명 이상이면 외 N명 문구", () => {
     const one = makeRun("run_steps_done", { count: 3, actors: ["park.s"], node_title: "시료 채취" });
-    expect(formatNotification(one, ko).body).toBe("박서연 님이 단계 3개를 완료했어요 · 최근: 시료 채취");
+    expect(formatNotification(one, ko).body).toBe("박서연님이 단계 3개를 완료했어요 · 최근: 시료 채취");
     const many = makeRun("run_steps_done", { count: 3, actors: ["lee.j", "kim.a", "park.s"], node_title: "시료 채취" });
-    expect(formatNotification(many, ko).body).toBe("박서연 님 외 2명이 단계 3개를 완료했어요 · 최근: 시료 채취");
+    expect(formatNotification(many, ko).body).toBe("박서연님 외 2명이 단계 3개를 완료했어요 · 최근: 시료 채취");
     expect(formatNotification(many, en).body).toBe("박서연 and 2 other(s) completed 3 step(s) · Latest: 시료 채취");
   });
 
   it("run_steps_done - node_title이 없으면(숨은 범위) 최근 구절 없는 변형", () => {
     const one = makeRun("run_steps_done", { count: 2, actors: ["park.s"] });
-    expect(formatNotification(one, ko).body).toBe("박서연 님이 단계 2개를 완료했어요");
+    expect(formatNotification(one, ko).body).toBe("박서연님이 단계 2개를 완료했어요");
     const many = makeRun("run_steps_done", { count: 4, actors: ["lee.j", "park.s"] });
-    expect(formatNotification(many, ko).body).toBe("박서연 님 외 1명이 단계 4개를 완료했어요");
+    expect(formatNotification(many, ko).body).toBe("박서연님 외 1명이 단계 4개를 완료했어요");
     expect(formatNotification(many, ko).body).not.toContain("최근");
   });
 
   it("run_problem - 노드가 보이면 노드 이름, 안 보이면 노드 없는 문구", () => {
     const seen = makeRun("run_problem", { node_title: "시료 채취" });
-    expect(formatNotification(seen, ko).body).toBe("박서연 님이 '시료 채취'에 문제를 표시했어요");
+    expect(formatNotification(seen, ko).body).toBe("박서연님이 '시료 채취'에 문제를 표시했어요");
     const hidden = makeRun("run_problem", {});
-    expect(formatNotification(hidden, ko).body).toBe("박서연 님이 문제를 표시했어요");
+    expect(formatNotification(hidden, ko).body).toBe("박서연님이 문제를 표시했어요");
   });
 
   it("run_problem - snippet은 말미에 붙고 파츠로는 인용 칩이 된다", () => {
     const item = makeRun("run_problem", { node_title: "시료 채취", snippet: "시약이 모자라요" });
-    expect(formatNotification(item, ko).body).toBe("박서연 님이 '시료 채취'에 문제를 표시했어요 · \"시약이 모자라요\"");
+    expect(formatNotification(item, ko).body).toBe("박서연님이 '시료 채취'에 문제를 표시했어요 · \"시약이 모자라요\"");
     const parts = formatNotificationBodyParts(item, ko);
     expect(parts).toContainEqual({ chip: "시약이 모자라요", kind: "quote" });
     expect(parts).toContainEqual({ chip: "시료 채취", kind: "name" });
@@ -318,13 +318,13 @@ describe("run notifications", () => {
 
   it("run_resolved - 노드 유무 두 문구", () => {
     expect(formatNotification(makeRun("run_resolved", { node_title: "시료 채취" }), ko).body)
-      .toBe("박서연 님이 '시료 채취' 문제를 해결했어요");
-    expect(formatNotification(makeRun("run_resolved", {}), ko).body).toBe("박서연 님이 문제를 해결했어요");
+      .toBe("박서연님이 '시료 채취' 문제를 해결했어요");
+    expect(formatNotification(makeRun("run_resolved", {}), ko).body).toBe("박서연님이 문제를 해결했어요");
   });
 
   it("run_finished·run_stopped·run_idle_warning - 실행 이름·자동 중단·남은 일수", () => {
     expect(formatNotification(makeRun("run_finished", {}), ko).body).toBe("'11월 점검' 실행이 모두 완료됐어요");
-    expect(formatNotification(makeRun("run_stopped", { auto: false }), ko).body).toBe("박서연 님이 '11월 점검' 실행을 중단했어요");
+    expect(formatNotification(makeRun("run_stopped", { auto: false }), ko).body).toBe("박서연님이 '11월 점검' 실행을 중단했어요");
     const auto = makeRun("run_stopped", { auto: true, days: 40, actor: undefined, actor_name: "" });
     expect(formatNotification(auto, ko).body).toBe("'11월 점검' 실행이 오래 그대로라 자동으로 중단됐어요");
     const idle = makeRun("run_idle_warning", { days: 10, actor: undefined, actor_name: "" });

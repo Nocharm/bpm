@@ -23,17 +23,17 @@ type PanelKey = "checkouts" | "runs" | "inbox";
 
 interface DashboardActivityTilesProps {
   data: MeDashboard | null; // 도착 전 null → 스켈레톤
+  unread: number; // 알림 · 피드백 타일 수 — 홈 대시보드가 프로필 배지와 같은 값으로 내려 준다
+  onUnreadChange: (n: number) => void; // 알림 칸이 읽어 온·읽음 처리한 미읽음 수를 위로 올린다
   onSelect: (mapId: number) => void;
 }
 
-export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTilesProps) {
+export function DashboardActivityTiles({ data, unread, onUnreadChange, onSelect }: DashboardActivityTilesProps) {
   const { t } = useI18n();
   const ago = useAgo();
   const [open, setOpen] = useState<PanelKey | null>(null);
   // 펼침 목록의 거르기·정렬 — 브라우저에 기억(펼침 여부는 기억하지 않는다)
   const [prefs, setPrefs] = useState<HomeListPrefs>(loadHomeListPrefs);
-  // 알림 칸이 읽어 온·읽음 처리한 미읽음 수 — 대시보드 응답보다 최신이면 이것으로 타일을 맞춘다
-  const [liveUnread, setLiveUnread] = useState<number | null>(null);
   const { closingKeys, beginClose, cancelClose, getSectionClass } = useClosingKeys<PanelKey>();
   const togglePanel = (key: PanelKey) => {
     cancelActiveDelayedNav();
@@ -67,7 +67,7 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
   const waiting = data.checkouts.reduce((n, c) => n + c.waiting_requests, 0);
   return (
     <div data-id="home-activity" className="flex flex-col gap-2">
-      <TileGrid a={a} waiting={waiting} unread={liveUnread ?? a.unread_notifications} open={open} onToggle={togglePanel} />
+      <TileGrid a={a} waiting={waiting} unread={unread} open={open} onToggle={togglePanel} />
       {isShown("checkouts") && data.checkouts.length > 0 && (
         <div className={getSectionClass("checkouts")}>
         <NavPendingScope className="rounded-sm">
@@ -107,7 +107,7 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
       )}
       {isShown("inbox") && (
         <div className={getSectionClass("inbox")}>
-          <DashboardInboxPanel prefs={prefs} onPrefs={updatePrefs} onUnreadChange={setLiveUnread} />
+          <DashboardInboxPanel prefs={prefs} onPrefs={updatePrefs} onUnreadChange={onUnreadChange} />
         </div>
       )}
     </div>

@@ -427,8 +427,13 @@ function ColumnList({ dataId, loading, error, empty, children }: ColumnListProps
       </p>
     );
   }
+  // 목록 높이는 화면 높이에 맞춰 줄인다 — 펼친 칸은 홈의 sticky 상단 안이라, 칸이 화면보다 길면 아래 링크(모두 읽음·새 피드백)가
+  // 붙어 있는 동안 화면 밖에 남는다. 좁은 분할(두 목록이 위아래)은 목록 둘이 나눠 쓰고, 넓으면(@36rem 좌우) 하나 몫. 상한 15rem
   return (
-    <ul data-id={dataId} className="max-h-60 overflow-y-auto">
+    <ul
+      data-id={dataId}
+      className="max-h-[clamp(5rem,calc(50dvh_-_14rem),15rem)] overflow-y-auto @[36rem]:max-h-[clamp(5rem,calc(100dvh_-_24rem),15rem)]"
+    >
       {empty !== null ? (
         <li data-id={`${dataId}-empty`} className="px-3 py-4 text-center text-fine text-ink-muted">
           {empty}

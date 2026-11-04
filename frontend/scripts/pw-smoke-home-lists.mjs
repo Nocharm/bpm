@@ -252,6 +252,8 @@ try {
   await page.locator('[data-id="home-inbox-read-all"]').click();
   await page.waitForFunction(() => document.querySelectorAll('[data-id^="home-inbox-noti-row-"][data-unread]').length === 0);
   check("inbox: mark all read is immediate", atHome() && (await readTileValue("home-activity-inbox")) === 0);
+  const profileBadge = ((await page.locator('[data-id="home-profile-unread"]').textContent()) ?? "").trim();
+  check("inbox: profile badge follows mark all read", profileBadge === "0", `badge ${profileBadge}`);
   await page.locator('[data-id="home-inbox-fb-new"]').click();
   await page.waitForTimeout(500);
   const sidePanel = page.locator('aside[role="dialog"]');
