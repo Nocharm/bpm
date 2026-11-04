@@ -1,19 +1,25 @@
-// 홈 대시보드 활동 타일 5종 — 결재 대기·내가 낸 요청·점유 중 버전·미읽음 알림·내 피드백. 0도 숨기지 않고 뮤트.
-// 점유 타일은 클릭 시 아래로 점유 목록을 아코디언으로 펼친다(접힘 고스트는 useClosingKeys). 페이지 이동 타일은 1클릭 지연 이동 —
-// 누른 타일 한 칸만 레이어로 덮이며 가운데에 링 + "…로 이동 중"이 뜨고, 레이어를 클릭하면 취소(실수 클릭 복귀, 사용자 지시 2026-09-18).
+// 홈 대시보드 활동 타일 5종 — 결재 대기·내가 낸 요청·Check out 중 버전·진행 중 실행·알림 · 피드백. 0도 숨기지 않고 뮤트.
+// Check out·진행 중 실행·알림 · 피드백 타일은 누르면 타일 줄 아래로 목록을 아코디언으로 펼친다(한 번에 하나, 접힘 고스트는 useClosingKeys,
+// design 2026-11-04 §4.8). 페이지 이동 타일은 1클릭 지연 이동 — 누른 타일 한 칸만 레이어로 덮이며 가운데에 링 + "…로 이동 중"이 뜨고,
+// 레이어를 클릭하면 취소(실수 클릭 복귀, 사용자 지시 2026-09-18). 타일로 칸을 접거나 바꾸면 대기 중인 이동도 취소된다.
 "use client";
 
-import { Bell, Globe, Inbox, Lock, MessageSquare, Send } from "lucide-react";
+import { Bell, Globe, Inbox, ListChecks, Lock, Send } from "lucide-react";
 import { useState, type MouseEvent, type ReactNode } from "react";
 
 import type { MeDashboard } from "@/lib/api";
+import { loadHomeListPrefs, saveHomeListPrefs, type HomeListPrefs } from "@/lib/home-list-prefs";
 import { useI18n } from "@/lib/i18n";
 import { useAgo } from "@/lib/use-ago";
 import { useClosingKeys } from "@/lib/use-closing-keys";
-import { useDelayedNav } from "@/lib/use-delayed-nav";
+import { cancelActiveDelayedNav, useDelayedNav } from "@/lib/use-delayed-nav";
+import { DashboardInboxPanel } from "@/components/maps/dashboard-inbox-panel";
+import { DashboardRunPanel } from "@/components/maps/dashboard-run-panel";
 import { HoverLinkedRow } from "@/components/maps/dashboard-hover-row";
 import { NavPendingScope } from "@/components/nav-pending-scope";
 import { SkeletonBlock, SkeletonLine } from "@/components/skeleton";
+
+type PanelKey = "checkouts" | "runs" | "inbox";
 
 interface DashboardActivityTilesProps {
   data: MeDashboard | null; // 도착 전 null → 스켈레톤
@@ -23,13 +29,27 @@ interface DashboardActivityTilesProps {
 export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTilesProps) {
   const { t } = useI18n();
   const ago = useAgo();
-  const [checkoutsOpen, setCheckoutsOpen] = useState(false);
-  const { closingKeys, beginClose, cancelClose, getSectionClass } = useClosingKeys<"checkouts">();
-  const toggleCheckouts = () => {
-    if (checkoutsOpen) beginClose("checkouts");
-    else cancelClose("checkouts");
-    setCheckoutsOpen((v) => !v);
+  const [open, setOpen] = useState<PanelKey | null>(null);
+  // 펼침 목록의 거르기·정렬 — 브라우저에 기억(펼침 여부는 기억하지 않는다)
+  const [prefs, setPrefs] = useState<HomeListPrefs>(loadHomeListPrefs);
+  // 알림 칸이 읽어 온·읽음 처리한 미읽음 수 — 대시보드 응답보다 최신이면 이것으로 타일을 맞춘다
+  const [liveUnread, setLiveUnread] = useState<number | null>(null);
+  const { closingKeys, beginClose, cancelClose, getSectionClass } = useClosingKeys<PanelKey>();
+  const togglePanel = (key: PanelKey) => {
+    cancelActiveDelayedNav();
+    if (open !== null) beginClose(open);
+    if (open === key) {
+      setOpen(null);
+      return;
+    }
+    cancelClose(key);
+    setOpen(key);
   };
+  const updatePrefs = (next: HomeListPrefs) => {
+    setPrefs(next);
+    saveHomeListPrefs(next);
+  };
+  const isShown = (key: PanelKey) => open === key || closingKeys.has(key);
   if (data === null) {
     return (
       <div data-id="home-activity" className="grid grid-cols-5 gap-2">
@@ -47,8 +67,8 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
   const waiting = data.checkouts.reduce((n, c) => n + c.waiting_requests, 0);
   return (
     <div data-id="home-activity" className="flex flex-col gap-2">
-      <TileGrid a={a} waiting={waiting} checkoutsOpen={checkoutsOpen} onToggleCheckouts={toggleCheckouts} />
-      {(checkoutsOpen || closingKeys.has("checkouts")) && data.checkouts.length > 0 && (
+      <TileGrid a={a} waiting={waiting} unread={liveUnread ?? a.unread_notifications} open={open} onToggle={togglePanel} />
+      {isShown("checkouts") && data.checkouts.length > 0 && (
         <div className={getSectionClass("checkouts")}>
         <NavPendingScope className="rounded-sm">
         <ul data-id="home-activity-checkout-list" className="flex flex-col rounded-sm border border-hairline bg-surface">
@@ -80,6 +100,16 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
         </NavPendingScope>
         </div>
       )}
+      {isShown("runs") && (
+        <div className={getSectionClass("runs")}>
+          <DashboardRunPanel runs={data.runs} prefs={prefs} onPrefs={updatePrefs} />
+        </div>
+      )}
+      {isShown("inbox") && (
+        <div className={getSectionClass("inbox")}>
+          <DashboardInboxPanel prefs={prefs} onPrefs={updatePrefs} onUnreadChange={setLiveUnread} />
+        </div>
+      )}
     </div>
   );
 }
@@ -87,13 +117,17 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
 interface TileGridProps {
   a: MeDashboard["activity"];
   waiting: number;
-  checkoutsOpen: boolean;
-  onToggleCheckouts: () => void;
+  unread: number;
+  open: PanelKey | null;
+  onToggle: (key: PanelKey) => void;
 }
 
-function TileGrid({ a, waiting, checkoutsOpen, onToggleCheckouts }: TileGridProps) {
+function TileGrid({ a, waiting, unread, open, onToggle }: TileGridProps) {
   const { t } = useI18n();
   const inbox = { href: "/inbox", label: t("home.dash.navGoing", { dest: t("home.dash.destInbox") }) };
+  // 0이면 펼치지 않는다 — 단, 펼친 채 0이 되면(모두 읽음) 다시 눌러 접을 수 있게 둔다
+  const toggleFor = (key: PanelKey, value: number) => (value > 0 || open === key ? () => onToggle(key) : undefined);
+  const runIssues = a.runs_problem + a.runs_idle;
   return (
     <div className="grid grid-cols-5 gap-2">
       <Tile
@@ -126,30 +160,34 @@ function TileGrid({ a, waiting, checkoutsOpen, onToggleCheckouts }: TileGridProp
               : t("home.dash.tileCheckoutsSub")
         }
         warn={waiting > 0}
-        pressed={checkoutsOpen}
-        onClick={a.checkouts_held > 0 ? onToggleCheckouts : undefined}
+        pressed={open === "checkouts"}
+        onClick={toggleFor("checkouts", a.checkouts_held)}
       />
       <Tile
-        dataId="home-activity-unread"
-        icon={<Bell size={14} strokeWidth={1.5} />}
-        label={t("home.dash.tileUnread")}
-        value={a.unread_notifications}
-        sub={a.unread_notifications > 0 ? t("home.dash.tileUnreadSub") : t("home.dash.tileUnreadNone")}
-        nav={inbox}
-      />
-      <Tile
-        dataId="home-activity-feedback"
-        icon={<MessageSquare size={14} strokeWidth={1.5} />}
-        label={t("home.dash.tileFeedback")}
-        value={a.feedback_mine}
+        dataId="home-activity-runs"
+        icon={<ListChecks size={14} strokeWidth={1.5} />}
+        label={t("home.dash.tileRuns")}
+        value={a.runs_open}
         sub={
-          a.feedback_mine === 0
-            ? t("home.dash.tileFeedbackNone")
-            : a.feedback_mine_open > 0
-              ? t("home.dash.tileFeedbackOpen", { n: a.feedback_mine_open })
-              : t("home.dash.tileFeedbackDone")
+          a.runs_open === 0
+            ? t("home.dash.tileRunsNone")
+            : runIssues > 0
+              ? t("home.dash.tileRunsSub", { p: a.runs_problem, i: a.runs_idle })
+              : t("home.dash.tileRunsCalm")
         }
-        nav={{ href: "/feedback", label: t("home.dash.navGoing", { dest: t("home.dash.destFeedback") }) }}
+        warn={runIssues > 0}
+        pressed={open === "runs"}
+        onClick={toggleFor("runs", a.runs_open)}
+      />
+      <Tile
+        dataId="home-activity-inbox"
+        icon={<Bell size={14} strokeWidth={1.5} />}
+        label={t("home.dash.tileInbox")}
+        value={unread}
+        unit={t("home.dash.tileInboxUnit")}
+        sub={t("home.dash.tileInboxSub", { n: a.feedback_mine_open })}
+        pressed={open === "inbox"}
+        onClick={toggleFor("inbox", unread)}
       />
     </div>
   );
@@ -160,11 +198,12 @@ interface TileProps {
   icon: ReactNode;
   label: string;
   value: number;
+  unit?: string; // 숫자 옆 작은 단위 글씨("미읽음")
   sub: string;
   hot?: boolean; // 0 초과일 때 액센트 강조(내 결정 필요)
   warn?: boolean; // 보조 문구 경고색
-  pressed?: boolean;
-  onClick?: (e: MouseEvent<HTMLButtonElement>) => void; // 즉시 동작(점유 목록 펼침)
+  pressed?: boolean; // 아래 목록을 펼친 타일 — 틴트 배경
+  onClick?: (e: MouseEvent<HTMLButtonElement>) => void; // 즉시 동작(아래 목록 펼침)
   nav?: { href: string; label: string }; // 지연 페이지 이동 — 타일 한 칸이 스코프가 되어 자기 위에 레이어를 띄운다
 }
 
@@ -183,10 +222,10 @@ function NavTile({ nav, ...rest }: TileProps & { nav: { href: string; label: str
   return <TileBody {...rest} onClick={() => toggle(nav.href, nav.label)} />;
 }
 
-function TileBody({ dataId, icon, label, value, sub, hot, warn, pressed, onClick }: TileProps) {
+function TileBody({ dataId, icon, label, value, unit, sub, hot, warn, pressed, onClick }: TileProps) {
   const zero = value === 0;
-  const cls = `flex w-full min-w-0 flex-col gap-1.5 rounded-sm border bg-surface px-3 py-2.5 text-left transition-[border-color,box-shadow] duration-150 ease-smooth ${
-    pressed ? "border-accent-tint-border shadow-sm" : "border-hairline"
+  const cls = `flex w-full min-w-0 flex-col gap-1.5 rounded-sm border px-3 py-2.5 text-left transition-[border-color,box-shadow,background-color] duration-150 ease-smooth ${
+    pressed ? "border-accent-tint-border bg-accent-tint shadow-sm" : "border-hairline bg-surface"
   } ${onClick ? "hover:border-accent-tint-border hover:shadow-sm" : "cursor-default"}`;
   const inner = (
     <>
@@ -194,7 +233,10 @@ function TileBody({ dataId, icon, label, value, sub, hot, warn, pressed, onClick
         {icon}
         {label}
       </span>
-      <span className={`text-tagline tabular-nums ${zero ? "font-light text-ink-muted" : hot ? "text-accent-elevated" : "text-ink"}`}>{value}</span>
+      <span className={`text-tagline tabular-nums ${zero ? "font-light text-ink-muted" : hot ? "text-accent-elevated" : "text-ink"}`}>
+        {value}
+        {unit && <span className="ml-1 text-fine font-normal text-ink-tertiary">{unit}</span>}
+      </span>
       <span className={`truncate text-[11px] ${warn ? "text-warn" : "text-ink-tertiary"}`}>{sub}</span>
     </>
   );

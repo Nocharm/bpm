@@ -31,3 +31,5 @@ export const FEEDBACK_STATUS_LABEL: Record<FeedbackStatus, MessageKey> = {
 };
 
 export const FEEDBACK_STATUSES: FeedbackStatus[] = ["draft", "in_progress", "done"];
+
+export const FEEDBACK_KINDS: FeedbackKind[] = ["bug", "suggestion", "question", "etc"];

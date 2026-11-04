@@ -1,6 +1,7 @@
 "use client";
 
 // 아이콘 필 필터 — 비활성=아이콘만, 활성=아이콘+라벨(우측으로 펼쳐짐). 필터/세그먼트 공용.
+// 개수(count)를 주면 활성 여부와 상관없이 아이콘 뒤에 늘 보인다(홈 대시보드 펼침 목록).
 
 import type { LucideIcon } from "lucide-react";
 
@@ -8,16 +9,20 @@ export interface IconPillOption<T extends string> {
   value: T;
   label: string;
   Icon: LucideIcon;
+  count?: number;
 }
 
 export function IconPillFilter<T extends string>({
   options,
   value,
   onChange,
+  dataId,
 }: {
   options: IconPillOption<T>[];
   value: T;
   onChange: (value: T) => void;
+  /** 필마다 `${dataId}-${value}` 식별자 */
+  dataId?: string;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -28,6 +33,7 @@ export function IconPillFilter<T extends string>({
           <button
             key={opt.value}
             type="button"
+            data-id={dataId ? `${dataId}-${opt.value}` : undefined}
             aria-pressed={active}
             title={opt.label}
             onClick={() => onChange(opt.value)}
@@ -47,6 +53,7 @@ export function IconPillFilter<T extends string>({
             >
               {opt.label}
             </span>
+            {opt.count !== undefined && <span className="ml-1 tabular-nums">{opt.count}</span>}
           </button>
         );
       })}

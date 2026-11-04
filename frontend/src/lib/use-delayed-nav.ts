@@ -23,6 +23,12 @@ export const DelayedNavScopeContext = createContext<((pending: DelayedNavPending
 let activeOwner: object | null = null;
 let activeCancel: (() => void) | null = null;
 
+/** 지금 대기 중인 지연 실행을 (어느 훅이든) 취소 — 홈 활동 타일이 펼침 칸을 접거나 바꿀 때. 접히는 칸은 0.24초
+ * 고스트로 남아 있어 언마운트 정리보다 타이머가 먼저 돌 수 있다(design 2026-11-04 §4.8). */
+export function cancelActiveDelayedNav(): void {
+  activeCancel?.();
+}
+
 export function useDelayedNav(): {
   pending: string | null; // 대기 중인 키(href 또는 동작 키), 없으면 null
   toggle: (href: string, label: string) => void; // 페이지 이동 시작 / 같은 href면 취소

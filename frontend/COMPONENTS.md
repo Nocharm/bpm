@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 327개 · 2026-11-04 기준
+총 329개 · 2026-11-04 기준
 
 ## components/
 
@@ -86,7 +86,7 @@
 | `hover-tip.tsx` | `HoverTip` | 경량 호버 툴팁 | `components/approval-panel.tsx`, `components/compare-png-export-modal.tsx`, `components/png-export-modal.tsx`, `components/process-node.tsx` |
 | `html-view.tsx` | `HtmlView` | 게시된 HTML 매뉴얼 렌더 | `app/manual/page.tsx`, `components/settings/manual-manage-panel.tsx` |
 | `icon-action-button.tsx` | `IconActionButton` | 아이콘 전용 버튼 | `components/admin/deleted-groups-panel.tsx`, `components/admin/deleted-maps-panel.tsx`, `components/groups/group-actions.tsx` |
-| `icon-pill-filter.tsx` | `IconPillFilter` | 아이콘 필 필터 | `app/feedback/page.tsx`, `app/inbox/page.tsx`, `app/notices/page.tsx` |
+| `icon-pill-filter.tsx` | `IconPillFilter` | 아이콘 필 필터 | `app/feedback/page.tsx`, `app/inbox/page.tsx`, `app/notices/page.tsx`, `components/maps/dashboard-inbox-panel.tsx`, `components/maps/dashboard-run-panel.tsx` |
 | `icon-tip.tsx` | `IconTip` | 아이콘 전용 버튼의 호버 툴팁 박스 | `app/maps/[mapId]/page.tsx`, `components/scope-window.tsx` |
 | `inbox-badge.tsx` | `InboxBadge` | top-nav 인박스 탭 카운트 배지 | `components/top-nav.tsx` |
 | `info-tip.tsx` | `InfoTip` | 섹션 헤더 오른쪽 끝의 i 아이콘 | `components/admin/import-report/report-section.tsx`, `components/admin/import-report/summary-card.tsx` |
@@ -103,12 +103,12 @@
 | `map-name-dropdown.tsx` | `MapNameDropdown` | 상단바 맵 이름 드롭다운 | `app/maps/[mapId]/page.tsx` |
 | `map-ownership-section.tsx` | `MapOwnershipSection` | 속성 빈상태 소유·승인자 섹션 | `app/maps/[mapId]/page.tsx`, `components/dept-pill.tsx`, `components/permissions/collaborators-panel.tsx`, `components/process-library-panel.tsx` |
 | `markdown-view.tsx` | `MarkdownView` | 마크다운 뷰어 | `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/notices/page.tsx`, `components/ai-chat-panel.tsx`, `components/csv-import-tab.tsx`, `components/framework-interview/feedback-chat.tsx`, `components/interview/draw-confirm-dialog.tsx`, `components/interview/interview-panel.tsx`, `components/notices/notices-manage-panel.tsx`, `components/settings/ai-prompts-panel.tsx`, `components/settings/manual-manage-panel.tsx` |
-| `menu-select.tsx` | `MenuSelect` | 메뉴 셀렉트 | `components/permissions/collaborators-panel.tsx`, `components/run/run-start-dialog.tsx` |
+| `menu-select.tsx` | `MenuSelect` | 메뉴 셀렉트 | `components/maps/dashboard-inbox-panel.tsx`, `components/maps/dashboard-run-panel.tsx`, `components/permissions/collaborators-panel.tsx`, `components/run/run-start-dialog.tsx` |
 | `minimap-viewport-fill.tsx` | `MinimapFade`, `MiniMapViewportFill` | React Flow MiniMap + 현재 뷰포트 영역을 반투명 악센트로 '채우는' 오버레이(MiniMapViewportFill). | `app/maps/[mapId]/page.tsx` |
 | `modal-backdrop.tsx` | `ModalBackdrop` | 모달 백드롭 | `app/maps/[mapId]/page.tsx`, `components/admin/category-dept-modal.tsx`, `components/admin/framework-panel.tsx`, `components/admin/notification-purge-modal.tsx`, `components/approver-manager.tsx`, `components/compare-png-export-modal.tsx`, `components/confirm-dialog.tsx`, `components/csv-create-modal.tsx`, `components/csv-export-modal.tsx`, `components/dev-login-modal.tsx`, `components/edge-action-modal.tsx`, `components/edge-branch-modal.tsx`, `components/edge-decision-modal.tsx`, `components/edge-end-modal.tsx`, `components/edge-select-modal.tsx`, `components/excel-export-modal.tsx`, `components/expand-invariant-modal.tsx`, `components/feedback-detail-modal.tsx`, `components/framework-browse-modal.tsx`, `components/framework-connect-dialog.tsx`, `components/framework-interview/external-l6-modal.tsx`, `components/group-bulk-modal.tsx`, `components/groups/group-detail.tsx`, `components/groups/groups-panel.tsx`, `components/interview/draw-confirm-dialog.tsx`, `components/interview/interview-panel.tsx`, `components/interview/params-table-dialog.tsx`, `components/io-import-modal.tsx`, `components/io-peers-menu.tsx`, `components/manual-pdf-dialog.tsx`, `components/maps/delete-map-dialog.tsx`, `components/maps/dept-sub-maps-modal.tsx`, `components/maps/framework-assign-modal.tsx`, `components/maps/framework-explorer-modal.tsx`, `components/maps/map-card-warnings-modal.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/map-notes-section.tsx`, `components/maps/slot-change-dialog.tsx`, `components/maps/slot-delete-dialog.tsx`, `components/node-details-card.tsx`, `components/node-summary-modal.tsx`, `components/notices/notice-edit-modal.tsx`, `components/org-info-modal.tsx`, `components/permissions/create-map-dialog.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/permissions/transfer-owner-dialog.tsx`, `components/permissions/undo-last-apply-modal.tsx`, `components/png-export-modal.tsx`, `components/prompt-dialog.tsx`, `components/ref-audit/ref-detail-dialog.tsx`, `components/ref-audit/ref-detail-target.tsx`, `components/run/run-bar.tsx`, `components/run/run-list-modal.tsx`, `components/run/run-start-dialog.tsx`, `components/self-publish-popover.tsx`, `components/swap-outputs-modal.tsx`, `components/system-suggest-input.tsx`, `components/version/transfer-checkout-dialog.tsx` |
 | `multi-value-input.tsx` | `MultiValueInput` | 개행 구분 복수 값 편집 | `components/node-details-card.tsx`, `components/node-details-fields.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/subprocess-usage-tab.tsx` |
 | `multiline-edge.tsx` | - | 에디터 엣지 | `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/framework-interview/relations-canvas.tsx`, `components/interview/choice-card.tsx`, `components/interview/interview-preview.tsx` |
-| `nav-pending-scope.tsx` | `NavPendingOverlay`, `NavPendingScope` | 지연 이동 대기 스코프 | `components/maps/dashboard-activity-tiles.tsx`, `components/maps/dashboard-profile.tsx`, `components/maps/dashboard-section.tsx` |
+| `nav-pending-scope.tsx` | `NavPendingOverlay`, `NavPendingScope` | 지연 이동 대기 스코프 | `components/maps/dashboard-activity-tiles.tsx`, `components/maps/dashboard-inbox-panel.tsx`, `components/maps/dashboard-profile.tsx`, `components/maps/dashboard-run-panel.tsx`, `components/maps/dashboard-section.tsx` |
 | `nav-ring.tsx` | `NavRing` | 지연 이동 카운트다운 링 | `components/maps/map-card.tsx`, `components/nav-pending-scope.tsx` |
 | `newline-hint.tsx` | `NewlineHint` | 줄바꿈 단축키 안내 캡션 | `app/maps/[mapId]/page.tsx`, `components/node-summary-modal.tsx` |
 | `node-action-bar.tsx` | `NodeActionBar` | 단일 선택 노드 하단 중앙의 통합 액션 바 | `app/maps/[mapId]/page.tsx` |
@@ -145,7 +145,7 @@
 | `section-overlay.tsx` | `SectionOverlay` | 섹션 덮개 | `app/maps/[mapId]/page.tsx`, `components/admin/import-report/interview-import-report.tsx`, `components/nav-pending-scope.tsx` |
 | `self-publish-popover.tsx` | `SelfPublishPopover` | 셀프 게시 확인 팝오버 | `app/maps/[mapId]/page.tsx`, `components/permissions/versions-publish-panel.tsx` |
 | `shimmer-presence.tsx` | `ShimmerPresence` | 등장·퇴장 쉬머 래퍼 | `components/a4-guide-control.tsx`, `components/compare-png-export-modal.tsx`, `components/csv-export-modal.tsx`, `components/excel-export-modal.tsx`, `components/png-export-modal.tsx` |
-| `skeleton.tsx` | `SkeletonBlock`, `SkeletonLine`, `SkeletonPill`, `SkeletonCard` | 스켈레톤 플레이스홀더 | `app/notices/page.tsx`, `components/admin/import-report/person-pill.tsx`, `components/map-ownership-section.tsx`, `components/maps/approvals-card.tsx`, `components/maps/dashboard-activity-tiles.tsx`, `components/maps/dashboard-profile.tsx`, `components/maps/framework-card.tsx`, `components/maps/home-skeleton.tsx`, `components/maps/recent-events-card.tsx`, `components/user-pill.tsx` |
+| `skeleton.tsx` | `SkeletonBlock`, `SkeletonLine`, `SkeletonPill`, `SkeletonCard` | 스켈레톤 플레이스홀더 | `app/notices/page.tsx`, `components/admin/import-report/person-pill.tsx`, `components/map-ownership-section.tsx`, `components/maps/approvals-card.tsx`, `components/maps/dashboard-activity-tiles.tsx`, `components/maps/dashboard-inbox-panel.tsx`, `components/maps/dashboard-profile.tsx`, `components/maps/framework-card.tsx`, `components/maps/home-skeleton.tsx`, `components/maps/recent-events-card.tsx`, `components/user-pill.tsx` |
 | `status-badge.tsx` | `StatusBadge` | 버전 라이프사이클 상태 pill | `app/maps/[mapId]/page.tsx`, `components/approval-panel.tsx` |
 | `subprocess-inspector-card.tsx` | `SubprocessInspectorCard` | 인스펙터 서브프로세스 카드 | `app/maps/[mapId]/page.tsx` |
 | `subprocess-node-banner.tsx` | `SubprocessNodeBanner` | 인스펙터 속성 탭 SP 노드 머리 배너 | `app/maps/[mapId]/page.tsx` |
@@ -275,8 +275,10 @@
 | `dashboard-activity-tiles.tsx` | `DashboardActivityTiles` | 홈 대시보드 활동 타일 5종 | `components/maps/home-dashboard.tsx` |
 | `dashboard-hover-row.tsx` | `HoverLinkedRow` | 대시보드 버튼 행(결재·점유·최근 변경) | `components/maps/approvals-card.tsx`, `components/maps/dashboard-activity-tiles.tsx`, `components/maps/recent-events-card.tsx` |
 | `dashboard-hover.tsx` | `HoverMapProvider` | 홈 대시보드 맵 호버 연동 | `components/maps/dashboard-hover-row.tsx`, `components/maps/dashboard-map-row.tsx`, `components/maps/home-dashboard.tsx` |
+| `dashboard-inbox-panel.tsx` | `DashboardInboxPanel` | 홈 대시보드 "알림 · 피드백" 펼침 칸 | `components/maps/dashboard-activity-tiles.tsx` |
 | `dashboard-map-row.tsx` | `DashboardMapRow` | 대시보드 컴팩트 맵 행 | `components/maps/dept-maps-card.tsx`, `components/maps/my-documents-card.tsx`, `components/maps/recent-opened-list.tsx` |
 | `dashboard-profile.tsx` | `DashboardProfile` | 홈 대시보드 마스트헤드 | `components/maps/home-dashboard.tsx` |
+| `dashboard-run-panel.tsx` | `DashboardRunPanel` | 홈 대시보드 "진행 중 실행" 펼침 칸 | `components/maps/dashboard-activity-tiles.tsx` |
 | `dashboard-section.tsx` | `DashboardSection`, `DashboardEmpty`, `DashboardFoot` | 홈 대시보드 섹션 셸 | `components/maps/approvals-card.tsx`, `components/maps/dept-maps-card.tsx`, `components/maps/framework-card.tsx`, `components/maps/my-documents-card.tsx`, `components/maps/recent-events-card.tsx`, `components/maps/recent-opened-list.tsx` |
 | `delete-map-dialog.tsx` | `DeleteMapDialog` | 맵 삭제 확인 | `components/maps/map-detail-card.tsx`, `components/permissions/danger-zone.tsx` |
 | `dept-group-box.tsx` | `DeptGroupBox` | 부서 헤더 행 + 그 부서가 직접 가진 맵 카드를 묶는 박스. | `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
