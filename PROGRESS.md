@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-11-04 — 실행 체크(Run) 설계 문서 (feat/run-check)
+
+- 게시본 위에서 실제 한 건을 밟아 가는 실행 체크의 컨셉을 목업(폰 기준)으로 맞춘 뒤 설계 문서로 남겼다(`docs/superpowers/specs/2026-11-04-run-check-design.md`). 사용자 결정과 설계자 판단을 구분해 적었고, 제품 코드는 승인 전이라 없다.
+
 ## 2026-10-26 — v1.4.0 main 머지·운영 배포: 고아 참조 화면 개선(+v1.3.3)
 
 - 아래 고아 참조 화면 라운드가 사용자에게 보이는 변경이라 MINOR로 v1.4.0. v1.3.3은 배포 전이라 함께 담는다. 9910 검증 스택에서 먼저 확인(사용자)한 뒤 main fast-forward·태그 `439bbff2`. 2026-10-26 운영(9900) 배포 완료(사용자 확인).
