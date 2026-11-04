@@ -292,3 +292,35 @@ export function formatRunPeriod(startedAt: string, endedAt: string, t: TFunc): s
     n: days,
   });
 }
+
+/** 실행 숫자 설정 입력 초안(문자열 그대로 — 입력 중 빈 칸을 허용). */
+export interface RunLimitsDraft {
+  warn: string;
+  stop: string;
+  summary: string;
+  openSolo: string;
+  openShared: string;
+  keepShared: string;
+  keepSolo: string;
+}
+
+// 서버 범위(schemas.AppSettingsUpdate)와 같다 — 일수 1~3650, 상한 1~1000
+const RUN_DAYS_RANGE = { lo: 1, hi: 3650 };
+const RUN_CAP_RANGE = { lo: 1, hi: 1000 };
+
+function isIntInRange(raw: string, range: { lo: number; hi: number }): boolean {
+  if (raw.trim() === "") return false;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= range.lo && value <= range.hi;
+}
+
+/** 저장 전 검사 — 범위 밖 정수이거나 자동 중단 일수가 방치 알림 일수 이하면 안내 문구 키, 통과면 null. */
+export function validateRunLimits(draft: RunLimitsDraft): MessageKey | null {
+  const days = [draft.warn, draft.stop, draft.summary];
+  const caps = [draft.openSolo, draft.openShared, draft.keepShared, draft.keepSolo];
+  if (!days.every((raw) => isIntInRange(raw, RUN_DAYS_RANGE))) return "run.admin.invalidNumber";
+  if (!caps.every((raw) => isIntInRange(raw, RUN_CAP_RANGE))) return "run.admin.invalidNumber";
+  // 서버는 stop을 warn+1로 올려 쓰지만, 관리자가 입력한 값과 실제 동작이 어긋나지 않게 입력 단계에서 막는다
+  if (Number(draft.stop) <= Number(draft.warn)) return "run.admin.stopAfterWarn";
+  return null;
+}

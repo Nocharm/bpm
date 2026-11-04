@@ -20,6 +20,8 @@ import {
   splitRunNodeKey,
   splitRunScopeGraphs,
   toRunNodeKey,
+  validateRunLimits,
+  type RunLimitsDraft,
 } from "@/lib/run-view";
 
 // 실제 ko 문구로 해석 — 문구 키가 빠지면 key가 그대로 나와 테스트가 잡는다
@@ -449,5 +451,47 @@ describe("formatRunPeriod", () => {
     expect(formatRunPeriod("2026-09-21T09:00:00+09:00", "2026-09-21T18:00:00+09:00", tEn)).toBe("9/21 (1 day)");
     expect(formatRunPeriod("2026-09-12T10:00:00+09:00", "2026-09-14T15:00:00+09:00", tEn)).toBe("9/12 to 14 (3 days)");
     expect(formatRunPeriod("2026-09-30T10:00:00+09:00", "2026-10-02T15:00:00+09:00", tEn)).toBe("9/30 to 10/2 (3 days)");
+  });
+});
+
+describe("validateRunLimits", () => {
+  const base: RunLimitsDraft = {
+    warn: "30",
+    stop: "40",
+    summary: "30",
+    openSolo: "10",
+    openShared: "30",
+    keepShared: "50",
+    keepSolo: "10",
+  };
+
+  it("accepts the defaults", () => {
+    expect(validateRunLimits(base)).toBeNull();
+  });
+
+  it("blocks auto stop on or before the idle warning day", () => {
+    expect(validateRunLimits({ ...base, warn: "30", stop: "30" })).toBe("run.admin.stopAfterWarn");
+    expect(validateRunLimits({ ...base, warn: "30", stop: "20" })).toBe("run.admin.stopAfterWarn");
+    expect(validateRunLimits({ ...base, warn: "30", stop: "31" })).toBeNull();
+  });
+
+  it("blocks values that are not whole numbers in range", () => {
+    expect(validateRunLimits({ ...base, summary: "" })).toBe("run.admin.invalidNumber");
+    expect(validateRunLimits({ ...base, summary: "0" })).toBe("run.admin.invalidNumber");
+    expect(validateRunLimits({ ...base, summary: "3651" })).toBe("run.admin.invalidNumber");
+    expect(validateRunLimits({ ...base, openSolo: "1.5" })).toBe("run.admin.invalidNumber");
+    expect(validateRunLimits({ ...base, keepSolo: "1001" })).toBe("run.admin.invalidNumber");
+    expect(validateRunLimits({ ...base, openShared: "abc" })).toBe("run.admin.invalidNumber");
+  });
+
+  it("accepts the range edges", () => {
+    expect(validateRunLimits({ ...base, warn: "1", stop: "3650", summary: "3650", openSolo: "1", keepShared: "1000" })).toBeNull();
+  });
+
+  it("has copy for both error keys", () => {
+    for (const key of ["run.admin.stopAfterWarn", "run.admin.invalidNumber"] as const) {
+      expect(messages.en[key]).toBeTruthy();
+      expect(messages.ko[key]).toBeTruthy();
+    }
   });
 });

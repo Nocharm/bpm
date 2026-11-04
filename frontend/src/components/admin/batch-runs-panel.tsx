@@ -1,10 +1,10 @@
 "use client";
-// 배치 작업(DB 백업·HR 동기화) 최근 실행 상태 — 잡·결과별 최신 1행 (설정 > Batch jobs 탭, sysadmin 전용).
+// 배치 작업(DB 백업·HR 동기화·실행 보존 정리) 최근 실행 상태 — 잡·결과별 최신 1행 (설정 > Batch jobs 탭, sysadmin 전용).
 // 서버 기록: 백업=scripts/db-backup.sh(psql), HR=backend run_full_sync — 최신 성공·실패만 upsert 보전.
 // DB 백업 카드는 온디맨드 실행(Backup now)·백업 파일 목록·로컬 다운로드까지 담당한다.
 // HR 카드는 회차 이력(HrSyncHistory, hr_sync_runs)을 함께 보인다 — 바뀐 사람을 회차별로 되짚는 용도.
 
-import { CheckCircle2, DatabaseBackup, Download, Play, Users, XCircle } from "lucide-react";
+import { CheckCircle2, DatabaseBackup, Download, ListChecks, Play, Users, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -24,6 +24,7 @@ import { useI18n } from "@/lib/i18n";
 const JOBS = [
   { id: "db_backup", labelKey: "batch.job.db_backup", icon: DatabaseBackup },
   { id: "hr_sync", labelKey: "batch.job.hr_sync", icon: Users },
+  { id: "run_retention", labelKey: "batch.job.run_retention", icon: ListChecks },
 ] as const;
 
 // requested(postgres 사이드카 경로) 폴링 — 5초 폴링 사이드카 + 덤프 시간 여유

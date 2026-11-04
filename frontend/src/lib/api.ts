@@ -1482,6 +1482,14 @@ export interface AppSettings {
   systems: CatalogEntry[];
   // nodes.system ∪ sp_system distinct — 사용 중 값을 목록으로 승격하는 후보(읽기전용)
   available_systems: string[];
+  // 실행 체크(Run) 숫자 설정 — 일수 1~3650, 상한 1~1000 (기본 30/40/30/10/30/50/10)
+  run_idle_warn_days: number; // 마지막 활동 후 방치 알림까지
+  run_idle_stop_days: number; // 마지막 활동 후 자동 중단까지(서버는 warn+1 이상으로 보정)
+  run_summary_days: number; // 끝난 뒤 요약만 남기기까지
+  run_open_solo_cap: number; // 사람당 진행 중인 개인 실행 상한
+  run_open_shared_cap: number; // 맵당 진행 중인 공유 실행 상한
+  run_keep_shared_cap: number; // 맵당 영구 보존 공유 실행 상한
+  run_keep_solo_cap: number; // 사람당 영구 보존 개인 실행 상한
   updated_by: string | null;
   updated_at: string | null;
 }
@@ -1516,6 +1524,13 @@ export function putAppSettings(patch: {
   exposed_positions?: string[];
   assignee_roles?: CatalogEntry[];
   systems?: CatalogEntry[];
+  run_idle_warn_days?: number;
+  run_idle_stop_days?: number;
+  run_summary_days?: number;
+  run_open_solo_cap?: number;
+  run_open_shared_cap?: number;
+  run_keep_shared_cap?: number;
+  run_keep_solo_cap?: number;
 }): Promise<AppSettings> {
   return request<AppSettings>("/admin/app-settings", {
     method: "PUT",

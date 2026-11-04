@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 329개 · 2026-11-04 기준
+총 330개 · 2026-11-04 기준
 
 ## components/
 
@@ -176,7 +176,7 @@
 |------|----------|------|--------|
 | `admin-table.tsx` | `TableCard`, `RolePill` | 어드민 콘솔 표 공통 셸 | `components/admin/department-table.tsx`, `components/admin/employee-table.tsx`, `components/admin/framework-overview.tsx`, `components/admin/local-account-table.tsx` |
 | `approval-queue.tsx` | `ApprovalQueue` | 시스템 관리자 승인 큐 | `app/settings/page.tsx` |
-| `batch-runs-panel.tsx` | `BatchRunsPanel` | 배치 작업(DB 백업·HR 동기화) 최근 실행 상태 | `app/settings/page.tsx` |
+| `batch-runs-panel.tsx` | `BatchRunsPanel` | 배치 작업(DB 백업·HR 동기화·실행 보존 정리) 최근 실행 상태 | `app/settings/page.tsx` |
 | `category-dept-modal.tsx` | `CategoryDeptModal` | 카테고리 관리 부서 지정 모달 | `components/admin/framework-panel.tsx` |
 | `deleted-groups-panel.tsx` | `DeletedGroupsPanel` | 삭제 예정(휴지통) | `app/settings/page.tsx` |
 | `deleted-maps-panel.tsx` | `DeletedMapsPanel` | 삭제 예정(휴지통) | `app/settings/page.tsx` |
@@ -394,6 +394,7 @@
 | `dashboard-panel.tsx` | `DashboardPanel` | 운영 대시보드 | `app/settings/page.tsx` |
 | `kb-manage-panel.tsx` | `KbManagePanel` | 설정 · 지식기반 라이브러리(P2) | `app/settings/page.tsx` |
 | `manual-manage-panel.tsx` | `ManualManagePanel` | 설정 · 매뉴얼 편집·게시 | `app/settings/page.tsx` |
+| `run-settings-panel.tsx` | `RunSettingsPanel` | 실행 체크(Run) 숫자 설정(sysadmin) | `app/settings/page.tsx` |
 
 ## components/version/
 

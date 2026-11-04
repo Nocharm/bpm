@@ -27,6 +27,7 @@ import { DeletedGroupsPanel } from "@/components/admin/deleted-groups-panel";
 import { NoticesManagePanel } from "@/components/notices/notices-manage-panel";
 import { AiChatSettingsPanel } from "@/components/settings/ai-chat-settings-panel";
 import { AiPromptsPanel } from "@/components/settings/ai-prompts-panel";
+import { RunSettingsPanel } from "@/components/settings/run-settings-panel";
 import { FrameworkPanel } from "@/components/admin/framework-panel";
 import { CatalogsPanel } from "@/components/settings/catalogs-panel";
 import { KbManagePanel } from "@/components/settings/kb-manage-panel";
@@ -51,6 +52,7 @@ type TabId =
   | "kb"
   | "aiChat"
   | "aiPrompts"
+  | "runs"
   | "dashboard"
   | "framework"
   | "catalogs";
@@ -74,6 +76,7 @@ const CATEGORIES: Category[] = [
       { id: "kb", labelKey: "kb.manage.tab" },
       { id: "aiChat", labelKey: "aiLog.tab" },
       { id: "aiPrompts", labelKey: "aiPrompts.tab" },
+      { id: "runs", labelKey: "run.admin.tab" },
     ],
   },
   {
@@ -304,6 +307,9 @@ export default function SettingsPage() {
           )}
           {current === "aiPrompts" && (
             <AiPromptsPanel onToast={(message) => showToast({ id: genId(), message })} />
+          )}
+          {current === "runs" && (
+            <RunSettingsPanel onToast={(message) => showToast({ id: genId(), message })} />
           )}
           {current === "employees" && <EmployeeTable />}
           {current === "queue" &&
