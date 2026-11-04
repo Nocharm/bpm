@@ -1,4 +1,4 @@
-"""실행 체크(Run) 라우터 — 만들기·읽기·목록. 보기 규칙은 `run_service`가 정한다 (design 2026-11-04 §4.4)."""
+"""실행 체크(Run) 라우터 — 만들기·읽기·목록·노드 동작. 규칙은 `run_service`가 정한다 (design 2026-11-04 §4.2·§4.4)."""
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,7 +7,8 @@ from app import run_service
 from app.auth import get_current_user
 from app.db import get_session
 from app.permissions.deps import require_map_role
-from app.schemas import RunCreateIn, RunDetailOut, RunListOut
+from app.routers.graph import _load_graph
+from app.schemas import GraphOut, RunActionIn, RunCreateIn, RunDetailOut, RunListOut
 
 router = APIRouter(prefix="/api", tags=["runs"], dependencies=[Depends(get_current_user)])
 
@@ -56,3 +57,29 @@ async def get_run(
 ) -> RunDetailOut:
     run = await run_service.load_visible_run(session, run_id, user)
     return await run_service.build_run_detail(session, run, user)
+
+
+@router.post("/runs/{run_id}/actions", response_model=RunDetailOut)
+async def act_on_run(
+    run_id: int,
+    body: RunActionIn,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> RunDetailOut:
+    """노드 동작 하나 — 실행 행을 잠가 공유 실행의 동시 변경을 한 줄로 세우고, 서버가 전이를 다시 판정한다."""
+    run = await run_service.load_visible_run(session, run_id, user, lock=True)
+    await run_service.apply_run_action(session, run, user, body)
+    return await run_service.build_run_detail(session, run, user)
+
+
+@router.get("/runs/{run_id}/graph", response_model=GraphOut)
+async def get_run_graph(
+    run_id: int,
+    scope: str = Query(default="", max_length=300),
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> GraphOut:
+    """범위의 그래프 — 하위 범위는 고정본이 있으면 그것, 없으면 지금 해석한 버전(보기만으로는 고정하지 않는다)."""
+    run = await run_service.load_visible_run(session, run_id, user)
+    version_id = await run_service.resolve_scope_version(session, run, scope, user)
+    return await _load_graph(session, version_id, user)

@@ -1,6 +1,7 @@
 """실행 체크(Run) API 테스트 공용 헬퍼 — 게시된 맵 시드·사용자 헤더·권한 강제 픽스처.
 
 Task 4 이후 테스트도 같은 시드를 쓴다. 맵 이름·노드 id는 세션 공유 DB에서 충돌하지 않게 호출자가 고유하게 준다.
+하위프로세스 노드를 다른 맵에 잇으려면 사례 그래프의 노드 dict에 `linked_map_id`를 넣어 넘긴다(본문에 그대로 실린다).
 """
 
 import asyncio
@@ -128,3 +129,22 @@ def seed_published_map(
     finally:
         settings.dev_enforce_permissions = prev_enforce
     return {"map_id": map_id, "version_id": version_id, "ids": ids, "owner": owner}
+
+
+def republish_map(client: TestClient, monkeypatch: pytest.MonkeyPatch, version_id: int) -> int:
+    """게시본을 복제해 새로 게시한다 — 새 버전 id. 복제본의 노드 id는 새로 생기고 원래 게시본은 지난 게시본이 된다."""
+    owner = settings.dev_user
+    prev_enforce = settings.dev_enforce_permissions
+    settings.dev_enforce_permissions = False
+    try:
+        created = client.post(f"/api/versions/{version_id}/republish")
+        _assert_ok(created, "republish")
+        new_id = created.json()["id"]
+        _assert_ok(client.post(f"/api/versions/{new_id}/submit"), "submit")
+        monkeypatch.setattr(settings, "dev_user", APPROVER)
+        _assert_ok(client.post(f"/api/versions/{new_id}/approve"), "approve")
+        monkeypatch.setattr(settings, "dev_user", owner)
+        _assert_ok(client.post(f"/api/versions/{new_id}/publish"), "publish")
+    finally:
+        settings.dev_enforce_permissions = prev_enforce
+    return new_id

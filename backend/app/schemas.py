@@ -3095,3 +3095,14 @@ class RunCreateIn(BaseModel):
     participants: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]] = Field(
         default_factory=list, max_length=100
     )
+
+
+class RunActionIn(BaseModel):
+    """노드 동작 하나 — 서버가 전이표로 다시 판정한다 (design 2026-11-04 §4.2)."""
+
+    scope_path: str = Field(default="", max_length=300)  # ""=최상위, 하위 맵은 하위프로세스 노드 id를 `/`로 잇는다
+    node_id: str = Field(min_length=1, max_length=50)
+    action: Literal["start", "complete", "problem", "resolve", "unstart", "undo"]
+    edge_id: str | None = Field(default=None, max_length=50)  # 갈래 노드를 완료할 때 고른 연결선
+    exit_key: str | None = Field(default=None, max_length=200)  # 끝이 여럿인 하위프로세스를 바로 완료할 때 나갈 출구
+    cascade: bool = False  # 하위 맵에 기록이 있는 하위프로세스의 취소 — 안내를 거친 뒤 하위 기록까지 지운다
