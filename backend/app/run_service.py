@@ -55,7 +55,7 @@ from app.schemas import (
     RunProgressOut,
     RunScopeOut,
 )
-from app.subprocess import resolve_linked_version
+from app.subprocess import is_embeddable_subprocess_map, resolve_linked_version
 
 ERR_NOT_OPEN = "run is not open"
 ERR_STARTER_ONLY = "only the starter can do this"
@@ -74,6 +74,8 @@ ERR_TOUCHED_AFTER = "later steps already changed: {title}"
 ERR_SUB_PROGRESS = "subprocess has progress"  # FE는 "하위 맵 기록도 모두 취소돼요" 안내 후 cascade=true로 다시 보낸다
 ERR_TOO_DEEP = "subprocess is too deep"
 ERR_SUB_ACCESS = "cannot view the subprocess map"
+ERR_SUB_NOT_PUBLISHED = "subprocess map has no published version"
+ERR_SUB_UNAVAILABLE = "subprocess map is unavailable"
 
 MAX_SCOPE_DEPTH = 5  # 하위 맵 중첩 상한(범위 경로 조각 수) — 설계 §4.2 [빌더], 계획에서 5단계로 정함
 
@@ -380,9 +382,18 @@ async def _load_scope_row(session: AsyncSession, run_id: int, scope_path: str) -
     return await session.scalar(select(RunScope).where(RunScope.run_id == run_id, RunScope.scope_path == scope_path))
 
 
-async def _assert_can_view_sub(session: AsyncSession, user: str, map_id: int) -> None:
-    if role_rank(await get_effective_role(session, user, map_id)) < role_rank("viewer"):
+async def _assert_sub_runnable(session: AsyncSession, user: str, version_id: int) -> None:
+    """하위 범위로 밟을 수 있는 버전 — 사용자가 볼 수 있고, 게시본·지난 게시본이며, 임베드 가능한 하위 맵의 것.
+
+    Draft는 편집으로 노드 id가 바뀌어 기록이 엉키고, 휴지통·미지정 맵은 라이브러리 임베드와 같이 막는다.
+    """
+    version = await session.get(MapVersion, version_id)
+    if role_rank(await get_effective_role(session, user, version.map_id)) < role_rank("viewer"):
         raise HTTPException(status_code=403, detail=ERR_SUB_ACCESS)
+    if version.status not in _RUNNABLE_VERSION_STATUSES:
+        raise HTTPException(status_code=422, detail=ERR_SUB_NOT_PUBLISHED)
+    if not is_embeddable_subprocess_map(await session.get(ProcessMap, version.map_id)):
+        raise HTTPException(status_code=422, detail=ERR_SUB_UNAVAILABLE)
 
 
 async def _resolve_child_version(
@@ -391,8 +402,7 @@ async def _resolve_child_version(
     """하위 범위의 버전 — 고정본이 있으면 그것, 없으면 호스트 링크를 에디터 임베드처럼 해석하고 pin이면 고정한다."""
     pinned = await _load_scope_row(session, run.id, scope_path)
     if pinned is not None:
-        version = await session.get(MapVersion, pinned.version_id)
-        await _assert_can_view_sub(session, user, version.map_id)
+        await _assert_sub_runnable(session, user, pinned.version_id)
         return pinned.version_id
     host = await session.get(Node, _split_scope(scope_path)[1])
     if (
@@ -402,10 +412,11 @@ async def _resolve_child_version(
         or host.linked_map_id is None
     ):
         raise HTTPException(status_code=422, detail=ERR_NOT_ACTIONABLE)
-    await _assert_can_view_sub(session, user, host.linked_map_id)
+    # 고정(follow_latest 끔)이 아니면 최신 게시본, 게시본이 없으면 Draft까지 내려간다 — 아래 검사가 Draft를 막는다
     version_id = await resolve_linked_version(session, host.linked_map_id, host.follow_latest, host.linked_version_id)
-    if version_id is None:
-        raise HTTPException(status_code=422, detail=ERR_NOT_ACTIONABLE)
+    if version_id is None:  # 링크 맵이 영구 삭제됐거나 고정 버전이 그 맵 것이 아니다
+        raise HTTPException(status_code=422, detail=ERR_SUB_UNAVAILABLE)
+    await _assert_sub_runnable(session, user, version_id)
     if pin:
         session.add(RunScope(run_id=run.id, scope_path=scope_path, version_id=version_id))
         await session.flush()

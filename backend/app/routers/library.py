@@ -14,7 +14,7 @@ from app.permissions.access import get_effective_role, get_user_active_group_ids
 from app.permissions.logic import role_rank
 from app.routers.graph import _load_graph
 from app.schemas import GraphOut
-from app.subprocess import resolve_linked_version
+from app.subprocess import is_embeddable_subprocess_map, resolve_linked_version
 
 router = APIRouter(
     prefix="/api/library", tags=["library"], dependencies=[Depends(get_current_user)]
@@ -205,8 +205,7 @@ async def resolved_graph(
     session: AsyncSession = Depends(get_session),
 ) -> GraphOut:
     # 미지정/삭제 맵은 권한과 무관하게 잠금 — 지정된 맵만 임베드 허용 (spec 2026-07-06)
-    target = await session.get(ProcessMap, map_id)
-    if target is None or target.deleted_at is not None or target.sp_designated_at is None:
+    if not is_embeddable_subprocess_map(await session.get(ProcessMap, map_id)):
         return GraphOut(nodes=[], edges=[], locked=True)
     # 마스킹(옵션1 완전 잠금): viewer 미만은 자식 그래프를 만들지 않고 잠금 응답 — 데이터 자체를 안 싣는다.
     # Masking (full lock): below-viewer never builds the child graph — return empty locked payload.

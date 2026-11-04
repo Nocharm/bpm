@@ -100,10 +100,12 @@ def seed_published_map(
     graph: dict,
     name: str,
     visibility: str = "private",
+    designate: bool = False,
 ) -> dict:
-    """맵 생성 → 그래프 저장 → 제출·승인·게시. `{"map_id", "version_id", "ids", "owner"}`를 돌려준다.
+    """맵 생성 → 그래프 저장 → 제출·승인·게시(→ designate면 서브프로세스 지정). `{"map_id", "version_id", "ids", "owner"}`.
 
     ids는 사례 id → 실제 id, owner는 맵을 만든(=오너가 된) 개발 사용자다.
+    실행 하위 범위는 지정된 하위 맵만 들어가므로(라이브러리 임베드와 같은 규칙) 하위 맵 시드는 designate를 켠다.
     권한 강제가 켜져 있어도 시드는 끄고 돌린다 — 시나리오가 아니라 준비 단계이기 때문이다.
     """
     owner = settings.dev_user
@@ -126,6 +128,9 @@ def seed_published_map(
         _assert_ok(client.post(f"/api/versions/{version_id}/approve"), "approve")
         monkeypatch.setattr(settings, "dev_user", owner)
         _assert_ok(client.post(f"/api/versions/{version_id}/publish"), "publish")
+        if designate:
+            designation = {"department": OWNING_DEPARTMENT}
+            _assert_ok(client.put(f"/api/maps/{map_id}/subprocess-designation", json=designation), "designate")
     finally:
         settings.dev_enforce_permissions = prev_enforce
     return {"map_id": map_id, "version_id": version_id, "ids": ids, "owner": owner}

@@ -25,10 +25,21 @@ def _unique(label: str) -> str:
 
 
 def _seed(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, shape: str, label: str, *, visibility: str = "private"
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    shape: str,
+    label: str,
+    *,
+    visibility: str = "private",
+    designate: bool = False,
 ) -> dict:
     return seed_published_map(
-        client, monkeypatch, graph=load_case_graph(shape), name=_unique(label), visibility=visibility
+        client,
+        monkeypatch,
+        graph=load_case_graph(shape),
+        name=_unique(label),
+        visibility=visibility,
+        designate=designate,
     )
 
 
@@ -40,9 +51,10 @@ def _seed_sp_pair(
     host_shape: str = "sp_exits",
     host_id: str = "q",
     parent_visibility: str = "private",
+    designate_child: bool = True,
 ) -> tuple[dict, dict]:
-    """하위 맵(linear)과 그 맵을 하위프로세스로 부르는 바깥 맵 — (바깥, 하위)."""
-    child = _seed(client, monkeypatch, "linear", f"{label} child")
+    """하위 맵(linear, 기본은 서브프로세스 지정)과 그 맵을 하위프로세스로 부르는 바깥 맵 — (바깥, 하위)."""
+    child = _seed(client, monkeypatch, "linear", f"{label} child", designate=designate_child)
     graph = load_case_graph(host_shape)
     host = next(n for n in graph["nodes"] if n["id"] == host_id)
     host.update(node_type="subprocess", linked_map_id=child["map_id"])
@@ -246,12 +258,14 @@ def test_loop_clears_subprocess_scope_in_body(client: TestClient, monkeypatch: p
 
 
 def test_nested_subprocess_chain(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    grandchild = _seed(client, monkeypatch, "linear", "nested grandchild")
+    grandchild = _seed(client, monkeypatch, "linear", "nested grandchild", designate=True)
     middle_graph = load_case_graph("linear")
     next(n for n in middle_graph["nodes"] if n["id"] == "b").update(
         node_type="subprocess", linked_map_id=grandchild["map_id"]
     )
-    middle = seed_published_map(client, monkeypatch, graph=middle_graph, name=_unique("nested middle"))
+    middle = seed_published_map(
+        client, monkeypatch, graph=middle_graph, name=_unique("nested middle"), designate=True
+    )
     top_graph = load_case_graph("sp_exits")
     next(n for n in top_graph["nodes"] if n["id"] == "q").update(linked_map_id=middle["map_id"])
     top = seed_published_map(client, monkeypatch, graph=top_graph, name=_unique("nested top"))
@@ -445,6 +459,54 @@ def test_scope_path_rules(client: TestClient, monkeypatch: pytest.MonkeyPatch) -
     # 하위프로세스가 아닌 노드는 하위 범위를 열지 않는다
     assert _rejected(_act(client, run, "x", "start", scope_path=a)) == (422, "node is not actionable")
     assert _rejected(_get_graph(client, run, a)) == (422, "node is not actionable")
+
+
+def test_subprocess_map_without_published_version_is_rejected(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 게시본 없이 Draft만 있는 맵 — 링크 해석이 Draft로 내려가도 실행은 들어가지 않는다(편집으로 노드 id가 바뀐다)
+    draft_only = client.post(
+        "/api/maps", json={"owning_department": "Owning Anchor Division", "name": _unique("draft child")}
+    )
+    assert draft_only.status_code == 201, draft_only.text
+    graph = load_case_graph("sp_exits")
+    next(n for n in graph["nodes"] if n["id"] == "q")["linked_map_id"] = draft_only.json()["id"]
+    parent = seed_published_map(client, monkeypatch, graph=graph, name=_unique("draft parent"))
+    q = parent["ids"]["q"]
+    run = _create_run(client, parent)
+
+    acted = _act(client, run, "any-node", "start", scope_path=q)
+
+    assert _rejected(acted) == (422, "subprocess map has no published version")
+    assert _rejected(_get_graph(client, run, q)) == (422, "subprocess map has no published version")
+    assert _get_detail(client, run)["scopes"] == []
+
+
+def test_trashed_subprocess_map_is_unavailable(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    parent, child = _seed_sp_pair(client, monkeypatch, "trashed child")
+    q = parent["ids"]["q"]
+    run = _create_run(client, parent)
+    _ok(_act(client, run, child["ids"]["a"], "start", scope_path=q))  # 버전 고정 뒤 휴지통 — 고정본 경로도 막는다
+
+    assert client.delete(f"/api/maps/{child['map_id']}").status_code == 204
+
+    unavailable = (422, "subprocess map is unavailable")
+    assert _rejected(_act(client, run, child["ids"]["a"], "complete", scope_path=q)) == unavailable
+    assert _rejected(_get_graph(client, run, q)) == unavailable
+    assert _rejected(_get_graph(client, _create_run(client, parent), q)) == unavailable  # 해석 경로
+
+
+def test_undesignated_subprocess_map_is_unavailable(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    parent, child = _seed_sp_pair(client, monkeypatch, "undesignated child", designate_child=False)
+    q = parent["ids"]["q"]
+    run = _create_run(client, parent)
+
+    acted = _act(client, run, child["ids"]["a"], "start", scope_path=q)
+
+    assert _rejected(acted) == (422, "subprocess map is unavailable")
+    assert _rejected(_get_graph(client, run, q)) == (422, "subprocess map is unavailable")
+    # 하위 맵에 들어갈 수 없어도 바깥에서 바로 완료하는 길은 열려 있다
+    assert _states(_ok(_act(client, run, q, "complete", exit_key="__primary__"))) == {q: "done"}
 
 
 def test_stale_action_is_rejected_and_state_kept(

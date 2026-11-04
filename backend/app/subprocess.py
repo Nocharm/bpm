@@ -133,6 +133,14 @@ def validate_framework_canvas(nodes: list[NodeIn]) -> None:
         first_end.is_primary_end = True
 
 
+def is_embeddable_subprocess_map(found_map: ProcessMap | None) -> bool:
+    """다른 맵 안에서 펼쳐 볼 수 있는 하위 맵 — 실존·휴지통 밖·서브프로세스 지정.
+
+    라이브러리 임베드(`routers/library.py` resolved_graph)와 실행 하위 범위(`run_service`)가 같은 판정을 쓴다.
+    """
+    return found_map is not None and found_map.deleted_at is None and found_map.sp_designated_at is not None
+
+
 async def resolve_linked_version(
     session: AsyncSession,
     map_id: int,
