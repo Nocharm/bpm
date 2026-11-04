@@ -6,7 +6,7 @@
 
 ## 유지 중 (아직 소비될 문서)
 
-- [실행 체크(Run)](../superpowers/specs/2026-11-04-run-check-design.md) — 게시본 위에서 실제 한 건을 노드별 상태·코멘트로 밟아 가는 기능(개인·공유 실행, 상태 전파, 알림, 30일 요약·영구 보존). 구현 전 설계, 2026-11-04.
+- [실행 체크(Run)](../superpowers/specs/2026-11-04-run-check-design.md) — 게시본 위에서 실제 한 건을 노드별 상태·코멘트로 밟아 가는 기능(개인·공유 실행, 상태 전파, 알림, 30일 요약·영구 보존). 구현 전 설계, 2026-11-04. 구현 계획 [`../superpowers/plans/2026-11-04-run-check.md`](../superpowers/plans/2026-11-04-run-check.md).
 
 - [컨설턴트 전사 프로세스 체계(7단계) 수용](2026-08-08-consultant-hierarchy-design.md) — 스키마·엔진(§5) 설계 원본(`models.py`·임포트 엔진이 주석으로 참조). canonical(§4)은 외부 전달 양식에서 **내부 IR로 강등**(2026-08-18) — 파일 로더·CLI·웹 canonical 임포트는 제거됨.
 - [컨설턴트 인터뷰 결과 JSON 임포트(Phase 3 어댑터)](2026-08-18-interview-import-design.md) — 인터뷰 JSON→canonical 어댑터·다중 파일 웹 임포트·키 검증 dry-run·`map_notes` 테이블. 어댑터 계약의 원설계(`consultant_interview.py`·테스트가 주석으로 참조). 현행 계약은 `docs/samples/interview-json-0.5.md`.
