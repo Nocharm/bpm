@@ -57,6 +57,7 @@ import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { RunBar } from "@/components/run/run-bar";
 import { RunLegend } from "@/components/run/run-legend";
+import { RunActionBar } from "@/components/run/run-action-bar";
 import { RunMenu } from "@/components/run/run-menu";
 import { RunStartDialog } from "@/components/run/run-start-dialog";
 import { RunUrlSync } from "@/components/run/run-url-sync";
@@ -356,8 +357,9 @@ import { buildNodeRefCheck } from "@/lib/node-ref-warnings";
 import { runGuardedNavigation, setNavigationGuard } from "@/lib/navigation-guard";
 import { listSaveBlockers } from "@/lib/save-blockers";
 import { useClosingKeys } from "@/lib/use-closing-keys";
+import { findRunBlockerKeys, getRunScopeHostKeys, type RunPop } from "@/lib/run-actions";
 import { buildMapVersionHref, buildRunHref } from "@/lib/run-links";
-import { applyRunEdgeKind, buildRunView, splitRunScopeGraphs } from "@/lib/run-view";
+import { applyRunEdgeKind, buildRunView, splitRunNodeKey, splitRunScopeGraphs } from "@/lib/run-view";
 import { useRepairRunNodeInternals, useRunSession } from "@/lib/use-run-session";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import {
@@ -443,6 +445,7 @@ const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
 const REGION_MARGIN = 48; // 영역 세로 레인이 콘텐츠 위아래로 더 뻗는 여백
 const REGION_CROSSING_OPACITY = 0.35; // 영역을 가로지르는 엣지 반투명
 const INACTIVE_SCOPE_OPACITY = 0.4; // 포커스 모드 — 비활성(인라인 자식) 스코프 노드/엣지 dim. 활성 스코프만 또렷·편집
+const RUN_FLASH_MS = 1100; // 실행 노드 반짝임을 끄는 시각(ms) — globals.css bpm-run-flash 0.5s × 2 + 여유
 const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 부채꼴 배치 반경(오버레이 렌더·hit-test 공용)
 const ZONE_TILE_H = 58; // 링을 시야로 끌어오는 패닝 여유(ensureRingVisible) 계산용
 const AI_WINDOW_KEY = "ai"; // windowGeom 맵에서 AI 플로팅 창 기하 키 (스코프 키와 충돌 없음)
@@ -1415,6 +1418,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [runId, setRunId] = useState<number | null>(null);
   const { session: runSession, loadError: runLoadError } = useRunSession(runId, showToast);
   const runMode = runId !== null;
+  // 실행 노드 버튼 줄의 팝오버(먼저 끝낼 단계·문제 메모·코멘트·하위 맵 취소 확인) — 여기 두어 Esc·빈 캔버스로 닫고
+  // 먼저 끝낼 단계에 점선(data.runHint)을 그린다. 반짝임(data.runFlash)은 잠깐 켰다가 스스로 끈다(nonce로 겹침 구분)
+  const [runPop, setRunPop] = useState<RunPop | null>(null);
+  const [runFlash, setRunFlash] = useState<{ keys: ReadonlySet<string>; nonce: number } | null>(null);
+  const runFlashNonceRef = useRef(0);
   const [runLegendOpen, setRunLegendOpen] = useState(false);
   const [runStartOpen, setRunStartOpen] = useState(false);
   // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
@@ -1668,10 +1676,35 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [rootGraph, hostsToEmbed, resolvedCache, runScopeGraphs]);
   // 실행 모드 렌더 파생 — 범위별 노드 상태·연결선 종류(lib/run-view). 실행 상세·합성 트리가 바뀔 때만 다시 계산
   const runDetail = runSession?.detail ?? null;
+  // 범위별 실행 그래프 — 상태 계산과 노드 버튼 줄(갈래·먼저 끝낼 단계)이 같이 쓴다
+  const runGraphs = useMemo(() => (runMode && fullGraph ? splitRunScopeGraphs(fullGraph) : null), [runMode, fullGraph]);
   const runView = useMemo(
-    () => (runDetail && fullGraph ? buildRunView(runDetail, splitRunScopeGraphs(fullGraph)) : null),
-    [runDetail, fullGraph],
+    () => (runDetail && runGraphs ? buildRunView(runDetail, runGraphs) : null),
+    [runDetail, runGraphs],
   );
+  // 먼저 끝낼 단계 팝오버가 열린 동안 그 노드들에 점선 바깥 테두리(렌더 전용)
+  const runHintKeys = useMemo(() => {
+    if (runPop?.kind !== "why" || runPop.key !== selectedId || !runDetail || !runGraphs || !runView) return null;
+    return new Set(findRunBlockerKeys(runDetail, runGraphs, runView, runPop.key));
+  }, [runPop, selectedId, runDetail, runGraphs, runView]);
+  // 실행 모드 Esc — 팝오버 → 선택 순서로 닫는다(빈 캔버스 누르기는 onPaneClick이 둘 다 닫는다)
+  const closeRunLayer = useEffectEvent(() => {
+    // 다른 노드에 남은 팝오버(Tab 이동 등)는 이미 안 보이므로 선택과 같이 닫는다
+    const isPopShown = runPop !== null && runPop.key === selectedId;
+    setRunPop(null);
+    if (isPopShown || selectedId === null) return;
+    setSelectedId(null);
+    setNodes((current) => current.map((node) => (node.selected ? { ...node, selected: false } : node)));
+    setChildNodes((current) => current.map((node) => (node.selected ? { ...node, selected: false } : node)));
+  });
+  useEffect(() => {
+    if (!runMode) return;
+    const handleRunEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) closeRunLayer();
+    };
+    window.addEventListener("keydown", handleRunEscape);
+    return () => window.removeEventListener("keydown", handleRunEscape);
+  }, [runMode]);
   useEffect(() => {
     fullGraphRef.current = fullGraph;
   }, [fullGraph]);
@@ -3677,6 +3710,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const handleRunUrlChange = (nextRunId: number | null, urlVersionId: number | null) => {
     const isLeavingByUrl = nextRunId === null && runId !== null;
     setRunId(nextRunId);
+    setRunPop(null); // 다른 실행·편집 화면으로 — 앞 실행의 버튼 줄 팝오버를 남기지 않는다
     if (
       isLeavingByUrl &&
       urlVersionId !== null &&
@@ -8077,7 +8111,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       let display;
       if (stateChild) {
         // 자식(인라인) 노드 — 읽기전용 dim. 드래그/삭제/연결 불가. 선택 시 선명하게 표시.
-        const childOpacity = stateChild.selected ? 1 : INACTIVE_SCOPE_OPACITY;
+        // 실행 모드는 흐리지 않는다 — 하위 맵 단계도 실행 색으로 읽고 눌러야 한다(R23)
+        const childOpacity = stateChild.selected || runMode ? 1 : INACTIVE_SCOPE_OPACITY;
         display = {
           ...stateChild,
           position: node.position,
@@ -8125,10 +8160,21 @@ function MapEditor({ mapId }: { mapId: number }) {
         gmpPreview !== null && gmpPreview.nodeId === node.id
           ? { ...withIoHighlight, data: { ...withIoHighlight.data, gmp: gmpPreview.gmp, color: gmpPreview.color } }
           : withIoHighlight;
-      // 실행 모드 — 노드 키(임베드 id와 같은 꼴)로 실행 상태를 얹는다(렌더 전용, lib/run-view)
+      // 실행 모드 — 노드 키(임베드 id와 같은 꼴)로 실행 상태를 얹는다(렌더 전용, lib/run-view).
+      // 먼저 끝낼 단계 점선·반짝임도 여기서만 얹는다(버튼 줄 팝오버·이어 밟기, components/run/run-action-bar)
       const runStatus = runView?.statusByKey.get(node.id);
       const withRunStatus =
-        runStatus === undefined ? withGmpPreview : { ...withGmpPreview, data: { ...withGmpPreview.data, runStatus } };
+        runStatus === undefined
+          ? withGmpPreview
+          : {
+              ...withGmpPreview,
+              data: {
+                ...withGmpPreview.data,
+                runStatus,
+                ...(runHintKeys?.has(node.id) ? { runHint: true } : {}),
+                ...(runFlash?.keys.has(node.id) ? { runFlash: true } : {}),
+              },
+            };
       const injected = injectSubEnds(withRunStatus);
       if (liveOverlay !== null) {
         const live = liveOverlay.get(node.id);
@@ -8186,6 +8232,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     renderYOffsets,
     dragYOffsets,
     runView,
+    runMode,
+    runHintKeys,
+    runFlash,
   ]);
   useEffect(() => {
     displayNodesRef.current = displayNodes; // 동결 드래그 프레임의 스토어 echo 베이스(#R2)
@@ -8387,7 +8436,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           selected: edge.id === selectedEdgeId,
           style: {
             ...styled.style,
-            opacity: edge.id === selectedEdgeId ? 1 : INACTIVE_SCOPE_OPACITY,
+            // 실행 모드는 하위 맵 연결선도 흐리지 않는다(R23) — 건너뜀 선은 실행 모양이 따로 흐린다
+            opacity: edge.id === selectedEdgeId || runMode ? 1 : INACTIVE_SCOPE_OPACITY,
           },
         },
         true,
@@ -8978,6 +9028,58 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [setNodes, revealNodeIfOffscreen],
   );
+
+  // 실행 노드 반짝임(data.runFlash) — 잠깐 켰다 끈다. 이어서 다시 반짝이면 한 번 끄고 다음 프레임에 켜 애니메이션을 새로 돌린다
+  const flashRunNodes = (keys: readonly string[]) => {
+    if (keys.length === 0) return;
+    runFlashNonceRef.current += 1;
+    const nonce = runFlashNonceRef.current;
+    setRunFlash(null);
+    requestAnimationFrame(() => setRunFlash({ keys: new Set(keys), nonce }));
+    window.setTimeout(() => setRunFlash((current) => (current?.nonce === nonce ? null : current)), RUN_FLASH_MS);
+  };
+
+  // 실행 노드로 이동(버튼 줄의 먼저 끝낼 단계·이어 밟기) — 에디터 포커싱 재활용: 선택(임베드 자식이면 childNodes, Tab 흐름
+  // 이동과 같은 규칙) + 화면 밖일 때만 현재 줌으로 가운데로. 펼치지 않은 하위 범위 노드면 바깥 호스트를 펼친 뒤
+  // 다음 틱에 고른다(handleOutlineSelect와 같은 160ms)
+  const selectRunNode = (key: string, opts: { flash: boolean; reveal: boolean }) => {
+    setRunPop(null);
+    setSelectedId(key);
+    setSelectedEdgeId(null);
+    const applySelection = () => {
+      const isChild = childNodesRef.current.some((node) => node.id === key);
+      setNodes((current) =>
+        current.map((node) =>
+          node.selected === (!isChild && node.id === key) ? node : { ...node, selected: !isChild && node.id === key },
+        ),
+      );
+      setChildNodes((current) =>
+        current.map((node) =>
+          node.selected === (isChild && node.id === key) ? node : { ...node, selected: isChild && node.id === key },
+        ),
+      );
+      if (opts.flash) flashRunNodes([key]);
+      if (opts.reveal) revealNodeIfOffscreen(key);
+    };
+    if (reactFlow.getNode(key) !== undefined) {
+      applySelection();
+      return;
+    }
+    const hosts = getRunScopeHostKeys(splitRunNodeKey(key).scopePath);
+    if (hosts.length === 0) return;
+    commitExpanded((current) => new Set([...current, ...hosts]));
+    window.setTimeout(applySelection, 160);
+  };
+
+  // 실행 모드 하위 맵 들어가기·접기 — 펼칠 때 아직 고정 전인 범위는 서버가 실행 기준으로 해석한 그래프를 받아 끼운다
+  // (편집 화면의 링크 해석은 Draft로 갈 수 있어 노드 id가 실행과 다를 수 있다)
+  const toggleRunSubprocess = (key: string) => {
+    const isExpanding = !expandedInline.has(key);
+    toggleInlineExpandRef.current?.(key);
+    if (isExpanding && runSession !== null && !runSession.scopeGraphs.has(key)) {
+      void runSession.loadScopeGraph(key);
+    }
+  };
 
   // fit 버튼 — 현재 스코프를 화면에 맞추되 가운데가 아니라 좌상단 정렬(왼쪽위 고정). 줌은 맞추되 콘텐츠는 좌상단에.
   const fitScopeTopLeft = useCallback(() => {
@@ -10323,6 +10425,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                       }}
                       onNodeMouseLeave={() => setHoverNodeInfo(null)}
                       onNodeClick={(_, node) => {
+                        // 실행 모드 — 다른 노드를 누르면 앞 노드의 팝오버를 닫는다(버튼 줄은 selectedId를 본다)
+                        if (runMode) {
+                          setRunPop(null);
+                        }
                         // 인라인 자식(읽기전용) — 선택 효과(테두리·불투명)는 RF가 처리하고, selectedId도
                         // 동기화해 아웃라인 행 하이라이트와 일치시킨다(깊이 무관 통일). 탐색 없음.
                         if (node.data?.scopeId != null) {
@@ -10370,6 +10476,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onPaneClick={() => {
                         setSelectedId(null);
                         setSelectedEdgeId(null);
+                        setRunPop(null); // 실행 버튼 줄 — 빈 캔버스를 누르면 팝오버와 선택을 같이 닫는다
                         setMenu(null);
                         setPending(null);
                         setSummaryNodeId(null);
@@ -10571,6 +10678,20 @@ function MapEditor({ mapId }: { mapId: number }) {
                             readOnly={readOnly}
                             onLeaveGroups={leaveGroups}
                             onOpenLink={setLinkPreviewUrl}
+                          />
+                        )}
+                        {runSession && runView && runGraphs && (
+                          <RunActionBar
+                            session={runSession}
+                            view={runView}
+                            graphs={runGraphs}
+                            selectedKey={selectedId}
+                            pop={runPop}
+                            onPopChange={setRunPop}
+                            onSelect={selectRunNode}
+                            onFlash={flashRunNodes}
+                            onEnterSubprocess={toggleRunSubprocess}
+                            onToast={showToast}
                           />
                         )}
                         {inlineComposition && (

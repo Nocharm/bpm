@@ -226,6 +226,11 @@ export function getRunCapKind(err: unknown): "solo" | "shared" | null {
   return null;
 }
 
+/** 하위 맵 기록이 있는 하위프로세스 취소(409) — 버튼 줄이 "하위 맵 기록도 모두 취소돼요" 확인을 띄우고 cascade로 다시 보낸다(R5). */
+export function isRunSubProgressError(err: unknown): boolean {
+  return getApiErrorDetail(err).startsWith("subprocess has progress");
+}
+
 export function humanizeRunError(err: unknown, t: TFunc): string {
   const detail = getApiErrorDetail(err);
   if (detail.startsWith(TOUCHED_AFTER_PREFIX)) {

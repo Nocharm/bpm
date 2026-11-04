@@ -180,6 +180,9 @@ export type NodeData = {
   hideLinkBanner?: boolean;
   // 실행 모드 전용 — 이 노드의 실행 상태(채움·테두리·배지). 렌더 시 주입, 퍼시스트 안 함 (lib/run-view)
   runStatus?: RunNodeStatus;
+  // 실행 모드 전용(렌더 주입) — 먼저 끝낼 단계 팝오버가 열린 동안의 점선 바깥 테두리, 이동해 오거나 새로 열린 노드의 두 번 반짝임
+  runHint?: boolean;
+  runFlash?: boolean;
 };
 
 export type AppNode = Node<NodeData>;

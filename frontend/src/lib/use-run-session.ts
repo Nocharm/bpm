@@ -8,7 +8,7 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } fro
 
 import { actOnRun, ApiError, getRun, getRunScopeGraph, type Graph, type RunActionName, type RunDetail } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { humanizeRunError } from "@/lib/run-view";
+import { humanizeRunError, isRunSubProgressError } from "@/lib/run-view";
 
 // 공유 실행 다시 읽기 주기(ms) — 실행 화면이 열려 있고 탭이 보이는 동안만 돈다(계획 "공유 실행 동기화")
 export const RUN_POLL_MS = 10_000;
@@ -22,11 +22,16 @@ export interface RunActInput {
   cascade?: boolean;
 }
 
+export interface RunActOptions {
+  // 하위 맵 기록이 있어 cascade 확인이 필요하다는 409 — 주면 오류 토스트 대신 이것을 부른다(R5, 화면이 못 보는 하위 범위 대비)
+  onNeedsCascade?: () => void;
+}
+
 export interface RunSession {
   detail: RunDetail;
   // 범위 경로 → 그 범위 그래프(실행이 고정한 버전) — 맵 화면 합성 트리(getEmbed)가 링크 해석보다 먼저 쓴다
   scopeGraphs: Map<string, Graph>;
-  act(input: RunActInput): Promise<RunDetail | null>;
+  act(input: RunActInput, options?: RunActOptions): Promise<RunDetail | null>;
   reload(): Promise<void>;
   loadScopeGraph(scopePath: string): Promise<void>;
   update(next: RunDetail): void;
@@ -185,7 +190,7 @@ export function useRunSession(
   }, [runId, fetchDetail, onToast, t]);
 
   const act = useCallback(
-    async (input: RunActInput): Promise<RunDetail | null> => {
+    async (input: RunActInput, options?: RunActOptions): Promise<RunDetail | null> => {
       if (runId === null) return null;
       try {
         const next = await actOnRun(runId, {
@@ -204,6 +209,10 @@ export function useRunSession(
           await fetchDetail(runId).catch((reloadErr: unknown) => {
             console.warn("run reload after action failed", { runId, err: reloadErr });
           });
+        }
+        if (!input.cascade && options?.onNeedsCascade && isRunSubProgressError(err)) {
+          options.onNeedsCascade();
+          return null;
         }
         onToast(humanizeRunError(err, t), "error");
         return null;

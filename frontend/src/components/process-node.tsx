@@ -1355,6 +1355,32 @@ function RunStatusBadge({ status, className = "-right-1.5 -top-1.5" }: { status:
   );
 }
 
+// 실행 모드 바깥 테두리 — 먼저 끝낼 단계 안내 중 점선(runHint), 이동해 왔거나 새로 열린 노드의 두 번 반짝임(runFlash,
+// 모션 축소면 없음). 기본은 바디 테두리 상자를 덮고 모서리를 물려받는다 — 마름모는 회전한 바디와 같은 상자를 넘긴다
+function RunNodeRing({
+  hint,
+  flash,
+  className = "-inset-[1.5px] rounded-[inherit]",
+  style,
+}: {
+  hint: boolean;
+  flash: boolean;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  if (!hint && !flash) return null;
+  return (
+    <span
+      aria-hidden
+      data-id="run-node-ring"
+      data-run-hint={hint ? "" : undefined}
+      data-run-flash={flash ? "" : undefined}
+      className={`pointer-events-none absolute ${className} ${hint ? "bpm-run-hint-ring" : ""} ${flash ? "bpm-run-flash-ring" : ""}`}
+      style={style}
+    />
+  );
+}
+
 const SUBPROCESS_IN_SIDES: { side: SubprocessInSide; position: Position }[] = [
   { side: "left", position: Position.Left },
   { side: "right", position: Position.Right },
@@ -1982,6 +2008,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
         {data.runStatus && <RunStatusBadge status={data.runStatus} />}
+        <RunNodeRing hint={data.runHint === true} flash={data.runFlash === true} />
         {data.spUrl && <UrlBadge url={data.spUrl} />}
         <NodeWarningBadge data={data} />
         {/* 미지정 상태는 점선 바디+배너가 신호 — 코너 삼각 배지는 제거, 잠금 배지도 그동안 억제 (2026-08-30 통일) */}
@@ -2013,6 +2040,12 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           style={{ ...style, transform: "translate(-50%, -50%) scaleX(1.2) rotate(45deg)" }}
           data-shell="decision"
           data-diff-status={diff}
+        />
+        <RunNodeRing
+          hint={data.runHint === true}
+          flash={data.runFlash === true}
+          className="left-1/2 top-1/2 h-[72px] w-[72px] rounded-sm"
+          style={{ transform: "translate(-50%, -50%) scaleX(1.2) rotate(45deg)" }}
         />
         {diff && <DiffBadge status={diff} className="-top-1 left-1/2 -translate-x-1/2" />}
         {/* GMP 태그는 왼쪽 위 바깥쪽(#4) — 가운데 3줄 제목·우상단 코멘트 배지와 겹치지 않게 */}
@@ -2130,6 +2163,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
       {/* 시작·끝은 흐름이 지나가며 계산되는 노드라 배지 없이 색만(목업과 같다) */}
       {data.runStatus && !isTerminal && <RunStatusBadge status={data.runStatus} />}
+      <RunNodeRing hint={data.runHint === true} flash={data.runFlash === true} />
       {data.url && <UrlBadge url={data.url} />}
       <NodeWarningBadge data={data} />
       {showCopyBadge && <CopyDragBadge />}

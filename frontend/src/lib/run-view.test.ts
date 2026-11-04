@@ -14,6 +14,7 @@ import {
   getRunCapKind,
   getRunMenuDisabledReason,
   humanizeRunError,
+  isRunSubProgressError,
   splitRunNodeKey,
   splitRunScopeGraphs,
   toRunNodeKey,
@@ -357,6 +358,14 @@ describe("getRunCapKind", () => {
     expect(getRunCapKind(makeApiError(409, "keep limit reached"))).toBeNull();
     expect(getRunCapKind(makeApiError(403, "only the starter can do this"))).toBeNull();
     expect(getRunCapKind(new Error("network"))).toBeNull();
+  });
+});
+
+describe("isRunSubProgressError", () => {
+  it("spots the sub-map-progress refusal that asks for a cascade confirm", () => {
+    expect(isRunSubProgressError(makeApiError(409, "subprocess has progress"))).toBe(true);
+    expect(isRunSubProgressError(makeApiError(409, "later steps already changed: 시료 채취"))).toBe(false);
+    expect(isRunSubProgressError(new Error("network"))).toBe(false);
   });
 });
 
