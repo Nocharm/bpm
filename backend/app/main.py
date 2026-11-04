@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.app_settings import get_exposed_positions, is_ai_access_enabled
 from app.auth import get_current_user
+from app.batch_runs import JOB_RUN_RETENTION, record_batch_run
 from app.clock import KST
 from app.clock import now as now_kst
 from app.db import SessionLocal, get_session, init_models
@@ -55,6 +56,12 @@ from app.routers import (
     runs,
     slot_changes,
     versions,
+)
+from app.run_retention import (
+    RETENTION_HOUR_KST,
+    RETENTION_MINUTE_KST,
+    get_seconds_until_kst,
+    run_run_retention,
 )
 from app.schemas import MeOut
 from app.settings import settings
@@ -108,6 +115,29 @@ async def _run_hr_sync_loop() -> None:
             logger.exception("scheduled HR sync failed - retrying next interval")
 
 
+async def _run_run_retention_loop() -> None:
+    """실행 체크 하루 한 번 정리 — 매일 새벽 KST 3:30에 돌고 결과를 batch_job_runs에 남긴다(설정 Batch jobs 탭)."""
+    while True:
+        delay = get_seconds_until_kst(RETENTION_HOUR_KST, RETENTION_MINUTE_KST, now_kst())
+        logger.info("run retention: next run in %d s", int(delay))
+        await asyncio.sleep(delay)
+        try:
+            async with SessionLocal() as session:
+                try:
+                    result = await run_run_retention(session, now_kst())
+                except Exception as exc:  # noqa: BLE001 -- 하루치 실패가 루프를 죽이면 안 됨. 기록하고 다음 새벽에 다시
+                    logger.exception("run retention failed - retrying next day")
+                    await session.rollback()
+                    await record_batch_run(session, JOB_RUN_RETENTION, "failure", str(exc)[:500])
+                else:
+                    logger.info("run retention: %s", result.format_detail())
+                    await record_batch_run(session, JOB_RUN_RETENTION, "success", result.format_detail())
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 -- 결과 기록마저 못 남겨도(DB 장애) 스케줄러는 산다
+            logger.exception("run retention could not record its outcome - retrying next day")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # ldap 모드인데 서명키가 없으면 위조가 자유로워진다 — 조용히 뜨는 대신 기동을 막는다 (설계 §7)
@@ -132,7 +162,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     hr_task: asyncio.Task | None = None
     if settings.hr_enabled and settings.hr_sync_interval_hours > 0:
         hr_task = asyncio.create_task(_run_hr_sync_loop())
+    run_retention_task = asyncio.create_task(_run_run_retention_loop())
     yield
+    run_retention_task.cancel()
     if hr_task is not None:
         hr_task.cancel()
 

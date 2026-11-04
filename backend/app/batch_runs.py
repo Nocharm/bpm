@@ -6,6 +6,7 @@ from app import clock
 from app.models import BatchJobRun
 
 JOB_HR_SYNC = "hr_sync"
+JOB_RUN_RETENTION = "run_retention"
 # 'db_backup'은 scripts/db-backup.sh(psql)가 기록 — 백엔드에선 조회만.
 
 
