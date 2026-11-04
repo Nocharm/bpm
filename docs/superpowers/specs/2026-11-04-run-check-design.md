@@ -1,6 +1,6 @@
 # 실행 체크(Run) 설계
 
-> 2026-11-04 브레인스토밍 결과. 화면 목업: https://claude.ai/artifact/5ngxKm5G4JJ8go5MesCH3C (v8, 문구는 한국어 목업). 목업은 사용자가 원격으로 폰에서 검토하느라 폰 폭으로 그렸을 뿐이고, 제품은 데스크톱 전용이다(§2).
+> 2026-11-04 브레인스토밍 결과. 화면 목업: https://claude.ai/artifact/5ngxKm5G4JJ8go5MesCH3C (v9, 문구는 한국어 목업). 목업은 사용자가 원격으로 폰에서 검토하느라 폰 폭으로 그렸을 뿐이고, 제품은 데스크톱 전용이다(§2).
 > 표기: **[결정]** = 사용자가 정한 것, **[판단]** = 설계자가 정하고 사용자에게 보인 것(뒤집을 수 있음), **[빌더]** = 구현자가 정할 것.
 
 ## 1. 무엇과 왜
@@ -158,6 +158,7 @@
   - 왼쪽 알림 **[판단]**: 미읽음(기본) · 전체 필 + 종류 메뉴(전체 · 실행 · 버전 · Check out · 권한 · 서브프로세스 · 공지, §4.5). 최신 순 고정. 줄은 안 읽음 점, 종류 칩(실행은 테마색), 제목, 본문 한 줄(`notification-format.ts`의 같은 렌더), 시간. 누르면 읽음으로 바꾸고, 실행 알림은 그 실행 화면으로, 나머지는 인박스의 그 알림(`/inbox?notification=<id>`)으로 간다. 아래에 "모두 읽음"(`markAllNotificationsRead`)과 "알림 탭에서 전체 보기 →"(`/inbox`).
   - 오른쪽 내 피드백 **[판단]**: 진행 중(기본, 초안 · 작업중) · 전체 필 + 종류 메뉴(전체 · 버그 · 제안 · 문의 · 기타). 최근 갱신 순 고정. 줄은 종류 칩, 본문 한 줄, "답글 있음 · 시간", 오른쪽 상태 칩(초안 · 작업중 · 완료). 누르면 피드백 화면의 그 상세 창(`/feedback?feedback=<id>`). 아래에 "+ 새 피드백"(지금의 피드백 쓰기 패널 `openFeedbackPanel`)과 "피드백 화면 →"(`/feedback`).
   - 지금 두 타일이 하던 페이지 이동(`/inbox`, `/feedback` 지연 이동)은 위 아래 링크로 옮긴다.
+- **이동 버퍼 [결정, 2026-11-04]**: 펼친 목록에서 다른 화면으로 가는 것(실행 줄, 알림 줄, 피드백 줄, "알림 탭에서 전체 보기", "피드백 화면")은 바로 가지 않고 버퍼를 한 번 거친다. 지금 홈 타일·Check out 목록 줄이 쓰는 지연 이동을 그대로 쓴다: `lib/use-delayed-nav.ts` `useDelayedNav`(0.6초 `NAV_DELAY_MS`, 한 번에 하나, 다른 이동을 시작하면 앞의 대기 취소), 누른 칸을 `NavPendingScope` 레이어로 덮고 링 + "…로 이동 중" + "누르면 취소", 그 사이 레이어를 누르면 취소된다(`HoverLinkedRow`의 `pendingLabel` 선례). 덮는 칸은 누른 목록 하나다 **[판단]**: 실행 칸 전체, 알림·피드백은 누른 쪽(왼쪽 또는 오른쪽)만. 알림의 읽음 처리는 실제로 이동할 때 한다 **[판단]**: 취소하면 안 읽은 채로 남는다. 화면을 바꾸지 않는 동작("모두 읽음", "+ 새 피드백" 쓰기 패널, 거르기·정렬)은 버퍼 없이 바로 된다. 타일을 눌러 칸을 접거나 바꾸면 대기 중인 이동은 취소된다.
 - **기억 [판단]**: 각 목록의 거르기·정렬·종류 선택은 브라우저 localStorage에 기억한다(내보내기 열 선택 `bpm.exportColumns.*`와 같은 방식, 키 접두 `bpm.home.`). 펼침 여부는 기억하지 않는다. 읽기·쓰기는 실패해도 기본값으로 동작한다.
 - **데이터 [판단 + 빌더]**: 실행 수·문제 수·곧 중단 수와 실행 줄은 Check out 목록처럼 `/me/dashboard` 응답(`backend/app/routers/me_dashboard.py` `MeDashboardActivityOut`·목록 필드)에 싣는다. 개인 10개 상한과 참여한 공유 실행이라 작다 **[판단]**. 알림·피드백 목록은 펼칠 때 기존 API로 부른다 **[판단]**. 몇 줄까지 싣고 어떻게 잘라 부를지는 **[빌더]**.
 - **바뀌는 곳**: `components/maps/dashboard-activity-tiles.tsx`(타일 5칸·펼침 칸), `home-dashboard.tsx`, `lib/api.ts` `MeDashboard` 타입, BE `me_dashboard.py`, `lib/notification-categories.ts`, i18n `home.dash.*`·`inbox.cat.run`, 컴포넌트 카탈로그 재생성(`node scripts/build-component-catalog.mjs`). 펼침 칸의 목록 조각은 Check out 목록 줄(`HoverLinkedRow`)과 인박스 필(`IconPillFilter`)을 재활용할 수 있는지 먼저 본다.
@@ -174,7 +175,7 @@
 
 ## 6. 참고
 
-- 목업: https://claude.ai/artifact/5ngxKm5G4JJ8go5MesCH3C (v8). 상태 계산 `derive()`, 엣지 종류 `getEdgeKind()`, 팔레트 `buildStatusPalette()`/`buildEdgePalette()`, 동작 `runAction()`(취소 막기 `findTouchedAfter()`, 하위프로세스 동기화 `syncSubprocess()`, 완료 뒤 다음 노드 선택), 버튼 줄 `buildBarHtml()`·`buildPopHtml()`·`placeBar()`, 먼저 끝낼 단계 `getFrontier()`. 홈 대시보드는 `HD_RUN_FILTERS`·`HD_RUN_SORTS`(거르기·정렬 정의), `renderHdRun()`·`renderHdNoti()`.
+- 목업: https://claude.ai/artifact/5ngxKm5G4JJ8go5MesCH3C (v9). 상태 계산 `derive()`, 엣지 종류 `getEdgeKind()`, 팔레트 `buildStatusPalette()`/`buildEdgePalette()`, 동작 `runAction()`(취소 막기 `findTouchedAfter()`, 하위프로세스 동기화 `syncSubprocess()`, 완료 뒤 다음 노드 선택), 버튼 줄 `buildBarHtml()`·`buildPopHtml()`·`placeBar()`, 먼저 끝낼 단계 `getFrontier()`. 홈 대시보드는 `HD_RUN_FILTERS`·`HD_RUN_SORTS`(거르기·정렬 정의), `renderHdRun()`·`renderHdNoti()`.
 - 홈 대시보드: `frontend/src/components/maps/dashboard-activity-tiles.tsx`(Check out 펼침 선례), `backend/app/routers/me_dashboard.py`, 인박스 `?notification=`·피드백 `?feedback=` 딥링크(`app/inbox/page.tsx`·`app/feedback/page.tsx`).
 - 에디터 포커싱: `frontend/src/app/maps/[mapId]/page.tsx` `revealNodeIfOffscreen`·`getFocusAnchorZoom`·`focusLinkedNode`(선택 + 노출), Tab 흐름 이동(`onFlowKey`, 임베드 자식 선택 포함).
 - 권한: `backend/app/permissions/logic.py` `effective_role`, `backend/app/permissions/access.py` `get_effective_role`·`get_eligible_users`.
