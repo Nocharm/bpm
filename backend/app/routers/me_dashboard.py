@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import workflow
 from app.app_settings import get_run_limits
 from app.auth import get_current_user
-from app.clock import KST
+from app.clock import convert_to_kst
 from app.clock import now as now_kst
 from app.db import get_session
 from app.models import (
@@ -104,7 +104,7 @@ async def get_me_dashboard(
         last_login_at=await _load_previous_login(session, user),
         runs_open=len(runs),
         runs_problem=sum(1 for r in runs if r.state_kind == "problem"),
-        runs_idle=sum(1 for r in runs if r.state_kind == "idle"),
+        runs_idle=sum(1 for r in runs if r.is_idle),
     )
     return MeDashboardOut(
         activity=activity,
@@ -114,11 +114,6 @@ async def get_me_dashboard(
         framework=await _load_framework(session, user),
         runs=runs[:_RUN_LIMIT],
     )
-
-
-def _as_kst(stamp: datetime) -> datetime:
-    """sqlite는 시각의 시간대를 떼고 KST 벽시계로 돌려주고 postgres는 접속 시간대로 돌려준다 — 날짜 계산 전에 KST로 맞춘다."""
-    return stamp.astimezone(KST) if stamp.tzinfo else stamp.replace(tzinfo=KST)
 
 
 async def _load_previous_login(session: AsyncSession, user: str) -> datetime | None:
@@ -271,8 +266,10 @@ async def _load_runs(session: AsyncSession, user: str) -> list[MeDashboardRunOut
         view = await _get_version_view(session, views, run.version_id)
         state = build_scope_state(root_rows.get(run.id, []))
         done, total = count_run_progress(view.graph, state)
-        elapsed = now - _as_kst(run.last_activity_at)
-        idle_days = stop_in_days = 0
+        elapsed = now - convert_to_kst(run.last_activity_at)
+        is_idle = elapsed >= timedelta(days=limits.idle_warn_days)  # "곧 중단"은 문제와 별개다(R20)
+        idle_days = elapsed.days if is_idle else 0
+        stop_in_days = max(0, stop_days - idle_days) if is_idle else 0
         problems = _sort_problem_rows(problem_rows.get(run.id, []), view.topo_rank)
         if problems:
             kind, title, more = "problem", problems[0].node_title, len(problems) - 1
@@ -280,10 +277,8 @@ async def _load_runs(session: AsyncSession, user: str) -> list[MeDashboardRunOut
                 visible = await get_visible_scope_paths(session, run, user)
                 if not is_scope_visible(problems[0].scope_path, visible):
                     title = ""
-        elif elapsed >= timedelta(days=limits.idle_warn_days):
+        elif is_idle:
             kind, title, more = "idle", "", 0
-            idle_days = elapsed.days
-            stop_in_days = max(0, stop_days - idle_days)
         else:
             kind = "next"
             title, more = _pick_next_nodes(view, state)
@@ -299,6 +294,7 @@ async def _load_runs(session: AsyncSession, user: str) -> list[MeDashboardRunOut
                 state_kind=kind,
                 state_title=title,
                 state_more=more,
+                is_idle=is_idle,
                 idle_days=idle_days,
                 stop_in_days=stop_in_days,
                 done=done,
@@ -306,7 +302,7 @@ async def _load_runs(session: AsyncSession, user: str) -> list[MeDashboardRunOut
                 last_activity_at=run.last_activity_at,
             )
         )
-    out.sort(key=lambda r: (_RUN_KIND_ORDER[r.state_kind], -_as_kst(r.last_activity_at).timestamp(), -r.run_id))
+    out.sort(key=lambda r: (_RUN_KIND_ORDER[r.state_kind], -convert_to_kst(r.last_activity_at).timestamp(), -r.run_id))
     return out
 
 

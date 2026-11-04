@@ -127,9 +127,10 @@ def test_dashboard_runs_order_and_kinds(
     assert [r["run_id"] for r in body["runs"]] == [problem_run["id"], idle_run["id"], next_run["id"]]
     problem, idle, upcoming = body["runs"]
     assert (problem["state_kind"], problem["state_title"], problem["state_more"]) == ("problem", "접수", 0)
-    assert (idle["state_kind"], idle["idle_days"], idle["stop_in_days"]) == ("idle", 31, 9)  # 40 - 31
+    assert (idle["state_kind"], idle["is_idle"], idle["idle_days"], idle["stop_in_days"]) == ("idle", True, 31, 9)  # 40 - 31
+    assert (problem["is_idle"], upcoming["is_idle"]) == (False, False)
     assert (upcoming["state_kind"], upcoming["state_title"], upcoming["state_more"]) == ("next", "접수", 0)
-    assert (upcoming["idle_days"], upcoming["stop_in_days"]) == (0, 0)
+    assert (upcoming["idle_days"], upcoming["stop_in_days"]) == (0, 0)  # 방치가 아니면 채우지 않는다
     assert (problem["scope"], upcoming["scope"]) == ("solo", "shared")
     assert (problem["participant_count"], upcoming["participant_count"]) == (1, 2)
     assert (upcoming["done"], upcoming["total"]) == (0, 2)
@@ -214,7 +215,7 @@ def test_dashboard_idle_uses_effective_stop_days(
 
     _set_run_fields(run["id"], last_activity_at=_days_ago(30))
     row = _dashboard(client, user)["runs"][0]
-    assert (row["state_kind"], row["idle_days"], row["stop_in_days"]) == ("idle", 30, 1)  # 31 - 30
+    assert (row["state_kind"], row["is_idle"], row["idle_days"], row["stop_in_days"]) == ("idle", True, 30, 1)  # 31 - 30
 
     _set_run_fields(run["id"], last_activity_at=_days_ago(33))  # 잡이 쉰 사이 넘긴 실행은 0에서 멈춘다
     row = _dashboard(client, user)["runs"][0]
@@ -229,21 +230,34 @@ def test_dashboard_not_idle_before_warning_days(client: TestClient, monkeypatch:
 
     body = _dashboard(client, user)
 
-    assert body["runs"][0]["state_kind"] == "next"
+    row = body["runs"][0]
+    assert (row["state_kind"], row["is_idle"], row["idle_days"], row["stop_in_days"]) == ("next", False, 0, 0)
     assert body["activity"]["runs_idle"] == 0
 
 
-def test_dashboard_problem_wins_over_idle(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    seeded = _seed(client, monkeypatch, "linear", "problem over idle")
+def test_dashboard_problem_run_past_warning_days_is_also_idle(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, set_limits: Callable[..., None]
+) -> None:
+    """"곧 중단"은 문제와 별개다 (R20): 줄 종류는 문제가 앞서도 방치 표시·일수·숫자는 그대로 채운다."""
+    seeded = _seed(client, monkeypatch, "linear", "problem and idle")
     user = _user("both")
-    run = _create_run(client, seeded, user)
-    _act(client, run, user, seeded["ids"]["a"], "problem")
-    _set_run_fields(run["id"], last_activity_at=_days_ago(35))
+    both = _create_run(client, seeded, user, name="both")
+    calm_idle = _create_run(client, seeded, user, name="calm idle")
+    _act(client, both, user, seeded["ids"]["a"], "problem")
+    _set_run_fields(both["id"], last_activity_at=_days_ago(35))
+    _set_run_fields(calm_idle["id"], last_activity_at=_days_ago(33))
 
     body = _dashboard(client, user)
 
-    assert body["runs"][0]["state_kind"] == "problem"
-    assert (body["activity"]["runs_problem"], body["activity"]["runs_idle"]) == (1, 0)
+    row = body["runs"][0]
+    assert row["run_id"] == both["id"]  # 줄 종류 우선순위와 정렬은 그대로: 문제 > 방치
+    assert (row["state_kind"], row["state_title"], row["is_idle"]) == ("problem", "접수", True)
+    assert (row["idle_days"], row["stop_in_days"]) == (35, 5)  # 40 - 35
+    assert (body["runs"][1]["state_kind"], body["runs"][1]["is_idle"]) == ("idle", True)
+    assert (body["activity"]["runs_problem"], body["activity"]["runs_idle"]) == (1, 2)  # 문제 실행도 곧 중단에 센다
+
+    set_limits(run_idle_warn_days=30, run_idle_stop_days=20)  # R8: 중단 일수 = max(중단, 경고 + 1) = 31, 일수를 넘기면 0
+    assert _dashboard(client, user)["runs"][0]["stop_in_days"] == 0
 
 
 # ── 제외 ──

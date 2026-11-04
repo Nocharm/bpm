@@ -1780,7 +1780,7 @@ class MeDashboardActivityOut(BaseModel):
     last_login_at: datetime | None = None  # 오늘(KST) 이전의 마지막 로그인 기록 — 없으면 None
     runs_open: int = 0  # 내가 참여한 열린 실행 전체 수(줄 상한과 무관)
     runs_problem: int = 0  # 그중 문제 노드가 있는 실행
-    runs_idle: int = 0  # 그중 문제는 없고 방치 경고 일수를 넘긴 실행(자동 중단 임박)
+    runs_idle: int = 0  # 그중 방치 경고 일수를 넘긴 실행(자동 중단 임박) — 문제 실행과 겹칠 수 있다
 
 
 class MeDashboardCheckoutOut(BaseModel):
@@ -1841,8 +1841,9 @@ class MeDashboardRunOut(BaseModel):
     state_kind: Literal["problem", "idle", "next"]
     state_title: str  # problem: 첫 문제 노드, next: 첫 ready|active 노드. 볼 수 없는 하위 맵 노드는 빈 문자열
     state_more: int  # state_title 말고 남은 같은 종류 노드 수
-    idle_days: int = 0  # idle일 때만 채운다
-    stop_in_days: int = 0  # idle일 때만 채운다 — 자동 중단까지 남은 날(0이면 곧바로)
+    is_idle: bool = False  # 방치 경고 일수를 넘김 — 문제가 있어도 true("곧 중단"은 문제와 별개, R20)
+    idle_days: int = 0  # is_idle일 때만 채운다
+    stop_in_days: int = 0  # is_idle일 때만 채운다 — 자동 중단까지 남은 날(0이면 곧바로)
     done: int
     total: int
     last_activity_at: datetime

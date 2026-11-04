@@ -12,7 +12,7 @@ from sqlalchemy import Select, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.app_settings import RunLimits, get_run_limits
-from app.clock import KST
+from app.clock import convert_to_kst
 from app.models import (
     MapVersion,
     ProcessMap,
@@ -45,16 +45,11 @@ class RetentionResult:
 
 def get_seconds_until_kst(hour: int, minute: int, now: datetime) -> float:
     """다음 KST hh:mm까지 남은 초 — 지금이 정확히 그 시각이면 다음 날(86400). KST는 서머타임이 없어 일 단위 덧셈이 안전하다."""
-    local = now.astimezone(KST) if now.tzinfo else now.replace(tzinfo=KST)
+    local = convert_to_kst(now)
     target = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if target <= local:
         target += timedelta(days=1)
     return (target - local).total_seconds()
-
-
-def _to_kst(stamp: datetime) -> datetime:
-    """sqlite는 시간대 없이 KST 벽시계로 돌려주고 postgres는 접속 시간대로 돌려준다 — 날짜 계산 전에 KST로 맞춘다."""
-    return stamp.astimezone(KST) if stamp.tzinfo else stamp.replace(tzinfo=KST)
 
 
 def _select_live_runs(*conditions) -> Select:
@@ -112,8 +107,8 @@ async def _build_summary(session: AsyncSession, run: Run, now: datetime) -> dict
     problems = await session.execute(
         select(RunEvent.scope_path, RunEvent.node_id).where(RunEvent.run_id == run.id, RunEvent.action == "problem")
     )
-    started = _to_kst(run.created_at)
-    ended = _to_kst(run.ended_at or now)
+    started = convert_to_kst(run.created_at)
+    ended = convert_to_kst(run.ended_at or now)
     return {
         "result": run.end_reason,
         "started_at": started.isoformat(),
@@ -149,7 +144,7 @@ async def run_run_retention(session: AsyncSession, now: datetime) -> RetentionRe
 
     자동 중단 일수는 경고 일수보다 하루 이상 뒤다(설정이 중단 <= 경고여도 경고 없이 멈추지 않는다).
     """
-    now = _to_kst(now)
+    now = convert_to_kst(now)
     limits = await get_run_limits(session)
     stop_days = max(limits.idle_stop_days, limits.idle_warn_days + 1)
     warned = await _warn_idle_runs(session, now, limits, stop_days)
