@@ -20,6 +20,9 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
 
+# 실행 체크 테스트 공용 픽스처(enforce_permissions) — import로 끌어오면 파라미터와 이름이 겹쳐 린트(F811)가 막는다
+pytest_plugins = ["tests.run_helpers"]
+
 
 @pytest.fixture(scope="session")
 def client() -> TestClient:

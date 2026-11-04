@@ -3001,3 +3001,94 @@ class FrameworkInterviewOut(BaseModel):
     progress: FrameworkInterviewProgressOut
     created_at: datetime
     updated_at: datetime
+
+
+class RunParticipantOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    login_id: str
+    muted: bool
+
+
+class RunProgressOut(BaseModel):
+    done: int
+    total: int
+
+
+class RunOut(BaseModel):
+    """실행 목록 줄 — 상세(`RunDetailOut`)의 공통 머리. 진행률은 최상위 범위 기준이다."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    map_id: int
+    map_name: str
+    version_id: int
+    version_number: int | None
+    version_label: str
+    version_is_current: bool
+    name: str
+    scope: Literal["solo", "shared"]
+    starter: str
+    status: Literal["open", "done", "stopped", "summarized"]
+    end_reason: str | None
+    keep: bool
+    created_at: datetime
+    last_activity_at: datetime
+    ended_at: datetime | None
+    summarize_after: datetime | None
+    participants: list[RunParticipantOut]
+    progress: RunProgressOut
+    problem_count: int
+    summary: dict | None
+
+
+class RunNodeStateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    scope_path: str
+    node_id: str
+    node_title: str
+    status: str
+    chosen_edge_id: str | None
+    exit_key: str | None
+    updated_by: str
+    updated_at: datetime
+
+
+class RunScopeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    scope_path: str
+    version_id: int
+    closed: bool
+
+
+class RunCommentCountOut(BaseModel):
+    scope_path: str
+    node_id: str
+    count: int
+
+
+class RunDetailOut(RunOut):
+    states: list[RunNodeStateOut]
+    scopes: list[RunScopeOut]
+    comment_counts: list[RunCommentCountOut]
+    can_act: bool
+    can_manage: bool
+    can_keep: bool
+
+
+class RunListOut(BaseModel):
+    items: list[RunOut]
+    total: int
+    page: int
+    page_size: int
+
+
+class RunCreateIn(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    version_id: int
+    scope: Literal["solo", "shared"]
+    # 공유일 때만 쓴다 — 시작한 사람은 자동으로 들어가고 중복은 서비스가 접는다. 컬럼 길이(100)만큼만 받는다
+    participants: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]] = []
