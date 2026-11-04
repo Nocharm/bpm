@@ -1,13 +1,14 @@
 "use client";
 
 // 실행 바 — 실행 모드 맵 화면의 캔버스 위 띠(정적 크롬). 실행 이름·참여자·진행·영구 보존·나만/공유 작은 탭·실행 메뉴(⋯)·닫기,
-// 위에 "현재 게시본이 아니에요" 안내 줄, 아래에 "중단된 실행이에요" 줄(design run-check §4.3·§4.4).
+// 위에 "현재 게시본이 아니에요" 안내 줄, 아래에 "중단된 실행이에요"·"요약만 남은 실행이에요" 줄(design run-check §4.3·§4.4).
+// 요약된 실행은 진행·영구 보존 대신 요약 줄(결과·기간·버전·문제 단계)만 보인다 — 단계 기록이 지워져 진행을 셀 수 없다.
 // 실행 상세가 오기 전엔 불러오는 중, 처음 읽기가 실패하면 오류 줄과 "실행 닫기"만 보인다(R24).
 // 변경은 서버 응답의 전체 상세로 세션을 바꾸고(session.update), 409·403이면 최신 상세로 다시 읽은 뒤 알린다.
 
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, Bookmark, Check, Loader2, MoreHorizontal, Square, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Archive, Bookmark, Check, Loader2, MoreHorizontal, Square, UserPlus, X } from "lucide-react";
 
 import {
   ApiError,
@@ -23,7 +24,7 @@ import { formatKstShort } from "@/lib/datetime";
 import { useDirectoryState } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import { useMe } from "@/lib/me";
-import { humanizeRunError } from "@/lib/run-view";
+import { formatRunSummaryParts, humanizeRunError } from "@/lib/run-view";
 import type { RunSession } from "@/lib/use-run-session";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ModalBackdrop } from "@/components/modal-backdrop";
@@ -148,6 +149,7 @@ function RunBarBody({ session, onToast, onClose, onOpenCurrentVersion }: RunBarB
   const markPeopleInside = usePopoverDismiss(peopleOpen, () => setPeopleOpen(false));
 
   const isOpen = detail.status === "open";
+  const isSummarized = detail.status === "summarized";
   const isShared = detail.scope === "shared";
   const myParticipant = me === null ? null : (detail.participants.find((p) => p.login_id === me) ?? null);
   // 시작한 사람을 맨 앞에 — 겹친 필의 첫 자리
@@ -155,7 +157,8 @@ function RunBarBody({ session, onToast, onClose, onOpenCurrentVersion }: RunBarB
     ...detail.participants.filter((p) => p.login_id === detail.starter),
     ...detail.participants.filter((p) => p.login_id !== detail.starter),
   ].map((p) => p.login_id);
-  const canEditPeople = isShared && detail.can_manage && detail.status !== "summarized";
+  // 끝난 실행엔 초대하지 않는다 — 서버도 열린 실행만 참여자 편집을 받는다(R38)
+  const canEditPeople = isShared && detail.can_manage && isOpen;
   const { done, total } = detail.progress;
   const versionMarker = detail.version_number !== null ? `v${detail.version_number}` : detail.version_label;
 
@@ -345,15 +348,17 @@ function RunBarBody({ session, onToast, onClose, onOpenCurrentVersion }: RunBarB
             )}
           </div>
         )}
-        <div data-id="run-bar-progress" className="flex items-center gap-2">
-          <span className="h-1.5 w-28 overflow-hidden rounded-full bg-hairline">
-            <span
-              className="block h-full rounded-full bg-run-done transition-[width] duration-350 ease-smooth"
-              style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}
-            />
-          </span>
-          <span className="text-fine tabular-nums text-ink-secondary">{t("run.bar.progress", { done, total })}</span>
-        </div>
+        {!isSummarized && (
+          <div data-id="run-bar-progress" className="flex items-center gap-2">
+            <span className="h-1.5 w-28 overflow-hidden rounded-full bg-hairline">
+              <span
+                className="block h-full rounded-full bg-run-done transition-[width] duration-350 ease-smooth"
+                style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}
+              />
+            </span>
+            <span className="text-fine tabular-nums text-ink-secondary">{t("run.bar.progress", { done, total })}</span>
+          </div>
+        )}
         {detail.can_keep ? (
           <button
             type="button"
@@ -376,7 +381,8 @@ function RunBarBody({ session, onToast, onClose, onOpenCurrentVersion }: RunBarB
             {detail.keep ? t("run.bar.kept") : t("run.bar.keep")}
           </button>
         ) : (
-          detail.keep && (
+          detail.keep &&
+          !isSummarized && (
             <span data-id="run-bar-keep" className="inline-flex items-center gap-1 text-fine font-semibold text-accent">
               <Bookmark size={14} strokeWidth={1.5} fill="currentColor" />
               {t("run.bar.kept")}
@@ -474,6 +480,32 @@ function RunBarBody({ session, onToast, onClose, onOpenCurrentVersion }: RunBarB
             >
               {t("run.bar.reopen")}
             </button>
+          )}
+        </div>
+      )}
+      {isSummarized && (
+        <div
+          data-id="run-bar-summary"
+          className="flex items-center gap-2 border-b border-hairline bg-surface-alt px-4 py-1.5 text-caption text-ink-secondary"
+        >
+          <Archive size={14} strokeWidth={1.5} className="shrink-0" />
+          <span className="shrink-0 font-semibold text-ink">{t("run.bar.summaryTitle")}</span>
+          {detail.summary !== null && (
+            <>
+              <span
+                data-id="run-bar-summary-result"
+                className={`shrink-0 rounded-full border px-1.5 py-px text-fine ${
+                  detail.summary.result === "completed"
+                    ? "border-added/40 bg-added/10 text-added"
+                    : "border-hairline bg-surface text-ink-secondary"
+                }`}
+              >
+                {detail.summary.result === "completed" ? t("run.menu.resultDone") : t("run.menu.resultStopped")}
+              </span>
+              <span data-id="run-bar-summary-parts" className="min-w-0 truncate">
+                {formatRunSummaryParts(detail.summary, t).join(" · ")}
+              </span>
+            </>
           )}
         </div>
       )}

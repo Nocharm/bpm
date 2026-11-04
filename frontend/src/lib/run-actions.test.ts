@@ -15,6 +15,7 @@ import {
   isInRunBarSurface,
   isRunCanvasEnterTarget,
   isRunCanvasKeyTarget,
+  isRunKeyAutoRepeat,
   pickAutoAdvance,
   placeRunBar,
   placeRunPop,
@@ -468,6 +469,54 @@ describe("getRunScopeLock", () => {
       parentBlocked: false,
       scopeClosed: false,
     });
+  });
+
+  it("locks a finished inner sub map under a closed outer one, so its steps show a note and no undo", () => {
+    // 바깥 sp를 바로 완료해 sp가 닫혔고, 그 안 c1(하위프로세스)의 손자 맵은 끝나 있어 닫히지 않았다
+    const middle: RunGraph = {
+      nodes: [makeNode("cs", "start"), makeNode("c1", "subprocess"), makeNode("ce", "end")],
+      edges: [makeEdge("c1e", "cs", "c1"), makeEdge("c2e", "c1", "ce")],
+    };
+    const inner: RunGraph = {
+      nodes: [makeNode("gs", "start"), makeNode("g1"), makeNode("ge", "end")],
+      edges: [makeEdge("g1e", "gs", "g1"), makeEdge("g2e", "g1", "ge")],
+    };
+    const nested = new Map([
+      ["", root],
+      ["sp", middle],
+      ["sp/c1", inner],
+    ]);
+    const detail = makeDetail({
+      states: [
+        makeState("", "a", "done"),
+        makeState("", "sp", "done"),
+        makeState("sp", "c1", "done"),
+        makeState("sp/c1", "g1", "done"),
+      ],
+      scopes: [
+        { scope_path: "sp", version_id: 200, closed: true },
+        { scope_path: "sp/c1", version_id: 300, closed: false },
+      ],
+    });
+    const view = buildRunView(detail, nested);
+    const lock = getRunScopeLock(detail, view, "sp/c1");
+    expect(lock).toEqual({ parentBlocked: true, scopeClosed: true });
+    const buttons = buildRunBarButtons(makeInput({ status: "done", ...lock }));
+    expect(describeButtons(buttons)).toEqual(["note:run.act.noteScopeClosed", "comments:0"]);
+  });
+});
+
+describe("isRunKeyAutoRepeat", () => {
+  it("catches held Enter and Space so auto-repeat cannot press bar buttons again", () => {
+    expect(isRunKeyAutoRepeat({ key: "Enter", repeat: true })).toBe(true);
+    expect(isRunKeyAutoRepeat({ key: " ", repeat: true })).toBe(true);
+  });
+
+  it("lets the first press and other held keys through", () => {
+    expect(isRunKeyAutoRepeat({ key: "Enter", repeat: false })).toBe(false);
+    expect(isRunKeyAutoRepeat({ key: " ", repeat: false })).toBe(false);
+    expect(isRunKeyAutoRepeat({ key: "Tab", repeat: true })).toBe(false);
+    expect(isRunKeyAutoRepeat({ key: "ArrowRight", repeat: true })).toBe(false);
   });
 });
 

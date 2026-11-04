@@ -367,10 +367,25 @@ try {
   await waitBarOn(nid("x"), "done");
   check("completing with nothing opened keeps the selection", true);
 
-  // 9) 미생물 배양 → 판독 자동 선택 → 결과 취합 자동 선택(멀리 오른쪽, 화면으로) → 품질 시험 자동 선택
+  // 9) 미생물 배양에서 Enter를 누르고 있으면(자동 반복) 한 단계만 완료 → 판독 자동 선택 → 결과 취합 자동 선택(멀리 오른쪽,
+  //    화면으로) → 품질 시험 자동 선택. Playwright는 같은 키를 다시 down하면 repeat=true로 보낸다
   await selectNode(nid("w"));
-  await page.locator('[data-id="run-act-complete"]').click();
+  await page.keyboard.press("Enter");
+  check("keyboard: Enter enters the bar on complete", (await activeId()) === "run-act-complete");
+  await page.keyboard.down("Enter"); // 누르기 시작 = 완료 한 번
   await waitBarOn(nid("y"), "ready");
+  for (let repeat = 0; repeat < 6; repeat += 1) {
+    await page.keyboard.down("Enter");
+    await page.waitForTimeout(150);
+  }
+  await page.keyboard.up("Enter");
+  await page.waitForTimeout(500);
+  check(
+    "keyboard: holding Enter completes only one step",
+    (await barNode()) === nid("y") &&
+      (await bar.getAttribute("data-status")) === "ready" &&
+      !(await readStates()).some((row) => row.node_id === nid("y")),
+  );
   await page.locator('[data-id="run-act-complete"]').click();
   await waitBarOn(nid("j"), "ready");
   await page.waitForTimeout(700);

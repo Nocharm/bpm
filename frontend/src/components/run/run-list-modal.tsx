@@ -11,7 +11,7 @@ import { Bookmark, Search, X } from "lucide-react";
 import { listRuns, patchRun, type Run, type RunList, type RunListTab, type RunSummaryInfo } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useMe } from "@/lib/me";
-import { formatRunDay, formatRunPeriod, formatSummaryCountdown, humanizeRunError } from "@/lib/run-view";
+import { formatRunDay, formatRunSummaryParts, formatSummaryCountdown, humanizeRunError } from "@/lib/run-view";
 import { useAgo } from "@/lib/use-ago";
 import { CheckInput } from "@/components/check-input";
 import { ModalBackdrop } from "@/components/modal-backdrop";
@@ -387,10 +387,8 @@ function SubLine({ parts }: { parts: ReactNode[] }) {
 // 요약 줄의 부제 — 기간 · 버전 · 문제 단계 수 · 참여자("박서연 외 2명")
 function SummarySub({ summary }: { summary: RunSummaryInfo }) {
   const { t } = useI18n();
-  const versionMarker = summary.version_number !== null ? `v${summary.version_number}` : summary.version_label;
   const people = summary.participants.length > 0 ? summary.participants : [summary.starter];
-  const parts: ReactNode[] = [formatRunPeriod(summary.started_at, summary.ended_at, t), versionMarker];
-  if (summary.problem_steps > 0) parts.push(t("run.list.problemSteps", { n: summary.problem_steps }));
+  const parts: ReactNode[] = formatRunSummaryParts(summary, t);
   parts.push(
     <span className="flex min-w-0 items-center gap-1">
       <UserPill loginId={people[0]} />

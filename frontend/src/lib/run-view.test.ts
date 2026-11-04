@@ -12,6 +12,7 @@ import {
   buildRunScopeStates,
   buildRunView,
   formatRunPeriod,
+  formatRunSummaryParts,
   formatSummaryCountdown,
   getRunCapKind,
   getRunMenuDisabledReason,
@@ -143,6 +144,26 @@ describe("buildRunScopeStates", () => {
   it("closes the root scope of a stopped run", () => {
     const states = buildRunScopeStates(makeDetail({ status: "stopped" }));
     expect(states.get("")?.closed).toBe(true);
+  });
+
+  it("closes the root scope of a summarized run", () => {
+    const states = buildRunScopeStates(makeDetail({ status: "summarized" }));
+    expect(states.get("")?.closed).toBe(true);
+  });
+});
+
+describe("buildRunView of a summarized run", () => {
+  it("shows no open step and no flowing path, sub maps included", () => {
+    // 요약된 실행은 상태·범위 행을 지운 뒤라 기록이 없다 — 새 실행처럼 첫 단계가 열려 보이면 안 된다
+    const detail = makeDetail({ status: "summarized", can_act: false, can_keep: false });
+    const view = buildRunView(detail, new Map([["", ROOT], ["h", SUB]]));
+    const statuses = [...view.statusByKey.values()];
+    const kinds = [...view.edgeKindByKey.values()];
+    expect(statuses).not.toContain("ready");
+    expect(statuses).not.toContain("active");
+    expect(kinds).not.toContain("now");
+    expect(view.statusByKey.get("a")).toBe("skipped");
+    expect(view.statusByKey.get("h/b")).toBe("skipped");
   });
 });
 
@@ -329,6 +350,21 @@ describe("humanizeRunError", () => {
     expect(t("run.err.soloCap")).not.toBe("run.err.soloCap");
   });
 
+  it.each([
+    [403, "only participants can change this run", "참여자만 이 실행을 바꿀 수 있어요"],
+    [403, "only the starter can do this", "실행을 시작한 사람만 할 수 있어요"],
+    [409, "summarized runs cannot be changed", "요약만 남은 실행이라 바꿀 수 없어요"],
+    [422, "participant kim.a cannot view this map", "kim.a님은 이 맵을 볼 수 없어 참여할 수 없어요"],
+    [422, "node is not actionable", "이 단계는 실행에서 바꿀 수 없어요"],
+    [404, "run 42 not found", "실행이 없거나 볼 수 없어요"],
+  ])("maps the server message %s %s", (status, detail, expected) => {
+    expect(humanizeRunError(makeApiError(status, detail), t)).toBe(expected);
+  });
+
+  it("keeps the participant login in the English copy", () => {
+    expect(humanizeRunError(makeApiError(422, "participant kim.a cannot view this map"), tEn)).toContain("kim.a");
+  });
+
   it("falls back to the generic API error text", () => {
     expect(humanizeRunError(makeApiError(422, "choose a branch"), t)).toBe("choose a branch (HTTP 422)");
   });
@@ -451,6 +487,31 @@ describe("formatRunPeriod", () => {
     expect(formatRunPeriod("2026-09-21T09:00:00+09:00", "2026-09-21T18:00:00+09:00", tEn)).toBe("9/21 (1 day)");
     expect(formatRunPeriod("2026-09-12T10:00:00+09:00", "2026-09-14T15:00:00+09:00", tEn)).toBe("9/12 to 14 (3 days)");
     expect(formatRunPeriod("2026-09-30T10:00:00+09:00", "2026-10-02T15:00:00+09:00", tEn)).toBe("9/30 to 10/2 (3 days)");
+  });
+});
+
+describe("formatRunSummaryParts", () => {
+  const summary = {
+    result: "completed",
+    started_at: "2026-09-12T10:00:00+09:00",
+    ended_at: "2026-09-14T15:00:00+09:00",
+    days: 3,
+    version_number: 4,
+    version_label: "v4",
+    problem_steps: 2,
+    participants: ["me", "kim.a"],
+    starter: "me",
+  };
+
+  it("lists the period, the version and the problem steps", () => {
+    expect(formatRunSummaryParts(summary, t)).toEqual(["9월 12일~14일(3일)", "v4", "문제 단계 2"]);
+  });
+
+  it("drops the problem part when nothing went wrong and falls back to the version label", () => {
+    expect(formatRunSummaryParts({ ...summary, problem_steps: 0, version_number: null, version_label: "As-Is" }, t)).toEqual([
+      "9월 12일~14일(3일)",
+      "As-Is",
+    ]);
   });
 });
 

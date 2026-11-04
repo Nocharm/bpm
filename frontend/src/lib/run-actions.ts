@@ -217,19 +217,26 @@ export function findRunBlockerKeys(
 }
 
 /**
- * 하위 범위 잠김 — 호스트가 대기·건너뜀이거나 범위가 닫혔으면(고정된 범위의 closed, 고정 전이면 호스트를 바로 완료함)
- * 그 안은 읽기 전용이다(서버 `_assert_hosts_reachable`과 같은 판정). 범위 경로는 바깥에서 호스트의 노드 키다.
+ * 하위 범위 잠김 — 그 범위와 바깥 하위 범위 중 하나라도 호스트가 대기·건너뜀이거나 닫혔으면(고정된 범위의 closed,
+ * 고정 전이면 호스트를 바로 완료함) 그 안은 읽기 전용이다(서버 `_assert_hosts_reachable`이 사슬 전체를 보는 것과 같은 판정).
+ * 닫힌 바깥 범위 안에서 끝난 손자 맵은 닫히지 않은 채 남으므로 바로 위 범위만 보면 완료 취소가 열려 보였다.
+ * 범위 경로는 바깥에서 호스트의 노드 키다.
  */
 export function getRunScopeLock(
   detail: RunDetail,
   view: RunView,
   scopePath: string,
 ): { parentBlocked: boolean; scopeClosed: boolean } {
-  if (scopePath === "") return { parentBlocked: false, scopeClosed: false };
-  const hostStatus = view.statusByKey.get(scopePath);
-  const pinned = detail.scopes.find((scope) => scope.scope_path === scopePath);
-  const scopeClosed = pinned ? pinned.closed : hostStatus === "done";
-  return { parentBlocked: scopeClosed || hostStatus === "waiting" || hostStatus === "skipped", scopeClosed };
+  let parentBlocked = false;
+  let scopeClosed = false;
+  for (const hostKey of getRunScopeHostKeys(scopePath)) {
+    const hostStatus = view.statusByKey.get(hostKey);
+    const pinned = detail.scopes.find((scope) => scope.scope_path === hostKey);
+    const isClosed = pinned ? pinned.closed : hostStatus === "done";
+    scopeClosed ||= isClosed;
+    parentBlocked ||= isClosed || hostStatus === "waiting" || hostStatus === "skipped";
+  }
+  return { parentBlocked, scopeClosed };
 }
 
 /** 범위 경로의 바깥 호스트 노드 키(바깥부터) — "h1/h2" → ["h1", "h1/h2"]. 펼치지 않은 하위 범위 노드로 갈 때 펼칠 호스트들. */
@@ -267,6 +274,15 @@ export function isRunCanvasKeyTarget(target: EventTarget | null): boolean {
 /** 캔버스의 Enter(선택한 노드의 버튼 줄로 들어가기)를 받을 곳 — 위와 같되 버튼·링크에서 누른 Enter는 그 버튼 몫이다. */
 export function isRunCanvasEnterTarget(target: EventTarget | null): boolean {
   return isRunCanvasKeyTarget(target) && !(target instanceof Element && target.closest(ENTER_OWNERS) !== null);
+}
+
+/**
+ * 눌러 둔 Enter·Space의 자동 반복인지 — 버튼 줄은 이 키다운을 막아(preventDefault) 반복이 버튼을 다시 누르지 않게 하고,
+ * 캔버스의 Enter(버튼 줄로 들어가기)도 반복이면 무시한다. 막지 않으면 Enter를 누르고 있는 동안 완료 → 다음 단계 선택 →
+ * 그 버튼 줄 첫 버튼(완료) → 완료가 이어져 여러 단계가 한 번에 끝났다.
+ */
+export function isRunKeyAutoRepeat(event: Pick<KeyboardEvent, "key" | "repeat">): boolean {
+  return event.repeat && (event.key === "Enter" || event.key === " ");
 }
 
 /** 하위프로세스 노드의 하위 맵(그 아래 하위 맵 포함)에 기록이 있는지 — 있으면 취소 전에 확인을 받는다(R5). */

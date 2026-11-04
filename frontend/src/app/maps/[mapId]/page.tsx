@@ -3700,6 +3700,14 @@ function MapEditor({ mapId }: { mapId: number }) {
     // 콜백으로 미룬다 — 이펙트 본문 동기 setState 금지(lessons react-ts-patterns §3), 전환은 같은 값이면 무해
     void Promise.resolve().then(() => switchVersion(runVersionId));
   }, [runVersionId, versionId, versions, switchVersion]);
+  // 다른 맵의 실행을 가리키는 `?run=` — 실행 상세가 오면 그 실행의 맵·버전 주소로 바꾼다(R37). 이 맵 캔버스 위에
+  // 다른 맵의 실행 상태를 그리지 않는다. 실행 모드는 읽기 전용이라 이탈 가드를 거치지 않는다
+  const runMapId = runDetail?.map_id ?? null;
+  const runDetailId = runDetail?.id ?? null;
+  useEffect(() => {
+    if (runMapId === null || runVersionId === null || runDetailId === null || runMapId === mapId) return;
+    router.replace(buildRunHref(runMapId, runVersionId, runDetailId));
+  }, [runMapId, runVersionId, runDetailId, mapId, router]);
   // 실행 열기·닫기 — 주소가 진실(RunUrlSync가 runId를 따라 맞춘다). 닫을 때는 runId를 먼저 비워 위 버전 맞춤 이펙트가
   // 다른 버전으로 옮기는 전환을 되돌리지 않게 한다(같은 값이 주소 동기화로 다시 온다)
   const openRun = (nextRunId: number, runVersion: number) => {
@@ -6884,7 +6892,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         onSelect: () => (isFrameworkMap ? setFrameworkPickerOpen(true) : setLibraryOpen(true)),
       };
       if (readOnly) {
-        return [moreItem, { divider: true }, libraryItem];
+        // 실행 모드는 PNG 내보내기를 끈다(R36) — 실행 상태가 내보내기에 실리지 않게. 기타 하위메뉴엔 그것뿐이라 통째로 뺀다
+        return runMode ? [libraryItem] : [moreItem, { divider: true }, libraryItem];
       }
       return [
         // 캔버스는 subprocess 링크+분기·끝만 — process/start 추가 항목 숨김 (2026-08-28 개선)
@@ -7236,6 +7245,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [
     menu,
     readOnly,
+    runMode,
     isFrameworkMap,
     nodes,
     edges,
@@ -9370,7 +9380,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         if (event.code === "KeyG" && !event.shiftKey) {
           fire(() => createGroupFromSelection());
         } else if (event.code === "KeyE" && event.shiftKey) {
-          fire(() => setPngExportOpen(true));
+          // 실행 모드는 PNG 내보내기를 끈다(R36) — 브라우저 기본 동작도 그대로 두지 않는다
+          fire(() => {
+            if (!runMode) setPngExportOpen(true);
+          });
         } else if (event.code === "KeyC" && !event.shiftKey) {
           // 선택 노드가 없거나 **텍스트를 드래그 선택 중**이면 브라우저 기본 복사로 흘려보낸다 —
           // 노드가 선택된 채 AI 챗 본문을 선택 복사하면 노드 복사가 가로채 토스트만 뜨고
@@ -9440,6 +9453,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleCopy,
     handlePaste,
     isFrameworkMap,
+    runMode,
   ]);
 
   // 포인터 화면 좌표 추적 — 엣지 액션/분기 모달을 마우스 위치에 띄우기 위함.
@@ -12273,15 +12287,18 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <MapNotesSection scope={{ mapId }} canEdit={myRole === "owner"} onToast={showToast} />
                     )}
                     <div className="flex gap-1.5">
-                      <button
-                        type="button"
-                        data-id="export-png"
-                        onClick={() => setPngExportOpen(true)}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-semibold text-on-accent hover:bg-accent-focus"
-                      >
-                        <Download size={16} strokeWidth={1.5} />
-                        {t("inspector.exportPng")}
-                      </button>
+                      {/* 실행 모드는 PNG 내보내기를 끈다(R36) — 캔버스의 실행 상태 색·점이 그림에 실리면 안 된다 */}
+                      {!runMode && (
+                        <button
+                          type="button"
+                          data-id="export-png"
+                          onClick={() => setPngExportOpen(true)}
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-semibold text-on-accent hover:bg-accent-focus"
+                        >
+                          <Download size={16} strokeWidth={1.5} />
+                          {t("inspector.exportPng")}
+                        </button>
+                      )}
                       <button
                         type="button"
                         data-id="export-excel"
@@ -13189,7 +13206,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         fileNameFor={excelFileNameFor}
       />
       <CsvExportModal graph={csvExport?.graph ?? null} fileName={csvExport?.fileName ?? ""} onClose={() => setCsvExport(null)} />
-      {pngExportOpen && (
+      {pngExportOpen && !runMode && (
         <PngExportModal
           frame={nodes.length > 0 ? measureExportFrame(nodes) : null}
           measureSplit={() => {

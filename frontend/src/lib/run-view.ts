@@ -4,7 +4,7 @@
 
 import { MarkerType, type Edge } from "@xyflow/react";
 
-import { getApiErrorDetail, type FlatNode, type GraphEdge, type RunDetail } from "@/lib/api";
+import { getApiErrorDetail, type FlatNode, type GraphEdge, type RunDetail, type RunSummaryInfo } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import type { MessageKey } from "@/lib/i18n-messages";
 import {
@@ -41,19 +41,27 @@ function createEmptyScopeState(closed: boolean): RunScopeState {
   return { manual: {}, choice: {}, exit: {}, closed };
 }
 
-/** 상태 행·고정 범위 → 범위별 엔진 입력. 최상위(`""`)는 늘 있다. 중단된 실행은 모든 범위가 닫혀 남은 단계가 건너뜀. */
+/**
+ * 모든 범위를 닫고 읽는 실행 — 중단은 남은 단계가 건너뜀이고, 요약은 상태·범위 행을 지운 뒤라 기록 없이 열면
+ * 새 실행처럼 첫 단계가 열려 보인다(흐르는 점·동작 없이 닫힌 실행으로 읽는다).
+ */
+function isRunClosedForView(detail: RunDetail): boolean {
+  return detail.status === "stopped" || detail.status === "summarized";
+}
+
+/** 상태 행·고정 범위 → 범위별 엔진 입력. 최상위(`""`)는 늘 있다. 중단·요약된 실행은 모든 범위가 닫혀 남은 단계가 건너뜀. */
 export function buildRunScopeStates(detail: RunDetail): Map<string, RunScopeState> {
-  const isStopped = detail.status === "stopped";
-  const states = new Map<string, RunScopeState>([["", createEmptyScopeState(isStopped)]]);
+  const isClosedRun = isRunClosedForView(detail);
+  const states = new Map<string, RunScopeState>([["", createEmptyScopeState(isClosedRun)]]);
   const ensureState = (scopePath: string): RunScopeState => {
     const found = states.get(scopePath);
     if (found) return found;
-    const created = createEmptyScopeState(isStopped);
+    const created = createEmptyScopeState(isClosedRun);
     states.set(scopePath, created);
     return created;
   };
   for (const scope of detail.scopes) {
-    ensureState(scope.scope_path).closed = scope.closed || isStopped;
+    ensureState(scope.scope_path).closed = scope.closed || isClosedRun;
   }
   for (const row of detail.states) {
     const state = ensureState(row.scope_path);
@@ -73,8 +81,8 @@ function getScopeDepth(scopePath: string): number {
  * 바로 완료했으면 남은 단계는 건너뜀이다(BE `_assert_hosts_reachable`과 같은 판정).
  * 범위 경로는 바깥 범위에서 호스트의 노드 키와 같다.
  */
-function buildUnpinnedScopeState(scopePath: string, statusByKey: ReadonlyMap<string, RunNodeStatus>, isStopped: boolean): RunScopeState {
-  return createEmptyScopeState(isStopped || statusByKey.get(scopePath) === "done");
+function buildUnpinnedScopeState(scopePath: string, statusByKey: ReadonlyMap<string, RunNodeStatus>, isClosedRun: boolean): RunScopeState {
+  return createEmptyScopeState(isClosedRun || statusByKey.get(scopePath) === "done");
 }
 
 // 막힌 호스트 상태 → 그 하위 범위의 연결선 종류(R22) — 대기면 앞이 안 끝남, 건너뜀이면 건너뜀(흐르는 점 없음)
@@ -90,7 +98,7 @@ function getBlockedHostStatus(scopePath: string, statusByKey: ReadonlyMap<string
 /** 범위 경로 → 그래프(최상위 `""`)에서 노드 상태·연결선 종류를 노드 키로. 그래프가 아직 없는 범위는 건너뛴다. */
 export function buildRunView(detail: RunDetail, graphs: ReadonlyMap<string, RunGraph>): RunView {
   const states = buildRunScopeStates(detail);
-  const isStopped = detail.status === "stopped";
+  const isClosedRun = isRunClosedForView(detail);
   const statusByKey = new Map<string, RunNodeStatus>();
   const edgeKindByKey = new Map<string, RunEdgeKind>();
   let progress = detail.progress;
@@ -99,7 +107,7 @@ export function buildRunView(detail: RunDetail, graphs: ReadonlyMap<string, RunG
     ([a], [b]) => getScopeDepth(a) - getScopeDepth(b) || (a < b ? -1 : a > b ? 1 : 0),
   );
   for (const [scopePath, graph] of ordered) {
-    const state = states.get(scopePath) ?? buildUnpinnedScopeState(scopePath, statusByKey, isStopped);
+    const state = states.get(scopePath) ?? buildUnpinnedScopeState(scopePath, statusByKey, isClosedRun);
     const statuses = deriveRunStatuses(graph, state);
     // 호스트가 대기·건너뜀인 하위 맵은 기록과 무관하게 시작 노드 말고 전부 그 상태로 읽힌다(R22). 바깥부터 돌아서
     // 손자 맵은 이미 대기·건너뜀이 된 하위 호스트를 보고 같은 규칙을 탄다
@@ -206,8 +214,15 @@ const RUN_ERROR_KEYS: [string, MessageKey][] = [
   ["run is not open", "run.err.notOpen"],
   // 하위 맵 기록이 있는 하위프로세스 취소 — 확인 후 cascade로 다시 보내는 흐름은 버튼 줄(Task 12)이 맡는다
   ["subprocess has progress", "run.err.subProgress"],
+  ["only participants can change this run", "run.err.participantOnly"],
+  ["only the starter can do this", "run.err.starterOnly"],
+  ["summarized runs cannot be changed", "run.err.summarized"],
+  ["node is not actionable", "run.err.notActionable"],
 ];
 const TOUCHED_AFTER_PREFIX = "later steps already changed: ";
+// 자리값이 든 서버 문구 — BE ERR_PARTICIPANT_ACCESS("participant {login} cannot view this map")·load_visible_run 404
+const PARTICIPANT_ACCESS_PATTERN = /^participant (.+) cannot view this map$/;
+const RUN_NOT_FOUND_PATTERN = /^run \d+ not found$/;
 
 // 실행할 수 있는 버전 — 게시본과 지난 게시본만(design §4.1). 업무 체계 캔버스는 실행 대상이 아니다(BE ERR_FRAMEWORK)
 const RUNNABLE_VERSION_STATUSES: ReadonlySet<string> = new Set(["published", "expired"]);
@@ -236,6 +251,9 @@ export function humanizeRunError(err: unknown, t: TFunc): string {
   if (detail.startsWith(TOUCHED_AFTER_PREFIX)) {
     return t("run.err.touchedAfter", { title: detail.slice(TOUCHED_AFTER_PREFIX.length) });
   }
+  const participant = PARTICIPANT_ACCESS_PATTERN.exec(detail);
+  if (participant) return t("run.err.participantAccess", { login: participant[1] });
+  if (RUN_NOT_FOUND_PATTERN.test(detail)) return t("run.err.notFound");
   const hit = RUN_ERROR_KEYS.find(([prefix]) => detail.startsWith(prefix));
   return hit ? t(hit[1]) : humanizeApiError(err, t);
 }
@@ -291,6 +309,14 @@ export function formatRunPeriod(startedAt: string, endedAt: string, t: TFunc): s
     end: isSameMonth ? t("run.list.periodDayOnly", { d: end.day }) : formatMonthDay(end, t),
     n: days,
   });
+}
+
+/** 요약된 실행의 부제 조각 — 기간 · 버전 · 문제 단계 수(있을 때만). 모든 실행 창의 요약 줄과 실행 바가 같이 쓴다. */
+export function formatRunSummaryParts(summary: RunSummaryInfo, t: TFunc): string[] {
+  const versionMarker = summary.version_number !== null ? `v${summary.version_number}` : summary.version_label;
+  const parts = [formatRunPeriod(summary.started_at, summary.ended_at, t), versionMarker];
+  if (summary.problem_steps > 0) parts.push(t("run.list.problemSteps", { n: summary.problem_steps }));
+  return parts;
 }
 
 /** 실행 숫자 설정 입력 초안(문자열 그대로 — 입력 중 빈 칸을 허용). */

@@ -34,6 +34,7 @@ import {
   getRunScopeLock,
   hasRunChildProgress,
   isRunCanvasEnterTarget,
+  isRunKeyAutoRepeat,
   pickAutoAdvance,
   placeRunBar,
   placeRunPop,
@@ -276,7 +277,8 @@ function RunActionBarBody({
   // 캔버스에서 Enter — 선택한 노드의 버튼 줄 첫 버튼으로 들어온다(R31). 다른 노드에 포커스가 있으면 React Flow가 그 노드를 고른다
   useEffect(() => {
     const handleEnter = (event: KeyboardEvent) => {
-      if (event.key !== "Enter" || event.defaultPrevented || event.isComposing) return;
+      // 눌러 둔 Enter의 반복은 버튼 줄로 다시 들어가지 않는다 — 다음 단계의 완료까지 이어 눌렀다
+      if (event.key !== "Enter" || event.repeat || event.defaultPrevented || event.isComposing) return;
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (!isRunCanvasEnterTarget(event.target)) return;
       const focusedNode = event.target instanceof Element ? event.target.closest(".react-flow__node") : null;
@@ -376,6 +378,10 @@ function RunActionBarBody({
 
   // 팝오버 안 Esc — 닫고 그 팝오버를 연 버튼으로 포커스를 돌린다(R31). 문제 메모는 문제 버튼이 사라져 첫 버튼으로
   const handlePopKeyDown = (event: ReactKeyboardEvent) => {
+    if (isRunKeyAutoRepeat(event)) {
+      event.preventDefault(); // 눌러 둔 키의 반복이 팝오버 버튼(하위 맵 기록 취소 확인 등)을 다시 누르지 않게
+      return;
+    }
     if (event.key !== "Escape" || openPop === null) return;
     event.preventDefault();
     const returnTo =
@@ -384,8 +390,13 @@ function RunActionBarBody({
     focusBarButton(returnTo);
   };
 
-  // 버튼 줄 위 Esc — 열린 팝오버가 있으면 닫고, 없으면 포커스를 캔버스의 그 노드로 돌린다(선택은 그대로, R31)
+  // 버튼 줄 위 Esc — 열린 팝오버가 있으면 닫고, 없으면 포커스를 캔버스의 그 노드로 돌린다(선택은 그대로, R31).
+  // 눌러 둔 Enter·Space의 반복은 막는다 — 버튼의 기본 동작(누르기)이 반복마다 일어나 단계가 이어 완료됐다
   const handleBarKeyDown = (event: ReactKeyboardEvent) => {
+    if (isRunKeyAutoRepeat(event)) {
+      event.preventDefault();
+      return;
+    }
     if (event.key !== "Escape") return;
     event.preventDefault();
     if (openPop !== null) {
