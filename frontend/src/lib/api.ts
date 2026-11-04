@@ -2208,6 +2208,8 @@ export interface NotificationItem {
   payload?: NotificationPayload | null;
   read: boolean;
   created_at: string;
+  // 가리키는 맵이 휴지통(삭제 대기)에 있는지 — 목록 조회만 채운다(읽음 처리 응답은 false)
+  map_in_trash?: boolean;
 }
 
 export function listNotifications(unreadOnly = false): Promise<NotificationItem[]> {

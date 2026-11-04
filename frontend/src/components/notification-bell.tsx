@@ -5,10 +5,16 @@ import { Bell, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { RunTrashChip } from "@/components/run/run-trash-chip";
 import { deleteNotification, listNotifications, markNotificationRead, type NotificationItem } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
-import { formatNotification, getNotificationIcon, getRunNotificationHref } from "@/lib/notification-format";
+import {
+  formatNotification,
+  getNotificationIcon,
+  getRunNotificationHref,
+  isRunNotificationInTrash,
+} from "@/lib/notification-format";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { runGuardedNavigation } from "@/lib/navigation-guard";
 
@@ -123,12 +129,18 @@ export function NotificationBell() {
                 // 언어 토글 렌더 — 제목(맵 이름)+유형 칩+상세 문장, 레거시는 원문 폴백
                 const view = formatNotification(item, t);
                 const TypeIcon = getNotificationIcon(item.type);
+                // 맵이 휴지통인 실행 알림 — 열 실행이 없어 누르기를 끄고 흐리게(읽음·삭제 버튼은 그대로)
+                const inTrash = isRunNotificationInTrash(item);
                 return (
                   <li
                     key={item.id}
                     data-id={`notif-bell-row-${item.id}`}
-                    onClick={() => handleOpen(item)}
-                    className="group flex cursor-pointer items-start gap-2 rounded-sm px-1.5 py-2 hover:bg-surface-alt"
+                    data-in-trash={inTrash || undefined}
+                    title={inTrash ? t("notif.runInTrashHint") : undefined}
+                    onClick={inTrash ? undefined : () => handleOpen(item)}
+                    className={`group flex items-start gap-2 rounded-sm px-1.5 py-2 ${
+                      inTrash ? "opacity-60" : "cursor-pointer hover:bg-surface-alt"
+                    }`}
                   >
                     <TypeIcon
                       size={14}
@@ -144,6 +156,7 @@ export function NotificationBell() {
                         >
                           {view.title}
                         </span>
+                        {inTrash && <RunTrashChip dataId={`notif-bell-trash-${item.id}`} />}
                         <span className="shrink-0 text-fine text-ink-tertiary">{view.label}</span>
                         <span className="ml-auto shrink-0 text-fine text-ink-tertiary">
                           {formatKstShort(item.created_at)}

@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 
 from app import clock
 from app.db import SessionLocal
-from app.models import Notification, Run, RunComment, RunEvent, RunScope
+from app.models import Notification, ProcessMap, Run, RunComment, RunEvent, RunScope
 from tests.run_helpers import as_user, load_case_graph, seed_published_map
 
 _names = itertools.count(1)
@@ -168,6 +168,22 @@ def test_comment_roundtrip_and_limit(client: TestClient, monkeypatch: pytest.Mon
     assert [c["node_id"] for c in everything] == [a, a, b]
     detail = _ok(_call(client, "GET", f"/runs/{run['id']}", starter))
     assert {(c["node_id"], c["count"]) for c in detail["comment_counts"]} == {(a, 2), (b, 1)}
+
+
+def test_blank_comment_is_rejected_and_body_is_trimmed(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    seeded = _seed(client, monkeypatch, "comment blank")
+    a = seeded["ids"]["a"]
+    starter = _user("blank")
+    run = _create_run(client, seeded, starter)
+
+    blank = _comment(client, run, starter, " \t\n ", node_id=a)
+    trimmed = _comment(client, run, starter, "  hold the lot  ", node_id=a)
+
+    assert blank.status_code == 422
+    assert trimmed.status_code == 201, trimmed.text
+    assert trimmed.json()["body"] == "hold the lot"
+    listed = _ok(_call(client, "GET", f"/runs/{run['id']}/comments", starter, params={"scope": "", "node_id": a}))
+    assert [c["body"] for c in listed] == ["hold the lot"]
 
 
 def test_comment_on_unknown_node_is_rejected(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -455,6 +471,81 @@ def test_delete_run_deletes_its_run_notifications(
     assert _messages() == sorted(
         [("notice", run["id"]), ("run_problem", run["id"]), ("run_invited", other["id"])]
     )
+
+
+def _list_member_run_notifications(client: TestClient, member: str, map_id: int) -> list[dict]:
+    rows = _ok(_call(client, "GET", "/notifications", member))
+    return [n for n in rows if n["map_id"] == map_id and n["type"].startswith("run_")]
+
+
+def test_notifications_flag_runs_of_a_trashed_map(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, seed_employee: Callable[..., None]
+) -> None:
+    seeded = _seed(client, monkeypatch, "trash flag")
+    starter, member = _user("starter"), _user("member")
+    seed_employee(member)
+    _create_run(client, seeded, starter, scope="shared", participants=[member])  # 초대 알림 하나
+
+    before = _list_member_run_notifications(client, member, seeded["map_id"])
+    assert _call(client, "DELETE", f"/maps/{seeded['map_id']}", seeded["owner"]).status_code == 204
+    trashed = _list_member_run_notifications(client, member, seeded["map_id"])
+    read = _ok(_call(client, "POST", f"/notifications/{trashed[0]['id']}/read", member))
+    assert _call(client, "POST", f"/maps/{seeded['map_id']}/restore", seeded["owner"]).status_code == 200
+    restored = _list_member_run_notifications(client, member, seeded["map_id"])
+
+    assert [n["map_in_trash"] for n in before] == [False]
+    assert [n["map_in_trash"] for n in trashed] == [True]  # 휴지통 동안은 표시만 바뀌고 지우지 않는다
+    assert (read["read"], read["map_in_trash"]) == (True, True)  # 읽음 응답이 목록 줄을 갈아 끼워도 표시가 남는다
+    assert [n["map_in_trash"] for n in restored] == [False]
+
+
+def _count_member_notifications(member: str, map_id: int) -> list[str]:
+    async def _work(session) -> list[str]:
+        rows = await session.scalars(
+            select(Notification.type).where(Notification.recipient == member, Notification.map_id == map_id)
+        )
+        return sorted(rows.all())
+
+    return _read_db(_work)
+
+
+def test_purging_a_map_deletes_its_run_notifications(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, seed_employee: Callable[..., None]
+) -> None:
+    seeded = _seed(client, monkeypatch, "purge notifications")
+    starter, member = _user("starter"), _user("member")
+    seed_employee(member)
+    _create_run(client, seeded, starter, scope="shared", participants=[member])
+
+    async def _seed_notice(session) -> None:
+        session.add(Notification(recipient=member, type="notice", map_id=seeded["map_id"], message="keep"))
+
+    _write_db(_seed_notice)
+    assert _call(client, "DELETE", f"/maps/{seeded['map_id']}", seeded["owner"]).status_code == 204
+    assert _count_member_notifications(member, seeded["map_id"]) == ["notice", "run_invited"]
+    purged = _call(client, "DELETE", f"/maps/{seeded['map_id']}/permanent", seeded["owner"])
+
+    assert purged.status_code == 204
+    assert _count_member_notifications(member, seeded["map_id"]) == ["notice"]  # 실행 알림만 지운다
+
+
+def test_expired_trash_purge_deletes_run_notifications(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, seed_employee: Callable[..., None]
+) -> None:
+    seeded = _seed(client, monkeypatch, "expired purge notifications")
+    starter, member = _user("starter"), _user("member")
+    seed_employee(member)
+    _create_run(client, seeded, starter, scope="shared", participants=[member])
+    assert _call(client, "DELETE", f"/maps/{seeded['map_id']}", seeded["owner"]).status_code == 204
+
+    async def _age_trash(session) -> None:
+        found = await session.get(ProcessMap, seeded["map_id"])
+        found.deleted_at = clock.now() - timedelta(days=8)  # 복구 기간 7일이 지난 휴지통
+
+    _write_db(_age_trash)
+    assert _call(client, "GET", "/maps/deleted/list", seeded["owner"]).status_code == 200  # 조회가 만료분을 정리한다
+
+    assert _count_member_notifications(member, seeded["map_id"]) == []
 
 
 # ── 보존 · 이름 · 알림 끄기 ──

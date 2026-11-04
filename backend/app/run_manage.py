@@ -290,6 +290,19 @@ async def delete_run(session: AsyncSession, run: Run, user: str) -> None:
     await session.commit()
 
 
+async def delete_map_run_notifications(session: AsyncSession, map_ids: list[int]) -> None:
+    """맵을 영구 삭제할 때 그 맵 실행들의 `run_` 알림을 지운다(R40) — 실행은 FK cascade로 사라지지만 알림은 느슨한 참조라 남고,
+    sqlite는 지운 맵 id를 다시 써 엉뚱한 맵의 실행 알림처럼 보였다. 커밋은 호출자가 한다."""
+    if not map_ids:
+        return
+    await session.execute(
+        delete(Notification).where(
+            Notification.type.startswith(workflow.RUN_NOTIFICATION_PREFIX, autoescape=True),
+            Notification.map_id.in_(map_ids),
+        )
+    )
+
+
 async def _delete_run_notifications(session: AsyncSession, run: Run) -> None:
     """payload의 run_id는 JSON이라 sqlite·postgres 공통으로 거르려고 유형·맵으로 좁힌 뒤 파이썬에서 고른다."""
     rows = await session.execute(

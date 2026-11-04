@@ -24,12 +24,13 @@ import { getFeedbackUpdatedAt, selectMyFeedback, type HomeListPrefs } from "@/li
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { getNotificationCategory, NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notification-categories";
-import { formatNotification, getRunNotificationHref } from "@/lib/notification-format";
+import { formatNotification, getRunNotificationHref, isRunNotificationInTrash } from "@/lib/notification-format";
 import { useAgo } from "@/lib/use-ago";
 import { useDelayedNav } from "@/lib/use-delayed-nav";
 import { IconPillFilter } from "@/components/icon-pill-filter";
 import { MenuSelect } from "@/components/menu-select";
 import { NavPendingScope } from "@/components/nav-pending-scope";
+import { RunTrashChip } from "@/components/run/run-trash-chip";
 import { SkeletonLine } from "@/components/skeleton";
 
 const LIST_LIMIT = 20; // 칸마다 보이는 줄 상한 — 나머지는 알림 탭·피드백 화면에서
@@ -47,7 +48,7 @@ const NOTI_CAT_VALUES: (NotificationCategory | "all")[] = ["all", ...NOTIFICATIO
 const FB_KIND_VALUES: (FeedbackKind | "all")[] = ["all", ...FEEDBACK_KINDS];
 
 const ROW_CLASS =
-  "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 px-3 py-1.5 text-left transition-colors duration-150 hover:bg-surface-pearl [li+li>&]:border-t [li+li>&]:border-divider";
+  "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 px-3 py-1.5 text-left transition-colors duration-150 enabled:hover:bg-surface-pearl [li+li>&]:border-t [li+li>&]:border-divider";
 const LINK_CLASS = "whitespace-nowrap text-accent hover:underline disabled:text-ink-muted disabled:no-underline";
 
 interface DashboardInboxPanelProps {
@@ -229,6 +230,8 @@ function NotificationColumn({ items, error, prefs, onPrefs, onRead, onReadAll, r
           const view = formatNotification(item, t);
           const category = getNotificationCategory(item.type);
           const selecting = pending === `notification:${item.id}`;
+          // 맵이 휴지통인 실행 알림 — 열 실행이 없어 줄을 끄고 흐리게(복구하면 다시 열린다)
+          const inTrash = isRunNotificationInTrash(item);
           return (
             <li key={item.id}>
               <button
@@ -236,8 +239,10 @@ function NotificationColumn({ items, error, prefs, onPrefs, onRead, onReadAll, r
                 data-id={`home-inbox-noti-row-${item.id}`}
                 data-unread={!item.read || undefined}
                 data-selecting={selecting || undefined}
+                disabled={inTrash}
+                title={inTrash ? t("notif.runInTrashHint") : undefined}
                 onClick={() => open(item)}
-                className={`${ROW_CLASS} ${selecting ? "bg-accent-tint/40" : ""}`}
+                className={`${ROW_CLASS} ${selecting ? "bg-accent-tint/40" : ""} ${inTrash ? "opacity-60" : ""}`}
               >
                 <span className="flex min-w-0 items-center gap-1.5">
                   {!item.read && (
@@ -255,6 +260,7 @@ function NotificationColumn({ items, error, prefs, onPrefs, onRead, onReadAll, r
                   <span className={`min-w-0 truncate text-caption ${item.read ? "text-ink-secondary" : "font-semibold text-ink"}`}>
                     {view.title}
                   </span>
+                  {inTrash && <RunTrashChip dataId={`home-inbox-noti-trash-${item.id}`} />}
                 </span>
                 <span title={formatKstShort(item.created_at)} className="row-span-2 self-start text-fine tabular-nums text-ink-tertiary">
                   {ago(item.created_at)}

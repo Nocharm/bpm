@@ -1587,6 +1587,8 @@ class NotificationOut(BaseModel):
     payload: dict | None = None
     read: bool
     created_at: datetime
+    # 가리키는 맵이 휴지통(삭제 대기)에 있는지 — 목록·읽음 응답이 채운다. 실행 알림은 이때 실행을 열지 않고 따로 표시한다
+    map_in_trash: bool = False
 
 
 class NotificationBulkDeleteIn(BaseModel):
@@ -3140,7 +3142,8 @@ RunLogin = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1,
 class RunCommentIn(BaseModel):
     scope_path: str = Field(default="", max_length=300)  # ""=최상위, 하위 맵은 `RunActionIn`과 같은 경로 규칙
     node_id: str = Field(min_length=1, max_length=50)
-    body: str = Field(min_length=1, max_length=2000)  # 첨부 없음, 2,000자 (design §4.2 코멘트)
+    # 첨부 없음, 2,000자 (design §4.2 코멘트). 앞뒤 공백을 걷어 빈 코멘트(공백만)는 422로 막는다
+    body: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
 
 class RunCommentOut(BaseModel):

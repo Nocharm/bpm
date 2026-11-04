@@ -8,6 +8,7 @@ import type { MessageKey } from "@/lib/i18n-messages";
 import { getOutputKey } from "@/lib/output-rules";
 import {
   findRunFrontier,
+  getRunTopoOrder,
   type BranchOptions,
   type RunGraph,
   type RunGraphEdge,
@@ -327,4 +328,113 @@ export function placeRunPop(
   const leftSide = node.left - POP_SIDE_GAP - pop.width;
   if (leftSide >= EDGE_MARGIN) return { left: leftSide, top: sideTop };
   return { left, top: Math.max(POP_EDGE_MARGIN, bar.top - pop.height - POP_BAR_GAP) };
+}
+
+// ── 키보드 이동(실행 모드 캔버스) ──
+
+export type RunArrowDirection = "left" | "right" | "up" | "down";
+
+export const RUN_ARROW_KEYS: Readonly<Record<string, RunArrowDirection>> = {
+  ArrowLeft: "left",
+  ArrowRight: "right",
+  ArrowUp: "up",
+  ArrowDown: "down",
+};
+
+/** 화면에 그려진 실행 노드 하나의 자리(플로우 좌표, 좌상단 + 크기). */
+export interface RunNodeBox {
+  key: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// 옆으로 어긋난 정도에 주는 가중치 — 클수록 "그 방향 똑바로"의 노드를 먼 노드보다 먼저 고른다
+const ARROW_CROSS_WEIGHT = 2;
+// 진행 거리의 이 배수보다 옆으로 더 어긋난 노드는 그 방향으로 치지 않는다(약 63도) — 같은 줄의 키 차이(몇 px)로
+// ↓를 눌렀는데 멀리 옆 노드로 튀지 않게
+const ARROW_CONE = 2;
+
+/**
+ * 방향키로 고를 이웃 노드 — 현재 노드 가운데에서 그 방향 부채꼴 안의 노드 중 (진행 거리 + 옆 어긋남×2)가 가장 작은 것.
+ * 같으면 가로 이동은 위쪽, 세로 이동은 왼쪽을 먼저. 그 방향에 노드가 없으면 null.
+ */
+export function findRunNodeInDirection(
+  boxes: readonly RunNodeBox[],
+  fromKey: string,
+  direction: RunArrowDirection,
+): string | null {
+  const from = boxes.find((box) => box.key === fromKey);
+  if (!from) return null;
+  const cx = from.x + from.width / 2;
+  const cy = from.y + from.height / 2;
+  const horizontal = direction === "left" || direction === "right";
+  const sign = direction === "right" || direction === "down" ? 1 : -1;
+  let best: { key: string; score: number; tie: number } | null = null;
+  for (const box of boxes) {
+    if (box.key === fromKey) continue;
+    const dx = box.x + box.width / 2 - cx;
+    const dy = box.y + box.height / 2 - cy;
+    const main = (horizontal ? dx : dy) * sign;
+    const cross = Math.abs(horizontal ? dy : dx);
+    if (main <= 1 || cross > main * ARROW_CONE) continue;
+    const score = main + cross * ARROW_CROSS_WEIGHT;
+    const tie = horizontal ? dy : dx;
+    if (best === null || score < best.score || (score === best.score && tie < best.tie)) {
+      best = { key: box.key, score, tie };
+    }
+  }
+  return best?.key ?? null;
+}
+
+/** 실행 흐름 순서의 노드 키 — 범위마다 위상 순서이고, 그래프가 실린 하위 범위의 노드는 그 호스트 바로 뒤에 끼운다. */
+export function listRunFlowKeys(graphs: ReadonlyMap<string, RunGraph>): string[] {
+  const keys: string[] = [];
+  const visit = (scopePath: string) => {
+    const graph = graphs.get(scopePath);
+    if (!graph) return;
+    for (const nodeId of getRunTopoOrder(graph)) {
+      const key = toRunNodeKey(scopePath, nodeId);
+      keys.push(key);
+      visit(key); // 하위프로세스 노드 키 = 그 하위 범위 경로
+    }
+  };
+  visit("");
+  return keys;
+}
+
+const TODO_STATUSES: ReadonlySet<RunNodeStatus> = new Set(["active", "problem", "ready"]);
+
+/**
+ * 지금 손댈 단계(진행 중·문제·시작 가능) 중 현재 키 다음 것 — 흐름 순서로 돌아 감는다(reverse면 이전 것).
+ * 현재 키가 없거나 순서에 없으면 처음(reverse면 마지막) 할 단계. 할 단계가 없으면 null.
+ */
+export function findNextRunTodoKey(
+  order: readonly string[],
+  statusByKey: ReadonlyMap<string, RunNodeStatus>,
+  currentKey: string | null,
+  reverse: boolean,
+): string | null {
+  const todo = order.filter((key) => TODO_STATUSES.has(statusByKey.get(key) ?? "waiting"));
+  if (todo.length === 0) return null;
+  const at = currentKey === null ? -1 : order.indexOf(currentKey);
+  if (at < 0) return reverse ? todo[todo.length - 1] : todo[0];
+  const rank = new Map(order.map((key, index) => [key, index]));
+  if (reverse) {
+    const before = todo.filter((key) => (rank.get(key) ?? 0) < at);
+    return before.length > 0 ? before[before.length - 1] : todo[todo.length - 1];
+  }
+  return todo.find((key) => (rank.get(key) ?? 0) > at) ?? todo[0];
+}
+
+/** 하위 범위가 끝났는지(그 범위 바로 아래 노드가 전부 완료·건너뜀) — 호스트가 여전히 안 끝났으면 갈래를 골라야 한다. */
+export function isRunScopeAllDone(statusByKey: ReadonlyMap<string, RunNodeStatus>, scopePath: string): boolean {
+  let seen = false;
+  for (const [key, status] of statusByKey) {
+    if (splitRunNodeKey(key).scopePath !== scopePath) continue;
+    seen = true;
+    if (status !== "done" && status !== "skipped") return false;
+  }
+  return seen;
 }

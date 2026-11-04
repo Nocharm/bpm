@@ -10,6 +10,7 @@ import {
   formatNotificationBodyParts,
   getNotificationIcon,
   getRunNotificationHref,
+  isRunNotificationInTrash,
   sumRefFixCounts,
 } from "@/lib/notification-format";
 
@@ -364,5 +365,26 @@ describe("getRunNotificationHref", () => {
     expect(getRunNotificationHref(item({ version_id: null }))).toBeNull();
     expect(getRunNotificationHref(item({ payload: {} }))).toBeNull();
     expect(getRunNotificationHref(item({ payload: null }))).toBeNull();
+  });
+  it("맵이 휴지통에 있으면 null", () => {
+    expect(getRunNotificationHref(item({ map_in_trash: true }))).toBeNull();
+  });
+});
+
+describe("isRunNotificationInTrash", () => {
+  const item = (over: Partial<NotificationItem>): NotificationItem => ({
+    id: 1, type: "run_invited", map_id: 3, version_id: 9, message: "x", read: false,
+    created_at: "2026-11-04T10:00:00+09:00", payload: { run_id: 21 }, ...over,
+  });
+
+  it("실행 알림이고 맵이 휴지통이면 true", () => {
+    expect(isRunNotificationInTrash(item({ map_in_trash: true }))).toBe(true);
+  });
+  it("맵이 살아 있거나 표시가 없으면 false", () => {
+    expect(isRunNotificationInTrash(item({ map_in_trash: false }))).toBe(false);
+    expect(isRunNotificationInTrash(item({}))).toBe(false);
+  });
+  it("실행 알림이 아니면 맵이 휴지통이어도 false", () => {
+    expect(isRunNotificationInTrash(item({ type: "published", map_in_trash: true }))).toBe(false);
   });
 });

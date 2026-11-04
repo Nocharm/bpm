@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
-from app import ref_audit, workflow
+from app import ref_audit, run_manage, workflow
 from app.app_settings import commit_system, get_systems
 from app.clock import now as now_kst
 from app.auth import get_current_user
@@ -108,6 +108,7 @@ async def _purge_expired(session: AsyncSession) -> None:
     if expired:
         await _delete_map_kb_chunks(session, [m.id for m in expired])
         await _unlink_purged_canvases(session, [m.id for m in expired])
+        await run_manage.delete_map_run_notifications(session, [m.id for m in expired])
         for stale_map in expired:
             await session.delete(stale_map)
         await session.commit()
@@ -1846,5 +1847,6 @@ async def purge_map(
         raise HTTPException(status_code=409, detail="map is not in trash")
     await _delete_map_kb_chunks(session, [map_id])
     await _unlink_purged_canvases(session, [map_id])
+    await run_manage.delete_map_run_notifications(session, [map_id])
     await session.delete(found_map)
     await session.commit()

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.clock import KST
 from app.db import get_session
-from app.models import Notification
+from app.models import Notification, ProcessMap
 from app.schemas import NotificationBulkDeleteIn, NotificationBulkDeleteOut, NotificationOut
 
 router = APIRouter(
@@ -17,6 +17,19 @@ router = APIRouter(
     tags=["notifications"],
     dependencies=[Depends(get_current_user)],
 )
+
+
+async def _flag_maps_in_trash(session: AsyncSession, rows: list[Notification]) -> None:
+    """응답 표시용 `map_in_trash`(컬럼 아님)를 채운다 — 가리키는 맵이 휴지통이면 True, 복구하면 다음 조회부터 풀린다."""
+    map_ids = {row.map_id for row in rows if row.map_id is not None}
+    trashed: set[int] = set()
+    if map_ids:
+        found = await session.scalars(
+            select(ProcessMap.id).where(ProcessMap.id.in_(map_ids), ProcessMap.deleted_at.is_not(None))
+        )
+        trashed = set(found.all())
+    for row in rows:
+        row.map_in_trash = row.map_id in trashed
 
 
 @router.get("", response_model=list[NotificationOut])
@@ -29,8 +42,9 @@ async def list_notifications(
     if unread_only:
         query = query.where(Notification.read.is_(False))
     query = query.order_by(Notification.created_at.desc(), Notification.id.desc())
-    rows = await session.scalars(query)
-    return list(rows.all())
+    rows = list((await session.scalars(query)).all())
+    await _flag_maps_in_trash(session, rows)
+    return rows
 
 
 @router.post("/read-all", status_code=204)
@@ -60,6 +74,7 @@ async def mark_read(
     notif.read = True
     await session.commit()
     await session.refresh(notif)
+    await _flag_maps_in_trash(session, [notif])  # 읽음 응답이 목록 줄을 갈아 끼우므로 표시도 같이 싣는다
     return notif
 
 

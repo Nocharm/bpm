@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 import type { RunDetail, RunNodeState } from "@/lib/api";
 import {
   buildRunBarButtons,
+  findNextRunTodoKey,
   findRunBlockerKeys,
+  findRunNodeInDirection,
   getBranchLabel,
   getExitLabels,
   getRunScopeHostKeys,
@@ -16,6 +18,8 @@ import {
   isRunCanvasEnterTarget,
   isRunCanvasKeyTarget,
   isRunKeyAutoRepeat,
+  isRunScopeAllDone,
+  listRunFlowKeys,
   pickAutoAdvance,
   placeRunBar,
   placeRunPop,
@@ -591,5 +595,113 @@ describe("placeRunPop", () => {
     const middle = { left: 220, top: 560, width: 160, height: 60 };
     const middleBar = placeRunBar(middle, bar, wide);
     expect(placeRunPop(middle, middleBar, bar, pop, wide)).toEqual({ left: 150, top: middleBar.top - 160 - 6 });
+  });
+});
+
+describe("findRunNodeInDirection", () => {
+  // 가로 흐름: s → d(판단) → 위 갈래 y / 아래 갈래 n → e, 같은 줄의 키 차이로 가운데가 몇 px 어긋난 w
+  const box = (key: string, x: number, y: number, width = 100, height = 40) => ({ key, x, y, width, height });
+  const boxes = [
+    box("s", 0, 0),
+    box("d", 200, 0),
+    box("y", 400, -100),
+    box("n", 400, 100),
+    box("e", 600, 0),
+    box("w", 1200, 4, 100, 48),
+  ];
+
+  it("moves straight along the flow", () => {
+    expect(findRunNodeInDirection(boxes, "s", "right")).toBe("d");
+    expect(findRunNodeInDirection(boxes, "d", "left")).toBe("s");
+  });
+
+  it("breaks a tie between branches toward the upper one", () => {
+    expect(findRunNodeInDirection(boxes, "d", "right")).toBe("y");
+  });
+
+  it("moves between stacked branches", () => {
+    expect(findRunNodeInDirection(boxes, "y", "down")).toBe("n");
+    expect(findRunNodeInDirection(boxes, "n", "up")).toBe("y");
+  });
+
+  it("ignores nodes far to the side when moving up or down", () => {
+    expect(findRunNodeInDirection(boxes, "w", "down")).toBeNull(); // 같은 줄로 보이는 몇 px 아래 노드도 아니다
+    expect(findRunNodeInDirection(boxes, "s", "up")).toBeNull();
+    expect(findRunNodeInDirection(boxes, "e", "right")).toBe("w"); // 키가 달라 가운데가 어긋나도 같은 줄
+  });
+
+  it("returns null for an unknown start", () => {
+    expect(findRunNodeInDirection(boxes, "zz", "right")).toBeNull();
+  });
+});
+
+describe("listRunFlowKeys", () => {
+  it("orders each scope by flow and slots a loaded sub map right after its host", () => {
+    const root: RunGraph = {
+      nodes: [makeNode("s", "start"), makeNode("sp", "subprocess"), makeNode("a"), makeNode("e", "end")],
+      edges: [makeEdge("e1", "s", "sp"), makeEdge("e2", "sp", "a"), makeEdge("e3", "a", "e")],
+    };
+    const child: RunGraph = {
+      nodes: [makeNode("cs", "start"), makeNode("c1"), makeNode("ce", "end")],
+      edges: [makeEdge("f1", "cs", "c1"), makeEdge("f2", "c1", "ce")],
+    };
+    const graphs = new Map([
+      ["", root],
+      ["sp", child],
+    ]);
+
+    expect(listRunFlowKeys(graphs)).toEqual(["s", "sp", "sp/cs", "sp/c1", "sp/ce", "a", "e"]);
+  });
+});
+
+describe("findNextRunTodoKey", () => {
+  const order = ["s", "a", "b", "c", "d", "e"];
+  const statuses = new Map([
+    ["s", "done"],
+    ["a", "done"],
+    ["b", "active"],
+    ["c", "waiting"],
+    ["d", "ready"],
+    ["e", "waiting"],
+  ] as const);
+
+  it("starts from the first step to do", () => {
+    expect(findNextRunTodoKey(order, statuses, null, false)).toBe("b");
+    expect(findNextRunTodoKey(order, statuses, null, true)).toBe("d");
+  });
+
+  it("moves to the next step to do and wraps around", () => {
+    expect(findNextRunTodoKey(order, statuses, "b", false)).toBe("d");
+    expect(findNextRunTodoKey(order, statuses, "d", false)).toBe("b");
+    expect(findNextRunTodoKey(order, statuses, "c", false)).toBe("d");
+  });
+
+  it("moves backwards with reverse", () => {
+    expect(findNextRunTodoKey(order, statuses, "d", true)).toBe("b");
+    expect(findNextRunTodoKey(order, statuses, "b", true)).toBe("d");
+  });
+
+  it("returns null when nothing is left to do", () => {
+    expect(findNextRunTodoKey(order, new Map([["s", "done"]] as const), "s", false)).toBeNull();
+  });
+});
+
+describe("isRunScopeAllDone", () => {
+  it("is true only when every node right under the scope is done or skipped", () => {
+    const finished = new Map([
+      ["sp", "active"],
+      ["sp/c1", "done"],
+      ["sp/c2", "skipped"],
+      ["sp/c2/x", "waiting"],
+    ] as const);
+    const open = new Map([
+      ["sp", "active"],
+      ["sp/c1", "done"],
+      ["sp/c2", "ready"],
+    ] as const);
+
+    expect(isRunScopeAllDone(finished, "sp")).toBe(true); // 더 아래 범위는 따지지 않는다
+    expect(isRunScopeAllDone(open, "sp")).toBe(false);
+    expect(isRunScopeAllDone(finished, "other")).toBe(false);
   });
 });

@@ -359,10 +359,15 @@ import { runGuardedNavigation, setNavigationGuard } from "@/lib/navigation-guard
 import { listSaveBlockers } from "@/lib/save-blockers";
 import { useClosingKeys } from "@/lib/use-closing-keys";
 import {
+  findNextRunTodoKey,
   findRunBlockerKeys,
+  findRunNodeInDirection,
   getRunScopeHostKeys,
   isInRunBarSurface,
   isRunCanvasKeyTarget,
+  listRunFlowKeys,
+  RUN_ARROW_KEYS,
+  type RunNodeBox,
   type RunPop,
 } from "@/lib/run-actions";
 import { buildMapVersionHref, buildRunHref } from "@/lib/run-links";
@@ -9090,6 +9095,43 @@ function MapEditor({ mapId }: { mapId: number }) {
     window.setTimeout(applySelection, 160);
   };
 
+  // 실행 모드 키보드 이동(캔버스에 포커스가 있을 때) — 방향키=그 방향의 가까운 노드(아무것도 안 골랐으면 첫 할 단계),
+  // N/⇧N=다음/이전 할 단계(진행 중·문제·시작 가능, 접힌 하위 맵 안이면 펼쳐서). Tab 흐름 이동·Enter 버튼 줄·Esc는 따로 맡는다(R31)
+  const moveRunSelectionByKey = useEffectEvent((event: KeyboardEvent) => {
+    if (!runView || !runGraphs) return;
+    const direction = RUN_ARROW_KEYS[event.key];
+    if (direction === undefined && event.code !== "KeyN") return;
+    event.preventDefault();
+    let target: string | null;
+    if (direction !== undefined && selectedId !== null) {
+      const boxes: RunNodeBox[] = [];
+      for (const node of reactFlow.getNodes()) {
+        const internal = reactFlow.getInternalNode(node.id);
+        if (node.hidden || !internal || !runView.statusByKey.has(node.id)) continue;
+        const { x, y } = internal.internals.positionAbsolute;
+        boxes.push({ key: node.id, x, y, width: node.measured?.width ?? NODE_WIDTH, height: node.measured?.height ?? NODE_HEIGHT });
+      }
+      target = findRunNodeInDirection(boxes, selectedId, direction);
+    } else {
+      const reverse = direction === undefined && event.shiftKey;
+      target = findNextRunTodoKey(listRunFlowKeys(runGraphs), runView.statusByKey, direction === undefined ? selectedId : null, reverse);
+    }
+    if (target === null || target === selectedId) return;
+    // 캔버스에 남은 DOM 포커스(전에 누른 노드·줌 버튼)를 푼다 — 남아 있으면 다음 Enter를 그 노드 고르기·버튼 누르기가 먹어
+    // 새 노드의 버튼 줄로 못 간다
+    if (event.target instanceof HTMLElement && event.target !== document.body) event.target.blur();
+    selectRunNode(target, { flash: false, reveal: true });
+  });
+  useEffect(() => {
+    if (!runMode) return;
+    const handleRunMoveKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+      if (isRunCanvasKeyTarget(event.target)) moveRunSelectionByKey(event);
+    };
+    window.addEventListener("keydown", handleRunMoveKey);
+    return () => window.removeEventListener("keydown", handleRunMoveKey);
+  }, [runMode]);
+
   // 실행 모드 하위 맵 들어가기·접기 — 펼칠 때 아직 고정 전인 범위는 서버가 실행 기준으로 해석한 그래프를 받아 끼운다
   // (편집 화면의 링크 해석은 Draft로 갈 수 있어 노드 id가 실행과 다를 수 있다)
   const toggleRunSubprocess = (key: string) => {
@@ -9670,6 +9712,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         if (!nextId) {
           return;
         }
+        // 실행 모드 — 전에 누른 노드에 남은 DOM 포커스를 푼다. 남아 있으면 다음 Enter를 React Flow가 그 노드 고르기로 먹어
+        // 새 노드의 버튼 줄로 못 간다(R31)
+        if (runMode && target instanceof HTMLElement && target.closest(".react-flow__node") !== null) target.blur();
         setSelectedId(nextId);
         // 다음 노드가 임베드 자식이면 childNodes에 선택을 싣는다 — 반대편 state는 전부 해제(단일 선택).
         const isChild = childNodesRef.current.some((node) => node.id === nextId);
@@ -9700,6 +9745,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     selectedId,
     selectedEdgeId,
     readOnly,
+    runMode,
     reactFlow,
     setNodes,
     setChildNodes,

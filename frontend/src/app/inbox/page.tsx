@@ -67,6 +67,7 @@ import {
   formatNotificationBodyParts,
   getNotificationIcon,
   getRunNotificationHref,
+  isRunNotificationInTrash,
   sumRefFixCounts,
 } from "@/lib/notification-format";
 import { filterByQuery } from "@/lib/search";
@@ -84,6 +85,7 @@ import {
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { MarkdownView } from "@/components/markdown-view";
 import { PersonHoverCard } from "@/components/person-hover-card";
+import { RunTrashChip } from "@/components/run/run-trash-chip";
 import { SearchBox } from "@/components/search-box";
 import { TimePills } from "@/components/time-pills";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
@@ -732,6 +734,7 @@ export default function InboxPage() {
                             <TypeIcon size={14} strokeWidth={1.5} className="text-ink-tertiary" />
                             {/* 유형 라벨 — 언어 토글 반영 (notification-format) */}
                             <span className="text-fine text-ink-tertiary">{view.label}</span>
+                            {isRunNotificationInTrash(n) && <RunTrashChip dataId={`inbox-notif-trash-${n.id}`} />}
                           </span>
                           {n.read ? (
                             <span className="text-fine text-ink-tertiary">{t("notices.read")}</span>
@@ -1124,7 +1127,15 @@ function NotificationDetail({
         {/* 절대 시각(KST) — 상대 필과 병기 */}
         <span className="text-fine text-ink-tertiary">{formatKst(notification.created_at)}</span>
       </div>
-      {runHref ? (
+      {isRunNotificationInTrash(notification) ? (
+        // 맵이 휴지통이면 실행도 맵도 열리지 않는다 — 이동 버튼 대신 사정을 적는다
+        <p
+          data-id="notif-run-in-trash"
+          className="mt-4 rounded-sm border border-notice-border bg-notice px-3 py-2 text-caption text-warn"
+        >
+          {t("notif.runInTrashHint")}
+        </p>
+      ) : runHref ? (
         <Link
           href={runHref}
           data-id="notif-run-open"

@@ -1,4 +1,4 @@
-// 실행 범례 — 맵 화면 실행 모드에서 캔버스 왼쪽 아래(미니맵 위) 칩. 펼치면 노드 상태 6종과 연결선 5종의 뜻을 보인다.
+// 실행 범례 — 맵 화면 실행 모드에서 캔버스 왼쪽 아래(미니맵 위) 칩. 펼치면 노드 상태 6종과 연결선 5종의 뜻, 키보드 이동을 보인다.
 // 실행 모드에선 흐름 펄스 범례(PulseLegend) 대신 나온다. React Flow `Panel`이라 <ReactFlow> 안에서만 쓴다(에디터 page.tsx).
 "use client";
 
@@ -7,6 +7,7 @@ import { ChevronDown, ChevronUp, ListChecks } from "lucide-react";
 
 import { runNodeStyle } from "@/components/process-node";
 import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n-messages";
 import type { RunEdgeKind, RunNodeStatus } from "@/lib/run-graph";
 import { RUN_EDGE_LOOK } from "@/lib/run-view";
 
@@ -19,6 +20,14 @@ interface RunLegendProps {
 const ABOVE_MINIMAP_PX = 128;
 const STATUS_ORDER: readonly RunNodeStatus[] = ["waiting", "ready", "active", "done", "problem", "skipped"];
 const EDGE_ORDER: readonly RunEdgeKind[] = ["past", "now", "prob", "fut", "skip"];
+// 실행 모드 캔버스 키(page.tsx 실행 키보드 이동·Tab 흐름 이동, 버튼 줄 run-action-bar) — 키 표기는 언어와 무관하다
+const KEY_ROWS: readonly { keys: string; label: MessageKey }[] = [
+  { keys: "← ↑ → ↓", label: "run.legend.key.arrows" },
+  { keys: "Tab ⇧Tab", label: "run.legend.key.tab" },
+  { keys: "N ⇧N", label: "run.legend.key.todo" },
+  { keys: "Enter", label: "run.legend.key.enter" },
+  { keys: "Esc", label: "run.legend.key.esc" },
+];
 
 export function RunLegend({ open, onToggle }: RunLegendProps) {
   const { t } = useI18n();
@@ -67,6 +76,19 @@ export function RunLegend({ open, onToggle }: RunLegendProps) {
                     <span className="font-semibold text-ink">{t(`run.legend.edge.${kind}`)}</span>{" "}
                     <span className="text-ink-tertiary">{t(`run.legend.edgeDesc.${kind}`)}</span>
                   </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mb-1.5 mt-3 border-t border-divider pt-2 text-fine font-semibold text-ink-tertiary">
+              {t("run.legend.keyHeading")}
+            </p>
+            <ul data-id="run-legend-keys" className="flex flex-col gap-1">
+              {KEY_ROWS.map((row) => (
+                <li key={row.keys} className="flex items-start justify-between gap-3 text-caption">
+                  <span className="min-w-0 text-ink-secondary">{t(row.label)}</span>
+                  <kbd className="shrink-0 rounded-xs border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-tertiary">
+                    {row.keys}
+                  </kbd>
                 </li>
               ))}
             </ul>

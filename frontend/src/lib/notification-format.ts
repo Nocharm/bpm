@@ -118,12 +118,21 @@ function getRunBodyKey(type: string, p: NotificationPayload): string {
   return `notifBody.${type}`;
 }
 
-/** 실행 알림이 가리키는 실행 화면 주소 — run_ 유형이고 맵·버전·실행 id가 다 있을 때만, 아니면 null(인박스로 간다). */
+/** 맵이 휴지통(삭제 대기)에 있는 실행 알림 — 실행을 열 수 없어 줄을 흐리게 하고 누르기를 끈다(맵을 복구하면 풀린다). */
+export function isRunNotificationInTrash(item: NotificationItem): boolean {
+  return item.type.startsWith("run_") && item.map_in_trash === true;
+}
+
+/**
+ * 실행 알림이 가리키는 실행 화면 주소 — run_ 유형이고 맵·버전·실행 id가 다 있을 때만, 아니면 null(인박스로 간다).
+ * 맵이 휴지통에 있으면 그 실행 화면이 열리지 않으므로 null이다.
+ */
 export function getRunNotificationHref(item: NotificationItem): string | null {
   const runId = item.payload?.run_id;
   if (!item.type.startsWith("run_") || item.map_id === null || item.version_id === null || runId === undefined) {
     return null;
   }
+  if (item.map_in_trash) return null;
   return buildRunHref(item.map_id, item.version_id, runId);
 }
 

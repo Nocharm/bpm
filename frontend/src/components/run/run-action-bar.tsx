@@ -35,6 +35,7 @@ import {
   hasRunChildProgress,
   isRunCanvasEnterTarget,
   isRunKeyAutoRepeat,
+  isRunScopeAllDone,
   pickAutoAdvance,
   placeRunBar,
   placeRunPop,
@@ -229,6 +230,9 @@ const BUTTON_BASE =
   "inline-flex h-7 max-w-[180px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 text-caption " +
   "transition-colors duration-150 disabled:cursor-wait disabled:opacity-60";
 
+// 버튼 줄 안에서 포커스를 옮기는 키
+const BAR_MOVE_KEYS: ReadonlySet<string> = new Set(["ArrowLeft", "ArrowRight", "Home", "End"]);
+
 function getActionDataId(button: ActionButton): string {
   if (button.edgeId !== undefined) return `run-act-branch-${button.edgeId}`;
   if (button.exitKey !== undefined) return `run-act-exit-${button.exitKey}`;
@@ -351,6 +355,14 @@ function RunActionBarBody({
       const hostLabel = readNodeLabel(storeApi.getState().nodeLookup, scopePath);
       onToast(t("run.act.hostDone", { title: getRunNodeTitle(graphs, scopePath, hostLabel) }));
     }
+    // 하위 맵은 끝났는데 바깥이 갈래 없이 갈라지는(레거시 택일) 하위프로세스라 자동 완료가 갈 길을 못 정했다 —
+    // 바깥 노드로 옮겨 갈래 버튼을 바로 보인다(완료를 다시 찾아 누르지 않게)
+    if (scopePath !== "" && after.get(scopePath) === "active" && isRunScopeAllDone(after, scopePath)) {
+      const hostLabel = readNodeLabel(storeApi.getState().nodeLookup, scopePath);
+      onToast(t("run.act.hostChoose", { title: getRunNodeTitle(graphs, scopePath, hostLabel) }));
+      onSelect(scopePath, { flash: true, reveal: true });
+      return;
+    }
     const advance = pickAutoAdvance(findOpenedNodeIds(before, Object.fromEntries(after)));
     if (advance.select !== null) {
       onSelect(advance.select, { flash: true, reveal: true });
@@ -391,10 +403,22 @@ function RunActionBarBody({
   };
 
   // 버튼 줄 위 Esc — 열린 팝오버가 있으면 닫고, 없으면 포커스를 캔버스의 그 노드로 돌린다(선택은 그대로, R31).
-  // 눌러 둔 Enter·Space의 반복은 막는다 — 버튼의 기본 동작(누르기)이 반복마다 일어나 단계가 이어 완료됐다
+  // ←/→(Home/End)는 버튼 사이를 옮긴다(끝에서 돌아 감는다). 눌러 둔 Enter·Space의 반복은 막는다 — 버튼의 기본 동작(누르기)이
+  // 반복마다 일어나 단계가 이어 완료됐다
   const handleBarKeyDown = (event: ReactKeyboardEvent) => {
     if (isRunKeyAutoRepeat(event)) {
       event.preventDefault();
+      return;
+    }
+    if (BAR_MOVE_KEYS.has(event.key)) {
+      const buttons = [...(barRef.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? [])];
+      const at = buttons.findIndex((button) => button === document.activeElement);
+      if (buttons.length === 0 || at < 0) return;
+      event.preventDefault();
+      const last = buttons.length - 1;
+      const next =
+        event.key === "Home" ? 0 : event.key === "End" ? last : event.key === "ArrowLeft" ? (at === 0 ? last : at - 1) : at === last ? 0 : at + 1;
+      buttons[next].focus({ preventScroll: true });
       return;
     }
     if (event.key !== "Escape") return;
@@ -719,18 +743,23 @@ function WhyPop({
   );
 }
 
-/** 한 줄 입력 + 남기기 — Enter로 보낸다(한글 조합 중 제외). 열리자마자 입력을 받는다. onSend가 true면 칸을 비운다. */
+/**
+ * 한 줄 입력 + 남기기 — Enter로 보낸다(한글 조합 중 제외). 열리자마자 입력을 받는다. onSend가 true면 칸을 비운다.
+ * 비었거나 공백뿐이면 보내지 않고 onEmpty로 알린다(서버도 공백뿐인 코멘트를 422로 막는다).
+ */
 function RunLineInput({
   dataId,
   label,
   placeholder,
   onSend,
+  onEmpty,
   skip,
 }: {
   dataId: string;
   label: string;
   placeholder: string;
   onSend: (body: string) => Promise<boolean>;
+  onEmpty: () => void;
   skip?: { label: string; onSkip: () => void };
 }) {
   const { t } = useI18n();
@@ -742,12 +771,13 @@ function RunLineInput({
     inputRef.current?.focus({ preventScroll: true });
   }, []);
   const send = async () => {
+    if (sending) return;
     const body = draft.trim();
     if (!body) {
       inputRef.current?.focus({ preventScroll: true });
+      onEmpty();
       return;
     }
-    if (sending) return;
     setSending(true);
     const ok = await onSend(body);
     setSending(false);
@@ -768,7 +798,8 @@ function RunLineInput({
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.nativeEvent.isComposing) {
             event.preventDefault();
-            void send();
+            // 눌러 둔 Enter의 반복은 무시 — 보낸 뒤 빈 칸에서 반복이 "빈 코멘트" 토스트를 쌓았다
+            if (!event.repeat) void send();
           }
         }}
         className="w-full rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink outline-none focus:border-accent"
@@ -784,11 +815,15 @@ function RunLineInput({
             {skip.label}
           </button>
         )}
+        {/* 비었을 때도 누를 수 있게 둔다 — 눌러도 아무 일이 없으면 왜 안 되는지 모른다(흐리게 + 토스트로 알린다) */}
         <button
           type="button"
           data-id={`${dataId}-submit`}
-          disabled={sending || draft.trim() === ""}
-          className="rounded-sm bg-accent px-2.5 py-1 text-fine font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-50"
+          disabled={sending}
+          aria-disabled={draft.trim() === "" || undefined}
+          className={`rounded-sm bg-accent px-2.5 py-1 text-fine font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-50 ${
+            draft.trim() === "" ? "opacity-50" : ""
+          }`}
           onClick={() => void send()}
         >
           {t("run.pop.send")}
@@ -841,6 +876,7 @@ function NotePop({
         label={t("run.pop.noteLabel")}
         placeholder={t(isSolo ? "run.pop.notePlaceholderSolo" : "run.pop.notePlaceholder")}
         onSend={sendNote}
+        onEmpty={() => onToast(t("run.pop.emptyBody"), "error")}
         skip={{ label: t("run.pop.noteSkip"), onSkip: onClose }}
       />
     </>
@@ -930,6 +966,7 @@ function CommentsPop({
           label={t("run.pop.commentLabel")}
           placeholder={t("run.pop.commentPlaceholder")}
           onSend={sendComment}
+          onEmpty={() => onToast(t("run.pop.emptyBody"), "error")}
         />
       )}
     </>
