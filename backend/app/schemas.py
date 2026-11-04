@@ -3090,5 +3090,8 @@ class RunCreateIn(BaseModel):
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
     version_id: int
     scope: Literal["solo", "shared"]
-    # 공유일 때만 쓴다 — 시작한 사람은 자동으로 들어가고 중복은 서비스가 접는다. 컬럼 길이(100)만큼만 받는다
-    participants: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]] = []
+    # 공유일 때만 쓴다 — 시작한 사람은 자동으로 들어가고 중복은 서비스가 접는다.
+    # 항목은 컬럼 길이(100)만큼, 목록은 100명까지만 받는다
+    participants: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]] = Field(
+        default_factory=list, max_length=100
+    )

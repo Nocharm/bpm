@@ -3,15 +3,18 @@
 Task 4 이후 테스트도 같은 시드를 쓴다. 맵 이름·노드 id는 세션 공유 DB에서 충돌하지 않게 호출자가 고유하게 준다.
 """
 
+import asyncio
 import copy
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.db import SessionLocal
 from app.main import app
+from app.models import Employee
 from app.settings import settings
 
 CASES_PATH = Path(__file__).parent / "fixtures" / "run_graph_cases.json"
@@ -40,6 +43,33 @@ def enforce_permissions(client: TestClient) -> Iterator[None]:
     yield
     settings.auth_enabled, settings.dev_enforce_permissions, settings.bpm_sysadmins = prev
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def seed_employee() -> Iterator[Callable[..., None]]:
+    """직원 행을 만들고 테스트가 끝나면 지운다 — 활성 직원이 남으면 공지 수신자 수를 세는 테스트가 오염된다."""
+    created: list[str] = []
+
+    def _seed(login_id: str, *, active: bool = True) -> None:
+        async def _run() -> None:
+            async with SessionLocal() as session:
+                session.add(Employee(login_id=login_id, name=login_id, source="local", active=active))
+                await session.commit()
+
+        asyncio.run(_run())
+        created.append(login_id)
+
+    yield _seed
+
+    async def _cleanup() -> None:
+        async with SessionLocal() as session:
+            for login_id in created:
+                found = await session.get(Employee, login_id)
+                if found is not None:
+                    await session.delete(found)
+            await session.commit()
+
+    asyncio.run(_cleanup())
 
 
 def _build_graph_payload(graph: dict, version_id: int) -> tuple[dict, dict[str, str]]:

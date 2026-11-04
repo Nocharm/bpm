@@ -23,7 +23,7 @@ from app.models import (
     RunParticipant,
     RunScope,
 )
-from app.permissions.access import get_effective_role
+from app.permissions.access import get_effective_role, get_eligible_users
 from app.permissions.logic import role_rank
 from app.run_graph import RunGraph, RunScopeState, count_run_progress
 from app.schemas import (
@@ -236,15 +236,24 @@ async def _assert_version_runnable(session: AsyncSession, map_id: int, version_i
         raise HTTPException(status_code=422, detail=ERR_NEEDS_PUBLISHED)
 
 
-async def _resolve_participants(session: AsyncSession, map_id: int, user: str, body: RunCreateIn) -> list[str]:
-    """공유 실행의 초대 대상 — 시작한 사람과 중복을 접고, 맵을 볼 수 없는 사람이 있으면 422."""
+def _list_invited(user: str, body: RunCreateIn) -> list[str]:
+    """공유 실행의 초대 대상 — 시작한 사람과 중복을 접는다. 개인 실행은 초대가 없다."""
     if body.scope != "shared":
         return []
-    logins = list(dict.fromkeys(login for login in body.participants if login != user))
+    return list(dict.fromkeys(login for login in body.participants if login != user))
+
+
+async def ensure_eligible_participants(session: AsyncSession, map_id: int, logins: list[str]) -> None:
+    """참여자는 맵을 볼 수 있는 재직 직원이어야 한다 — 아니면 422 (design §4.4, 후보 = `get_eligible_users`).
+
+    공개 맵은 유효 역할만 보면 아무 문자열이나 viewer라서, 직원 명단(퇴직자 제외)과 맞춰 본다.
+    """
+    if not logins:
+        return
+    eligible = {emp.login_id for emp in await get_eligible_users(session, map_id)}
     for login in logins:
-        if role_rank(await get_effective_role(session, login, map_id)) < role_rank("viewer"):
+        if login not in eligible:
             raise HTTPException(status_code=422, detail=ERR_PARTICIPANT_ACCESS.format(login=login))
-    return logins
 
 
 async def _assert_open_cap(session: AsyncSession, map_id: int, user: str, scope: str) -> None:
@@ -264,12 +273,14 @@ async def _assert_open_cap(session: AsyncSession, map_id: int, user: str, scope:
 
 
 async def create_run(session: AsyncSession, map_id: int, user: str, body: RunCreateIn) -> Run:
-    # 맵 행 잠금(postgres) — 같은 맵에서 동시에 만들어도 상한 검사를 한 건씩 지나게 한다
-    found_map = await load_live_map(session, map_id, lock=True)
+    found_map = await load_live_map(session, map_id)
     if found_map.mode == "framework":
         raise HTTPException(status_code=422, detail=ERR_FRAMEWORK)
     await _assert_version_runnable(session, map_id, body.version_id)
-    invited = await _resolve_participants(session, map_id, user, body)
+    invited = _list_invited(user, body)
+    await ensure_eligible_participants(session, map_id, invited)  # 무거운 명단 조회는 잠금 전에 끝낸다
+    # 맵 행 잠금(postgres) — 같은 맵에서 동시에 만들어도 상한 검사를 한 건씩 지나게 한다
+    await load_live_map(session, map_id, lock=True)
     await _assert_open_cap(session, map_id, user, body.scope)
     run = Run(map_id=map_id, version_id=body.version_id, name=body.name, scope=body.scope, starter=user)
     session.add(run)

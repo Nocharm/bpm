@@ -162,20 +162,57 @@ def test_create_rejects_framework_map(client: TestClient, monkeypatch: pytest.Mo
 
 
 def test_shared_run_participant_must_view_map(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, enforce_permissions: None
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, enforce_permissions: None, seed_employee: Callable[..., None]
 ) -> None:
     seeded = _seed(client, monkeypatch, "participant access")
+    seed_employee("outsider.lee")  # 재직 직원이어도 비공개 맵 권한이 없으면 후보가 아니다
 
     res = _create_run(client, seeded, seeded["owner"], scope="shared", participants=["outsider.lee"])
 
     assert (res.status_code, res.json()["detail"]) == (422, "participant outsider.lee cannot view this map")
 
 
-def test_shared_run_participants_are_deduped_and_include_starter(
+def test_shared_run_rejects_non_employee_on_public_map(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, enforce_permissions: None
+) -> None:
+    seeded = _seed(client, monkeypatch, "participant ghost", visibility="public")
+
+    res = _create_run(client, seeded, seeded["owner"], scope="shared", participants=["ghost.nobody"])
+
+    assert (res.status_code, res.json()["detail"]) == (422, "participant ghost.nobody cannot view this map")
+
+
+def test_shared_run_rejects_inactive_employee(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, enforce_permissions: None, seed_employee: Callable[..., None]
+) -> None:
+    seeded = _seed(client, monkeypatch, "participant retired", visibility="public")
+    seed_employee("retired.kim", active=False)
+    seed_employee("active.kim")
+
+    res = _create_run(client, seeded, seeded["owner"], scope="shared", participants=["active.kim", "retired.kim"])
+
+    assert (res.status_code, res.json()["detail"]) == (422, "participant retired.kim cannot view this map")
+
+
+def test_shared_run_participants_are_capped_at_100(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    seeded = _seed(client, monkeypatch, "participant cap")
+
+    too_many = _create_run(client, seeded, "cap.starter", scope="shared", participants=[f"p{n}" for n in range(101)])
+    at_limit = _create_run(client, seeded, "cap.starter", scope="shared", participants=[f"p{n}" for n in range(100)])
+
+    assert too_many.status_code == 422
+    assert isinstance(too_many.json()["detail"], list)  # 요청 모양 검사(pydantic)에서 막힌다
+    # 100명은 모양 검사를 통과해 서비스의 자격 검사까지 간다(직원이 아니라 거기서 422)
+    assert at_limit.json()["detail"] == "participant p0 cannot view this map"
+
+
+def test_shared_run_participants_are_deduped_and_include_starter(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, enforce_permissions: None, seed_employee: Callable[..., None]
 ) -> None:
     seeded = _seed(client, monkeypatch, "participant dedupe", visibility="public")
     starter = seeded["owner"]
+    seed_employee("pub.a")
+    seed_employee("pub.b")
 
     res = _create_run(client, seeded, starter, scope="shared", participants=["pub.a", "pub.a", starter, "pub.b"])
 
@@ -261,9 +298,10 @@ def test_solo_run_hidden_from_others(
 
 
 def test_shared_run_is_readable_by_non_participant_viewers(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, enforce_permissions: None
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, enforce_permissions: None, seed_employee: Callable[..., None]
 ) -> None:
     seeded = _seed(client, monkeypatch, "shared read", visibility="public")
+    seed_employee("read.member")
     run_id = _create_run(client, seeded, "read.starter", scope="shared", participants=["read.member"]).json()["id"]
 
     res = client.get(f"/api/runs/{run_id}", headers=as_user(client, "read.bystander"))
@@ -289,10 +327,11 @@ def test_map_owner_can_keep_shared_but_not_solo(
 
 
 def test_participant_without_access_cannot_open(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, enforce_permissions: None
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, enforce_permissions: None, seed_employee: Callable[..., None]
 ) -> None:
     seeded = _seed(client, monkeypatch, "access lost")
     owner, member = as_user(client, seeded["owner"]), "lost.member"
+    seed_employee(member)
     grant = client.post(
         f"/api/maps/{seeded['map_id']}/permissions",
         json={"principal_type": "user", "principal_id": member, "role": "viewer"},
@@ -309,9 +348,12 @@ def test_participant_without_access_cannot_open(
     assert (res.status_code, res.json()["detail"]) == (404, f"run {run_id} not found")
 
 
-def test_list_tabs_and_filters(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_tabs_and_filters(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, seed_employee: Callable[..., None]
+) -> None:
     seeded = _seed(client, monkeypatch, "list filters")
     a, b = "list.user.a", "list.user.b"
+    seed_employee(b)
     solo_a = _create_run(client, seeded, a, name="Alpha solo").json()["id"]
     shared_a = _create_run(client, seeded, a, name="Beta shared", scope="shared", participants=[b]).json()["id"]
     solo_b = _create_run(client, seeded, b, name="Gamma solo b").json()["id"]
