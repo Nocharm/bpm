@@ -2128,6 +2128,14 @@ class AppSettingsOut(BaseModel):
     ai_chat_max_sessions_per_map: int
     ai_chat_max_messages_per_session: int
     ai_chat_retention_days: int
+    # 실행 체크(Run) 정리 기준 — 방치 경고/자동 중지/요약 일수, 열린 실행·보관 상한 (design 2026-11-04)
+    run_idle_warn_days: int
+    run_idle_stop_days: int
+    run_summary_days: int
+    run_open_solo_cap: int
+    run_open_shared_cap: int
+    run_keep_shared_cap: int
+    run_keep_solo_cap: int
     # 관리자 런타임 AI 차단 — true면 env AI_ENABLED와 무관하게 전 AI 표면 503 (2026-07-30)
     ai_access_disabled: bool = False
     # 부서장으로 노출할 EDW 직책(FRNM) allowlist — /api/me manager_ids 산출 기준 (설계 2026-08-11 §5)
@@ -2150,6 +2158,13 @@ class AppSettingsUpdate(BaseModel):
     ai_chat_max_sessions_per_map: int | None = Field(default=None, ge=1, le=200)
     ai_chat_max_messages_per_session: int | None = Field(default=None, ge=10, le=2000)
     ai_chat_retention_days: int | None = Field(default=None, ge=7, le=3650)
+    run_idle_warn_days: int | None = Field(default=None, ge=1, le=3650)
+    run_idle_stop_days: int | None = Field(default=None, ge=1, le=3650)
+    run_summary_days: int | None = Field(default=None, ge=1, le=3650)
+    run_open_solo_cap: int | None = Field(default=None, ge=1, le=1000)
+    run_open_shared_cap: int | None = Field(default=None, ge=1, le=1000)
+    run_keep_shared_cap: int | None = Field(default=None, ge=1, le=1000)
+    run_keep_solo_cap: int | None = Field(default=None, ge=1, le=1000)
     ai_access_disabled: bool | None = None
     # 빈 목록 저장 = 전부 비노출(get_exposed_positions가 기본값으로 되돌리지 않음)
     exposed_positions: list[str] | None = Field(default=None, max_length=50)

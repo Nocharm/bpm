@@ -2,6 +2,7 @@
 
 import json
 import re
+from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +33,23 @@ AI_ACCESS_DISABLED_KEY = "ai_access_disabled"
 DEFAULT_AI_CHAT_MAX_SESSIONS = 20
 DEFAULT_AI_CHAT_MAX_MESSAGES = 200
 DEFAULT_AI_CHAT_RETENTION_DAYS = 180
+
+# 실행 체크(Run) 정리 기준 — 방치 경고/자동 중지/요약까지 일수와 열린 실행·보관 상한 (design 2026-11-04)
+RUN_IDLE_WARN_DAYS_KEY = "run_idle_warn_days"
+RUN_IDLE_STOP_DAYS_KEY = "run_idle_stop_days"
+RUN_SUMMARY_DAYS_KEY = "run_summary_days"
+RUN_OPEN_SOLO_CAP_KEY = "run_open_solo_cap"
+RUN_OPEN_SHARED_CAP_KEY = "run_open_shared_cap"
+RUN_KEEP_SHARED_CAP_KEY = "run_keep_shared_cap"
+RUN_KEEP_SOLO_CAP_KEY = "run_keep_solo_cap"
+
+DEFAULT_RUN_IDLE_WARN_DAYS = 30
+DEFAULT_RUN_IDLE_STOP_DAYS = 40
+DEFAULT_RUN_SUMMARY_DAYS = 30
+DEFAULT_RUN_OPEN_SOLO_CAP = 10
+DEFAULT_RUN_OPEN_SHARED_CAP = 30
+DEFAULT_RUN_KEEP_SHARED_CAP = 50
+DEFAULT_RUN_KEEP_SOLO_CAP = 10
 
 # 기본 기능 팁 — 이전 기록 로딩 중 노출되는 서비스 전반 FAQ. 설정 콘솔에서 교체 가능(비우면 기본 복원).
 DEFAULT_AI_CHAT_TIPS = [
@@ -296,4 +314,29 @@ async def get_ai_chat_max_messages(session: AsyncSession) -> int:
 async def get_ai_chat_retention_days(session: AsyncSession) -> int:
     return await _get_int_setting(
         session, AI_CHAT_RETENTION_DAYS_KEY, DEFAULT_AI_CHAT_RETENTION_DAYS
+    )
+
+
+@dataclass(frozen=True)
+class RunLimits:
+    """실행 체크 정리 기준 7종 — 정리 잡·시작 상한 검사가 한 번에 읽는 묶음."""
+
+    idle_warn_days: int
+    idle_stop_days: int
+    summary_days: int
+    open_solo_cap: int
+    open_shared_cap: int
+    keep_shared_cap: int
+    keep_solo_cap: int
+
+
+async def get_run_limits(session: AsyncSession) -> RunLimits:
+    return RunLimits(
+        idle_warn_days=await _get_int_setting(session, RUN_IDLE_WARN_DAYS_KEY, DEFAULT_RUN_IDLE_WARN_DAYS),
+        idle_stop_days=await _get_int_setting(session, RUN_IDLE_STOP_DAYS_KEY, DEFAULT_RUN_IDLE_STOP_DAYS),
+        summary_days=await _get_int_setting(session, RUN_SUMMARY_DAYS_KEY, DEFAULT_RUN_SUMMARY_DAYS),
+        open_solo_cap=await _get_int_setting(session, RUN_OPEN_SOLO_CAP_KEY, DEFAULT_RUN_OPEN_SOLO_CAP),
+        open_shared_cap=await _get_int_setting(session, RUN_OPEN_SHARED_CAP_KEY, DEFAULT_RUN_OPEN_SHARED_CAP),
+        keep_shared_cap=await _get_int_setting(session, RUN_KEEP_SHARED_CAP_KEY, DEFAULT_RUN_KEEP_SHARED_CAP),
+        keep_solo_cap=await _get_int_setting(session, RUN_KEEP_SOLO_CAP_KEY, DEFAULT_RUN_KEEP_SOLO_CAP),
     )

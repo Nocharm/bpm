@@ -1196,3 +1196,100 @@ class KbChunk(Base):
     embedding: Mapped[bytes] = mapped_column(LargeBinary)
     meta: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Run(Base):
+    """실행 체크 한 건 — 게시본 위에서 노드를 밟아 가는 기록. 맵 그래프와 따로 저장한다 (design 2026-11-04)."""
+
+    __tablename__ = "runs"
+    __table_args__ = (Index("ix_runs_map_status", "map_id", "status"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    map_id: Mapped[int] = mapped_column(ForeignKey("process_maps.id", ondelete="CASCADE"), index=True)
+    version_id: Mapped[int] = mapped_column(ForeignKey("map_versions.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(200))
+    scope: Mapped[str] = mapped_column(String(10))  # solo|shared
+    starter: Mapped[str] = mapped_column(String(100), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open|done|stopped|summarized
+    end_reason: Mapped[str | None] = mapped_column(String(20), default=None)  # completed|stopped|auto_stopped
+    keep: Mapped[bool] = mapped_column(Boolean, default=False)  # 보관 표시 — 정리 잡이 요약하지 않는다
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    idle_warned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    summarize_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None, index=True)
+    summary: Mapped[dict | None] = mapped_column(JSON, default=None)  # 요약 뒤 남기는 집계 (세부 행은 지운다)
+
+
+class RunParticipant(Base):
+    """실행 참여자 — 시작한 사람도 한 행을 가진다. muted면 이 실행의 알림을 받지 않는다."""
+
+    __tablename__ = "run_participants"
+    __table_args__ = (UniqueConstraint("run_id", "login_id", name="uq_run_participants_run_login"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
+    login_id: Mapped[str] = mapped_column(String(100), index=True)
+    muted: Mapped[bool] = mapped_column(Boolean, default=False)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class RunNodeState(Base):
+    """노드별 수동 상태·판단 선택·출구 — 나머지(막힘·대기)는 그래프에서 매번 계산해 저장하지 않는다."""
+
+    __tablename__ = "run_node_states"
+    __table_args__ = (UniqueConstraint("run_id", "scope_path", "node_id", name="uq_run_node_states_node"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
+    scope_path: Mapped[str] = mapped_column(String(300), default="")  # ""=최상위, 하위 맵은 SP 노드 id 경로
+    node_id: Mapped[str] = mapped_column(String(50))
+    node_title: Mapped[str] = mapped_column(String(200), default="")  # 맵이 바뀌어도 기록이 읽히도록 복사
+    status: Mapped[str] = mapped_column(String(20))
+    chosen_edge_id: Mapped[str | None] = mapped_column(String(50), default=None)
+    exit_key: Mapped[str | None] = mapped_column(String(200), default=None)
+    updated_by: Mapped[str] = mapped_column(String(100))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class RunScope(Base):
+    """실행이 연 하위 맵 범위 — 첫 동작 때 고정한 버전을 기억한다. closed면 계산에서 건너뛴다."""
+
+    __tablename__ = "run_scopes"
+    __table_args__ = (UniqueConstraint("run_id", "scope_path", name="uq_run_scopes_path"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"))  # 유니크 제약이 인덱스 역할
+    scope_path: Mapped[str] = mapped_column(String(300))
+    version_id: Mapped[int] = mapped_column(ForeignKey("map_versions.id", ondelete="CASCADE"))
+    closed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class RunComment(Base):
+    """노드에 단 실행 코멘트 — 막힘 사유 등을 참여자끼리 주고받는다."""
+
+    __tablename__ = "run_comments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
+    scope_path: Mapped[str] = mapped_column(String(300))
+    node_id: Mapped[str] = mapped_column(String(50))
+    author: Mapped[str] = mapped_column(String(100))
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class RunEvent(Base):
+    """실행 이력 한 줄 — 되돌리기·타임라인의 원장. actor가 None이면 정리 잡이 한 일."""
+
+    __tablename__ = "run_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
+    actor: Mapped[str | None] = mapped_column(String(100), default=None)
+    # start|complete|problem|resolve|unstart|undo|loop|stop|reopen|auto_stop
+    action: Mapped[str] = mapped_column(String(20))
+    scope_path: Mapped[str] = mapped_column(String(300), default="")
+    node_id: Mapped[str | None] = mapped_column(String(50), default=None)
+    node_title: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
