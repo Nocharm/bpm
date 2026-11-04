@@ -77,11 +77,15 @@ def test_empty_user_returns_zeros_and_empty_lists(client: TestClient, enforce: N
         "feedback_mine": 0,
         "feedback_mine_open": 0,
         "last_login_at": None,
+        "runs_open": 0,
+        "runs_problem": 0,
+        "runs_idle": 0,
     }
     assert body["checkouts"] == []
     assert body["requests"] == []
     assert body["recent_events"] == []
     assert body["framework"] == []
+    assert body["runs"] == []
 
 
 def test_activity_counts_after_seeding(client: TestClient) -> None:

@@ -1778,6 +1778,9 @@ class MeDashboardActivityOut(BaseModel):
     feedback_mine: int
     feedback_mine_open: int  # status != done
     last_login_at: datetime | None = None  # 오늘(KST) 이전의 마지막 로그인 기록 — 없으면 None
+    runs_open: int = 0  # 내가 참여한 열린 실행 전체 수(줄 상한과 무관)
+    runs_problem: int = 0  # 그중 문제 노드가 있는 실행
+    runs_idle: int = 0  # 그중 문제는 없고 방치 경고 일수를 넘긴 실행(자동 중단 임박)
 
 
 class MeDashboardCheckoutOut(BaseModel):
@@ -1825,12 +1828,33 @@ class MeDashboardCategoryOut(BaseModel):
     slot_pending_count: int  # 서브트리 카테고리에 걸린 맵의 pending fw_slot 요청 수
 
 
+class MeDashboardRunOut(BaseModel):
+    """내가 참여한 열린 실행 한 줄 — 급한 순(문제 → 방치 → 다음)으로 정렬해 내려 준다 (design 2026-11-04 §4.8)."""
+
+    run_id: int
+    map_id: int
+    map_name: str
+    version_id: int
+    name: str
+    scope: Literal["solo", "shared"]
+    participant_count: int
+    state_kind: Literal["problem", "idle", "next"]
+    state_title: str  # problem: 첫 문제 노드, next: 첫 ready|active 노드. 볼 수 없는 하위 맵 노드는 빈 문자열
+    state_more: int  # state_title 말고 남은 같은 종류 노드 수
+    idle_days: int = 0  # idle일 때만 채운다
+    stop_in_days: int = 0  # idle일 때만 채운다 — 자동 중단까지 남은 날(0이면 곧바로)
+    done: int
+    total: int
+    last_activity_at: datetime
+
+
 class MeDashboardOut(BaseModel):
     activity: MeDashboardActivityOut
     checkouts: list[MeDashboardCheckoutOut] = []
     requests: list[MeDashboardRequestOut] = []
     recent_events: list[MeDashboardEventOut] = []
     framework: list[MeDashboardCategoryOut] = []
+    runs: list[MeDashboardRunOut] = []
 
 
 class EmployeeOut(BaseModel):

@@ -4,6 +4,7 @@
 §4.4(개인·공유와 권한). 코멘트·참여자·중단·보존은 `run_manage.py`가 이어받는다(이 파일의 보기·상한·범위 해석을 그대로 쓴다).
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal
@@ -120,6 +121,18 @@ async def load_version_graph(session: AsyncSession, version_id: int) -> RunGraph
     return RunGraph.from_models(list(nodes), list(edges))
 
 
+def build_scope_state(rows: Iterable[RunNodeState], *, closed: bool = False) -> RunScopeState:
+    """한 범위의 저장 행 → 엔진 입력. 행을 이미 한꺼번에 읽은 호출자(홈 대시보드)가 `load_scope_state`와 같은 규칙을 쓴다."""
+    state = RunScopeState(closed=closed)
+    for row in rows:
+        state.manual[row.node_id] = row.status
+        if row.chosen_edge_id is not None:
+            state.choice[row.node_id] = row.chosen_edge_id
+        if row.exit_key is not None:
+            state.exit[row.node_id] = row.exit_key
+    return state
+
+
 async def load_scope_state(session: AsyncSession, run_id: int, scope_path: str) -> RunScopeState:
     rows = (
         await session.scalars(
@@ -129,14 +142,7 @@ async def load_scope_state(session: AsyncSession, run_id: int, scope_path: str) 
     scope = await session.scalar(
         select(RunScope).where(RunScope.run_id == run_id, RunScope.scope_path == scope_path)
     )
-    state = RunScopeState(closed=scope is not None and scope.closed)
-    for row in rows:
-        state.manual[row.node_id] = row.status
-        if row.chosen_edge_id is not None:
-            state.choice[row.node_id] = row.chosen_edge_id
-        if row.exit_key is not None:
-            state.exit[row.node_id] = row.exit_key
-    return state
+    return build_scope_state(rows, closed=scope is not None and scope.closed)
 
 
 async def _compute_progress(session: AsyncSession, run: Run) -> RunProgressOut:
