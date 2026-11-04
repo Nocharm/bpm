@@ -335,7 +335,9 @@ function FeedbackColumn({ items, error, prefs, onPrefs }: FeedbackColumnProps) {
         dataId="home-inbox-fb-list"
         loading={items === null && !error}
         error={error}
-        empty={shown.length === 0 ? t("home.dash.inbox.fbEmpty") : null}
+        empty={
+          shown.length === 0 ? t((items ?? []).length === 0 ? "home.dash.inbox.fbNone" : "home.dash.inbox.fbEmpty") : null
+        }
       >
         {shown.map((item) => {
           const href = `/feedback?feedback=${item.id}`;
@@ -427,7 +429,13 @@ function ColumnList({ dataId, loading, error, empty, children }: ColumnListProps
   }
   return (
     <ul data-id={dataId} className="max-h-60 overflow-y-auto">
-      {empty !== null ? <li className="px-3 py-4 text-center text-fine text-ink-muted">{empty}</li> : children}
+      {empty !== null ? (
+        <li data-id={`${dataId}-empty`} className="px-3 py-4 text-center text-fine text-ink-muted">
+          {empty}
+        </li>
+      ) : (
+        children
+      )}
     </ul>
   );
 }

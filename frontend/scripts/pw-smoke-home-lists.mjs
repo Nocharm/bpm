@@ -1,7 +1,8 @@
 // 홈 대시보드 펼침 목록 스모크(design 2026-11-04 §4.8) — 타일 5칸(진행 중 실행 · 알림 · 피드백, 옛 미읽음·피드백 타일 없음) →
 // 실행 타일 펼침(필 개수·"곧 중단" = is_idle·정렬 메뉴·기억) → 줄 클릭 "실행 화면(으)로 이동 중" 레이어 → 레이어 클릭 취소 →
 // 다시 눌러 기다리면 실행 화면 → 알림·피드백 타일로 바꾸면 실행 칸이 접히고 좌우 목록 → 알림 줄 대기 중 타일 전환 = 이동 취소(안 읽음 유지) →
-// 실행 알림 줄 이동 뒤 미읽음 수 감소 → "모두 읽음"(바로) → "+ 새 피드백"(바로 쓰기 패널) → 다른 IconPillFilter 화면 3곳. 콘솔 에러 0.
+// 실행 알림 줄 이동 뒤 미읽음 수 감소 → "모두 읽음"(바로) → "+ 새 피드백"(바로 쓰기 패널) → 미읽음 0인 홈에서도 알림 · 피드백 타일 펼침(R34,
+// 미읽음 필 빈 줄·전체 필 읽은 줄) → 다른 IconPillFilter 화면 3곳. 콘솔 에러 0.
 // 실행(frontend/ 에서):
 //   bash       BASE_URL=http://localhost:3047 API_URL=http://localhost:8048 node scripts/pw-smoke-home-lists.mjs
 //   PowerShell $env:BASE_URL="http://localhost:3047"; $env:API_URL="http://localhost:8048"; node scripts\pw-smoke-home-lists.mjs
@@ -262,7 +263,24 @@ try {
   await page.waitForTimeout(400);
   check("inbox: tile at 0 still collapses its open list", (await inboxPanel.count()) === 0);
 
-  // 9) 같은 IconPillFilter를 쓰는 화면 3곳이 그대로 뜬다(개수 없음)
+  // 9) 미읽음 0으로 새로 연 홈에서도 알림 · 피드백 타일은 펼친다(R34) — 미읽음 필은 빈 줄, 전체 필은 읽은 줄
+  await gotoHome();
+  check("inbox: dashboard says 0 unread", (await readTileValue("home-activity-inbox")) === 0);
+  await page.locator('[data-id="home-activity-inbox"]').click();
+  await inboxPanel.waitFor();
+  await page.locator('[data-id="home-inbox-noti-list"]').waitFor();
+  check("inbox: opens with 0 unread (R34)", (await page.locator('[data-id="home-activity-inbox"]').getAttribute("aria-pressed")) === "true");
+  check(
+    "inbox: unread pill shows its empty line",
+    ((await page.locator('[data-id="home-inbox-noti-list-empty"]').textContent()) ?? "").includes("안 읽은 알림이 없어요"),
+  );
+  await page.locator('[data-id="home-inbox-noti-read-all"]').click();
+  const readRows = page.locator('[data-id^="home-inbox-noti-row-"]');
+  check("inbox: all pill shows read rows", (await readRows.count()) > 0 && (await page.locator('[data-id^="home-inbox-noti-row-"][data-unread]').count()) === 0);
+  await page.waitForTimeout(400); // 펼침·필 라벨 애니메이션이 끝난 뒤 캡처
+  await page.screenshot({ path: `${OUT}/home-inbox-zero.png` });
+
+  // 10) 같은 IconPillFilter를 쓰는 화면 3곳이 그대로 뜬다(개수 없음)
   for (const path of ["/inbox", "/feedback", "/notices"]) {
     await page.goto(`${BASE}${path}`);
     await page.waitForTimeout(1200);

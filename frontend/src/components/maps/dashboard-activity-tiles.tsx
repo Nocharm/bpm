@@ -125,7 +125,8 @@ interface TileGridProps {
 function TileGrid({ a, waiting, unread, open, onToggle }: TileGridProps) {
   const { t } = useI18n();
   const inbox = { href: "/inbox", label: t("home.dash.navGoing", { dest: t("home.dash.destInbox") }) };
-  // 0이면 펼치지 않는다 — 단, 펼친 채 0이 되면(모두 읽음) 다시 눌러 접을 수 있게 둔다
+  // Check out·실행 타일은 0이면 펼치지 않는다(펼친 채 0이 되면 다시 눌러 접을 수 있게 둔다). 알림 · 피드백 타일은 읽은 알림(전체 필)과
+  // 내 피드백도 보여 주므로 수와 상관없이 늘 펼친다(R34)
   const toggleFor = (key: PanelKey, value: number) => (value > 0 || open === key ? () => onToggle(key) : undefined);
   const runIssues = a.runs_problem + a.runs_idle;
   return (
@@ -187,7 +188,7 @@ function TileGrid({ a, waiting, unread, open, onToggle }: TileGridProps) {
         unit={t("home.dash.tileInboxUnit")}
         sub={t("home.dash.tileInboxSub", { n: a.feedback_mine_open })}
         pressed={open === "inbox"}
-        onClick={toggleFor("inbox", unread)}
+        onClick={() => onToggle("inbox")}
       />
     </div>
   );
