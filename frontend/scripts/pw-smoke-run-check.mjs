@@ -48,6 +48,7 @@ async function pickUserB(directory) {
   const wanted = process.env.USER_B ?? "bora.hong";
   const candidates = [wanted, ...directory.users.map((u) => u.id).filter((id) => id !== wanted && id !== USER_A)];
   for (const id of candidates.slice(0, 40)) {
+    await purgeRunNotifications([id]); // 지난 회차가 남긴 실행 알림을 먼저 지우고 센다
     if ((await listNotifications(id)).length < NOTIFICATION_ROOM) return id;
   }
   throw new Error("no seeded user below the notification cap for USER_B");
@@ -80,9 +81,6 @@ const nid = (key) => `${PREFIX}${tag}-${key}`;
 const directory = await api(USER_A, "GET", "/directory");
 const me = directory.users.find((u) => u.id === USER_A) ?? directory.users[0];
 if (!me?.org_path) throw new Error("no org_path in directory — seed the directory first");
-const USER_B = await pickUserB(directory);
-await purgeMaps();
-await purgeRunNotifications([USER_A, USER_B]);
 
 async function createPublishedMap(name, nodes, edges) {
   const map = await api(USER_A, "POST", "/maps", { name, owning_department: me.org_path, visibility: "public" });
@@ -106,49 +104,60 @@ const edge = (key, source, target, extra = {}) => ({
   ...extra,
 });
 
-// 하위 맵: 시작 → 측정 → 끝 (게시 + 하위프로세스 지정)
-const child = await createPublishedMap(
-  `${PREFIX}${tag} 품질 시험`,
-  [node("cs", "시작", 0, 100, { node_type: "start" }), node("c1", "측정", 220, 100), node("ce", "", 440, 100, { node_type: "end" })],
-  [edge("c1", "cs", "c1"), edge("c2", "c1", "ce")],
-);
-await api(USER_A, "PUT", `/maps/${child.mapId}/subprocess-designation`, { department: me.department || "QA" });
+// 하위 맵(시작 → 측정 → 끝, 게시 + 하위프로세스 지정)과 바깥 맵
+// (시작 → 접수 → 서류 검토 → 판정?(합격 → 시료 채취 → 품질 시험(하위프로세스) → 끝 / 불합격 → 반품 처리 → 반품 끝))
+async function seedMaps() {
+  const childMap = await createPublishedMap(
+    `${PREFIX}${tag} 품질 시험`,
+    [node("cs", "시작", 0, 100, { node_type: "start" }), node("c1", "측정", 220, 100), node("ce", "", 440, 100, { node_type: "end" })],
+    [edge("c1", "cs", "c1"), edge("c2", "c1", "ce")],
+  );
+  await api(USER_A, "PUT", `/maps/${childMap.mapId}/subprocess-designation`, { department: me.department || "QA" });
+  const parentMap = await createPublishedMap(
+    `${PREFIX}${tag} 입고 검사`,
+    [
+      node("s", "시작", 0, 220, { node_type: "start" }),
+      node("a", "접수", 200, 220),
+      node("b", "서류 검토", 420, 220),
+      node("d", "판정?", 650, 200, { node_type: "decision" }),
+      node("c", "시료 채취", 880, 220),
+      node("sp", "품질 시험", 1100, 220, { node_type: "subprocess", linked_map_id: childMap.mapId, follow_latest: true }),
+      node("e", "", 1340, 220, { node_type: "end", is_primary_end: true }),
+      node("r", "반품 처리", 880, 420),
+      node("re", "반품 끝", 1100, 420, { node_type: "end" }),
+    ],
+    [
+      edge("sa", "s", "a"),
+      edge("ab", "a", "b"),
+      edge("bd", "b", "d"),
+      edge("dc", "d", "c", { label: "합격" }),
+      edge("dr", "d", "r", { label: "불합격" }),
+      edge("csp", "c", "sp"),
+      edge("spe", "sp", "e", { source_handle: "__primary__" }),
+      edge("rre", "r", "re"),
+    ],
+  );
+  return { child: childMap, parent: parentMap };
+}
 
-// 바깥 맵: 시작 → 접수 → 서류 검토 → 판정?(합격 → 시료 채취 → 품질 시험(하위프로세스) → 끝 / 불합격 → 반품 처리 → 반품 끝)
-const parent = await createPublishedMap(
-  `${PREFIX}${tag} 입고 검사`,
-  [
-    node("s", "시작", 0, 220, { node_type: "start" }),
-    node("a", "접수", 200, 220),
-    node("b", "서류 검토", 420, 220),
-    node("d", "판정?", 650, 200, { node_type: "decision" }),
-    node("c", "시료 채취", 880, 220),
-    node("sp", "품질 시험", 1100, 220, { node_type: "subprocess", linked_map_id: child.mapId, follow_latest: true }),
-    node("e", "", 1340, 220, { node_type: "end", is_primary_end: true }),
-    node("r", "반품 처리", 880, 420),
-    node("re", "반품 끝", 1100, 420, { node_type: "end" }),
-  ],
-  [
-    edge("sa", "s", "a"),
-    edge("ab", "a", "b"),
-    edge("bd", "b", "d"),
-    edge("dc", "d", "c", { label: "합격" }),
-    edge("dr", "d", "r", { label: "불합격" }),
-    edge("csp", "c", "sp"),
-    edge("spe", "sp", "e", { source_handle: "__primary__" }),
-    edge("rre", "r", "re"),
-  ],
-);
-const eligible = await api(USER_A, "GET", `/maps/${parent.mapId}/eligible-approvers`);
-if (!eligible.some((u) => u.id === USER_B)) throw new Error(`${USER_B} cannot be a participant of map ${parent.mapId}`);
-const baseDash = (await api(USER_B, "GET", "/me/dashboard")).activity;
+// 시드가 B로 볼 수 있는 공개 게시본인지 — B 입장에서 다시 읽어 확인한다
+async function isPublicPublished(mapId, versionId) {
+  const detail = await api(USER_B, "GET", `/maps/${mapId}`);
+  return detail.visibility === "public" && detail.versions.some((v) => v.id === versionId && v.status === "published");
+}
+
 const runName = `${PREFIX}${tag} LOT 2611-07`;
 const memo = "라벨 인쇄가 흐려요";
-check("seeded public maps", true, `child ${child.mapId} parent ${parent.mapId} · B=${USER_B}`);
-
-// ---- 브라우저(사용자마다 컨텍스트 하나) ----
-const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const consoleErrors = [];
+let USER_B = null;
+let browser = null;
+let pageA = null;
+let pageB = null;
+let runId = null;
+let bar = null;
+let pop = null;
+
+// 브라우저는 사용자마다 컨텍스트 하나
 async function openPage(devUser) {
   const ctx = await browser.newContext({ viewport: { width: 1480, height: 950 } });
   await ctx.addInitScript((user) => {
@@ -162,12 +171,6 @@ async function openPage(devUser) {
   page.on("pageerror", (err) => consoleErrors.push(`${devUser}: ${String(err)}`));
   return page;
 }
-const pageA = await openPage(USER_A);
-let pageB = null;
-let runId = null;
-
-const bar = pageA.locator('[data-id="run-action-bar"]');
-const pop = pageA.locator('[data-id="run-pop"]');
 const nodeEl = (page, key) => page.locator(`.react-flow__node[data-id="${key}"]`);
 
 async function barButtons() {
@@ -205,6 +208,25 @@ async function waitFlash(key) {
 }
 
 try {
+  // 0) 시작 정리(지난 회차 알림을 지운 뒤 B를 고른다) → 시드 — 시드가 실패해도 아래 finally가 접두로 정리한다
+  await purgeRunNotifications([USER_A]);
+  USER_B = await pickUserB(directory);
+  await purgeMaps();
+  const { child, parent } = await seedMaps();
+  const eligible = await api(USER_A, "GET", `/maps/${parent.mapId}/eligible-approvers`);
+  if (!eligible.some((u) => u.id === USER_B)) throw new Error(`${USER_B} cannot be a participant of map ${parent.mapId}`);
+  check(
+    "seed: both maps are public published versions B can open",
+    (await isPublicPublished(child.mapId, child.versionId)) && (await isPublicPublished(parent.mapId, parent.versionId)),
+    `child ${child.mapId} parent ${parent.mapId} · B=${USER_B}`,
+  );
+  const baseDash = (await api(USER_B, "GET", "/me/dashboard")).activity;
+
+  browser = await chromium.launch({ executablePath: CHROME, headless: true });
+  pageA = await openPage(USER_A);
+  bar = pageA.locator('[data-id="run-action-bar"]');
+  pop = pageA.locator('[data-id="run-pop"]');
+
   // 1) A: 게시본 → 실행 메뉴 → 새 실행(공유, B 참여) → 실행 화면
   await pageA.goto(`${BASE}/maps/${parent.mapId}?version=${parent.versionId}`);
   await pageA.waitForFunction(() => document.querySelector('[data-id="run-menu"]')?.getAttribute("aria-disabled") === "false");
@@ -316,7 +338,16 @@ try {
   const runsTile = pageB.locator('[data-id="home-activity-runs"]');
   await runsTile.waitFor();
   const runsTileText = (await runsTile.textContent()) ?? "";
-  check("B home: runs tile shows the problem", runsTileText.includes(`문제 ${baseDash.runs_problem + 1}`), runsTileText);
+  const runsTileValue = Number.parseInt((await pageB.locator('[data-id="home-activity-runs"] > span').nth(1).textContent()) ?? "", 10);
+  const runsTileSub = runsTileText.match(/문제 (\d+) · 곧 중단 (\d+)/);
+  check("B home: runs tile counts the new run", runsTileValue === baseDash.runs_open + 1, `${runsTileValue} vs ${baseDash.runs_open} + 1`);
+  check(
+    "B home: runs tile shows exactly one more problem",
+    runsTileSub !== null &&
+      Number(runsTileSub[1]) === baseDash.runs_problem + 1 &&
+      Number(runsTileSub[2]) === baseDash.runs_idle,
+    runsTileText,
+  );
   await runsTile.click();
   const runRow = pageB.locator(`[data-id="home-run-row-${runId}"]`);
   await runRow.waitFor();
@@ -383,13 +414,16 @@ try {
 } catch (err) {
   failures += 1;
   console.log("FAIL exception", err);
-  await pageA.screenshot({ path: `${OUT}/run-smoke-failure-a.png` }).catch(() => undefined);
+  await pageA?.screenshot({ path: `${OUT}/run-smoke-failure-a.png` }).catch(() => undefined);
   await pageB?.screenshot({ path: `${OUT}/run-smoke-failure-b.png` }).catch(() => undefined);
 } finally {
-  check("console errors", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));
-  await browser.close();
+  if (browser !== null) {
+    check("console errors", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));
+    await browser.close();
+  }
   if (!KEEP) {
-    await purgeRunNotifications([USER_A, USER_B]).catch((err) => console.warn("notification cleanup skipped", String(err).slice(0, 160)));
+    const users = USER_B === null ? [USER_A] : [USER_A, USER_B];
+    await purgeRunNotifications(users).catch((err) => console.warn("notification cleanup skipped", String(err).slice(0, 160)));
     if (runId !== null) {
       await api(USER_A, "DELETE", `/runs/${runId}`).catch((err) => console.warn("run cleanup skipped", String(err).slice(0, 160)));
     }
