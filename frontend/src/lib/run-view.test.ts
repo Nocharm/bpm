@@ -11,6 +11,8 @@ import {
   applyRunEdgeKind,
   buildRunScopeStates,
   buildRunView,
+  formatRunPeriod,
+  formatSummaryCountdown,
   getRunCapKind,
   getRunMenuDisabledReason,
   humanizeRunError,
@@ -23,6 +25,13 @@ import {
 // 실제 ko 문구로 해석 — 문구 키가 빠지면 key가 그대로 나와 테스트가 잡는다
 function t(key: MessageKey, vars?: Record<string, string | number>): string {
   let text: string = messages.ko[key] ?? key;
+  for (const [name, value] of Object.entries(vars ?? {})) text = text.replaceAll(`{${name}}`, String(value));
+  return text;
+}
+
+// 영어 문구로도 같은 함수가 읽히는지 본다
+function tEn(key: MessageKey, vars?: Record<string, string | number>): string {
+  let text: string = messages.en[key] ?? key;
   for (const [name, value] of Object.entries(vars ?? {})) text = text.replaceAll(`{${name}}`, String(value));
   return text;
 }
@@ -392,5 +401,53 @@ describe("run links", () => {
     expect(readVersionIdParam("run=7")).toBeNull();
     expect(readVersionIdParam("version=x")).toBeNull();
     expect(readVersionIdParam("version=-3")).toBeNull();
+  });
+});
+
+describe("formatSummaryCountdown", () => {
+  const now = new Date("2026-11-04T00:00:00+09:00");
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const after = (days: number) => new Date(now.getTime() + days * DAY_MS).toISOString();
+
+  it("rounds the remaining days up", () => {
+    expect(formatSummaryCountdown(after(23.2), now)).toBe(24);
+    expect(formatSummaryCountdown(after(23), now)).toBe(23);
+    expect(formatSummaryCountdown(after(0.1), now)).toBe(1);
+  });
+
+  it("is 0 once the date has passed", () => {
+    expect(formatSummaryCountdown(after(-0.5), now)).toBe(0);
+    expect(formatSummaryCountdown(after(-10), now)).toBe(0);
+  });
+
+  it("is null when there is no summary date or it can't be read", () => {
+    expect(formatSummaryCountdown(null, now)).toBeNull();
+    expect(formatSummaryCountdown("not a date", now)).toBeNull();
+  });
+});
+
+describe("formatRunPeriod", () => {
+  it("says one day when the run starts and ends on the same KST day", () => {
+    expect(formatRunPeriod("2026-09-21T09:00:00+09:00", "2026-09-21T18:00:00+09:00", t)).toBe("9월 21일 하루");
+    // UTC로는 날짜가 갈리지만 KST로는 같은 날
+    expect(formatRunPeriod("2026-09-20T16:00:00Z", "2026-09-21T14:30:00Z", t)).toBe("9월 21일 하루");
+  });
+
+  it("writes the end as the day only inside one month", () => {
+    expect(formatRunPeriod("2026-09-12T10:00:00+09:00", "2026-09-14T15:00:00+09:00", t)).toBe("9월 12일~14일(3일)");
+  });
+
+  it("writes the end month when the period crosses months", () => {
+    expect(formatRunPeriod("2026-09-30T10:00:00+09:00", "2026-10-02T15:00:00+09:00", t)).toBe("9월 30일~10월 2일(3일)");
+  });
+
+  it("counts KST calendar days, not 24-hour spans", () => {
+    expect(formatRunPeriod("2026-09-21T14:00:00Z", "2026-09-21T16:00:00Z", t)).toBe("9월 21일~22일(2일)");
+  });
+
+  it("reads in English with the English copy", () => {
+    expect(formatRunPeriod("2026-09-21T09:00:00+09:00", "2026-09-21T18:00:00+09:00", tEn)).toBe("9/21 (1 day)");
+    expect(formatRunPeriod("2026-09-12T10:00:00+09:00", "2026-09-14T15:00:00+09:00", tEn)).toBe("9/12 to 14 (3 days)");
+    expect(formatRunPeriod("2026-09-30T10:00:00+09:00", "2026-10-02T15:00:00+09:00", tEn)).toBe("9/30 to 10/2 (3 days)");
   });
 });

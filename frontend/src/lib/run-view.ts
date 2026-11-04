@@ -239,3 +239,56 @@ export function humanizeRunError(err: unknown, t: TFunc): string {
   const hit = RUN_ERROR_KEYS.find(([prefix]) => detail.startsWith(prefix));
   return hit ? t(hit[1]) : humanizeApiError(err, t);
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 끝난 실행이 요약만 남기까지 남은 날(올림) — 지났으면 0(밤 정리 잡이 곧 처리), 날짜가 없거나 읽을 수 없으면 null. */
+export function formatSummaryCountdown(summarizeAfter: string | null, now: Date): number | null {
+  if (summarizeAfter === null) return null;
+  const at = Date.parse(summarizeAfter);
+  if (Number.isNaN(at)) return null;
+  return Math.max(0, Math.ceil((at - now.getTime()) / DAY_MS));
+}
+
+// 실행 기간은 KST 달력 날짜 기준 — 브라우저 시간대와 무관하게 서버가 세는 "며칠"과 같다
+const KST_YMD_FORMAT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Seoul",
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+});
+
+interface KstYmd {
+  year: number;
+  month: number;
+  day: number;
+}
+
+function getKstYmd(iso: string): KstYmd {
+  const parts = Object.fromEntries(KST_YMD_FORMAT.formatToParts(new Date(iso)).map((p) => [p.type, Number(p.value)]));
+  return { year: parts.year, month: parts.month, day: parts.day };
+}
+
+function formatMonthDay(ymd: KstYmd, t: TFunc): string {
+  return t("run.list.periodDay", { m: ymd.month, d: ymd.day });
+}
+
+/** 끝난 날 한 줄 표기("9월 12일", en "9/12") — KST. */
+export function formatRunDay(iso: string, t: TFunc): string {
+  return formatMonthDay(getKstYmd(iso), t);
+}
+
+/** 실행 기간 — 같은 날이면 "9월 21일 하루", 아니면 "9월 12일~14일(3일)"(달이 다르면 "9월 30일~10월 2일(3일)"), KST 달력 날짜 기준. */
+export function formatRunPeriod(startedAt: string, endedAt: string, t: TFunc): string {
+  const start = getKstYmd(startedAt);
+  const end = getKstYmd(endedAt);
+  const days = Math.round((Date.UTC(end.year, end.month - 1, end.day) - Date.UTC(start.year, start.month - 1, start.day)) / DAY_MS) + 1;
+  // 끝이 시작보다 앞서는 값(시계 어긋남)도 하루로 접는다
+  if (days <= 1) return t("run.list.periodOne", { start: formatMonthDay(start, t) });
+  const isSameMonth = start.year === end.year && start.month === end.month;
+  return t("run.list.periodRange", {
+    start: formatMonthDay(start, t),
+    end: isSameMonth ? t("run.list.periodDayOnly", { d: end.day }) : formatMonthDay(end, t),
+    n: days,
+  });
+}

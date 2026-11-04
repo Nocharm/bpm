@@ -58,6 +58,7 @@ import { NodeActionBar } from "@/components/node-action-bar";
 import { RunBar } from "@/components/run/run-bar";
 import { RunLegend } from "@/components/run/run-legend";
 import { RunActionBar } from "@/components/run/run-action-bar";
+import { RunListModal } from "@/components/run/run-list-modal";
 import { RunMenu } from "@/components/run/run-menu";
 import { RunStartDialog } from "@/components/run/run-start-dialog";
 import { RunUrlSync } from "@/components/run/run-url-sync";
@@ -1431,6 +1432,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const runFlashNonceRef = useRef(0);
   const [runLegendOpen, setRunLegendOpen] = useState(false);
   const [runStartOpen, setRunStartOpen] = useState(false);
+  const [runListOpen, setRunListOpen] = useState(false);
   // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
   const readOnly = isViewer || (checkout !== null && !checkout.mine) || statusLocksEditing || runMode;
   // 읽기 전용 배너 — 사유별 톤/아이콘/타이틀+설명 (우선순위: 뷰어 > 타인 점유 > 버전 상태).
@@ -10005,13 +10007,14 @@ function MapEditor({ mapId }: { mapId: number }) {
               </div>
             );
           })()}
-          {/* 실행 진입 — 게시본·지난 게시본에서만 켜진다(그 밖은 꺼진 버튼+이유 툴팁). "모든 실행 보기"는 모든 실행 창이 생기면 onShowAll로 연결 */}
+          {/* 실행 진입 — 게시본·지난 게시본에서만 켜진다(그 밖은 꺼진 버튼+이유 툴팁) */}
           <RunMenu
             mapId={mapId}
             versionStatus={currentVersion?.status ?? ""}
             isFrameworkMap={isFrameworkMap}
             onOpenRun={openRun}
             onNewRun={() => setRunStartOpen(true)}
+            onShowAll={() => setRunListOpen(true)}
           />
           <button
             data-id="editor-save"
@@ -12913,6 +12916,15 @@ function MapEditor({ mapId }: { mapId: number }) {
       <Suspense fallback={null}>
         <RunUrlSync onRunIdChange={handleRunUrlChange} />
       </Suspense>
+      {runListOpen && (
+        <RunListModal
+          mapId={mapId}
+          isMapOwner={myRole === "owner"}
+          onClose={() => setRunListOpen(false)}
+          onOpenRun={openRun}
+          onToast={showToast}
+        />
+      )}
       {runStartOpen && versionId !== null && (
         <RunStartDialog
           mapId={mapId}
