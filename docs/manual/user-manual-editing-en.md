@@ -6,7 +6,7 @@
 
 ## 1. Editor at a Glance
 
-Open a map to enter the editor. The top bar holds the version selector, **New version**, **Compare**, **Undo** / **Redo**, **Save**, the process library, **Import CSV**, and the **AI assistant**. Edit the selected node's properties in the right inspector; the left sidebar holds the outline tree and a keyboard-shortcut card. The icon at the far right of the inspector's tab bar **collapses or expands every section** of the current tab at once (if any section is open it collapses all; if all are closed it expands all). On maps registered in the business **Framework**, a **Framework chip** at the **top left** of the canvas shows the classification path (the map title and save checklist sit at the top right). Expand the chip and click a category row to see the other maps in that category, and click one to jump to it (a confirmation guards unsaved changes). The L5 row also opens the **linkage canvas** (section 11), and the **Search other frameworks** footer opens the full framework browse modal. Opening a **new, empty map** (only Start and End nodes) shows a **"Start with the AI consultant"** bubble. **Start** takes you to the interview screen (section 10), **Not now** dismisses it.
+Open a map to enter the editor. The top bar holds the version selector, **New version**, **Compare**, **Undo** / **Redo**, **Save**, the process library, **Import CSV**, the **AI assistant**, and **Run** (the run check that walks a published version through one real piece of work; see the Getting Around manual, section 7). Edit the selected node's properties in the right inspector; the left sidebar holds the outline tree and a keyboard-shortcut card. The icon at the far right of the inspector's tab bar **collapses or expands every section** of the current tab at once (if any section is open it collapses all; if all are closed it expands all). On maps registered in the business **Framework**, a **Framework chip** at the **top left** of the canvas shows the classification path (the map title and save checklist sit at the top right). Expand the chip and click a category row to see the other maps in that category, and click one to jump to it (a confirmation guards unsaved changes). The L5 row also opens the **linkage canvas** (section 11), and the **Search other frameworks** footer opens the full framework browse modal. Opening a **new, empty map** (only Start and End nodes) shows a **"Start with the AI consultant"** bubble. **Start** takes you to the interview screen (section 10), **Not now** dismisses it.
 
 ### Moving around the canvas
 
@@ -366,6 +366,8 @@ Every leaf category (L5) of the business **Framework** can open a **linkage canv
 
 > **Tip:** In the editor, open **More shortcuts** at the bottom of the Outline keys card (left sidebar) to see this list in context.
 
+> The keys on the **run check screen** (arrow keys, `N`, and `Enter` to reach the button row) are in the Getting Around manual, section 7 "Keyboard", and in the **Run legend** at the lower left of the run screen.
+
 ---
 
-*Business Process Map · Editing Maps · Updated 2026-10-02*
+*Business Process Map · Editing Maps · Updated 2026-11-05*

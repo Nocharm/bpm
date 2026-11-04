@@ -24,12 +24,12 @@ DECK = {
     "lang": "en",
     "html_title": "BPM Administrator Manual",
     "label": "Business Process Map · Administrator Manual",
-    "date": "2026-10-20",
+    "date": "2026-11-05",
     "cover": {
         "eyebrow": "Administrator Manual · English edition",
         "h1": "Business Process Map<br>Administrator Manual",
         "sub": "Consoles, operations and governance for system administrators. Everything in the User Manual applies to you too.",
-        "meta": ["Company process-map system", "As of 2026-10-20"],
+        "meta": ["Company process-map system", "As of 2026-11-05"],
         "hint": "Navigate with <kbd>←</kbd><kbd>→</kbd> or click the screen edges · <kbd>Home</kbd> to restart",
     },
     "toc": {"kicker": "Contents", "sec": "What's inside", "title": "What's inside"},
@@ -64,11 +64,11 @@ DECK = {
             "desc": "Every console on the Settings rail, at a glance.",
             "slides": [
                 {"title": "The Settings rail", "shot": True, "pts": [
-                    ("Content", "Notices · Manual · <b>Knowledge base</b> · AI chat · <b>AI prompts</b>."),
-                    ("Directory", "Employees · Departments · <b>Catalogs</b> · <b>Orphaned refs</b> · Local Accounts (ldap only)."),
+                    ("Content", "Notices · Manual · <b>Knowledge base</b> · AI chat · <b>AI prompts</b> · <b>Runs</b>."),
+                    ("Directory", "Employees · Departments · <b>Catalogs</b> · Local Accounts (ldap only)."),
                     ("Framework", "Categories &amp; import (<b>Manage / Status</b> views). Delegated admins see their subtree."),
                     ("Database · Approvals", "Tables · Batch jobs (<b>Back up now</b>) · Approval Queue."),
-                    ("More", "Groups · Analytics (Dashboard) · Trash (Scheduled deletion)."),
+                    ("More", "Checks (<b>Orphaned refs</b>, everyone) · Groups · Analytics · Trash."),
                 ]},
             ],
         },
@@ -76,17 +76,18 @@ DECK = {
             "title": "Content Management", "short": "Content",
             "desc": "Notices, the in-app manual, AI knowledge · settings · prompts, and feedback.",
             "slides": [
-                {"title": "Notices", "shot": True, "pts": [
+                {"title": "Notices", "shot": "manual11/en-admin-notice-load.jpg", "pts": [
                     ("Fields", "Title · importance (Important / General) · posting period (<b>open-ended</b> allowed) · Markdown body."),
                     ("Notify all", "Check <b>Notify all users on publish</b> to push to every inbox."),
                     ("Visibility", "Users see active notices only, the admin list shows all. CSV export."),
                     ("Hard delete", "Permanent, no trash. Already-sent bell notifications remain."),
+                    ("Load from file", "Fill title and body from a <code>docs/notices</code> draft shipped with the build."),
                 ]},
-                {"title": "Publishing the manual", "shot": True, "pts": [
-                    ("Several documents", "<b>/manual</b>. Each with a format (markdown / sanitized HTML) and language (KO / EN)."),
-                    ("Authoring", "Write inline · upload an .md · load the bundled copy. Preview, then publish."),
+                {"title": "Publishing the manual", "shot": "manual11/en-admin-manual-synced.jpg", "pts": [
+                    ("Several documents", "<b>/manual</b>. Format (markdown / HTML) and language (KO / EN). Hand-made docs stay editable."),
+                    ("Synced from files", "The six <code>docs/manual</code> files apply on deploy automatically (the file wins)."),
                     ("KO / EN pairing", "Titles come from the first heading. Same order keeps the language toggle on the same document."),
-                    ("Fallback", "With no publish history the bundled copy is served with a badge."),
+                    ("Locked", "Docs with the <b>Synced from file</b> chip are read-only. Edit the md and redeploy."),
                     ("TOC rule", "<code>##</code> / <code>###</code> headings. Images and raw HTML don't render."),
                 ]},
                 {"title": "Knowledge base", "shot": True, "pts": [
@@ -100,6 +101,13 @@ DECK = {
                     ("Retention caps", "20 chats per map · 200 messages per chat · 180 days. Applies immediately."),
                     ("AI prompts", "Override the built-ins. Saves apply instantly, clearing falls back."),
                     ("Re-check", "While overridden, prompt improvements shipped in code are not picked up."),
+                ]},
+                {"title": "Run settings (Runs)", "shot": "manual11/en-admin-run-settings.jpg", "caption": "Settings › Content › Runs", "pts": [
+                    ("Idle · summary", "Idle warning 30 days · auto stop 40 · summary 30 days after the end (defaults)."),
+                    ("Caps", "Open: 10 solo per person, 30 shared per map. Keep: 50 shared, 10 solo."),
+                    ("When it applies", "Caps on save; day counts from the nightly 03:30 cleanup."),
+                    ("Checks", "Days 1 to 3650, caps 1 to 1000. Auto stop must come after the warning."),
+                    ("Results", "The <b>Run retention</b> card under Batch jobs."),
                 ]},
                 {"title": "Feedback administration", "shot": True, "pts": [
                     ("Status · replies", "Sysadmin only. <b>Done</b> locks further replies."),
@@ -243,7 +251,7 @@ DECK = {
                     ("Retention", "Notifications keep the most recent 100 per person."),
                 ]},
                 {"title": "Batch job status", "shot": "manual10/en-batch-hr-history.jpg", "pts": [
-                    ("Per job", "DB backup and HR sync. Last success and last failure with time and summary."),
+                    ("Per job", "DB backup, HR sync and run retention. Last success and last failure."),
                     ("Signal", "A failure newer than the last success means act."),
                     ("Back up now", "Outside the daily schedule. Production runs <code>pg_dump</code> via the sidecar, local copies sqlite."),
                     ("Backup files", "List of <code>${BACKUP_DIR}</code> with downloads for an off-server copy (sysadmin)."),
@@ -280,6 +288,7 @@ DECK = {
                     ("Scope", "Owners see their own, sysadmin sees everyone's trash."),
                     ("Instant purge", "Remove without the 7-day wait. Trash-state maps only, <b>no undo</b>."),
                     ("Linkage canvases", "Trashed canvases read \"No canvas\"; a sysadmin restore brings them back (409 if replaced)."),
+                    ("Run checks", "Runs of a trashed map hide; a purge deletes them and their notifications."),
                 ]},
                 {"title": "Version workflow · admin powers", "pts": [
                     ("Force checkout", "Take the lock when the holder is away (unsaved context is lost). Checkouts never expire on their own."),

@@ -40,6 +40,7 @@ All admin surfaces live under **Settings**. The left rail shows extra categories
 | **Knowledge base** | Settings → Content | Upload org documents the AI consultant cites in interviews (see section 12) |
 | **AI chat** | Settings → Content | Retention-cap settings, chat loading-tips management (see section 12) |
 | **AI prompts** | Settings → Content | Manage overrides of the built-in AI prompts (see section 12) |
+| **Runs** | Settings → Content | Idle and summary day counts and caps for run checks (see section 8, "Run Cleanup") |
 | **Employees** | Settings → Directory | Org directory table: HR-webhook full sync, sysadmin tags, CSV export |
 | **Departments** | Settings → Directory | Org-basis department table, department heads and exposed positions, CSV export |
 | **Orphaned refs** | Settings → Checks | Open to everyone (each person sees only what they can normally change); card-based replace/remove with a per-place preview; notifications to whoever can fix the rest (see section 7) |
@@ -47,7 +48,7 @@ All admin surfaces live under **Settings**. The left rail shows extra categories
 | **Local Accounts** | Settings → Directory | ldap auth mode only. Local login accounts for external consultants (see section 7) |
 | **Framework** | Settings → Framework | Work-framework category management (Manage / Status views), admin appointment, interview JSON import. Pilot stage (see section 13). Delegated category admins get the same screen scoped to their subtree |
 | **Tables** | Settings → Database | Read-only DB browser (incl. login records), server-side CSV export |
-| **Batch jobs** | Settings → Database | Latest run status (success/failure) of DB backups and HR sync, **Backup now** and backup-file download, HR sync run history (who changed) |
+| **Batch jobs** | Settings → Database | Latest run status (success/failure) of DB backups, HR sync, and run retention, **Backup now** and backup-file download, HR sync run history (who changed) |
 | **Approval Queue** | Settings → Approvals | Cross-map pending requests |
 | **Dashboard** | Settings → Analytics | Operational metrics from the live database. Access can be delegated to others (see section 8) |
 | **Groups** | Settings → Groups | Approve group requests, see all groups |
@@ -63,6 +64,7 @@ Create and manage announcements shown on every user's **Notices** tab.
 2. **New notice**: title, importance (**Important** / General), posted period (start–end, or **No end date**), and a **Markdown** body.
 3. Check **Notify all users on publish** to push a notification to everyone's Inbox.
 
+- **Load from file**: the button to the right of the body (in both the new and the edit window) lists the notice drafts shipped with the deployment (`docs/notices/*.md` in the repository, newest first). Picking one fills the title and body. The first `#` heading becomes the title, and `<!-- -->` comments kept as publishing notes are dropped. Press **Publish** to make it live. Bodies are limited to 20,000 characters.
 - Users only see notices whose posting period is currently active; the admin list shows all of them.
 - The admin notice list can be downloaded in full with the **Export CSV** button, with the same columns as the screen, Excel-compatible (BOM), and a formula-injection guard.
 - Editing a notice takes effect immediately. **Deleting is a hard delete**. It is permanently removed on the spot, with no trash and no recovery (unlike the 7-day trash for maps and groups). However, if "Notify all users on publish" was checked, the bell notifications already sent stay in place even after the notice is deleted.
@@ -198,11 +200,20 @@ Selecting `notifications` in **Tables** adds a from–to date range and a **Dele
 
 ### Batch Job Status (Settings → Database → Batch jobs)
 
-Shows the latest attempts of the **DB backup** and the **HR (people) sync**, per job. The last **success** and the last **failure** each keep their time and summary, so you can tell at a glance in the morning whether the overnight batches ran clean. A failure row newer than the last success is your signal to act.
+Shows the latest attempts of the **DB backup**, the **HR (people) sync**, and **Run retention**, per job. The last **success** and the last **failure** each keep their time and summary, so you can tell at a glance in the morning whether the overnight batches ran clean. A failure row newer than the last success is your signal to act.
 
 - **Backup now (on demand)**: the **Backup now** button on the DB backup card makes a backup outside the daily schedule. In production (postgres) the backend drops a request file that the sidecar picks up within seconds to run `pg_dump`, so after the "Backup requested" notice, re-check the list a moment later; local sqlite copies immediately. If it says "The backup request could not be written", the sidecar has not restarted with the new script yet: run `docker compose up -d --force-recreate db-backup` once on the server.
 - **Backup files and download**: the same card lists the backup files in `${BACKUP_DIR}`, and each can be **downloaded** for an off-server copy (sysadmin only).
 - **HR sync history**: below the HR card, every full sync run is listed newest first (latest 30 shown, 200 kept). Each run shows how many people were scanned and how many were new, left, rejoined, removed or duplicated; expand a run to see each person's name, ID and department. Mass-departure runs carry a **Mass departure** badge. People deactivated by a feed accident come back on the next good sync, but approvals cancelled and checkouts released in between do not, so use this list to find who needs follow-up.
+
+### Run Cleanup (Settings → Content → Runs)
+
+Run checks (Getting Around manual, section 7) are records that pile up separately from maps, so old runs are cleaned up every night. The **Run retention** job runs daily at 03:30 KST and leaves its result on the Batch jobs card above.
+
+- **Idle and summary**: counted from the last day anyone touched the run (a status change, comment, switch to shared, stop, or reopen). After **Days idle until a warning** (default 30) the participants get an idle notice, and after **Days idle until auto stop** (default 40) the run is stopped. A finished or stopped run is stripped of its step records and comments once **Days after finishing until only a summary stays** (default 30) have passed, leaving a one-line summary (runs that are kept with **Keep** are excluded).
+- **Caps**: **Solo run cap (open per person)** (default 10) · **Shared run cap (open per map)** (default 30) · **Shared keep cap (per map)** (default 50) · **Solo keep cap (per person)** (default 10). Caps apply to new runs and keeps as soon as you save; day counts apply from the next cleanup run.
+- The input range is 1 to 3650 for days and 1 to 1000 for caps, and auto stop must come after the warning for the form to save.
+- Runs of a map in the trash are not cleaned up but hidden, and permanently deleting the map deletes its runs and run notifications with it (section 9).
 
 ### Daily Automatic DB Backup (production server)
 
@@ -235,6 +246,7 @@ Deleting a map or group is a **soft delete**. It moves to the trash and is perma
 - **Restore** brings a map back intact (versions, nodes, permissions).
 - After the 7-day window the purge is permanent. There is no undo beyond that point.
 - **Instant purge (sysadmin only)**: the instant-delete button on a trash row removes a map immediately without waiting out the 7 days. It only works on maps already in the trash (soft-deleted), and **cannot be undone**, so use with care.
+- While a map is in the trash, its run check does not open, and its run notifications carry a **Map in trash** chip. Restoring the map brings everything back as it was, and a permanent delete (instant or 7-day expiry) deletes the run records and run notifications with it.
 
 ---
 
@@ -258,6 +270,7 @@ Everything in the user manual's workflow section applies, plus:
 3. Write in the editor, **Upload .md** to load a file, or **Load bundled** to start from the copy shipped with the build.
 4. **Preview** renders exactly what users will see; **Publish** makes it live at /manual immediately.
 
+- **Automatic sync from deployed files**: the six manuals in the repository's `docs/manual` (getting around, editing maps, administrator, each in Korean and English) ship with the deployment. When the backend starts, and whenever the manual list is opened, changed files are applied to the documents automatically (the files are the source). These documents carry a **Synced from file** chip in the list and open read-only with a note (no editing, upload, publish or delete). To change one, edit the md file and redeploy. On the first sync, a hand-uploaded document with the same language and title is taken over by the file document, and a document whose file is removed is deleted too. Other hand-made documents stay editable as before. The production compose mounts `./docs/manual` and `./docs/notices` read-only into the backend.
 - The list title is **auto-extracted from the first heading** on save.
 - Upload KO/EN documents as pairs in the same order. Switching languages in the viewer opens the document at the same position.
 - With no documents registered, the viewer shows the default manual shipped with the build.
@@ -404,4 +417,4 @@ Fill an L5 through a conversation with AI instead of a document (sysadmin only).
 
 ---
 
-*Business Process Map · Administrator Manual · updated 2026-10-02*
+*Business Process Map · Administrator Manual · updated 2026-11-05*

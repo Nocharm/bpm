@@ -2,7 +2,7 @@
 
 > Business Process Map (BPM) is a web app for drawing business processes as flowcharts, managing them as As-Is / To-Be **versions**, and finalizing them through an **approval workflow**.
 
-This manual covers everything outside of editing, from signing in through map management, version approval, settings, and collaboration. For how to draw and edit nodes on the canvas, see the **Editing Maps** manual. System administrators should also read the **Administrator Manual**.
+This manual covers everything outside of editing, from signing in through map management, version approval, settings, collaboration, and run checks. For how to draw and edit nodes on the canvas, see the **Editing Maps** manual. System administrators should also read the **Administrator Manual**.
 
 ---
 
@@ -50,13 +50,15 @@ A map with **Public** visibility is viewable by everyone, including its working 
 
 ### Home dashboard
 
-The right side of the home screen (with no map selected) is your **personal dashboard**: **My profile** at the top (department, role chip, last login) with quick actions (**My maps only** filter, notifications, framework settings, settings), the **activity tiles** below it (Approvals waiting · My requests · Checked-out versions · Unread notifications · My feedback. Clicking the Checked-out versions tile unfolds its list as an accordion), and then six sections in the order **Recently opened | Framework → My department | My documents → Approvals needed | Recent changes**. The profile and tiles stay pinned at the top while you scroll.
+The right side of the home screen (with no map selected) is your **personal dashboard**: **My profile** at the top (department, role chip, last login) with quick actions (**My maps only** filter, notifications, framework settings, settings), the **activity tiles** below it (Needs my decision, My requests, Checked out, Active runs, and Notifications · Feedback. Clicking the Checked out, Active runs, or Notifications · Feedback tile unfolds a list below the tile row, one at a time), and then six sections in the order **Recently opened | Framework → My department | My documents → Approvals needed | Recent changes**. The profile and tiles stay pinned at the top while you scroll.
 
 - Each section shows only a few items and sends the rest to the list or inbox through a **"N more"** link. With no data it shows a one-line empty state and a hint for the next action. When rows exceed the cap the header stays fixed and only the body scrolls inside; clicking the header expands the whole section. When the same map appears in several sections, resting the pointer on it for about half a second marks the matching rows in the other sections with a **left accent bar** (the hovered row itself is left out, and the bar clears as soon as you leave). A passing hover does not trigger it.
 - **My department** counts only maps owned by your immediate department; sub-department maps fold into a single count line that opens the **sub-department maps dialog** on click (clicking a department row switches the scope to that department and expands the org tree on the left). The **department scope dropdown** at the right of the section header (my department → parent departments; the choice is remembered) widens the scope.
 - The **My department** and **My documents** cards show their distribution under **Status | Version** tabs. The Version tab has four buckets (unpublished · published latest · update in progress · needs re-check), the bar segments and the legend highlight together on hover, and clicking a legend entry filters the list to that bucket.
 - Clicking an **Approvals needed** row jumps straight to that approval card in the inbox. **Recent changes** rows show the actor's person pill, the map name, a version chip, and an event icon.
-- **One-click delayed navigation**: activity tiles, profile buttons, approval-card links, **Open** on map rows/cards, and clicks on approval, checkout, and recent-change rows do not navigate immediately: a **0.6-second countdown** runs first, then the action fires. Meanwhile the section (or, for a tile, that single cell) is covered by a translucent notice layer with the countdown ring, the destination ("Going to Inbox", "Selecting {map}") and a "click to cancel" hint. Clicking the layer cancels. Map cards outside the sections keep the ring in the icon slot and cancel on a second click, and new-tab modifiers such as `Ctrl`/`⌘`+click follow the browser's default behavior.
+- **Active runs** tile: shows how many active runs you started or joined, with the Problem and Stopping soon counts. Unfolded, it lists run rows (map and run name, the problem step or the next step, days idle and days left until auto stop). Filter with **All · Problem · Stopping soon · Shared · Just me**, sort by **Most urgent · Recent activity · Least progress · Map name**, and click a row to go to that run's screen (section 7). With no active runs the tile does not unfold.
+- **Notifications · Feedback** tile: shows the unread notification count and the number of feedback items in progress. Unfolded, it shows Notifications on the left (**Unread · All**, and a type filter) and My feedback on the right (**In progress · All**, and a type filter). Clicking a notification row goes to the run screen for a run notification, or to that notification in the Notifications tab otherwise, and marks it read. Links below read **Mark all read · See all in Inbox → · + New feedback · Feedback page →**. Your filter and sort choices are remembered in this browser.
+- **One-click delayed navigation**: activity tiles (except the ones that unfold), profile buttons, approval-card links, **Open** on map rows/cards, approval, checkout, and recent-change rows, and the rows and links in an unfolded run, notification, or feedback list do not navigate immediately: a **0.6-second countdown** runs first, then the action fires. Meanwhile the section (or, for a tile, that single cell) is covered by a translucent notice layer with the countdown ring, the destination ("Going to Inbox", "Selecting {map}") and a "click to cancel" hint. Clicking the layer cancels. Map cards outside the sections keep the ring in the icon slot and cancel on a second click, and new-tab modifiers such as `Ctrl`/`⌘`+click follow the browser's default behavior.
 
 ### Finding maps
 
@@ -203,9 +205,10 @@ The **Notices** tab lists currently active announcements. Filter by All / Import
 - **Handling a confirm request (L5 admin · sysadmin)**: when an admin of a higher category (L1–L4) asks for a linkage canvas to be confirmed, the L5's **direct admins** and sysadmins receive a **Confirm request** card (with the requester's comment). **Approve** confirms the canvas on the spot; a canvas that fails a gate cannot be approved. The requester can **withdraw** until it is decided, and the outcome comes back as a **Confirm approved / Confirm rejected** notification (Editing Maps manual, section 11).
 - **Notification content**: notification sentences carry the map name, version, and actor, rendered **in your language setting**. In the detail pane, hover (0.7 s) or click the **actor name pill** to open their person card (the Korean UI shows Korean (English) names side by side), and the **version chip** (with a leading v-number) opens a version card on hover/click. Check its status and creation time, and **jump straight to that version**. Notifications created before rich display shipped keep their original text.
 - **Data clean-up**: when your maps still reference a department, assignee, or user that has left the org chart, a **red dot** on your name button points you to Settings → Checks → **Orphaned refs**. The dot stays on only while there is something you can fix yourself. The tab lists only what you can normally change. Open a department or person card and pick the target (a person can also be removed) to see the result for every place, then **replace** them in one go. Places you cannot change go to the person who can (the owner or the checkout holder) as a **Stale refs fix request** notification, one per recipient with the map list attached. A published map is not changed directly. The fix goes into a new draft named **Reference cleanup**, and it takes effect after you publish it. An **Owner assigned** notification arrives when an admin changes the owner. When an external L6 placeholder from a consultant import gets connected to a real map, the L5 admins receive an **External L6 connected** notification.
-- **Bell**: the bell icon top right refreshes every **5 seconds**. Clicking an item jumps to the **Notifications tab** and opens it (marking it read); you can also mark read or delete (X) an item directly from the bell. Version-approval progress, checkout transfer requests/approvals/rejections, and permission/visibility change requests/approvals/rejections all arrive here.
-- **Notifications** tab: unlike the bell, this **loads once when you open the page** (no auto-refresh, refresh the page for the latest). Besides **Mark all read**, a category filter (All/Version/Checkout/Permission/Subprocess/Notice), and per-item delete (X), it supports **selection mode** to check and delete several at once, **delete read notifications**, and **delete before a date** (before that date's midnight). All three bulk actions go through a confirmation dialog, and **every deletion is permanent**.
-- **Retention**: notifications keep only the **most recent 100 per person**. Anything beyond that is auto-deleted oldest-first, regardless of read state.
+- **Bell**: the bell icon top right refreshes every **5 seconds**. Clicking an item jumps to the **Notifications tab** and opens it (marking it read; a run notification goes straight to that run screen); you can also mark read or delete (X) an item directly from the bell. Version-approval progress, checkout transfer requests/approvals/rejections, and permission/visibility change requests/approvals/rejections all arrive here.
+- **Notifications** tab: unlike the bell, this **loads once when you open the page** (no auto-refresh, refresh the page for the latest). Besides **Mark all read**, a category filter (All/Run/Version/Checkout/Permission/Subprocess/Notice), and per-item delete (X), it supports **selection mode** to check and delete several at once, **delete read notifications**, and **delete before a date** (before that date's midnight). All three bulk actions go through a confirmation dialog, and **every deletion is permanent**.
+- **Retention**: notifications keep only the **most recent 100 per person**. Anything beyond that is auto-deleted oldest-first, starting with run notifications, and a new run notification never pushes out your other unread notifications (approvals and so on).
+- **Map in trash**: while a map is in the trash, its run notifications carry a **Map in trash** chip and do not open the run screen (the detail in the Notifications tab shows a notice instead). Restoring the map makes them open again, and permanently deleting it deletes those run notifications too.
 
 ### Feedback
 
@@ -216,7 +219,62 @@ Click **Feedback** on any screen: pick a type (**Bug / Suggestion / Question / O
 
 ---
 
-## 7. User Groups
+## 7. Run Check
+
+Walk a published map step by step against one real piece of work (for example "November intake 1 · LOT 2611-07") and leave progress, problems, and comments along the way. Run records are stored separately from the map and never change its content or versions. Use it on a desktop screen.
+
+### Starting a run
+
+- Open the map's **published version** (or a past published one) and choose **Run** in the top bar → **New run**. For a Draft, a version in approval or rejected, and Framework linkage canvases the menu is disabled, with the reason in a tooltip.
+- Enter a **Name** (for example a LOT number) and choose **Just me** or **Shared**. A shared run asks you to pick **Participants** (active employees who can view this map). Only participants change step states, and anyone who can view the map follows the progress. A Just me run is visible only to you, and you can switch it to shared while it runs (once shared, it can't go back).
+- Starting on a past published version asks you to confirm once, and a notice stays above the map while the run is open.
+- The **Run** menu lists your open runs and recently ended runs. **All runs** opens a window with **Open · Ended · Summary** tabs (search by name or LOT, **Only runs I'm in**, **Kept only**).
+
+### The run screen
+
+- Opening a run makes the map read-only and colors every node by its state. Node positions stay exactly as in the published version. The **run bar** at the top shows the name, participants, progress (**n of N done**), **Keep**, Just me / Shared, and a ⋯ menu. The **Run legend** at the lower left of the canvas explains the states, the edge colors, and the keyboard.
+- There are six states: **Waiting** (earlier steps are still open) · **Ready** (can start now) · **In progress** · **Done** · **Problem** (blocked, with the reason left in a comment) · **Skipped** (a branch that wasn't chosen). Dots flow along the edge of the path you are on.
+- Click a node to open a **button row** beside it: **Complete · Start · Problem · Comments** (**Undo start** while in progress, **Resolve** on a problem, **Undo complete** when done). A decision node uses one button per branch name to complete and pick the branch together. After completing, if there is one next step the selection moves to that node and it flashes. If there are several, the opened nodes flash.
+- Hover the greyed-out **Complete** on a waiting node and the steps to **Finish these first** are marked with dotted lines. Click one to jump to that node.
+- **Problem** opens a one-line note field (in a shared run, a note left within a minute goes out with the problem notice). In the **Comments** bubble you see who changed what and when, and you can read and leave comments. A blank comment can't be posted.
+- **Undo complete** is blocked when a later step has already been touched, and the name of the blocking step is shown.
+- While a run is open the version selector is locked and PNG export is turned off. The **×** (**Close run**) at the right of the run bar returns you to the normal map screen.
+
+### Subprocesses
+
+- The **Sub map** button on a subprocess node unfolds the linked map so you can walk the steps inside it. Doing anything inside the sub map puts the outer node In progress, and **when the sub map's end is reached the outer node completes automatically** (you don't press the outer node again). With several ends, the end that was reached becomes the exit.
+- If you **Complete** the outer node directly without walking the sub map, the remaining steps in the sub map become Skipped and can't be changed anymore.
+- Pressing **Undo start** or **Undo complete** on an outer node that has sub map records first asks you to confirm "The sub map records will all be undone too", then clears the sub map records as well (comments stay).
+- People who can't view the sub map don't see what is inside it.
+
+### Keyboard
+
+Use these after clicking a node or an empty spot on the canvas.
+
+| Key | Action |
+| --- | --- |
+| `←` `↑` `→` `↓` | To the nearest step in that direction (the first step to do if nothing is selected) |
+| `Tab` / `Shift+Tab` | To the next / previous step along the flow |
+| `N` / `Shift+N` | To the next / previous step to do (in progress, problem, or ready; a folded sub map is unfolded when the step is inside it) |
+| `Enter` | Into the selected step's button row. Inside it, `←` `→` (`Home` `End`) move between buttons and `Enter` presses one |
+| `Esc` | Back from the button row to the step, then clears the selection on a second press |
+
+Pressing `Enter` twice completes that step and moves on to the next.
+
+### Notifications
+
+- Participants of a shared run receive notifications for invitations, step completions (those from the same run are folded into one line), problems, resolutions, the run ending, and stops. What you do yourself doesn't notify you, and you can turn the rest off with **Mute this run** in the run bar ⋯ menu. A Just me run only gets the idle notice.
+- Clicking a run notification goes straight to that run screen. If the map is in the trash, a **Map in trash** chip appears and it doesn't open (section 6).
+
+### Finishing and cleanup
+
+- When every step is Done or Skipped the run ends automatically (**Run complete**). The person who started the run uses the ⋯ menu for **Stop run**, **Reopen**, **Delete run**, editing participants, and switching to shared.
+- With no one touching a run for 30 days, an idle notice goes out, and at 40 days it stops automatically. A finished run keeps only a one-line summary (result, period, version, problem steps) after 30 days. To keep the records, turn on **Keep** (for a Just me run, the person themselves; for a shared run, the starter and the map owner). A system administrator sets the day counts and caps, and the numbers above are defaults.
+- Open runs are capped at 10 per person for Just me runs and 30 per map for shared runs (defaults). Over the cap, the New run window shows the runs you can stop first.
+
+---
+
+## 8. User Groups
 
 Groups let you grant map access to several people in one step.
 
@@ -226,7 +284,7 @@ Groups let you grant map access to several people in one step.
 
 ---
 
-## 8. Quick FAQ
+## 9. Quick FAQ
 
 - **Why can't I edit?** The version may be checked out by someone else, pending approval, or you may be a Viewer. Check the banner at the top of the canvas.
 - **Why can't I submit for approval?** Assign at least one approver first (Map Settings → Approvers).
@@ -243,4 +301,4 @@ Groups let you grant map access to several people in one step.
 
 ---
 
-*Business Process Map · Getting Around · Updated 2026-10-02*
+*Business Process Map · Getting Around · Updated 2026-11-05*

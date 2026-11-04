@@ -5,12 +5,12 @@ DECK = {
     "lang": "en",
     "html_title": "BPM User Manual",
     "label": "Business Process Map · User Manual",
-    "date": "2026-10-20",
+    "date": "2026-11-05",
     "cover": {
         "eyebrow": "User Manual · English edition",
         "h1": "Business Process Map<br>User Manual",
         "sub": "Draw processes as flowcharts, manage them as versions, finalize through approval.",
-        "meta": ["Company process-map system", "As of 2026-10-20"],
+        "meta": ["Company process-map system", "As of 2026-11-05"],
         "hint": "Navigate with <kbd>←</kbd><kbd>→</kbd> or click the screen edges · <kbd>Home</kbd> to restart",
     },
     "toc": {"kicker": "Contents", "sec": "What's inside", "title": "What's inside"},
@@ -58,12 +58,19 @@ DECK = {
                     ("Owner unconfirmed", "Interview-imported maps. Cleared by Transfer ownership."),
                     ("Notes", "Read-only interview source notes and owner-managed <b>Notes</b>. Collaborators edit right on the card."),
                 ]},
-                {"title": "Personal dashboard &amp; delayed navigation", "shot": True, "caption": "Home personal dashboard", "pts": [
+                {"title": "Personal dashboard &amp; delayed navigation", "shot": "manual11/en-home-dashboard.jpg", "caption": "Home personal dashboard", "pts": [
                     ("Six sections", "Recently opened · Framework · My department · My documents · Needs approval · Recent changes. Profile and tiles stay pinned."),
                     ("My department", "Your department's own maps. Sub-departments fold into one line, widened by the <b>scope dropdown</b>."),
                     ("Status | Version tabs", "Distribution on the My department and My documents cards. Click a legend to filter."),
                     ("N more", "A few rows per section. A map in several sections gets a <b>left accent bar</b> on hover."),
                     ("Delayed one-click navigation", "Tiles and rows run after a <b>0.6 s countdown</b>. Click the layer to cancel."),
+                ]},
+                {"title": "Active runs &amp; inbox lists", "shot": "manual11/en-home-runs.jpg", "caption": "The Active runs tile unfolded", "pts": [
+                    ("Five tiles", "Decisions · Requests · Checked out · <b>Active runs</b> · <b>Notifications · Feedback</b>."),
+                    ("Unfolding tiles", "Checked out, runs and inbox unfold a list under the tiles, one at a time."),
+                    ("Active runs", "Most urgent first (problem, next step, idle). Filters and sorting."),
+                    ("Notifications · Feedback", "Notifications left (Unread / All), my feedback right. Read when you go."),
+                    ("Remembered", "Filter and sort choices are saved in this browser."),
                 ]},
                 {"title": "The Framework pill · assign, move, hand off", "shot": True, "pts": [
                     ("Framework pill", "On the card: <b>Add to framework</b> · <b>Unassign</b> · <b>Transfer slot</b>. L5 only."),
@@ -178,6 +185,7 @@ DECK = {
                     ("Canvas", "<code>Space</code> pan · <code>Ctrl</code>+wheel zoom · <code>/</code> search · <code>S</code> subprocess list · <code>Esc</code> cancel / close"),
                     ("Tidying", "<code>Shift+L/K</code> auto layout · <code>Ctrl+G</code> group · <code>Alt+W/C/T/X</code> align · <code>Alt+R/V</code> distribute · <code>Shift</code>+drag axis lock"),
                     ("Navigation", "<code>Tab</code>/<code>Shift+Tab</code> along the flow · <code>]</code>/<code>[</code> highlight · <code>Alt+←/→</code> collapse panels · <code>Ctrl+Shift+E</code> PNG · <code>Ctrl+Enter</code> send"),
+                    ("Run check", "Arrows nearest step · <code>N</code> next to do · <code>Enter</code> button row · <code>Esc</code> back"),
                     ("More", "<b>More shortcuts</b> at the bottom of the Outline keys card."),
                 ]},
             ],
@@ -370,6 +378,61 @@ DECK = {
             ],
         },
         {
+            "title": "Run Check", "short": "Runs",
+            "desc": "Walk a published map through one real job, step by step, logging progress and problems.",
+            "slides": [
+                {"title": "Starting a run", "shot": "manual11/en-run-start.jpg", "caption": "The New run dialog", "pts": [
+                    ("Run menu", "Open the published version, then <b>Run</b> → <b>New run</b>. Off for drafts and pending versions."),
+                    ("Just me · Shared", "Just me is visible only to you. Shared picks <b>Participants</b> who can view the map."),
+                    ("Who can act", "Only participants change steps. Anyone who can view the map follows along."),
+                    ("Past published", "Confirm once to start; a notice stays above the map while it runs."),
+                    ("Separate records", "Run records live apart from the map. Map content and versions stay as they are."),
+                ]},
+                {"title": "The run screen &amp; statuses", "shot": "manual11/en-run-screen.jpg", "caption": "A run (3 done · 1 in progress)", "pts": [
+                    ("Read-only", "Nodes keep the published layout; only status colors are added."),
+                    ("Six statuses", "Waiting · Ready · In progress · Done · Problem · Skipped."),
+                    ("Flowing dots", "Dots flow only on the edges toward the next step."),
+                    ("Run bar", "Participants · <b>n of n done</b> · <b>Keep</b> · Just me / Shared · ⋯ menu."),
+                    ("Locked", "The version pill locks and PNG export is off. Close with <b>×</b>."),
+                ]},
+                {"title": "Working steps from the button row", "shot": "manual11/en-run-actions.jpg", "caption": "The button row on an in-progress step", "pts": [
+                    ("Button row", "Click a node for <b>Complete · Start · Problem · Comments</b> beside it."),
+                    ("Decisions", "One branch-name button completes the step and picks the path."),
+                    ("Moving on", "With one next step the selection moves and flashes; with several, they flash."),
+                    ("Finish first", "Hover the disabled Complete on a waiting step to see what to finish, then jump."),
+                    ("Undo complete", "Blocked once a later step was touched; the blocking step is named."),
+                ]},
+                {"title": "Problems &amp; comments", "shot": "manual11/en-run-problem-note.jpg", "caption": "A one-line note right after Problem", "pts": [
+                    ("Problem", "Marks a blocked step and opens a <b>one-line note</b>."),
+                    ("Note in the alert", "In a shared run, a note within a minute rides along with the problem alert."),
+                    ("Resolve", "<b>Resolve</b> returns it to in progress, or <b>Complete</b> it directly."),
+                    ("Comments", "The speech bubble shows who changed it and when, plus comments."),
+                    ("Blank comments", "Whitespace-only comments aren't sent; a toast says why."),
+                ]},
+                {"title": "Running into a sub map", "shot": "manual11/en-run-submap.jpg", "caption": "End of the sub map → the outer step completes", "pts": [
+                    ("Sub map button", "Expand a subprocess step and work the steps inside."),
+                    ("Auto complete", "Reaching the sub map's end completes the outer step too. No second click."),
+                    ("Complete directly", "Completing the outer step skips the rest of the sub map, read-only."),
+                    ("Cancel together", "Undoing an outer step with sub map records clears them after a confirm."),
+                    ("Hidden", "People who can't view the sub map don't see what's inside."),
+                ]},
+                {"title": "Running by keyboard", "shot": "manual11/en-run-legend.jpg", "caption": "The keyboard section of the Run legend", "pts": [
+                    ("Arrow keys", "Nearest step that way; with nothing selected, the first step to do."),
+                    ("N · Shift+N", "Next or previous step to do (in progress, problem, ready)."),
+                    ("Tab · Shift+Tab", "Next or previous step along the flow."),
+                    ("Enter", "Into the button row. Move with <code>←</code> <code>→</code>, press with <code>Enter</code>."),
+                    ("Esc", "Back to the step, then clear the selection."),
+                ]},
+                {"title": "All runs &amp; cleanup", "shot": "manual11/en-run-list.jpg", "caption": "The All runs window", "pts": [
+                    ("All runs", "Run menu → <b>All runs</b>. Open · Ended · Summary tabs with search."),
+                    ("Finishing", "When every step is done or skipped the run ends: <b>Run complete</b>."),
+                    ("Starter", "The ⋯ menu stops, reopens, deletes, edits participants or shares."),
+                    ("Idle · summary", "Warning at 30 idle days, auto stop at 40, a one-line summary 30 days after."),
+                    ("Keep", "Keeps the records. Open caps: 10 solo per person, 30 shared per map."),
+                ]},
+            ],
+        },
+        {
             "title": "Import · Export · AI", "short": "Data",
             "desc": "Fill from CSV, export as PNG · Excel · CSV, and draw with the AI assistant.",
             "slides": [
@@ -387,21 +450,21 @@ DECK = {
                     ("Node details", "Applied only while exporting. Alignment you set on the canvas survives size changes."),
                     ("Preview", "A sample shows each choice at once. Choices are remembered in this browser."),
                 ]},
-                {"title": "Print size and the A4 guide", "shot": "manual9/en-a4-crop.jpg", "pts": [
+                {"title": "Print size and the A4 guide", "shot": True, "pts": [
                     ("Print size panel", "Opens for Word document. A4 portrait / landscape and <b>Figure width</b> (30 to 100%)."),
                     ("Readouts", "Size cm · dpi (300+ is print quality) · node text pt. Word inserts at the chosen width."),
                     ("Split", "Cuts between nodes so text stays 7pt or more; one ZIP of pieces, cut lines share a letter."),
                     ("A4 guide", "Top of the eye-icon card. Inside the 9pt line prints readable; past 7pt is too small."),
                     ("Narrowing", "Landscape at 100% width, or vertical auto layout <code>Shift+K</code>."),
                 ]},
-                {"title": "Excel export · Print-ready file", "shot": "manual9/en-excel-print-map-collapsed.jpg", "pts": [
+                {"title": "Excel export · Print-ready file", "shot": True, "pts": [
                     ("Format", "<b>Process Map</b> / WBS, then pick columns. No, Name, Type, Parallel and Next always stay."),
                     ("Preview", "Shows the file as it will be: info rows (map, owning dept, owner, version, export time) and columns."),
                     ("Ready to print", "One A4 landscape page wide · header row on every page · Malgun Gothic · frozen header and name."),
                     ("Time values", "Duration and touch time are <code>[h]:mm</code>, so SUM adds up in hours and minutes."),
                     ("Next", "Targets by row number (<code>3. Review [Yes]</code>). 2,000-row cap."),
                 ]},
-                {"title": "CSV export · Preview and warnings", "shot": "manual9/en-csv-export-warnings.jpg", "pts": [
+                {"title": "CSV export · Preview and warnings", "shot": True, "pts": [
                     ("Preview", "First rows and the <b>file name</b>, right in the dialog."),
                     ("Columns", "Picked columns of the 25 import columns. Name, Parallel and Next always stay."),
                     ("Warnings", "What won't come back the same, unnamed steps and duplicate names, before you download."),
@@ -500,10 +563,10 @@ DECK = {
             "slides": [
                 {"title": "Notifications", "shot": True, "pts": [
                     ("Rich sentences", "Map name, version and actor in your language. Actor pill = person card, version chip = version card."),
-                    ("Bell", "Refreshes every 5 s. Clicking jumps to the tab and marks read."),
+                    ("Bell", "Refreshes every 5 s. Opens the tab; run notifications open the run itself."),
                     ("Notifications tab", "Mark all read, category filters, bulk delete by selection / read / date (permanent)."),
-                    ("Data clean-up", "<b>Stale refs fix request</b> (one per owner) · <b>Owner assigned</b>."),
-                    ("Retention", "The most recent 100 per person. Overflow auto-deletes oldest-first."),
+                    ("Map in trash", "Run notifications of a trashed map get a chip and don't open."),
+                    ("Retention", "100 per person. Run notifications go first; unread approvals are kept."),
                 ]},
                 {"title": "Notices &amp; the manual", "shot": True, "pts": [
                     ("Notices tab", "All / Important / General filters, search, Markdown bodies."),
