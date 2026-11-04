@@ -1578,6 +1578,8 @@ export interface ManualDocSummary {
   sort_order: number;
   updated_at: string | null;
   updated_by: string | null;
+  // 배포 파일(docs/manual)에서 동기화된 문서면 파일 이름 — 편집·삭제는 409라 화면이 잠근다
+  source_file: string | null;
 }
 
 export interface ManualDocDetail extends ManualDocSummary {
@@ -2485,6 +2487,21 @@ export function updateNotice(id: number, patch: Partial<NoticeInput>): Promise<N
 
 export function deleteNotice(id: number): Promise<void> {
   return request<void>(`/notices/${id}`, { method: "DELETE" });
+}
+
+// 공지 초안 파일(docs/notices, sysadmin) — 목록은 body가 빈 문자열, 한 편 조회가 제목·본문을 싣는다
+export interface NoticeDraft {
+  file: string;
+  title: string;
+  body: string;
+}
+
+export function listNoticeDrafts(): Promise<NoticeDraft[]> {
+  return request<NoticeDraft[]>("/notices/drafts");
+}
+
+export function getNoticeDraft(file: string): Promise<NoticeDraft> {
+  return request<NoticeDraft>(`/notices/drafts/${encodeURIComponent(file)}`);
 }
 
 // ── 온프레미스 AI 채팅 (design 2026-06-15) ──────────────

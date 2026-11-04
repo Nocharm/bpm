@@ -104,6 +104,10 @@ services:
     volumes:
       # db-backup 사이드카와 같은 호스트 디렉터리 — 백업 목록/다운로드·온디맨드 트리거 파일 공유
       - ${BACKUP_DIR:-./backups}:/backups
+      # 저장소 문서(읽기 전용) — 기동할 때 docs/manual을 앱 매뉴얼에 맞추고, 공지 작성 화면이 docs/notices를 불러온다
+      # (app/doc_files.py가 /app/app 기준 두 단계 위 /docs를 읽는다). git pull 뒤 backend를 다시 띄우면 매뉴얼이 반영된다
+      - ./docs/manual:/docs/manual:ro
+      - ./docs/notices:/docs/notices:ro
     depends_on:
       db:
         condition: service_healthy

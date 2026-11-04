@@ -18,7 +18,11 @@ os.environ["BPM_SYSADMINS"] = ""
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app import doc_files  # noqa: E402
 from app.main import app  # noqa: E402
+
+# 기동 때 저장소 docs/manual이 테스트 DB 매뉴얼 목록에 섞이지 않게 없는 폴더를 가리킨다 — 동기화·공지 초안 테스트는 임시 폴더를 넘긴다
+doc_files.DOCS_DIR = _TEST_DB.resolve().parent / ".no-docs-in-tests"
 
 # 실행 체크 테스트 공용 픽스처(enforce_permissions) — import로 끌어오면 파라미터와 이름이 겹쳐 린트(F811)가 막는다
 pytest_plugins = ["tests.run_helpers"]

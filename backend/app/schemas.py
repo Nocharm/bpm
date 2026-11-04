@@ -484,6 +484,8 @@ class ManualDocListOut(BaseModel):
     sort_order: int
     updated_at: datetime | None = None
     updated_by: str | None = None
+    # 배포 파일(docs/manual)에서 동기화된 문서면 파일 이름 — 화면은 편집을 잠그고 출처를 보인다
+    source_file: str | None = None
 
 
 class ManualDocDetailOut(ManualDocListOut):
@@ -1733,6 +1735,14 @@ class NoticeUpdate(BaseModel):
     importance: Literal["important", "normal"] | None = None
     starts_at: datetime | None = None
     ends_at: datetime | None = None
+
+
+class NoticeDraftOut(BaseModel):
+    """공지 초안 파일(docs/notices) — 목록은 body가 빈 문자열, 한 편 조회만 본문을 싣는다."""
+
+    file: str
+    title: str
+    body: str = ""
 
 
 class NoticeOut(BaseModel):

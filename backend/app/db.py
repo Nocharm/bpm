@@ -50,6 +50,7 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("manual_docs", "title", "VARCHAR(200) DEFAULT ''"),
     ("manual_docs", "language", "VARCHAR(5) DEFAULT 'ko'"),
     ("manual_docs", "sort_order", "INTEGER DEFAULT 0"),
+    ("manual_docs", "source_file", "VARCHAR(200)"),  # 배포 파일 동기화 문서(app/doc_files.py), NULL = 화면에서 올린 문서
     # 서브프로세스 지정 — 지정 맵만 피커 노출 + 라이브 어트리뷰트 (2026-07-06)
     ("process_maps", "sp_designated_at", "TIMESTAMPTZ"),
     ("process_maps", "sp_department", "VARCHAR(100)"),

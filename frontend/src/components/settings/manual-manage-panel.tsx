@@ -2,8 +2,9 @@
 
 // 설정 · 매뉴얼 편집·게시 — 다중 문서(F10): 목록(제목 자동 추출·한/영) + 편집기(포맷·언어·업로드·미리보기·저장·삭제).
 // 제목은 저장 시 서버가 본문 첫 헤딩에서 추출. 뷰어(/manual)는 현재 한/영 토글에 맞는 목록만 노출. sysadmin.
+// 배포 파일(docs/manual)에서 동기화된 문서는 "파일 동기화" 칩을 달고 읽기만 한다(파일이 원본, 사용자 결정 2026-11-05).
 
-import { Eye, FilePlus2, Pencil, Trash2, Upload } from "lucide-react";
+import { Eye, FileCheck, FilePlus2, Pencil, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -41,6 +42,9 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
   const [content, setContent] = useState("");
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
+  // 열어 둔 문서가 배포 파일에서 온 것이면 그 파일 이름 — 편집기·저장·업로드를 잠근다
+  const [sourceFile, setSourceFile] = useState<string | null>(null);
+  const locked = sourceFile !== null;
   const [pendingDelete, setPendingDelete] = useState<ManualDocSummary | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +64,7 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
 
   const startNew = () => {
     setEditingId(null);
+    setSourceFile(null);
     setLanguage("ko");
     setFormat("markdown");
     setContent("");
@@ -69,6 +74,7 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
   const openDoc = async (docId: number) => {
     const doc = await getManualDoc(docId);
     setEditingId(doc.id);
+    setSourceFile(doc.source_file);
     setLanguage(doc.language);
     setFormat(doc.format);
     setContent(doc.content);
@@ -119,8 +125,8 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
     onToast(t("manual.manage.deletedToast"));
   };
 
-  const authorOf = (loginId: string | null) =>
-    loginId ? (dir.get(loginId)?.name ?? loginId) : null;
+  const authorOf = (doc: ManualDocSummary) =>
+    doc.source_file ? t("manual.manage.syncedBy") : doc.updated_by ? (dir.get(doc.updated_by)?.name ?? doc.updated_by) : null;
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -160,22 +166,34 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
                   {doc.language === "ko" ? t("manual.manage.langKo") : t("manual.manage.langEn")}
                 </span>
                 <span className="min-w-0 truncate text-caption text-ink">{doc.title || t("manual.manage.untitled")}</span>
+                {doc.source_file && (
+                  <span
+                    data-id={`manual-doc-synced-${doc.id}`}
+                    title={doc.source_file}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary"
+                  >
+                    <FileCheck size={12} strokeWidth={1.5} />
+                    {t("manual.manage.syncedChip")}
+                  </span>
+                )}
                 {doc.updated_at && (
                   <span className="shrink-0 text-fine text-ink-tertiary">
-                    {authorOf(doc.updated_by)} · {formatKstShort(doc.updated_at)}
+                    {authorOf(doc)} · {formatKstShort(doc.updated_at)}
                   </span>
                 )}
               </button>
-              {/* 삭제 — 행 호버 시에만 노출 (F11) */}
-              <button
-                type="button"
-                className="shrink-0 rounded-xs p-1 text-ink-tertiary opacity-0 transition-opacity hover:bg-error/10 hover:text-error focus-visible:opacity-100 group-hover:opacity-100"
-                title={t("manual.manage.delete")}
-                aria-label={t("manual.manage.delete")}
-                onClick={() => setPendingDelete(doc)}
-              >
-                <Trash2 size={14} strokeWidth={1.5} />
-              </button>
+              {/* 삭제 — 행 호버 시에만 노출 (F11). 파일 동기화 문서는 지우지 않는다(다음 기동이 되살린다) */}
+              {!doc.source_file && (
+                <button
+                  type="button"
+                  className="shrink-0 rounded-xs p-1 text-ink-tertiary opacity-0 transition-opacity hover:bg-error/10 hover:text-error focus-visible:opacity-100 group-hover:opacity-100"
+                  title={t("manual.manage.delete")}
+                  aria-label={t("manual.manage.delete")}
+                  onClick={() => setPendingDelete(doc)}
+                >
+                  <Trash2 size={14} strokeWidth={1.5} />
+                </button>
+              )}
             </div>
           ))
         )}
@@ -198,6 +216,7 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
                 key={value}
                 type="button"
                 aria-pressed={format === value}
+                disabled={locked}
                 onClick={() => {
                   setFormat(value);
                   setPreview(false);
@@ -221,6 +240,7 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
                 key={value}
                 type="button"
                 aria-pressed={language === value}
+                disabled={locked}
                 onClick={() => setLanguage(value)}
                 className={
                   "rounded-xs px-3 py-1 text-caption transition-colors " +
@@ -243,11 +263,11 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
             className="hidden"
             onChange={(event) => void handleFile(event)}
           />
-          <button type="button" className={OUTLINE_BTN} onClick={() => fileRef.current?.click()}>
+          <button type="button" disabled={locked} className={OUTLINE_BTN} onClick={() => fileRef.current?.click()}>
             <Upload size={14} strokeWidth={1.5} />
             {t("manual.manage.upload")}
           </button>
-          <button type="button" className={OUTLINE_BTN} onClick={() => void loadBundled()}>
+          <button type="button" disabled={locked} className={OUTLINE_BTN} onClick={() => void loadBundled()}>
             {t("manual.manage.loadBundled")}
           </button>
           <button
@@ -267,7 +287,7 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
           </button>
           <button
             type="button"
-            disabled={busy || content.trim() === ""}
+            disabled={busy || locked || content.trim() === ""}
             className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-50"
             onClick={() => void save()}
           >
@@ -275,6 +295,13 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
           </button>
         </div>
       </div>
+
+      {locked && (
+        <p data-id="manual-synced-hint" className="flex items-start gap-2 rounded-sm border border-hairline bg-surface-alt px-3 py-2 text-caption text-ink-secondary">
+          <FileCheck size={16} strokeWidth={1.5} className="mt-0.5 shrink-0 text-ink-tertiary" />
+          {t("manual.manage.syncedHint", { file: sourceFile })}
+        </p>
+      )}
 
       {/* 편집기 / 미리보기 */}
       <div className="flex min-h-0 flex-1 flex-col rounded-sm border border-hairline">
@@ -295,6 +322,7 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
           <textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
+            readOnly={locked}
             spellCheck={false}
             placeholder={t("manual.manage.editorPlaceholder")}
             className="min-h-0 flex-1 resize-none rounded-b-sm bg-surface px-5 py-4 font-mono text-caption leading-relaxed text-ink outline-none"

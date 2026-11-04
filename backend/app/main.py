@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import doc_files
 from app.app_settings import get_exposed_positions, is_ai_access_enabled
 from app.auth import get_current_user
 from app.batch_runs import JOB_RUN_RETENTION, record_batch_run
@@ -150,6 +151,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         async with SessionLocal() as session:
             await seed_local_employees(session)
+    # 배포 매뉴얼 파일(docs/manual)을 앱 매뉴얼에 맞춘다 — 파일이 원본, 실패해도 기동은 계속(이전 게시본이 그대로 보인다)
+    try:
+        async with SessionLocal() as session:
+            await doc_files.sync_manual_files_if_changed(session, doc_files.DOCS_DIR / doc_files.MANUAL_DIR_NAME)
+    except Exception:
+        logger.exception("manual sync failed; the app keeps the documents it already had")
     # 설정 화면 부여 sysadmin 캐시 로드 — 기동 시 1회 (설계 §3.1)
     async with SessionLocal() as session:
         await logic.load_granted_sysadmins(session)

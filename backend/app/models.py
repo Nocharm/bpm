@@ -633,6 +633,8 @@ class ManualDoc(Base):
         DateTime(timezone=True), default=_now, onupdate=_now
     )
     updated_by: Mapped[str | None] = mapped_column(String(100), default=None)
+    # 배포 파일에서 온 문서의 파일 이름(docs/manual) — 기동 때 파일로 맞추고 화면·API로는 고치지 못한다(app/doc_files.py)
+    source_file: Mapped[str | None] = mapped_column(String(200), default=None)
 
 
 class Employee(Base):

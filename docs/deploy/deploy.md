@@ -134,6 +134,7 @@ docker compose up -d --build
   - **컬럼 삭제·개명·테이블 제거는 자동 반영되지 않는다** — 구 컬럼이 DB에 남고, 그것이 `NOT NULL`이면 INSERT가 깨진다. 그런 변경은 배포 전에 직접 `DROP`하거나 nullable로 바꾼다.
 - 프룬 도입(2026-07-09) 후 첫 AD 전체 동기화는 스테일 ad 행을 대량 삭제할 수 있음(비활성·퇴사자). 삭제 행의 한글이름/한글부서도 함께 사라지므로, 동기화 전 한글이름 모달의 전체 목록 추출로 백업 권장.
 - **1회성 후처리는 [`setup-once.md`](setup-once.md) B절에 모아뒀다** — `ai_chat_logs` 드랍(B1) · KB 게시본 백필(B2) · 필드 승격 재임포트(B3) · HR 첫 sync와 고아 경로 이관(B4) · 노출 직책 확정(B5). 지난 릴리스라면 이미 끝났을 수 있으니 해당 항목만 골라 확인한다.
+- **매뉴얼·공지 초안은 저장소 파일이 원본이다**(v1.5.0) — compose가 `./docs/manual`·`./docs/notices`를 backend의 `/docs` 아래에 읽기 전용으로 붙인다. backend가 뜰 때와 매뉴얼 목록을 열 때 `docs/manual/*-ko|en.md`가 바뀌었으면 앱 매뉴얼 문서에 반영하고(화면 편집은 잠김), 공지 작성 창의 **파일에서 불러오기**가 `docs/notices/*.md`를 읽는다. 그래서 문서만 바뀐 배포도 `git pull`만으로 반영된다. 서버 체크아웃에 `docs/manual`이 없으면 backend 로그에 `manual sync: no manual files`가 남고 기존 문서는 그대로다.
 - **`scripts/db-backup.sh`를 바꾼 배포는 사이드카를 다시 만든다** — 스크립트는 바인드 마운트라 `up -d --build`가 db-backup을 재생성하지 않아 옛 루프가 계속 돈다: `docker compose up -d --force-recreate db-backup`. 2026-10-20 배포(Backup now 트리거가 `requests/`로 이동)가 해당한다.
 - **데모 데이터 시드**(`backend/scripts/reset_db.py`)는 빈 DB 전용 → [`setup-once.md`](setup-once.md) A8. ⚠️ `drop_all`이라 **운영에서 실행 금지**(postgres는 맵·직원이 있으면 스크립트가 스스로 멈춘다).
 - **db-viewer 읽기전용 조회**를 새 스택에 처음 붙일 때만 → [`db-viewer-readonly.md`](db-viewer-readonly.md)(계정 발급·소스 등록은 서버 수작업). 매 배포에 반복하지 않는다.

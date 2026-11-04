@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import doc_files
 from app.auth import get_current_user, require_sysadmin
 from app.db import get_session
 from app.manual import extract_title, get_manual
@@ -21,6 +22,13 @@ router = APIRouter(prefix="/api", tags=["manual"], dependencies=[Depends(get_cur
 
 # 레거시 단일 게시본 — id=1 upsert (다중 문서 도입 후에도 기존 API 유지)
 _DOC_ID = 1
+ERR_FILE_SYNCED = "this document is synced from a deployed file - edit the file and redeploy"
+
+
+def _assert_not_file_synced(doc: ManualDoc) -> None:
+    """배포 파일에서 온 문서는 파일이 원본이라 화면·API로 고치거나 지우지 않는다(다음 기동이 되돌린다, app/doc_files.py)."""
+    if doc.source_file:
+        raise HTTPException(status_code=409, detail=ERR_FILE_SYNCED)
 
 
 def _with_title(doc: ManualDoc) -> ManualDoc:
@@ -35,7 +43,11 @@ async def list_manual_docs(
     language: str | None = Query(None, pattern="^(ko|en)$"),
     session: AsyncSession = Depends(get_session),
 ) -> list[ManualDoc]:
-    """문서 목록(내용 제외) — 업로드 순(sort_order, id). language 지정 시 해당 언어만 (F10)."""
+    """문서 목록(내용 제외) — 업로드 순(sort_order, id). language 지정 시 해당 언어만 (F10).
+
+    배포 매뉴얼 파일이 바뀌었으면 먼저 맞춘다 — docs만 바뀐 배포는 backend를 다시 띄우지 않는다.
+    """
+    await doc_files.sync_manual_files_if_changed(session, doc_files.DOCS_DIR / doc_files.MANUAL_DIR_NAME)
     query = select(ManualDoc).order_by(ManualDoc.sort_order, ManualDoc.id)
     if language is not None:
         query = query.where(ManualDoc.language == language)
@@ -94,6 +106,7 @@ async def update_manual_doc(
     doc = await session.get(ManualDoc, doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail=f"manual doc {doc_id} not found")
+    _assert_not_file_synced(doc)
     if payload.language is not None:
         doc.language = payload.language
     if payload.format is not None:
@@ -117,6 +130,7 @@ async def delete_manual_doc(
     doc = await session.get(ManualDoc, doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail=f"manual doc {doc_id} not found")
+    _assert_not_file_synced(doc)
     await session.delete(doc)
     await session.commit()
 
@@ -152,6 +166,7 @@ async def put_manual_doc(
         )
         session.add(doc)
     else:
+        _assert_not_file_synced(doc)
         doc.format = payload.format
         doc.content = payload.content
         doc.updated_by = user

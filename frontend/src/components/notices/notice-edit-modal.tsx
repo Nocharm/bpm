@@ -1,13 +1,17 @@
 "use client";
 
 // 공지 등록/수정 모달 — 제목·중요도·게시기간(캘린더·무제한)·본문(md)·전체 알림. (design 2026-07-05)
+// 본문은 배포에 실린 공지 초안 파일(docs/notices)에서 불러올 수 있다(새 글·수정 모두, 사용자 결정 2026-11-05).
 
-import { X } from "lucide-react";
+import { FileDown, X } from "lucide-react";
 import { useState } from "react";
 
 import {
   createNotice,
+  getNoticeDraft,
+  listNoticeDrafts,
   updateNotice,
+  type NoticeDraft,
   type NoticeImportance,
   type NoticeItem,
 } from "@/lib/api";
@@ -26,6 +30,8 @@ function toEndIso(date: string): string {
 }
 
 const IMPORTANCES: NoticeImportance[] = ["important", "normal"];
+// 서버 `NoticeCreate.body_md` max_length와 같은 값 — 불러온 초안이 넘으면 저장 전에 알린다
+const BODY_MAX = 20_000;
 
 export function NoticeEditModal({
   notice,
@@ -50,12 +56,39 @@ export function NoticeEditModal({
   const [bodyMd, setBodyMd] = useState(notice?.body_md ?? "");
   const [notifyAll, setNotifyAll] = useState(false);
   const [busy, setBusy] = useState(false);
+  // 초안 불러오기 — 목록은 처음 펼칠 때 읽는다(null = 아직, "error" = 실패)
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [drafts, setDrafts] = useState<NoticeDraft[] | "error" | null>(null);
+  const [loadedFile, setLoadedFile] = useState<string | null>(null);
 
+  const bodyTooLong = bodyMd.length > BODY_MAX;
   const canSave =
     title.trim().length > 0 &&
     startDate !== "" &&
     (unlimited || endDate !== "") &&
+    !bodyTooLong &&
     !busy;
+
+  const toggleDrafts = () => {
+    setDraftsOpen((open) => !open);
+    if (drafts === null || drafts === "error") {
+      listNoticeDrafts()
+        .then(setDrafts)
+        .catch(() => setDrafts("error"));
+    }
+  };
+
+  const loadDraft = async (file: string) => {
+    try {
+      const draft = await getNoticeDraft(file);
+      setTitle(draft.title);
+      setBodyMd(draft.body);
+      setLoadedFile(draft.file);
+      setDraftsOpen(false);
+    } catch {
+      setDrafts("error");
+    }
+  };
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -189,18 +222,64 @@ export function NoticeEditModal({
 
           {/* 본문 */}
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-caption-strong text-ink-secondary">
                 {t("noticeEdit.fieldBody")}
               </span>
-              <span className="text-fine text-ink-tertiary">{t("noticeEdit.bodyHint")}</span>
+              <span className="ml-auto text-fine text-ink-tertiary">{t("noticeEdit.bodyHint")}</span>
+              <button
+                type="button"
+                data-id="notice-load-draft"
+                aria-expanded={draftsOpen}
+                onClick={toggleDrafts}
+                className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-0.5 text-fine text-ink-secondary hover:bg-surface-alt"
+              >
+                <FileDown size={14} strokeWidth={1.5} />
+                {t("noticeEdit.loadDraft")}
+              </button>
             </div>
+            {/* 초안 목록 — 모달 안 펼침(떠 있는 메뉴가 아니라 z 사다리를 타지 않는다) */}
+            {draftsOpen && (
+              <div data-id="notice-draft-list" className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface-alt p-2">
+                <p className="text-fine text-ink-tertiary">{t("noticeEdit.loadDraftHint")}</p>
+                {drafts === null ? null : drafts === "error" ? (
+                  <p role="alert" className="text-fine text-error">{t("noticeEdit.loadDraftError")}</p>
+                ) : drafts.length === 0 ? (
+                  <p className="text-fine text-ink-tertiary">{t("noticeEdit.loadDraftEmpty")}</p>
+                ) : (
+                  <ul className="flex max-h-40 flex-col overflow-y-auto">
+                    {drafts.map((draft) => (
+                      <li key={draft.file}>
+                        <button
+                          type="button"
+                          data-id={`notice-draft-${draft.file}`}
+                          onClick={() => void loadDraft(draft.file)}
+                          className="flex w-full min-w-0 items-baseline gap-2 rounded-xs px-2 py-1 text-left hover:bg-surface"
+                        >
+                          <span className="min-w-0 truncate text-caption text-ink">{draft.title}</span>
+                          <span className="ml-auto shrink-0 font-mono text-fine text-ink-tertiary">{draft.file}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            {loadedFile && (
+              <p data-id="notice-draft-loaded" className="text-fine text-ink-tertiary">
+                {t("noticeEdit.loadedDraft", { file: loadedFile })}
+              </p>
+            )}
             <textarea
               value={bodyMd}
               onChange={(event) => setBodyMd(event.target.value)}
-              maxLength={20_000}
               className="min-h-40 w-full resize-none rounded-sm border border-hairline bg-surface px-3 py-2 text-caption text-ink focus:border-accent focus:outline-none"
             />
+            {bodyTooLong && (
+              <p role="alert" data-id="notice-body-too-long" className="text-fine text-error">
+                {t("noticeEdit.bodyTooLong", { n: bodyMd.length.toLocaleString(), max: BODY_MAX.toLocaleString() })}
+              </p>
+            )}
           </div>
 
           {/* 전체 알림 — 신규 등록 시만 */}

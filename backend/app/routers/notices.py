@@ -7,11 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import doc_files
 from app.auth import get_current_user, require_sysadmin
 from app.clock import now
 from app.db import get_session
 from app.models import Employee, Notice
-from app.schemas import NoticeCreate, NoticeOut, NoticeUpdate
+from app.schemas import NoticeCreate, NoticeDraftOut, NoticeOut, NoticeUpdate
 from app.workflow import create_notifications
 
 router = APIRouter(
@@ -49,6 +50,28 @@ async def list_notices_manage(
         select(Notice).order_by(Notice.starts_at.desc(), Notice.id.desc())
     )
     return list(rows.all())
+
+
+@router.get(
+    "/drafts",
+    response_model=list[NoticeDraftOut],
+    dependencies=[Depends(require_sysadmin)],
+)
+async def list_notice_drafts() -> list[doc_files.NoticeDraft]:
+    """공지 초안 파일 목록(docs/notices, 최신 먼저) — 공지를 쓰거나 고칠 때 본문으로 불러온다(사용자 결정 2026-11-05)."""
+    return doc_files.list_notice_drafts(doc_files.DOCS_DIR / doc_files.NOTICE_DIR_NAME)
+
+
+@router.get(
+    "/drafts/{file}",
+    response_model=NoticeDraftOut,
+    dependencies=[Depends(require_sysadmin)],
+)
+async def get_notice_draft(file: str) -> doc_files.NoticeDraft:
+    draft = doc_files.read_notice_draft(doc_files.DOCS_DIR / doc_files.NOTICE_DIR_NAME, file)
+    if draft is None:
+        raise HTTPException(status_code=404, detail=f"notice draft {file} not found")
+    return draft
 
 
 @router.get("/{notice_id}", response_model=NoticeOut)
