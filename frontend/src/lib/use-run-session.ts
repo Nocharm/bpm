@@ -1,6 +1,7 @@
 // 실행 체크(Run) 세션 — 맵 화면이 실행 모드일 때 실행 상세·고정된 하위 범위 그래프를 들고, 노드 동작·다시 읽기·공유 실행
 // 폴링을 맡는다. 실행 상태는 페이지의 편집 상태(nodes·edges)와 섞지 않고 이 훅에만 둔다(lessons react-ts-patterns §4).
 // 서버가 진실이라 동작 응답의 전체 상세로 바꾸고, 409·403(먼저 바뀜·권한)이면 최신 상세로 다시 읽은 뒤 알린다.
+// 처음 읽기가 실패하면 토스트 대신 loadError로 돌려준다 — 실행 바가 오류 줄과 "실행 닫기"를 보인다(R24).
 
 import { useStoreApi, useUpdateNodeInternals, type Node } from "@xyflow/react";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
@@ -31,9 +32,21 @@ export interface RunSession {
   update(next: RunDetail): void;
 }
 
+export interface RunSessionState {
+  // 실행 상세가 도착하기 전·실패했을 때 null
+  session: RunSession | null;
+  // 처음 읽기 실패 문구 — 상세가 있으면(뒤늦은 폴링 성공 등) null
+  loadError: string | null;
+}
+
 interface LoadedRun {
   runId: number;
   detail: RunDetail;
+}
+
+interface FailedRun {
+  runId: number;
+  message: string;
 }
 
 interface ScopeGraphEntry {
@@ -47,18 +60,29 @@ interface ScopeGraphCache {
   entries: Map<string, ScopeGraphEntry>;
 }
 
-export function useRunSession(runId: number | null, onToast: (msg: string, tone?: "error") => void): RunSession | null {
+export function useRunSession(
+  runId: number | null,
+  onToast: (msg: string, tone?: "error") => void,
+): RunSessionState {
   const { t } = useI18n();
   const [loaded, setLoaded] = useState<LoadedRun | null>(null);
+  const [failed, setFailed] = useState<FailedRun | null>(null);
   const [graphCache, setGraphCache] = useState<ScopeGraphCache | null>(null);
-  // 응답 순서 가드 — 늦게 온 옛 응답(폴링)이 방금 받은 동작 결과를 덮지 않게 요청 순번으로 거른다
+  // 응답 순서 가드 — 늦게 온 옛 읽기(폴링·다시 읽기) 응답이 그 뒤에 받은 결과를 덮지 않게 요청 순번으로 거른다.
+  // 동작·변경 응답은 늘 적용하고 그보다 먼저 떠난 읽기를 모두 낡은 것으로 만든다(R26: 폴링이 방금 누른 결과를 10초 가리지 않게)
   const requestSeqRef = useRef(0);
   const appliedSeqRef = useRef(0);
   const inFlightGraphsRef = useRef(new Set<string>());
 
-  const applyDetail = useCallback((id: number, seq: number, next: RunDetail) => {
+  const applyRead = useCallback((id: number, seq: number, next: RunDetail) => {
     if (seq < appliedSeqRef.current) return;
     appliedSeqRef.current = seq;
+    setLoaded({ runId: id, detail: next });
+  }, []);
+
+  const applyWrite = useCallback((id: number, next: RunDetail) => {
+    requestSeqRef.current += 1;
+    appliedSeqRef.current = requestSeqRef.current;
     setLoaded({ runId: id, detail: next });
   }, []);
 
@@ -66,9 +90,9 @@ export function useRunSession(runId: number | null, onToast: (msg: string, tone?
     async (id: number): Promise<void> => {
       requestSeqRef.current += 1;
       const seq = requestSeqRef.current;
-      applyDetail(id, seq, await getRun(id));
+      applyRead(id, seq, await getRun(id));
     },
-    [applyDetail],
+    [applyRead],
   );
 
   const fetchScopeGraph = useCallback(async (id: number, scopePath: string, versionId: number | null): Promise<void> => {
@@ -88,14 +112,19 @@ export function useRunSession(runId: number | null, onToast: (msg: string, tone?
   }, []);
 
   const detail = loaded !== null && loaded.runId === runId ? loaded.detail : null;
+  const loadError = detail === null && failed !== null && failed.runId === runId ? failed.message : null;
 
   const handleLoadError = useEffectEvent((err: unknown) => {
     onToast(humanizeRunError(err, t), "error");
   });
+  const handleFirstLoadError = useEffectEvent((id: number, err: unknown) => {
+    console.warn("run load failed", { runId: id, status: err instanceof ApiError ? err.status : null, err });
+    setFailed({ runId: id, message: humanizeRunError(err, t) });
+  });
 
   useEffect(() => {
     if (runId === null) return;
-    fetchDetail(runId).catch((err: unknown) => handleLoadError(err));
+    fetchDetail(runId).catch((err: unknown) => handleFirstLoadError(runId, err));
   }, [runId, fetchDetail]);
 
   // 고정된 하위 범위의 그래프 — 처음 보이거나 고정 버전이 바뀌면(되돌아가기 후 다시 고정) 받는다
@@ -158,8 +187,6 @@ export function useRunSession(runId: number | null, onToast: (msg: string, tone?
   const act = useCallback(
     async (input: RunActInput): Promise<RunDetail | null> => {
       if (runId === null) return null;
-      requestSeqRef.current += 1;
-      const seq = requestSeqRef.current;
       try {
         const next = await actOnRun(runId, {
           scope_path: input.scopePath,
@@ -169,7 +196,7 @@ export function useRunSession(runId: number | null, onToast: (msg: string, tone?
           exit_key: input.exitKey,
           cascade: input.cascade,
         });
-        applyDetail(runId, seq, next);
+        applyWrite(runId, next);
         return next;
       } catch (err) {
         // 먼저 바뀜(409)·권한(403) — 화면이 낡았으니 최신 상세로 다시 그린 뒤 알린다
@@ -182,7 +209,7 @@ export function useRunSession(runId: number | null, onToast: (msg: string, tone?
         return null;
       }
     },
-    [runId, applyDetail, fetchDetail, onToast, t],
+    [runId, applyWrite, fetchDetail, onToast, t],
   );
 
   const loadScopeGraph = useCallback(
@@ -198,13 +225,13 @@ export function useRunSession(runId: number | null, onToast: (msg: string, tone?
     [runId, detail, fetchScopeGraph, onToast, t],
   );
 
+  // 실행 바의 변경(보존·알림·공유·참여자·중단·다시 열기) 응답 — 동작 응답과 같이 늘 적용한다
   const update = useCallback(
     (next: RunDetail) => {
       if (runId === null || next.id !== runId) return;
-      requestSeqRef.current += 1;
-      applyDetail(runId, requestSeqRef.current, next);
+      applyWrite(runId, next);
     },
-    [runId, applyDetail],
+    [runId, applyWrite],
   );
 
   // 실행이 바뀌면 이전 실행의 그래프는 버린다(캐시는 실행 id로 표시돼 있다)
@@ -218,10 +245,11 @@ export function useRunSession(runId: number | null, onToast: (msg: string, tone?
     [graphCache, runId],
   );
 
-  return useMemo(
+  const session = useMemo(
     () => (detail === null ? null : { detail, scopeGraphs, act, reload, loadScopeGraph, update }),
     [detail, scopeGraphs, act, reload, loadScopeGraph, update],
   );
+  return { session, loadError };
 }
 
 /**

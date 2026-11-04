@@ -26,7 +26,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useParams, useRouter } from "next/navigation";
-import { Fragment, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import { ScopeWindow } from "@/components/scope-window";
 import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-store";
@@ -55,7 +55,11 @@ import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
+import { RunBar } from "@/components/run/run-bar";
 import { RunLegend } from "@/components/run/run-legend";
+import { RunMenu } from "@/components/run/run-menu";
+import { RunStartDialog } from "@/components/run/run-start-dialog";
+import { RunUrlSync } from "@/components/run/run-url-sync";
 import { UrlLabelField } from "@/components/url-label-field";
 import { AttributeReadRows } from "@/components/attribute-read-rows";
 import { FallbackHint } from "@/components/fallback-hint";
@@ -352,7 +356,7 @@ import { buildNodeRefCheck } from "@/lib/node-ref-warnings";
 import { runGuardedNavigation, setNavigationGuard } from "@/lib/navigation-guard";
 import { listSaveBlockers } from "@/lib/save-blockers";
 import { useClosingKeys } from "@/lib/use-closing-keys";
-import { readRunIdParam } from "@/lib/run-links";
+import { buildMapVersionHref, buildRunHref } from "@/lib/run-links";
 import { applyRunEdgeKind, buildRunView, splitRunScopeGraphs } from "@/lib/run-view";
 import { useRepairRunNodeInternals, useRunSession } from "@/lib/use-run-session";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
@@ -1406,11 +1410,13 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 뷰어 권한 사용자는 항상 읽기 전용 — 서버 산정 my_role 기준 / viewer role is always read-only
   const isViewer = myRole === "viewer";
   // 실행 체크(Run) 모드 — ?run=<id>로 열면 실행의 게시본 위에 상태 색·연결선만 그리는 읽기 전용 캔버스.
-  // 실행 상태는 훅(lib/use-run-session)이 들고 페이지 편집 상태와 섞지 않는다. runId는 맵 상세 로드 체인이 URL에서 읽는다
+  // 실행 상태는 훅(lib/use-run-session)이 들고 페이지 편집 상태와 섞지 않는다. runId는 주소 동기화(RunUrlSync)가 채우고
+  // 실행을 닫는 쪽이 먼저 비운다. 편집 잠금·실행 크롬은 상세 도착이 아니라 runId 기준 — 읽는 동안·실패해도 편집 화면이 되지 않는다(R24)
   const [runId, setRunId] = useState<number | null>(null);
-  const runSession = useRunSession(runId, showToast);
-  const runMode = runSession !== null;
+  const { session: runSession, loadError: runLoadError } = useRunSession(runId, showToast);
+  const runMode = runId !== null;
   const [runLegendOpen, setRunLegendOpen] = useState(false);
+  const [runStartOpen, setRunStartOpen] = useState(false);
   // 다른 사용자가 유효한 체크아웃을 쥐고 있으면 읽기 전용 (코멘트 작성은 허용)
   const readOnly = isViewer || (checkout !== null && !checkout.mine) || statusLocksEditing || runMode;
   // 읽기 전용 배너 — 사유별 톤/아이콘/타이틀+설명 (우선순위: 뷰어 > 타인 점유 > 버전 상태).
@@ -2897,8 +2903,6 @@ function MapEditor({ mapId }: { mapId: number }) {
           setVersionId(initialId ?? detail.versions[0].id);
           setScopes([{ kind: "root", title: detail.name }]);
           setActiveIndex(0);
-          // 실행 체크 딥링크 — ?run=<id>면 실행 모드(비동기 콜백이라 set-state-in-effect 아님)
-          setRunId(readRunIdParam(window.location.search));
         }
       } catch (err) {
         if (active) {
@@ -3654,11 +3658,30 @@ function MapEditor({ mapId }: { mapId: number }) {
     // 콜백으로 미룬다 — 이펙트 본문 동기 setState 금지(lessons react-ts-patterns §3), 전환은 같은 값이면 무해
     void Promise.resolve().then(() => switchVersion(runVersionId));
   }, [runVersionId, versionId, versions, switchVersion]);
+  // 실행 열기·닫기 — 주소가 진실(RunUrlSync가 runId를 따라 맞춘다). 닫을 때는 runId를 먼저 비워 위 버전 맞춤 이펙트가
+  // 다른 버전으로 옮기는 전환을 되돌리지 않게 한다(같은 값이 주소 동기화로 다시 온다)
+  const openRun = (nextRunId: number, runVersion: number) => {
+    runGuardedNavigation(() => router.push(buildRunHref(mapId, runVersion, nextRunId)));
+  };
+  const latestPublishedId = versions.find((v) => v.status === "published")?.id ?? null;
+  const leaveRun = (targetVersionId: number | null) => {
+    runGuardedNavigation(() => {
+      const nextVersionId = targetVersionId ?? versionId;
+      setRunId(null);
+      router.push(nextVersionId !== null ? buildMapVersionHref(mapId, nextVersionId) : `/maps/${mapId}`);
+      if (nextVersionId !== null && nextVersionId !== versionId) void switchVersion(nextVersionId);
+    });
+  };
 
   // 타임라인 '이 버전으로 가기' — 편집 중이면 VersionPill과 동일한 전환 확인 모달을 거친다 (feedback 2026-08-14)
   const [goVersionPrompt, setGoVersionPrompt] = useState<VersionSummary | null>(null);
   const requestGoToVersion = (id: number) => {
     if (id === versionId) return;
+    // 실행 모드는 실행의 버전으로 고정 — 전환하면 버전 맞춤 이펙트가 조용히 되돌린다(R27)
+    if (runMode) {
+      showToast(t("run.bar.versionLocked"));
+      return;
+    }
     const target = versions.find((v) => v.id === id);
     if (!target) return;
     if (!readOnly) setGoVersionPrompt(target);
@@ -4044,6 +4067,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 출구 선택 목록으로 끝을 고른 뒤 연결한다(사용자 결정 2026-10-01). 끝 1개 이하·일반 노드는 그대로.
   const handleFlowConnect = useCallback(
     (connection: Connection) => {
+      // 읽기 전용(실행 모드 포함)이면 출구 선택 목록도 열지 않는다 — onConnect의 가드보다 먼저 모달이 뜨던 길(R27)
+      if (readOnly) return;
       const sourceId = connection.source;
       const isSubprocessSource =
         nodesRef.current.find((node) => node.id === sourceId)?.data.nodeType === "subprocess";
@@ -4054,7 +4079,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       onConnect(connection);
     },
-    [onConnect, subEndsOf, openEndPrompt],
+    [readOnly, onConnect, subEndsOf, openEndPrompt],
   );
 
   // 끝점 재연결 중인 엣지 — onReconnectStart~End 사이에만 채워진다(몸체 드롭 빠른 연결과 구분, handleConnectEnd)
@@ -8276,7 +8301,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     const selectedPulseGroup = selectedEdgeId ? pulses.get(selectedEdgeId)?.group : undefined;
     // 실행 모드는 설계용 흐름 펄스를 끈다 — 지금 갈 길의 흐르는 점과 섞이지 않게(design run-check §4.3)
     const withPulse = (list: Edge[]): Edge[] =>
-      pulses.size === 0 || runView
+      pulses.size === 0 || runMode
         ? list
         : list.map((edge) => {
             const pulse = pulses.get(edge.id);
@@ -8367,7 +8392,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ),
     );
     return finishEdges([...currentStyled, ...childStyled, ...gatewayStyled]);
-  }, [edges, nodes, layoutNodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, yOffsets, edgeCarry, printView, runView]);
+  }, [edges, nodes, layoutNodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, yOffsets, edgeCarry, printView, runView, runMode]);
   // 흐름 점 범례(우하단 노드 표시 정보 카드) — 펄스가 붙은 엣지가 하나라도 있을 때만
   const hasFlowPulse = styledEdges.some((edge) => isEdgePulse(edge.data?.pulse));
 
@@ -9606,6 +9631,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           versionId={versionId}
           isEditing={!readOnly}
           onSwitch={(id) => void switchVersion(id)}
+          disabledReason={runMode ? t("run.bar.versionLocked") : undefined}
         />
 
         {isViewer && (
@@ -9852,6 +9878,14 @@ function MapEditor({ mapId }: { mapId: number }) {
               </div>
             );
           })()}
+          {/* 실행 진입 — 게시본·지난 게시본에서만 켜진다(그 밖은 꺼진 버튼+이유 툴팁). "모든 실행 보기"는 모든 실행 창이 생기면 onShowAll로 연결 */}
+          <RunMenu
+            mapId={mapId}
+            versionStatus={currentVersion?.status ?? ""}
+            isFrameworkMap={isFrameworkMap}
+            onOpenRun={openRun}
+            onNewRun={() => setRunStartOpen(true)}
+          />
           <button
             data-id="editor-save"
             className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
@@ -9890,9 +9924,19 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
       )}
 
+      {/* 실행 바 — 실행 모드에선 게시본 읽기 전용 배너 대신(실행 바가 버전 안내 줄을 따로 가진다) */}
+      {runMode && (
+        <RunBar
+          session={runSession}
+          loadError={runLoadError}
+          onToast={showToast}
+          onClose={() => leaveRun(null)}
+          onOpenCurrentVersion={latestPublishedId !== null ? () => leaveRun(latestPublishedId) : null}
+        />
+      )}
       {/* 상태 배너 — 사유별 톤·아이콘·굵은 타이틀로 즉시 구분(타인 점유는 이름 표기).
           framework 캔버스는 draft/confirmed/superseded 배너가 우선하며 draft는 편집 중에도 상시 (2026-09-02) */}
-      {editorNotice && editorNoticeVisible && (
+      {!runMode && editorNotice && editorNoticeVisible && (
         <div
           data-id="editor-readonly-notice"
           className={`flex items-center gap-2 border-b px-4 py-1.5 text-caption ${NOTICE_TONE_CLASS[editorNotice.tone]}`}
@@ -11872,6 +11916,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         isEditing={!readOnly}
                         onSwitch={(id) => void switchVersion(id)}
                         compact
+                        disabledReason={runMode ? t("run.bar.versionLocked") : undefined}
                       />
                       {/* 버전 관리 — 역할/상태 매트릭스 우측 정렬 아이콘 (§6.2) */}
                       <div className="ml-auto flex shrink-0 items-center gap-0.5">
@@ -12405,6 +12450,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     versionId={versionId}
                     isEditing={!readOnly}
                     onSwitch={(id) => void switchVersion(id)}
+                    disabledReason={runMode ? t("run.bar.versionLocked") : undefined}
                   />
                 }
                 readOnly={readOnly}
@@ -12714,6 +12760,23 @@ function MapEditor({ mapId }: { mapId: number }) {
           onClose={() => {
             setRejectOpen(false);
             setRejectReason("");
+          }}
+        />
+      )}
+      {/* 실행 주소 동기화 — useSearchParams 구독이라 이 조각만 Suspense로 감싼다 */}
+      <Suspense fallback={null}>
+        <RunUrlSync onRunIdChange={setRunId} />
+      </Suspense>
+      {runStartOpen && versionId !== null && (
+        <RunStartDialog
+          mapId={mapId}
+          versions={versions}
+          currentVersionId={versionId}
+          onClose={() => setRunStartOpen(false)}
+          onCreated={(detail) => {
+            setRunStartOpen(false);
+            showToast(t("run.start.created"));
+            openRun(detail.id, detail.version_id);
           }}
         />
       )}

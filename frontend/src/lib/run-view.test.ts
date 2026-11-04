@@ -6,11 +6,13 @@ import { describe, expect, it } from "vitest";
 import { ApiError, type FlatNode, type GraphEdge, type RunDetail, type RunNodeState } from "@/lib/api";
 import { messages, type MessageKey } from "@/lib/i18n-messages";
 import type { RunGraph } from "@/lib/run-graph";
-import { buildRunHref, readRunIdParam } from "@/lib/run-links";
+import { buildMapVersionHref, buildRunHref, readRunIdParam } from "@/lib/run-links";
 import {
   applyRunEdgeKind,
   buildRunScopeStates,
   buildRunView,
+  getRunCapKind,
+  getRunMenuDisabledReason,
   humanizeRunError,
   splitRunNodeKey,
   splitRunScopeGraphs,
@@ -320,9 +322,51 @@ describe("humanizeRunError", () => {
   });
 });
 
+describe("getRunMenuDisabledReason", () => {
+  it("allows published and past published versions", () => {
+    expect(getRunMenuDisabledReason("published", false)).toBeNull();
+    expect(getRunMenuDisabledReason("expired", false)).toBeNull();
+  });
+
+  it("blocks versions that are not published yet", () => {
+    expect(getRunMenuDisabledReason("draft", false)).toBe("run.menu.disabledDraft");
+    expect(getRunMenuDisabledReason("pending", false)).toBe("run.menu.disabledDraft");
+    expect(getRunMenuDisabledReason("approved", false)).toBe("run.menu.disabledDraft");
+    expect(getRunMenuDisabledReason("rejected", false)).toBe("run.menu.disabledDraft");
+  });
+
+  it("blocks framework canvases whatever the version", () => {
+    expect(getRunMenuDisabledReason("confirmed", true)).toBe("run.menu.disabledFramework");
+    expect(getRunMenuDisabledReason("published", true)).toBe("run.menu.disabledFramework");
+  });
+
+  it("has both reasons in en and ko", () => {
+    expect(t("run.menu.disabledDraft")).not.toBe("run.menu.disabledDraft");
+    expect(t("run.menu.disabledFramework")).not.toBe("run.menu.disabledFramework");
+    expect(messages.en["run.menu.disabledDraft"]).toBeTruthy();
+  });
+});
+
+describe("getRunCapKind", () => {
+  it("tells which open-run limit refused a new run", () => {
+    expect(getRunCapKind(makeApiError(409, "open solo run limit reached"))).toBe("solo");
+    expect(getRunCapKind(makeApiError(409, "open shared run limit reached"))).toBe("shared");
+  });
+
+  it("ignores other errors", () => {
+    expect(getRunCapKind(makeApiError(409, "keep limit reached"))).toBeNull();
+    expect(getRunCapKind(makeApiError(403, "only the starter can do this"))).toBeNull();
+    expect(getRunCapKind(new Error("network"))).toBeNull();
+  });
+});
+
 describe("run links", () => {
   it("builds the run URL on the map screen", () => {
     expect(buildRunHref(10, 100, 7)).toBe("/maps/10?version=100&run=7");
+  });
+
+  it("builds the plain map URL for leaving a run on the same version", () => {
+    expect(buildMapVersionHref(10, 100)).toBe("/maps/10?version=100");
   });
 
   it("reads only a positive integer run id", () => {

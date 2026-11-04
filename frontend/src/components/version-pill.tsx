@@ -18,9 +18,18 @@ interface VersionPillProps {
   onSwitch: (id: number) => void;
   // 승인 탭 등 컴팩트 위치 — 패딩·글자 축소 / shrink padding & text for tight spots.
   compact?: boolean;
+  // 전환을 막는 이유(실행 모드는 실행의 버전으로 고정) — 있으면 드롭다운·호버 바로가기를 열지 않고 툴팁으로 보인다
+  disabledReason?: string;
 }
 
-export function VersionPill({ versions, versionId, isEditing, onSwitch, compact = false }: VersionPillProps) {
+export function VersionPill({
+  versions,
+  versionId,
+  isEditing,
+  onSwitch,
+  compact = false,
+  disabledReason,
+}: VersionPillProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [hovering, setHovering] = useState(false);
@@ -34,7 +43,8 @@ export function VersionPill({ versions, versionId, isEditing, onSwitch, compact 
       (v) => v.id !== versionId && v.status !== "published" && v.status !== "expired" && v.status !== "confirmed",
     )
     .reverse();
-  const showHover = hovering && !open && unpublished.length > 0;
+  const isLocked = disabledReason !== undefined;
+  const showHover = hovering && !open && !isLocked && unpublished.length > 0;
 
   // 버전 선택 — 편집 중이면 확인 모달, 아니면 즉시 전환(드롭다운·아코디언 공용).
   const handlePick = (version: VersionSummary) => {
@@ -65,11 +75,14 @@ export function VersionPill({ versions, versionId, isEditing, onSwitch, compact 
     >
       <button
         type="button"
-        className={`inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent-tint font-semibold text-accent hover:bg-accent-tint/70 ${
-          compact ? "px-2 py-0.5 text-fine" : "px-2.5 py-1 text-caption"
-        }`}
-        onClick={() => setOpen((v) => !v)}
-        title={t("editor.versionSelectAria")}
+        className={`inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent-tint font-semibold text-accent ${
+          isLocked ? "cursor-not-allowed" : "hover:bg-accent-tint/70"
+        } ${compact ? "px-2 py-0.5 text-fine" : "px-2.5 py-1 text-caption"}`}
+        onClick={() => {
+          if (!isLocked) setOpen((v) => !v);
+        }}
+        aria-disabled={isLocked}
+        title={disabledReason ?? t("editor.versionSelectAria")}
         aria-label={t("editor.versionSelectAria")}
       >
         <span className={`inline-flex items-baseline gap-1 truncate ${compact ? "max-w-[8rem]" : "max-w-[10rem]"}`}>
@@ -79,7 +92,7 @@ export function VersionPill({ versions, versionId, isEditing, onSwitch, compact 
           </span>
           <span className="truncate font-semibold">{current.label}</span>
         </span>
-        <ChevronDown size={compact ? 12 : 14} strokeWidth={1.5} />
+        {!isLocked && <ChevronDown size={compact ? 12 : 14} strokeWidth={1.5} />}
       </button>
       {/* 호버 아코디언 — 게시 안 된 최근 버전 바로가기. pt-1로 pill↔패널 호버 갭 브리지. */}
       {unpublished.length > 0 && (

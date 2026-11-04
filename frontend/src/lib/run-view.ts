@@ -209,6 +209,23 @@ const RUN_ERROR_KEYS: [string, MessageKey][] = [
 ];
 const TOUCHED_AFTER_PREFIX = "later steps already changed: ";
 
+// 실행할 수 있는 버전 — 게시본과 지난 게시본만(design §4.1). 업무 체계 캔버스는 실행 대상이 아니다(BE ERR_FRAMEWORK)
+const RUNNABLE_VERSION_STATUSES: ReadonlySet<string> = new Set(["published", "expired"]);
+
+/** 헤더 실행 버튼이 꺼지는 이유(툴팁 문구 키) — 실행할 수 있으면 null. */
+export function getRunMenuDisabledReason(status: string, isFrameworkMap: boolean): MessageKey | null {
+  if (isFrameworkMap) return "run.menu.disabledFramework";
+  return RUNNABLE_VERSION_STATUSES.has(status) ? null : "run.menu.disabledDraft";
+}
+
+/** 새 실행이 열린 실행 상한(409)에 막혔는지 — 개인(사람당)·공유(맵당) 중 어느 쪽인지. 다른 에러면 null. */
+export function getRunCapKind(err: unknown): "solo" | "shared" | null {
+  const detail = getApiErrorDetail(err);
+  if (detail.startsWith("open solo run limit reached")) return "solo";
+  if (detail.startsWith("open shared run limit reached")) return "shared";
+  return null;
+}
+
 export function humanizeRunError(err: unknown, t: TFunc): string {
   const detail = getApiErrorDetail(err);
   if (detail.startsWith(TOUCHED_AFTER_PREFIX)) {

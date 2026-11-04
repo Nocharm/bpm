@@ -11,3 +11,8 @@ export function readRunIdParam(search: string): number | null {
   const runId = Number(raw);
   return Number.isInteger(runId) && runId > 0 ? runId : null;
 }
+
+/** 실행을 닫을 때의 맵 주소 — `?run=` 없이 같은 버전으로(실행 모드를 나온다). */
+export function buildMapVersionHref(mapId: number, versionId: number): string {
+  return `/maps/${mapId}?version=${versionId}`;
+}
