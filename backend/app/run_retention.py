@@ -1,6 +1,6 @@
 """실행 체크(Run) 하루 한 번 정리 — 방치 알림 · 자동 중단 · 끝난 실행의 한 줄 요약 전환. `main.py` lifespan 루프가 새벽에 부른다.
 
-설계: docs/superpowers/specs/2026-11-04-run-check-design.md §4.6(보존과 정리).
+설계: 2026-11-04-run-check-design.md §4.6(보존과 정리).
 휴지통 맵의 실행은 건너뛴다(복구되면 다음 회차가 처리). 각 단계는 자기 일을 커밋하고, 행 잠금에 걸린 실행(사용자가 만지는 중)은
 건너뛰어 다음 날로 미룬다(postgres `SKIP LOCKED`, sqlite는 잠금 문구 없음).
 """

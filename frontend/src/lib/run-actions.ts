@@ -1,7 +1,7 @@
 // 실행 모드 노드 버튼 줄의 순수 계산 — 상태·노드 유형·갈래에서 보일 버튼(목업 buildBarHtml()), 갈래·출구 이름,
 // 완료 뒤 이어 밟기(목업 runAction()), 먼저 끝낼 단계의 노드 키(목업 getFrontier()), 하위 범위 잠김·기록 판정,
 // 버튼 줄·팝오버 자리(목업 placeBar()). 화면은 components/run/run-action-bar.tsx.
-// 설계: docs/superpowers/specs/2026-11-04-run-check-design.md §4.2–§4.3.
+// 설계: 2026-11-04-run-check-design.md §4.2–§4.3.
 
 import type { RunActionName, RunDetail } from "@/lib/api";
 import type { MessageKey } from "@/lib/i18n-messages";

@@ -1,6 +1,6 @@
 // 실행 체크(Run) 화면 파생 — 실행 상세와 범위별 그래프에서 노드 상태·연결선 종류·진행률을 노드 키로 모은다(렌더 전용).
 // 노드 키는 에디터 임베드 id(`embedId`)와 같은 꼴(`{범위}/{노드}`, 최상위는 노드 id)이라 displayNodes·styledEdges가
-// 노드·연결선 id로 바로 찾는다. 상태 계산은 lib/run-graph. 설계: docs/superpowers/specs/2026-11-04-run-check-design.md §4.3.
+// 노드·연결선 id로 바로 찾는다. 상태 계산은 lib/run-graph. 설계: 2026-11-04-run-check-design.md §4.3.
 
 import { MarkerType, type Edge } from "@xyflow/react";
 

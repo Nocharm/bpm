@@ -1,6 +1,6 @@
 // 실행 체크(Run) 상태 엔진 — 맵 그래프 + 수동으로 저장된 소수의 상태에서 노드별 실행 상태를 계산한다.
 // BE `app/run_graph.py`와 이중 구현, 사례 `backend/tests/fixtures/run_graph_cases.json`(run-graph.test.ts가 읽는다) —
-// 한쪽 규칙을 바꾸면 사례와 양쪽을 같이 옮긴다. 설계: docs/superpowers/specs/2026-11-04-run-check-design.md §4.2.
+// 한쪽 규칙을 바꾸면 사례와 양쪽을 같이 옮긴다. 설계: 2026-11-04-run-check-design.md §4.2.
 //
 // 두 구현이 같아야 하는 세부(사례 파일이 직접 가두지 못하는 것):
 // - 위상 순서는 라운드 단위 Kahn — 매 라운드에 진입차수 0인 노드를 id 오름차순으로 한꺼번에 내보낸다.
