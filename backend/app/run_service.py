@@ -226,7 +226,8 @@ async def build_run_detail(session: AsyncSession, run: Run, user: str) -> RunDet
         comment_counts=[c for c in await _count_comments(session, run.id) if is_scope_visible(c.scope_path, visible)],
         can_act=is_actor(run, {p.login_id for p in row.participants}, user),
         can_manage=run.starter == user,
-        can_keep=await can_keep(session, run, user),
+        # 요약된 실행은 보존을 바꿀 수 없다(409) — 화면이 보존 표시를 내지 않게 한다
+        can_keep=run.status != "summarized" and await can_keep(session, run, user),
     )
 
 
@@ -426,9 +427,24 @@ async def _resolve_child_version(
         raise HTTPException(status_code=422, detail=ERR_SUB_UNAVAILABLE)
     await _assert_sub_runnable(session, user, version_id)
     if pin:
-        session.add(RunScope(run_id=run.id, scope_path=scope_path, version_id=version_id))
+        closed = await _is_closed_on_first_pin(session, run.id, scope_path, parent_version_id)
+        session.add(RunScope(run_id=run.id, scope_path=scope_path, version_id=version_id, closed=closed))
         await session.flush()
     return version_id
+
+
+async def _is_closed_on_first_pin(session: AsyncSession, run_id: int, scope_path: str, parent_version_id: int) -> bool:
+    """처음 고정하는 범위를 닫힌 채로 둘지 — 바깥 범위가 닫혔거나, 호스트를 들어가지 않고 바로 완료했으면 닫는다.
+
+    코멘트는 호스트·닫힘 게이트 없이 범위를 고정한다(R17). 열린 범위로 고정하면 `_assert_hosts_reachable`의
+    "들어가지 않은 완료" 판정을 지나 다음 동작이 하위 맵을 밟고, 호스트가 진행 중으로 되돌아가 고른 출구를 잃는다.
+    """
+    parent_path, host_id = _split_scope(scope_path)
+    parent_state = await load_scope_state(session, run_id, parent_path)
+    if parent_state.closed:
+        return True
+    statuses = derive_run_statuses(await load_version_graph(session, parent_version_id), parent_state)
+    return statuses.get(host_id) == "done"
 
 
 async def _resolve_scope_chain(

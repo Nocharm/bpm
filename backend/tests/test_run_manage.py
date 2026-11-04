@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 
 from app import clock
 from app.db import SessionLocal
-from app.models import Run, RunComment, RunEvent, RunScope
+from app.models import Notification, Run, RunComment, RunEvent, RunScope
 from tests.run_helpers import as_user, load_case_graph, seed_published_map
 
 _names = itertools.count(1)
@@ -259,11 +259,41 @@ def test_comment_in_unpinned_or_invalid_scope_is_denied(client: TestClient, monk
     starter = _user("badscope")
     run = _create_run(client, seeded, starter)
 
-    read = _call(client, "GET", f"/runs/{run['id']}/comments", starter, params={"scope": "ghost"})  # 고정 행 없음=기본 가림
+    read = _call(client, "GET", f"/runs/{run['id']}/comments", starter, params={"scope": "ghost"})
     write = _comment(client, run, starter, scope_path="ghost", node_id=seeded["ids"]["a"])
 
-    assert _rejected(read) == (403, "cannot view the subprocess map")
-    assert _rejected(write) == (422, "node is not actionable")  # 호스트가 하위프로세스 노드가 아니다
+    # 고정 행이 없는 범위는 범위 그래프와 같은 사슬 검사를 거친다 — 호스트가 하위프로세스 노드가 아니다
+    assert _rejected(read) == (422, "node is not actionable")
+    assert _rejected(write) == (422, "node is not actionable")
+
+
+def test_comment_list_on_unpinned_child_scope_matches_graph(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, enforce_permissions: None, seed_employee: Callable[..., None]
+) -> None:
+    parent, child = _seed_sp_pair(client, monkeypatch, "comment unpinned")
+    q = parent["ids"]["q"]
+    member, outsider = _user("member"), _user("outsider")
+    for login in (member, outsider):
+        seed_employee(login)
+    granted = _call(
+        client,
+        "POST",
+        f"/maps/{child['map_id']}/permissions",
+        child["owner"],
+        json={"principal_type": "user", "principal_id": member, "role": "viewer"},
+    )
+    assert granted.status_code == 201, granted.text
+    run = _create_run(client, parent, member, scope="shared", participants=[outsider])
+
+    def _get(path: str, user: str):
+        return _call(client, "GET", f"/runs/{run['id']}/{path}", user, params={"scope": q})
+
+    # 펼쳤지만 아직 들어가지 않은(고정 전) 하위 맵 — 그래프를 볼 수 있으면 코멘트 목록도 빈 목록으로 열린다
+    assert _get("graph", member).status_code == 200
+    assert _ok(_get("comments", member)) == []
+    assert _rejected(_get("graph", outsider)) == (403, "cannot view the subprocess map")
+    assert _rejected(_get("comments", outsider)) == (403, "cannot view the subprocess map")
+    assert _read_db(lambda s: s.scalar(select(func.count()).select_from(RunScope).where(RunScope.run_id == run["id"]))) == 0
 
 
 def test_comment_and_lifecycle_changes_touch_activity(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -391,6 +421,42 @@ def test_delete_run_is_starter_only_and_cascades(
     assert left == 0
 
 
+def test_delete_run_deletes_its_run_notifications(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, seed_employee: Callable[..., None]
+) -> None:
+    seeded = _seed(client, monkeypatch, "delete notifications")
+    starter, member = _user("starter"), _user("member")
+    seed_employee(member)
+    run = _create_run(client, seeded, starter, scope="shared", participants=[member])  # 초대 알림 하나
+    other = _create_run(client, seeded, starter, scope="shared", participants=[member], name="LOT-2")
+
+    async def _seed_extra(session) -> None:
+        payload = {"run_id": run["id"]}
+        session.add_all(
+            [
+                Notification(recipient=member, type="notice", map_id=seeded["map_id"], message="keep", payload=payload),
+                # 다른 맵의 같은 실행 id(sqlite는 지운 id를 다시 쓴다) — 이 실행의 알림이 아니다
+                Notification(recipient=member, type="run_problem", map_id=-1, message="other map", payload=payload),
+            ]
+        )
+
+    _write_db(_seed_extra)
+
+    def _messages() -> list[tuple[str, int | None]]:
+        async def _work(session) -> list[tuple[str, int | None]]:
+            rows = await session.scalars(select(Notification).where(Notification.recipient == member))
+            return sorted((n.type, (n.payload or {}).get("run_id")) for n in rows.all())
+
+        return _read_db(_work)
+
+    assert ("run_invited", run["id"]) in _messages()
+    assert _call(client, "DELETE", f"/runs/{run['id']}", starter).status_code == 204
+
+    assert _messages() == sorted(
+        [("notice", run["id"]), ("run_problem", run["id"]), ("run_invited", other["id"])]
+    )
+
+
 # ── 보존 · 이름 · 알림 끄기 ──
 
 
@@ -488,6 +554,18 @@ def test_summarized_run_rejects_keep_and_rename(client: TestClient, monkeypatch:
 
     assert _rejected(keep) == (409, "summarized runs cannot be changed")
     assert _rejected(rename) == (409, "summarized runs cannot be changed")
+
+
+def test_summarized_run_detail_offers_no_keep_or_actions(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    seeded = _seed(client, monkeypatch, "summarized detail")
+    starter = _user("summ")
+    run = _create_run(client, seeded, starter)
+    _set_run_fields(run["id"], status="summarized", end_reason="completed")
+
+    detail = _ok(_call(client, "GET", f"/runs/{run['id']}", starter))
+
+    # 요약된 실행은 보존을 바꿀 수 없어(409) 보존 버튼을 내지 않는다
+    assert (detail["can_keep"], detail["can_act"]) == (False, False)
 
 
 def test_mute_is_per_participant(
@@ -639,5 +717,14 @@ def test_participants_endpoint_rules(
 
     assert _rejected(on_solo) == (409, "run is not shared")
     assert _rejected(by_member) == (403, "only the starter can do this")
+    # 끝난 실행에는 초대하지 않는다(R38) — 사람을 더하려면 다시 연다
+    ended = _create_run(client, seeded, starter, scope="shared", participants=[member], name="LOT-ended")
+    _ok(_call(client, "POST", f"/runs/{ended['id']}/stop", starter))
+    on_ended = _call(client, "POST", f"/runs/{ended['id']}/participants", starter, json={"add": [third]})
+    assert _rejected(on_ended) == (409, "run is not open")
+    assert [p["login_id"] for p in _ok(_call(client, "GET", f"/runs/{ended['id']}", starter))["participants"]] == [
+        starter,
+        member,
+    ]
     assert _rejected(ghost) == (422, "participant ghost.nobody cannot view this map")
     assert too_many.status_code == 422 and isinstance(too_many.json()["detail"], list)

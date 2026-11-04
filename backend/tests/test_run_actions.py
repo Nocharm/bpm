@@ -490,6 +490,50 @@ def test_child_scope_of_directly_completed_host_is_rejected(
     assert _rejected(res) == (409, "action not allowed in this state")
 
 
+def test_comment_pins_directly_completed_child_closed(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    parent, child = _seed_sp_pair(client, monkeypatch, "comment closed pin")
+    q, child_a = parent["ids"]["q"], child["ids"]["a"]
+    run = _create_run(client, parent)
+    _ok(_act(client, run, q, "complete", exit_key="__primary__"))
+    _ok(_act(client, run, parent["ids"]["a"], "start"))
+
+    # 코멘트는 호스트 게이트 없이 범위를 처음 고정한다 — 들어가지 않고 완료한 호스트의 범위는 닫힌 채로 고정한다
+    posted = client.post(
+        f"/api/runs/{run['id']}/comments",
+        json={"scope_path": q, "node_id": child_a, "body": "late note"},
+        headers=as_user(client, run["starter"]),
+    )
+    assert posted.status_code == 201, posted.text
+
+    assert _get_detail(client, run)["scopes"] == [{"scope_path": q, "version_id": child["version_id"], "closed": True}]
+    assert _rejected(_act(client, run, child_a, "start", scope_path=q)) == (409, "action not allowed in this state")
+    detail = _get_detail(client, run)
+    host = _state_row(detail, q)
+    assert (host["status"], host["exit_key"]) == ("done", "__primary__")  # 호스트가 진행 중으로 되돌아가지 않는다
+    assert _states(detail)[parent["ids"]["a"]] == "active"
+
+
+def test_comment_pins_nested_scope_under_closed_scope_closed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    top, middle, grandchild = _seed_nested(client, monkeypatch, "comment nested closed")
+    q, grand_a = top["ids"]["q"], grandchild["ids"]["a"]
+    inner = f"{q}/{middle['ids']['b']}"
+    run = _create_run(client, top)
+    _ok(_act(client, run, q, "complete", exit_key="__primary__"))
+
+    posted = client.post(
+        f"/api/runs/{run['id']}/comments",
+        json={"scope_path": inner, "node_id": grand_a, "body": "deep note"},
+        headers=as_user(client, run["starter"]),
+    )
+    assert posted.status_code == 201, posted.text
+
+    # 사슬로 함께 고정되는 바깥 범위가 닫히면 그 아래 범위도 닫힌 채로 고정한다
+    assert {s["scope_path"]: s["closed"] for s in _get_detail(client, run)["scopes"]} == {q: True, inner: True}
+    assert _rejected(_act(client, run, grand_a, "start", scope_path=inner)) == (409, "action not allowed in this state")
+
+
 def test_closed_child_scope_is_read_only(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     parent, child = _seed_sp_pair(client, monkeypatch, "closed read only")
     q, child_a = parent["ids"]["q"], child["ids"]["a"]

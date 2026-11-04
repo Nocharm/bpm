@@ -509,17 +509,18 @@ def test_run_notification_types_share_the_cap_prefix() -> None:
     assert all(value.startswith(RUN_NOTIFICATION_PREFIX) for value in types)
 
 
-def _seed_rows(recipient: str, types: list[str]) -> None:
-    """상한 검사를 거치지 않고 오래된 순으로 직접 넣는다 — 한 시간 전부터 1초 간격."""
+def _seed_rows(recipient: str, types: list[str], *, read: bool = False, start: int = 0) -> None:
+    """상한 검사를 거치지 않고 오래된 순으로 직접 넣는다 — 한 시간 전부터 1초 간격, start는 이어 넣을 때의 순번."""
     base = clock.now() - timedelta(hours=1)
 
     async def _work(session) -> None:
-        for offset, type_ in enumerate(types):
+        for offset, type_ in enumerate(types, start=start):
             session.add(
                 Notification(
                     recipient=recipient,
                     type=type_,
                     message=f"seed {offset}",
+                    read=read,
                     created_at=base + timedelta(seconds=offset),
                 )
             )
@@ -568,14 +569,41 @@ def test_cap_unchanged_without_run_notifications() -> None:
     assert "plain 0" not in messages and "plain 1" in messages and f"plain {NOTIFICATION_CAP}" in messages
 
 
-def test_cap_falls_back_to_other_types_when_no_run_notification_is_left() -> None:
-    recipient = _user("cap-fallback")
-    _seed_rows(recipient, ["version_submitted"] * (NOTIFICATION_CAP + 1))
+def test_cap_drops_incoming_run_notification_over_unread_approvals() -> None:
+    recipient = _user("cap-unread")
+    _seed_rows(recipient, ["version_submitted"] * NOTIFICATION_CAP)
+
+    _add_notification(recipient, "run_problem", "newest")
+
+    # 안 읽은 결재 알림은 실행 알림 때문에 지우지 않는다 — 자리가 없으면 방금 만든 실행 알림을 버린다 (R35)
+    messages = {n["message"] for n in _rows(recipient)}
+    assert _count_rows(recipient) == NOTIFICATION_CAP
+    assert _count_rows(recipient, run_only=True) == 0
+    assert "newest" not in messages and "seed 0" in messages
+
+
+def test_cap_trims_oldest_read_approval_for_incoming_run_notification() -> None:
+    recipient = _user("cap-read")
+    _seed_rows(recipient, ["version_submitted"] * 60)  # 가장 오래된 60건은 안 읽음
+    _seed_rows(recipient, ["version_submitted"] * 40, read=True, start=60)
 
     _add_notification(recipient, "run_problem", "newest")
 
     messages = {n["message"] for n in _rows(recipient)}
     assert _count_rows(recipient) == NOTIFICATION_CAP
-    assert _count_rows(recipient, run_only=True) == 0  # 실행 알림을 먼저 지우고
-    assert "seed 0" not in messages  # 모자란 한 건은 가장 오래된 다른 알림을 지운다
-    assert "seed 1" in messages
+    assert "newest" in messages
+    assert "seed 0" in messages  # 더 오래됐어도 안 읽은 결재 알림은 남고
+    assert "seed 60" not in messages and "seed 61" in messages  # 가장 오래된 읽은 결재 알림이 지워진다
+
+
+def test_cap_trims_old_run_notifications_before_read_approvals() -> None:
+    recipient = _user("cap-old-run")
+    _seed_rows(recipient, ["run_steps_done"])  # seed 0
+    _seed_rows(recipient, ["version_submitted"] * (NOTIFICATION_CAP - 1), read=True, start=1)
+
+    _add_notification(recipient, "run_problem", "newest")
+
+    messages = {n["message"] for n in _rows(recipient)}
+    assert _count_rows(recipient) == NOTIFICATION_CAP
+    assert "newest" in messages and "seed 0" not in messages  # 방금 만든 것을 뺀 오래된 실행 알림부터
+    assert "seed 1" in messages  # 읽은 결재 알림은 그다음 차례라 남는다

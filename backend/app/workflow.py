@@ -1,6 +1,8 @@
 """승인 워크플로우 — 상태 상수, 편집가능 판정, 승인자 로딩, 알림, 퇴사자 정리 (design 2026-06-14)."""
 
-from sqlalchemy import delete, func, select
+from collections.abc import Sequence
+
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import now as now_kst
@@ -54,10 +56,15 @@ NOTIFICATION_CAP = 100  # 인당 알림 보존 상한 — 초과분은 읽음 �
 RUN_NOTIFICATION_PREFIX = "run_"  # 실행 체크 알림 유형 접두 — 상한을 넘길 때 결재 알림보다 먼저 지운다 (design 2026-11-04 §4.5)
 
 
-async def _trim_notifications(session: AsyncSession, recipient: str) -> None:
-    """상한 초과분 삭제 — 실행 알림을 오래된 순으로 먼저, 그래도 남으면 나머지 유형을 오래된 순으로 지운다.
+async def _trim_notifications(
+    session: AsyncSession, recipient: str, *, incoming_type: str = "", fresh_ids: Sequence[int] = ()
+) -> None:
+    """상한 초과분 삭제 — 지우는 차례는 들어오는 알림 유형(`incoming_type`)에 따라 다르다.
 
-    실행 알림이 하나도 없으면 종전 동작(전체에서 가장 오래된 순)과 같다. 결재·권한 알림이 잦은 실행 알림에 밀려 사라지지 않게 한다.
+    비실행 알림이 들어오면 실행 알림을 오래된 순으로 먼저, 그래도 남으면 나머지를 오래된 순으로 지운다(실행 알림이
+    없으면 종전처럼 전체에서 가장 오래된 순). 실행 알림이 들어오면 오래된 실행 알림(방금 만든 `fresh_ids` 제외) →
+    오래된 읽은 비실행 알림 → 방금 만든 실행 알림 순이고, 안 읽은 비실행 알림은 지우지 않는다(R35) — 상한에 찬
+    사람이 실행 알림을 하나도 못 받는 일과, 실행 알림에 밀려 안 읽은 결재 알림이 사라지는 일을 함께 막는다.
     """
     total = await session.scalar(
         select(func.count()).select_from(Notification).where(Notification.recipient == recipient)
@@ -66,7 +73,12 @@ async def _trim_notifications(session: AsyncSession, recipient: str) -> None:
     if excess <= 0:
         return
     is_run = Notification.type.startswith(RUN_NOTIFICATION_PREFIX, autoescape=True)  # `_`가 LIKE 와일드카드라 이스케이프
-    for scope in (is_run, ~is_run):
+    if incoming_type.startswith(RUN_NOTIFICATION_PREFIX):
+        is_fresh = Notification.id.in_(fresh_ids)
+        tiers = (and_(is_run, ~is_fresh), and_(~is_run, Notification.read.is_(True)), is_fresh)
+    else:
+        tiers = (is_run, ~is_run)
+    for scope in tiers:
         stale_ids = (
             await session.scalars(
                 select(Notification.id)
@@ -96,21 +108,23 @@ async def create_notifications(
 
     map_id/version_id는 선택 — 맵/버전과 무관한 알림(공지 등)은 생략.
     payload는 FE 언어 토글 렌더용 구조화 컨텍스트 — message는 영어 폴백 겸 레거시 표시용.
-    트리밍의 count가 autoflush로 pending add를 먼저 flush한다.
+    방금 만든 행의 id를 트리밍에 넘기려고(실행 알림의 지우는 차례) 추가한 뒤 flush한다.
     """
+    added: dict[str, list[Notification]] = {}
     for recipient in recipients:
-        session.add(
-            Notification(
-                recipient=recipient,
-                type=type,
-                map_id=map_id,
-                version_id=version_id,
-                message=message,
-                payload=payload,
-            )
+        row = Notification(
+            recipient=recipient,
+            type=type,
+            map_id=map_id,
+            version_id=version_id,
+            message=message,
+            payload=payload,
         )
-    for recipient in dict.fromkeys(recipients):  # 중복 수신자 1회만 트리밍
-        await _trim_notifications(session, recipient)
+        session.add(row)
+        added.setdefault(recipient, []).append(row)
+    await session.flush()
+    for recipient, rows in added.items():  # 중복 수신자 1회만 트리밍
+        await _trim_notifications(session, recipient, incoming_type=type, fresh_ids=[row.id for row in rows])
 
 
 async def load_active_approvers(session: AsyncSession, map_id: int) -> list[str]:

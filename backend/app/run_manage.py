@@ -11,9 +11,9 @@ from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import clock, run_notify
+from app import clock, run_notify, workflow
 from app.app_settings import get_run_limits
-from app.models import ProcessMap, Run, RunComment, RunEvent, RunParticipant
+from app.models import Notification, ProcessMap, Run, RunComment, RunEvent, RunParticipant, RunScope
 from app.run_access import get_visible_scope_paths, is_scope_visible
 from app.run_service import (
     ERR_KEEP_CAP,
@@ -28,6 +28,7 @@ from app.run_service import (
     is_actor,
     load_live_map,
     load_version_graph,
+    resolve_scope_version,
 )
 from app.schemas import RunCommentIn, RunParticipantsIn, RunPatchIn, RunShareIn
 
@@ -93,13 +94,27 @@ async def _assert_keep_cap(session: AsyncSession, run: Run, scope: str) -> None:
 # ── 코멘트 ──
 
 
+async def _is_scope_pinned(session: AsyncSession, run_id: int, scope_path: str) -> bool:
+    found = await session.scalar(
+        select(RunScope.id).where(RunScope.run_id == run_id, RunScope.scope_path == scope_path).limit(1)
+    )
+    return found is not None
+
+
 async def list_run_comments(
     session: AsyncSession, run: Run, user: str, *, scope_path: str | None, node_id: str | None
 ) -> list[RunComment]:
-    """오래된 순 코멘트 — 볼 수 있다고 확인된 범위의 것만. 범위를 짚었는데 볼 수 없으면 403, 안 짚으면 보이는 범위 전부."""
+    """오래된 순 코멘트 — 볼 수 있다고 확인된 범위의 것만. 범위를 짚었는데 볼 수 없으면 403, 안 짚으면 보이는 범위 전부.
+
+    고정 전 하위 범위(펼쳤지만 아직 들어가지 않음)는 범위 그래프와 같은 사슬 검사를 고정 없이 거쳐(403·422)
+    빈 목록을 준다 — 고정 행이 없는 범위의 코멘트는 기본 가림이라 아무에게도 보이지 않는다.
+    """
     visible = await get_visible_scope_paths(session, run, user)
     if scope_path is not None and not is_scope_visible(scope_path, visible):
-        raise HTTPException(status_code=403, detail=ERR_SUB_ACCESS)
+        if await _is_scope_pinned(session, run.id, scope_path):
+            raise HTTPException(status_code=403, detail=ERR_SUB_ACCESS)
+        await resolve_scope_version(session, run, scope_path, user)
+        return []
     query = select(RunComment).where(RunComment.run_id == run.id)
     if scope_path is not None:
         query = query.where(RunComment.scope_path == scope_path)
@@ -200,9 +215,14 @@ async def share_run(session: AsyncSession, run: Run, user: str, body: RunShareIn
 
 
 async def update_run_participants(session: AsyncSession, run: Run, user: str, body: RunParticipantsIn) -> None:
-    """공유 실행의 참여자 더하기·빼기 — 시작한 사람만. 뺀 사람이 남긴 기록(상태·코멘트)은 이름과 함께 그대로 남는다."""
+    """공유 실행의 참여자 더하기·빼기 — 시작한 사람만, 열린 실행만(끝난 실행에 초대하지 않는다, R38).
+
+    뺀 사람이 남긴 기록(상태·코멘트)은 이름과 함께 그대로 남는다.
+    """
     _assert_starter(run, user)
     _assert_not_summarized(run)
+    if run.status != "open":
+        raise HTTPException(status_code=409, detail=ERR_NOT_OPEN)
     if run.scope != "shared":
         raise HTTPException(status_code=409, detail=ERR_NOT_SHARED)
     if user in body.remove:
@@ -259,7 +279,25 @@ async def reopen_run(session: AsyncSession, run: Run, user: str) -> None:
 
 
 async def delete_run(session: AsyncSession, run: Run, user: str) -> None:
-    """시작한 사람만 지운다(맵 오너도 못 지운다, design §4.4) — 하위 행은 FK cascade가 함께 지운다."""
+    """시작한 사람만 지운다(맵 오너도 못 지운다, design §4.4) — 하위 행은 FK cascade가 함께 지운다.
+
+    알림은 FK가 없는 느슨한 참조라 그 실행의 `run_` 알림을 따로 지운다(R33) — 남기면 누를 때 없는 실행을 열고,
+    sqlite는 지운 id를 다시 쓰니 맵까지 맞는 행만 지운다.
+    """
     _assert_starter(run, user)
+    await _delete_run_notifications(session, run)
     await session.delete(run)
     await session.commit()
+
+
+async def _delete_run_notifications(session: AsyncSession, run: Run) -> None:
+    """payload의 run_id는 JSON이라 sqlite·postgres 공통으로 거르려고 유형·맵으로 좁힌 뒤 파이썬에서 고른다."""
+    rows = await session.execute(
+        select(Notification.id, Notification.payload).where(
+            Notification.type.startswith(workflow.RUN_NOTIFICATION_PREFIX, autoescape=True),
+            Notification.map_id == run.map_id,
+        )
+    )
+    stale_ids = [row_id for row_id, payload in rows.all() if isinstance(payload, dict) and payload.get("run_id") == run.id]
+    if stale_ids:
+        await session.execute(delete(Notification).where(Notification.id.in_(stale_ids)))
