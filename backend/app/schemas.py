@@ -3106,3 +3106,43 @@ class RunActionIn(BaseModel):
     edge_id: str | None = Field(default=None, max_length=50)  # 갈래 노드를 완료할 때 고른 연결선
     exit_key: str | None = Field(default=None, max_length=200)  # 끝이 여럿인 하위프로세스를 바로 완료할 때 나갈 출구
     cascade: bool = False  # 하위 맵에 기록이 있는 하위프로세스의 취소 — 안내를 거친 뒤 하위 기록까지 지운다
+
+
+# 컬럼 길이(100)만큼 — 참여자 로그인 한 명
+RunLogin = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+
+class RunCommentIn(BaseModel):
+    scope_path: str = Field(default="", max_length=300)  # ""=최상위, 하위 맵은 `RunActionIn`과 같은 경로 규칙
+    node_id: str = Field(min_length=1, max_length=50)
+    body: str = Field(min_length=1, max_length=2000)  # 첨부 없음, 2,000자 (design §4.2 코멘트)
+
+
+class RunCommentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    scope_path: str
+    node_id: str
+    author: str
+    body: str
+    created_at: datetime
+
+
+class RunPatchIn(BaseModel):
+    """실행 한 건의 가벼운 설정 — 이름(시작한 사람)·보존(시작한 사람/맵 오너)·내 알림 끄기(참여자 본인). 보낸 것만 바꾼다."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)] | None = None
+    keep: bool | None = None
+    muted: bool | None = None
+
+
+class RunShareIn(BaseModel):
+    """나만 → 공유 전환 — 초대할 참여자(시작한 사람은 자동으로 들어간다)."""
+
+    participants: list[RunLogin] = Field(min_length=1, max_length=100)
+
+
+class RunParticipantsIn(BaseModel):
+    add: list[RunLogin] = Field(default_factory=list, max_length=100)
+    remove: list[RunLogin] = Field(default_factory=list, max_length=100)

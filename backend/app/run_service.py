@@ -1,7 +1,7 @@
 """실행 체크(Run) 서비스 — 보기 규칙·읽기 모델·시작 검증·노드 동작. 라우터(`routers/runs.py`)가 얇게 부른다.
 
 설계: docs/superpowers/specs/2026-11-04-run-check-design.md §4.1(시작·상한)·§4.2(상태 모델·하위프로세스)·
-§4.4(개인·공유와 권한). 코멘트·중단은 같은 파일에 이어서 붙는다(Task 5 이후).
+§4.4(개인·공유와 권한). 코멘트·참여자·중단·보존은 `run_manage.py`가 이어받는다(이 파일의 보기·상한·범위 해석을 그대로 쓴다).
 """
 
 from dataclasses import dataclass
@@ -194,14 +194,14 @@ async def _count_comments(session: AsyncSession, run_id: int) -> list[RunComment
     return [RunCommentCountOut(scope_path=path, node_id=node_id, count=count) for path, node_id, count in rows]
 
 
-def _is_actor(run: Run, participant_logins: set[str], user: str) -> bool:
+def is_actor(run: Run, participant_logins: set[str], user: str) -> bool:
     """상태를 바꿀 수 있는 사람 — 열린 실행에서 공유는 참여자, 개인은 시작한 사람 (design §4.4)."""
     if run.status != "open":
         return False
     return user in participant_logins if run.scope == "shared" else run.starter == user
 
 
-async def _can_keep(session: AsyncSession, run: Run, user: str) -> bool:
+async def can_keep(session: AsyncSession, run: Run, user: str) -> bool:
     if run.starter == user:
         return True
     # 공유 실행은 맵 오너도 보존 표시를 켜고 끌 수 있다 (design §4.4)
@@ -218,9 +218,9 @@ async def build_run_detail(session: AsyncSession, run: Run, user: str) -> RunDet
         states=[RunNodeStateOut.model_validate(s) for s in states.all() if is_scope_visible(s.scope_path, visible)],
         scopes=[RunScopeOut.model_validate(s) for s in scopes.all() if is_scope_visible(s.scope_path, visible)],
         comment_counts=[c for c in await _count_comments(session, run.id) if is_scope_visible(c.scope_path, visible)],
-        can_act=_is_actor(run, {p.login_id for p in row.participants}, user),
+        can_act=is_actor(run, {p.login_id for p in row.participants}, user),
         can_manage=run.starter == user,
-        can_keep=await _can_keep(session, run, user),
+        can_keep=await can_keep(session, run, user),
     )
 
 
@@ -292,7 +292,7 @@ async def ensure_eligible_participants(session: AsyncSession, map_id: int, login
             raise HTTPException(status_code=422, detail=ERR_PARTICIPANT_ACCESS.format(login=login))
 
 
-async def _assert_open_cap(session: AsyncSession, map_id: int, user: str, scope: str) -> None:
+async def assert_open_cap(session: AsyncSession, map_id: int, user: str, scope: str) -> None:
     """열린 실행 상한 — 개인은 시작한 사람 기준 맵 합산, 공유는 맵 기준. 휴지통 맵의 실행은 세지 않는다."""
     limits = await get_run_limits(session)
     open_runs = (
@@ -317,7 +317,7 @@ async def create_run(session: AsyncSession, map_id: int, user: str, body: RunCre
     await ensure_eligible_participants(session, map_id, invited)  # 무거운 명단 조회는 잠금 전에 끝낸다
     # 맵 행 잠금(postgres) — 같은 맵에서 동시에 만들어도 상한 검사를 한 건씩 지나게 한다
     await load_live_map(session, map_id, lock=True)
-    await _assert_open_cap(session, map_id, user, body.scope)
+    await assert_open_cap(session, map_id, user, body.scope)
     run = Run(map_id=map_id, version_id=body.version_id, name=body.name, scope=body.scope, starter=user)
     session.add(run)
     await session.flush()
@@ -674,7 +674,7 @@ async def apply_run_action(session: AsyncSession, run: Run, user: str, body: Run
     if run.status != "open":
         raise HTTPException(status_code=409, detail=ERR_NOT_OPEN)
     logins = await session.scalars(select(RunParticipant.login_id).where(RunParticipant.run_id == run.id))
-    if not _is_actor(run, set(logins.all()), user):
+    if not is_actor(run, set(logins.all()), user):
         raise HTTPException(status_code=403, detail=ERR_PARTICIPANT_ONLY)
     pinned = await session.execute(select(RunScope.scope_path, RunScope.closed).where(RunScope.run_id == run.id))
     pinned_before = {path: closed for path, closed in pinned.all()}
