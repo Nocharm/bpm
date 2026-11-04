@@ -908,6 +908,10 @@ export interface MeDashboardActivity {
   feedback_mine_open: number;
   // 직전 로그인(오늘 기록 제외) — 없으면 null
   last_login_at: string | null;
+  // 내가 참여한 열린 실행 — 전체 수(runs 줄 상한과 무관), 그중 문제 노드가 있는 것, 방치 경고 일수를 넘긴 것(둘은 겹칠 수 있다)
+  runs_open: number;
+  runs_problem: number;
+  runs_idle: number;
 }
 
 export interface MeDashboardCheckout {
@@ -953,12 +957,37 @@ export interface MeDashboardCategory {
   slot_pending_count: number;
 }
 
+// 내가 참여한 열린 실행 한 줄 — 서버가 급한 순(문제 → 방치 → 다음)으로 정렬해 내려 준다
+export interface MeDashboardRun {
+  run_id: number;
+  map_id: number;
+  map_name: string;
+  version_id: number;
+  name: string;
+  scope: "solo" | "shared";
+  participant_count: number;
+  state_kind: "problem" | "idle" | "next";
+  // problem: 첫 문제 노드, next: 첫 진행 가능·진행 중 노드. 볼 수 없는 하위 맵 노드는 빈 문자열
+  state_title: string;
+  // state_title 말고 남은 같은 종류 노드 수
+  state_more: number;
+  // 방치 경고 일수를 넘김 — 문제가 있어도 true("곧 중단"은 문제와 별개)
+  is_idle: boolean;
+  // is_idle일 때만 채운다
+  idle_days: number;
+  stop_in_days: number;
+  done: number;
+  total: number;
+  last_activity_at: string;
+}
+
 export interface MeDashboard {
   activity: MeDashboardActivity;
   checkouts: MeDashboardCheckout[];
   requests: MeDashboardRequest[];
   recent_events: MeDashboardEvent[];
   framework: MeDashboardCategory[];
+  runs: MeDashboardRun[];
 }
 
 export function getMeDashboard(): Promise<MeDashboard> {
@@ -3684,4 +3713,201 @@ export function updateCategoryNote(
 
 export function deleteCategoryNote(categoryId: number, noteId: number): Promise<void> {
   return request<void>(`/categories/${categoryId}/notes/${noteId}`, { method: "DELETE" });
+}
+
+// ---- 실행 체크(Run) — 게시본 위에서 단계를 체크하며 진행하는 실행 (design 2026-11-04 run-check) ----
+// 상태 계산은 lib/run-graph.ts(BE app/run_graph.py와 이중 구현)가 맡고, 여기는 서버가 저장·판정하는 모양만 둔다.
+
+export interface RunParticipant {
+  login_id: string;
+  // 이 실행의 알림을 끈 참여자
+  muted: boolean;
+}
+
+export interface RunProgress {
+  done: number;
+  total: number;
+}
+
+// 요약된 실행에 남는 한 줄 집계 (BE run_retention._build_summary)
+export interface RunSummaryInfo {
+  result: string | null;
+  started_at: string;
+  ended_at: string;
+  days: number;
+  version_number: number | null;
+  version_label: string;
+  problem_steps: number;
+  participants: string[];
+  starter: string;
+}
+
+// 실행 목록 줄 — 진행률은 최상위 범위 기준
+export interface Run {
+  id: number;
+  map_id: number;
+  map_name: string;
+  version_id: number;
+  version_number: number | null;
+  version_label: string;
+  version_is_current: boolean;
+  name: string;
+  scope: "solo" | "shared";
+  starter: string;
+  status: "open" | "done" | "stopped" | "summarized";
+  end_reason: string | null;
+  keep: boolean;
+  created_at: string;
+  last_activity_at: string;
+  ended_at: string | null;
+  summarize_after: string | null;
+  participants: RunParticipant[];
+  progress: RunProgress;
+  problem_count: number;
+  // 요약 뒤에만 채운다
+  summary: RunSummaryInfo | null;
+}
+
+// 손댄 노드의 수동 상태 한 건 — scope_path ""=최상위, 하위 맵은 하위프로세스 노드 id를 "/"로 잇는다
+export interface RunNodeState {
+  scope_path: string;
+  node_id: string;
+  node_title: string;
+  // BE는 str이지만 저장은 수동 상태 3종뿐
+  status: "active" | "done" | "problem";
+  chosen_edge_id: string | null;
+  exit_key: string | null;
+  updated_by: string;
+  updated_at: string;
+}
+
+// 실행이 연 하위 맵 범위 — 첫 동작 때 고정한 버전, closed면 남은 단계는 건너뜀
+export interface RunScope {
+  scope_path: string;
+  version_id: number;
+  closed: boolean;
+}
+
+export interface RunCommentCount {
+  scope_path: string;
+  node_id: string;
+  count: number;
+}
+
+export interface RunDetail extends Run {
+  states: RunNodeState[];
+  scopes: RunScope[];
+  comment_counts: RunCommentCount[];
+  can_act: boolean;
+  can_manage: boolean;
+  can_keep: boolean;
+}
+
+export interface RunList {
+  items: Run[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface RunComment {
+  id: number;
+  scope_path: string;
+  node_id: string;
+  author: string;
+  body: string;
+  created_at: string;
+}
+
+export type RunActionName = "start" | "complete" | "problem" | "resolve" | "unstart" | "undo";
+
+export type RunListTab = "open" | "ended" | "summary";
+
+export function createRun(
+  mapId: number,
+  body: { name: string; version_id: number; scope: "solo" | "shared"; participants: string[] },
+): Promise<RunDetail> {
+  return request<RunDetail>(`/maps/${mapId}/runs`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export function listRuns(
+  mapId: number,
+  q: { tab: RunListTab; q?: string; mine?: boolean; kept?: boolean; page?: number },
+): Promise<RunList> {
+  const params = new URLSearchParams({ tab: q.tab });
+  if (q.q) params.set("q", q.q);
+  if (q.mine) params.set("mine", "true");
+  if (q.kept) params.set("kept", "true");
+  if (q.page) params.set("page", String(q.page));
+  return request<RunList>(`/maps/${mapId}/runs?${params.toString()}`);
+}
+
+export function getRun(runId: number): Promise<RunDetail> {
+  return request<RunDetail>(`/runs/${runId}`);
+}
+
+// 범위의 그래프 — 하위 범위는 고정본이 있으면 그것, 없으면 지금 해석한 버전 (scopePath ""=최상위)
+export function getRunScopeGraph(runId: number, scopePath: string): Promise<Graph> {
+  const params = new URLSearchParams({ scope: scopePath });
+  return request<Graph>(`/runs/${runId}/graph?${params.toString()}`);
+}
+
+// 노드 동작 하나 — 서버가 전이표로 다시 판정한다. edge_id는 갈래 노드 완료 때 고른 연결선, exit_key는 끝이 여럿인 SP를
+// 바로 완료할 때 나갈 출구, cascade는 하위 맵 기록이 있는 SP를 취소할 때 하위 기록까지 지우겠다는 확인
+export function actOnRun(
+  runId: number,
+  body: {
+    scope_path: string;
+    node_id: string;
+    action: RunActionName;
+    edge_id?: string;
+    exit_key?: string;
+    cascade?: boolean;
+  },
+): Promise<RunDetail> {
+  return request<RunDetail>(`/runs/${runId}/actions`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export function listRunComments(runId: number, scopePath: string, nodeId: string): Promise<RunComment[]> {
+  const params = new URLSearchParams({ scope: scopePath, node_id: nodeId });
+  return request<RunComment[]>(`/runs/${runId}/comments?${params.toString()}`);
+}
+
+export function addRunComment(
+  runId: number,
+  body: { scope_path: string; node_id: string; body: string },
+): Promise<RunComment> {
+  return request<RunComment>(`/runs/${runId}/comments`, { method: "POST", body: JSON.stringify(body) });
+}
+
+// 이름(시작한 사람)·영구 보존·내 알림 끄기 — 보낸 것만 바뀐다
+export function patchRun(
+  runId: number,
+  patch: { name?: string; keep?: boolean; muted?: boolean },
+): Promise<RunDetail> {
+  return request<RunDetail>(`/runs/${runId}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+// 나만 → 공유 전환 — 초대할 참여자(시작한 사람은 자동으로 들어간다)
+export function shareRun(runId: number, participants: string[]): Promise<RunDetail> {
+  return request<RunDetail>(`/runs/${runId}/share`, { method: "POST", body: JSON.stringify({ participants }) });
+}
+
+export function updateRunParticipants(
+  runId: number,
+  body: { add: string[]; remove: string[] },
+): Promise<RunDetail> {
+  return request<RunDetail>(`/runs/${runId}/participants`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export function stopRun(runId: number): Promise<RunDetail> {
+  return request<RunDetail>(`/runs/${runId}/stop`, { method: "POST" });
+}
+
+export function reopenRun(runId: number): Promise<RunDetail> {
+  return request<RunDetail>(`/runs/${runId}/reopen`, { method: "POST" });
+}
+
+export function deleteRun(runId: number): Promise<void> {
+  return request<void>(`/runs/${runId}`, { method: "DELETE" });
 }

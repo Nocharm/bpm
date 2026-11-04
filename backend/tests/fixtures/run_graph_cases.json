@@ -15,7 +15,11 @@
     "loop": {"nodes": [{"id": "s", "node_type": "start", "title": ""}, {"id": "w", "node_type": "process", "title": "작성"}, {"id": "r", "node_type": "decision", "title": "검토"}, {"id": "e", "node_type": "end", "title": "", "is_primary_end": true}],
              "edges": [{"id": "h1", "source": "s", "target": "w"}, {"id": "h2", "source": "w", "target": "r"}, {"id": "h3", "source": "r", "target": "w", "label": "반려"}, {"id": "h4", "source": "r", "target": "e", "label": "승인"}]},
     "sp_exits": {"nodes": [{"id": "s", "node_type": "start", "title": ""}, {"id": "q", "node_type": "subprocess", "title": "품질 시험"}, {"id": "a", "node_type": "process", "title": "출고"}, {"id": "b", "node_type": "process", "title": "재시험 요청"}, {"id": "e", "node_type": "end", "title": "완료", "is_primary_end": true}, {"id": "f", "node_type": "end", "title": "보류"}],
-                 "edges": [{"id": "k1", "source": "s", "target": "q"}, {"id": "k2", "source": "q", "target": "a", "source_handle": "__primary__"}, {"id": "k3", "source": "q", "target": "b", "source_handle": "불합격"}, {"id": "k4", "source": "a", "target": "e"}, {"id": "k5", "source": "b", "target": "f"}]}
+                 "edges": [{"id": "k1", "source": "s", "target": "q"}, {"id": "k2", "source": "q", "target": "a", "source_handle": "__primary__"}, {"id": "k3", "source": "q", "target": "b", "source_handle": "불합격"}, {"id": "k4", "source": "a", "target": "e"}, {"id": "k5", "source": "b", "target": "f"}]},
+    "dangling": {"nodes": [{"id": "s", "node_type": "start", "title": ""}, {"id": "a", "node_type": "process", "title": "접수"}, {"id": "e", "node_type": "end", "title": "", "is_primary_end": true}],
+                 "edges": [{"id": "d1", "source": "s", "target": "a"}, {"id": "d2", "source": "a", "target": "e"}, {"id": "d3", "source": "a", "target": "ghost"}, {"id": "d4", "source": "ghost", "target": "e"}]},
+    "two_ends": {"nodes": [{"id": "s", "node_type": "start", "title": ""}, {"id": "p", "node_type": "process", "title": "접수"}, {"id": "q", "node_type": "process", "title": "검토"}, {"id": "y", "node_type": "end", "title": "빠른 끝"}, {"id": "e", "node_type": "end", "title": "늦은 끝"}],
+                 "edges": [{"id": "t1", "source": "s", "target": "p"}, {"id": "t2", "source": "s", "target": "y"}, {"id": "t3", "source": "p", "target": "q"}, {"id": "t4", "source": "q", "target": "e"}]}
   },
   "cases": [
     {"name": "linear_fresh", "graph": "linear", "state": {}, "statuses": {"s": "done", "a": "ready", "b": "waiting", "e": "waiting"}, "progress": [0, 2], "finished": false, "reached_end": null},
@@ -32,9 +36,13 @@
     {"name": "fanout_gateway_parallel", "graph": "fanout_gateway", "state": {"manual": {"p": "done"}}, "statuses": {"s": "done", "p": "done", "a": "ready", "b": "ready", "e": "waiting"}, "progress": [1, 3], "finished": false, "reached_end": null},
     {"name": "loop_open", "graph": "loop", "state": {"manual": {"w": "done"}}, "statuses": {"s": "done", "w": "done", "r": "ready", "e": "waiting"}, "progress": [1, 2], "finished": false, "reached_end": null},
     {"name": "loop_done", "graph": "loop", "state": {"manual": {"w": "done", "r": "done"}, "choice": {"r": "h4"}}, "statuses": {"s": "done", "w": "done", "r": "done", "e": "done"}, "progress": [2, 2], "finished": true, "reached_end": "__primary__"},
-    {"name": "sp_exit_chosen", "graph": "sp_exits", "state": {"manual": {"q": "done"}, "exit": {"q": "불합격"}}, "statuses": {"s": "done", "q": "done", "a": "skipped", "b": "ready", "e": "skipped", "f": "waiting"}, "progress": [1, 2], "finished": false, "reached_end": null}
+    {"name": "sp_exit_chosen", "graph": "sp_exits", "state": {"manual": {"q": "done"}, "exit": {"q": "불합격"}}, "statuses": {"s": "done", "q": "done", "a": "skipped", "b": "ready", "e": "skipped", "f": "waiting"}, "progress": [1, 2], "finished": false, "reached_end": null},
+    {"name": "decision_join_opens", "graph": "decision", "state": {"manual": {"a": "done", "d": "done", "y": "done"}, "choice": {"d": "e3"}}, "statuses": {"s": "done", "a": "done", "d": "done", "y": "done", "n": "skipped", "j": "ready", "e": "waiting"}, "progress": [3, 4], "finished": false, "reached_end": null},
+    {"name": "start_parallel_both_done", "graph": "start_parallel", "state": {"manual": {"a": "done", "b": "done"}}, "statuses": {"s": "done", "a": "done", "b": "done", "j": "ready", "e": "waiting"}, "progress": [2, 3], "finished": false, "reached_end": null},
+    {"name": "dangling_edge_ignored", "graph": "dangling", "state": {"manual": {"a": "done"}}, "statuses": {"s": "done", "a": "done", "e": "done"}, "progress": [1, 1], "finished": true, "reached_end": "__primary__"},
+    {"name": "two_ends_round_order", "graph": "two_ends", "state": {"manual": {"p": "done", "q": "done"}}, "statuses": {"s": "done", "p": "done", "q": "done", "y": "done", "e": "done"}, "progress": [2, 2], "finished": true, "reached_end": "빠른 끝"}
   ],
-  "back_edges": {"linear": [], "decision": [], "loop": ["h3"]},
+  "back_edges": {"linear": [], "decision": [], "loop": ["h3"], "dangling": []},
   "options": [
     {"graph": "decision", "node": "d", "kind": "edge", "edge_ids": ["e3", "e4"], "exit_keys": []},
     {"graph": "decision", "node": "a", "kind": "none", "edge_ids": [], "exit_keys": []},
@@ -42,7 +50,8 @@
     {"graph": "fanout", "node": "p", "kind": "edge", "edge_ids": ["g2", "g3"], "exit_keys": []},
     {"graph": "fanout_gateway", "node": "p", "kind": "none", "edge_ids": [], "exit_keys": []},
     {"graph": "loop", "node": "r", "kind": "edge", "edge_ids": ["h3", "h4"], "exit_keys": []},
-    {"graph": "sp_exits", "node": "q", "kind": "exit", "edge_ids": [], "exit_keys": ["__primary__", "불합격"]}
+    {"graph": "sp_exits", "node": "q", "kind": "exit", "edge_ids": [], "exit_keys": ["__primary__", "불합격"]},
+    {"graph": "dangling", "node": "a", "kind": "none", "edge_ids": [], "exit_keys": []}
   ],
   "touched_after": [
     {"graph": "decision", "state": {"manual": {"a": "done"}}, "node": "a", "title": null},
