@@ -12,6 +12,9 @@ import {
   getRunScopeHostKeys,
   getRunScopeLock,
   hasRunChildProgress,
+  isInRunBarSurface,
+  isRunCanvasEnterTarget,
+  isRunCanvasKeyTarget,
   pickAutoAdvance,
   placeRunBar,
   placeRunPop,
@@ -128,6 +131,15 @@ describe("buildRunBarButtons", () => {
     ]);
   });
 
+  it("problem subprocess keeps the way into its sub map (R32)", () => {
+    expect(describeButtons(buildRunBarButtons(makeInput({ status: "problem", nodeType: "subprocess" })))).toEqual([
+      "resolve:branch",
+      "complete:default",
+      "enter",
+      "comments:0",
+    ]);
+  });
+
   it("done subprocess: view the sub map, undo complete", () => {
     expect(describeButtons(buildRunBarButtons(makeInput({ status: "done", nodeType: "subprocess" })))).toEqual([
       "enter",
@@ -221,6 +233,12 @@ describe("buildRunBarButtons", () => {
     ).toEqual(["note:run.act.noteSkippedClosed", "comments:0"]);
   });
 
+  it("steps under a skipped host read the blocked-parent note, not the unchosen-branch one", () => {
+    expect(
+      describeButtons(buildRunBarButtons(makeInput({ status: "skipped", parentBlocked: true }))),
+    ).toEqual(["note:run.act.noteParentBlocked", "comments:0"]);
+  });
+
   it("sub map whose outer step is blocked or closed: a note and comments, no actions (R9)", () => {
     expect(
       describeButtons(buildRunBarButtons(makeInput({ status: "waiting", parentBlocked: true }))),
@@ -294,6 +312,48 @@ describe("pickAutoAdvance", () => {
 
   it("does nothing when nothing opened", () => {
     expect(pickAutoAdvance([])).toEqual({ select: null, flash: [] });
+  });
+
+  it("counts an opened subprocess once, not its sub map's first step too", () => {
+    expect(pickAutoAdvance(["sp", "sp/c1"])).toEqual({ select: "sp", flash: [] });
+    expect(pickAutoAdvance(["a", "sp", "sp/c1", "sp/inner/c1"])).toEqual({ select: null, flash: ["a", "sp"] });
+    expect(pickAutoAdvance(["sp/c1"])).toEqual({ select: "sp/c1", flash: [] });
+  });
+});
+
+describe("run key targets", () => {
+  function mount(html: string): HTMLElement {
+    document.body.innerHTML = html;
+    return document.body;
+  }
+
+  it("treats the run bar and its popovers as their own key surface", () => {
+    mount(
+      '<div class="react-flow"><div data-id="run-action-bar"><button id="b">완료</button></div>' +
+        '<div data-id="run-pop"><input id="i" /><button id="p">남기기</button></div>' +
+        '<div data-id="run-pop-cascade"><button id="c">모두 취소</button></div><div id="n" class="react-flow__node"></div></div>',
+    );
+    for (const id of ["b", "i", "p", "c"]) expect(isInRunBarSurface(document.getElementById(id))).toBe(true);
+    expect(isInRunBarSurface(document.getElementById("n"))).toBe(false);
+    expect(isInRunBarSurface(null)).toBe(false);
+  });
+
+  it("canvas keys come from the page body or a spot on the canvas without its own keys", () => {
+    mount(
+      '<div class="react-flow"><div id="n" class="react-flow__node" tabindex="0"></div><button id="z">+</button>' +
+        '<div data-id="run-action-bar"><button id="b">완료</button></div>' +
+        '<div data-id="run-pop" role="dialog"><input id="i" /></div></div>' +
+        '<div data-id="run-bar"><button id="m">⋯</button></div><div role="dialog"><span id="d">x</span></div>',
+    );
+    // Esc: 본문·노드·캔버스 크롬 버튼(줌 등)은 캔버스 몫, 버튼 줄·팝오버·입력 칸·캔버스 밖 메뉴·대화창은 아니다
+    for (const element of [document.body, document.getElementById("n"), document.getElementById("z")]) {
+      expect(isRunCanvasKeyTarget(element)).toBe(true);
+    }
+    for (const id of ["b", "i", "m", "d"]) expect(isRunCanvasKeyTarget(document.getElementById(id))).toBe(false);
+    // Enter: 버튼에서 누른 Enter는 그 버튼을 누르므로 캔버스 몫이 아니다
+    expect(isRunCanvasEnterTarget(document.body)).toBe(true);
+    expect(isRunCanvasEnterTarget(document.getElementById("n"))).toBe(true);
+    for (const id of ["z", "b", "i", "m", "d"]) expect(isRunCanvasEnterTarget(document.getElementById(id))).toBe(false);
   });
 });
 

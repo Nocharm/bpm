@@ -8,7 +8,16 @@
 
 import { useStore, useStoreApi, type ReactFlowState } from "@xyflow/react";
 import { AlertCircle, ArrowRight, Check, ChevronsDownUp, LogIn, MessageCircle, Play, Undo2, type LucideIcon } from "lucide-react";
-import { useEffect, useEffectEvent, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import { addRunComment, listRunComments, type RunActionName, type RunComment, type RunDetail } from "@/lib/api";
 import type { NodeData } from "@/lib/canvas";
@@ -24,6 +33,7 @@ import {
   getExitLabels,
   getRunScopeLock,
   hasRunChildProgress,
+  isRunCanvasEnterTarget,
   pickAutoAdvance,
   placeRunBar,
   placeRunPop,
@@ -257,8 +267,28 @@ function RunActionBarBody({
   const storeApi = useStoreApi();
   const [busy, setBusy] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const barSize = useElementSize(barRef);
+  // 팝오버를 닫고 포커스를 버튼으로 돌리는 동안 — 꺼진 완료가 그 포커스로 팝오버를 다시 열지 않게 잠깐 막는다
+  const quietFocusRef = useRef(false);
   const { detail } = session;
+
+  // 캔버스에서 Enter — 선택한 노드의 버튼 줄 첫 버튼으로 들어온다(R31). 다른 노드에 포커스가 있으면 React Flow가 그 노드를 고른다
+  useEffect(() => {
+    const handleEnter = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || event.defaultPrevented || event.isComposing) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (!isRunCanvasEnterTarget(event.target)) return;
+      const focusedNode = event.target instanceof Element ? event.target.closest(".react-flow__node") : null;
+      if (focusedNode !== null && focusedNode.getAttribute("data-id") !== nodeKey) return;
+      const first = barRef.current?.querySelector<HTMLButtonElement>("button:not([disabled])");
+      if (!first) return;
+      event.preventDefault();
+      first.focus({ preventScroll: true });
+    };
+    window.addEventListener("keydown", handleEnter);
+    return () => window.removeEventListener("keydown", handleEnter);
+  }, [nodeKey]);
 
   const openPop = pop !== null && pop.key === nodeKey ? pop : null;
   const options = getBranchOptions(graph, nodeId);
@@ -329,7 +359,51 @@ function RunActionBarBody({
   };
 
   const openWhy = () => {
+    if (quietFocusRef.current) return;
     if (openPop?.kind !== "why") onPopChange({ key: nodeKey, kind: "why" });
+  };
+
+  // 버튼 줄의 버튼에 포커스 — 그 data-id가 없으면 첫 버튼
+  const focusBarButton = (dataId: string | null) => {
+    const bar = barRef.current;
+    const named = dataId === null ? null : bar?.querySelector<HTMLButtonElement>(`[data-id="${CSS.escape(dataId)}"]`);
+    const target = named ?? bar?.querySelector<HTMLButtonElement>("button:not([disabled])");
+    if (!target) return;
+    quietFocusRef.current = true;
+    target.focus({ preventScroll: true });
+    quietFocusRef.current = false;
+  };
+
+  // 팝오버 안 Esc — 닫고 그 팝오버를 연 버튼으로 포커스를 돌린다(R31). 문제 메모는 문제 버튼이 사라져 첫 버튼으로
+  const handlePopKeyDown = (event: ReactKeyboardEvent) => {
+    if (event.key !== "Escape" || openPop === null) return;
+    event.preventDefault();
+    const returnTo =
+      openPop.kind === "cascade" ? `run-act-${openPop.action}` : openPop.kind === "note" ? null : `run-act-${openPop.kind}`;
+    onPopChange(null);
+    focusBarButton(returnTo);
+  };
+
+  // 버튼 줄 위 Esc — 열린 팝오버가 있으면 닫고, 없으면 포커스를 캔버스의 그 노드로 돌린다(선택은 그대로, R31)
+  const handleBarKeyDown = (event: ReactKeyboardEvent) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    if (openPop !== null) {
+      onPopChange(null);
+      return;
+    }
+    const nodeElement = document.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(nodeKey)}"]`);
+    if (nodeElement) nodeElement.focus({ preventScroll: true });
+    else if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  };
+
+  // 꺼진 완료에서 Tab — 열린 "먼저 끝내야 할 단계"의 첫 줄로 바로 들어간다
+  const handleWhyKeyDown = (event: ReactKeyboardEvent) => {
+    if (event.key !== "Tab" || event.shiftKey || openPop?.kind !== "why") return;
+    const first = popRef.current?.querySelector<HTMLButtonElement>("button");
+    if (!first) return;
+    event.preventDefault();
+    first.focus({ preventScroll: true });
   };
 
   const renderButton = (button: RunBarButton, index: number): ReactNode => {
@@ -365,6 +439,7 @@ function RunActionBarBody({
             onMouseEnter={openWhy}
             onFocus={openWhy}
             onClick={openWhy}
+            onKeyDown={handleWhyKeyDown}
           >
             <Check size={16} strokeWidth={1.5} className="shrink-0" />
             {t("run.act.complete")}
@@ -434,6 +509,7 @@ function RunActionBarBody({
           data-node={nodeKey}
           data-status={status}
           className="glass glass-dense bpm-run-pop-in flex items-center gap-0.5 rounded-md border p-1"
+          onKeyDown={handleBarKeyDown}
         >
           {buttons.map(renderButton)}
         </div>
@@ -441,6 +517,8 @@ function RunActionBarBody({
       {openPop !== null && barPlace !== null && barSize !== null && (
         <RunPopFrame
           key={openPop.kind}
+          contentRef={popRef}
+          onKeyDown={handlePopKeyDown}
           kind={openPop.kind}
           nodeRect={nodeRect}
           barPlace={barPlace}
@@ -462,6 +540,7 @@ function RunActionBarBody({
               scopePath={scopePath}
               nodeId={nodeId}
               title={title}
+              isSolo={detail.scope === "solo"}
               session={session}
               onClose={() => onPopChange(null)}
               onToast={onToast}
@@ -473,6 +552,7 @@ function RunActionBarBody({
               scopePath={scopePath}
               nodeId={nodeId}
               title={title}
+              isSolo={detail.scope === "solo"}
               status={status}
               stateRow={stateRow}
               canWrite={detail.can_act}
@@ -513,6 +593,8 @@ const POP_LABEL: Record<RunPop["kind"], MessageKey> = {
 
 function RunPopFrame({
   kind,
+  contentRef,
+  onKeyDown,
   nodeRect,
   barPlace,
   barSize,
@@ -521,6 +603,9 @@ function RunPopFrame({
   children,
 }: {
   kind: RunPop["kind"];
+  // 팝오버 본문 — 버튼 줄이 Tab으로 첫 줄에 들어갈 때 쓴다
+  contentRef: RefObject<HTMLDivElement | null>;
+  onKeyDown: (event: ReactKeyboardEvent) => void;
   nodeRect: RunRect;
   barPlace: RunBarPlacement;
   barSize: RunSize;
@@ -535,10 +620,12 @@ function RunPopFrame({
   return (
     <div ref={frameRef} className="nopan nodrag nowheel absolute left-0 top-0 w-[300px]" style={placedStyle(place, viewport)}>
       <div
+        ref={contentRef}
         data-id={kind === "cascade" ? "run-pop-cascade" : "run-pop"}
         data-kind={kind}
         role={kind === "cascade" ? "alertdialog" : "dialog"}
         aria-label={t(POP_LABEL[kind])}
+        onKeyDown={onKeyDown}
         className="glass glass-dense bpm-run-pop-in flex flex-col gap-2 rounded-md border p-3 text-caption"
       >
         {children}
@@ -705,12 +792,23 @@ interface CommentTarget {
   scopePath: string;
   nodeId: string;
   title: string;
+  // 개인 실행 — 알림 자체가 없으니(방치 알림만) "알림에 같이 간다"는 문구를 쓰지 않는다
+  isSolo: boolean;
   session: RunSession;
   onToast: ToastFn;
 }
 
-// 문제를 표시한 직후의 한 줄 메모 — 1분 안에 남긴 말은 서버가 그 문제 알림에 붙인다(design §4.5)
-function NotePop({ runId, scopePath, nodeId, title, session, onToast, onClose }: CommentTarget & { onClose: () => void }) {
+// 문제를 표시한 직후의 한 줄 메모 — 공유 실행은 1분 안에 남긴 말을 서버가 그 문제 알림에 붙인다(design §4.5)
+function NotePop({
+  runId,
+  scopePath,
+  nodeId,
+  title,
+  isSolo,
+  session,
+  onToast,
+  onClose,
+}: CommentTarget & { onClose: () => void }) {
   const { t } = useI18n();
   const sendNote = async (body: string): Promise<boolean> => {
     try {
@@ -719,7 +817,7 @@ function NotePop({ runId, scopePath, nodeId, title, session, onToast, onClose }:
       onToast(humanizeRunError(err, t), "error");
       return false;
     }
-    onToast(t("run.pop.noteSent"));
+    onToast(t(isSolo ? "run.pop.noteSentSolo" : "run.pop.noteSent"));
     onClose();
     void session.reload(); // 말풍선 개수(comment_counts)
     return true;
@@ -730,7 +828,7 @@ function NotePop({ runId, scopePath, nodeId, title, session, onToast, onClose }:
       <RunLineInput
         dataId="run-pop-note"
         label={t("run.pop.noteLabel")}
-        placeholder={t("run.pop.notePlaceholder")}
+        placeholder={t(isSolo ? "run.pop.notePlaceholderSolo" : "run.pop.notePlaceholder")}
         onSend={sendNote}
         skip={{ label: t("run.pop.noteSkip"), onSkip: onClose }}
       />
@@ -744,6 +842,7 @@ function CommentsPop({
   scopePath,
   nodeId,
   title,
+  isSolo,
   status,
   stateRow,
   canWrite,
@@ -782,7 +881,7 @@ function CommentsPop({
       onToast(humanizeRunError(err, t), "error");
       return false;
     }
-    onToast(t("run.pop.commentSent"));
+    onToast(t(isSolo ? "run.pop.commentSentSolo" : "run.pop.commentSent"));
     void session.reload(); // 말풍선 개수, 처음 남긴 코멘트가 고정한 하위 범위
     return true;
   };

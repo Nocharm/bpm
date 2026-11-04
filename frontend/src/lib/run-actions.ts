@@ -120,7 +120,8 @@ function buildStatusButtons(input: RunBarInput): RunBarButton[] {
     case "done":
       return [...enter, makeAction("undo", "quiet")];
     case "problem":
-      return [makeAction("resolve", "branch"), ...buildChoiceButtons(input, "default", "default")];
+      // 하위프로세스는 완료 전 어느 상태든 하위 맵에서 밟을 수 있다(§4.2, R32)
+      return [makeAction("resolve", "branch"), ...buildChoiceButtons(input, "default", "default"), ...enter];
     default:
       return [
         ...buildChoiceButtons(input, "branch", "go"),
@@ -141,12 +142,12 @@ export function buildRunBarButtons(input: RunBarInput): RunBarButton[] {
   const note = (messageKey: MessageKey): RunBarButton => ({ kind: "note", messageKey });
   if (!input.runOpen) return [note("run.act.noteClosed"), talk];
   if (input.nodeType === "start" || input.nodeType === "end") return [note("run.act.noteTerminal")];
-  if (input.status === "skipped") {
-    return [note(input.scopeClosed ? "run.act.noteSkippedClosed" : "run.act.noteSkipped"), talk];
-  }
+  // 막힌 바깥이 먼저 — 건너뛴 호스트 아래 단계도 건너뜀으로 읽히지만 이유는 "고르지 않은 갈래"가 아니라 바깥이다
   if (input.parentBlocked) {
-    return [note(input.scopeClosed ? "run.act.noteScopeClosed" : "run.act.noteParentBlocked"), talk];
+    if (!input.scopeClosed) return [note("run.act.noteParentBlocked"), talk];
+    return [note(input.status === "skipped" ? "run.act.noteSkippedClosed" : "run.act.noteScopeClosed"), talk];
   }
+  if (input.status === "skipped") return [note("run.act.noteSkipped"), talk];
   const buttons = buildStatusButtons(input);
   return [...(input.canAct ? buttons : buttons.filter((button) => button.kind !== "action")), talk];
 }
@@ -182,10 +183,15 @@ export function getExitLabels(
   );
 }
 
-/** 완료 뒤 이어 밟기 — 새로 열린 단계가 하나면 그 노드를 고르고, 여럿이면 제자리에서 열린 노드만 반짝인다. */
+/**
+ * 완료 뒤 이어 밟기 — 새로 열린 단계가 하나면 그 노드를 고르고, 여럿이면 제자리에서 열린 노드만 반짝인다.
+ * 펼친 하위프로세스가 열리면 그 하위 맵 첫 단계도 같이 열려 보이므로, 바깥 호스트가 함께 열린 하위 단계는 세지 않는다.
+ */
 export function pickAutoAdvance(opened: readonly string[]): { select: string | null; flash: string[] } {
-  if (opened.length === 1) return { select: opened[0], flash: [] };
-  return { select: null, flash: [...opened] };
+  const openedSet = new Set(opened);
+  const steps = opened.filter((key) => !getRunScopeHostKeys(splitRunNodeKey(key).scopePath).some((host) => openedSet.has(host)));
+  if (steps.length === 1) return { select: steps[0], flash: [] };
+  return { select: null, flash: steps };
 }
 
 /**
@@ -231,6 +237,36 @@ export function getRunScopeHostKeys(scopePath: string): string[] {
   if (scopePath === "") return [];
   const parts = scopePath.split(EMBED_SEP);
   return parts.map((_, index) => parts.slice(0, index + 1).join(EMBED_SEP));
+}
+
+// 버튼 줄·팝오버 표면 — 이 안의 키는 버튼 줄이 맡고 캔버스 키(Tab 흐름 이동·Esc 단계 닫기)는 손대지 않는다(R31)
+const RUN_BAR_SURFACES = '[data-id="run-action-bar"], [data-id="run-pop"], [data-id="run-pop-cascade"]';
+// 자기 키를 가진 곳 — 입력 칸·대화창·메뉴·목록(그리고 버튼 줄·팝오버)에서 누른 Esc/Enter는 그쪽 몫이다
+const KEY_OWNERS =
+  'input, textarea, select, [contenteditable=""], [contenteditable="true"], ' +
+  '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], ' +
+  RUN_BAR_SURFACES;
+// Enter를 스스로 받는 것 — 캔버스 크롬 버튼(줌·범례 등)에서 누른 Enter는 그 버튼을 누른다
+const ENTER_OWNERS = 'button, a[href], [role="button"]';
+
+export function isInRunBarSurface(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(RUN_BAR_SURFACES) !== null;
+}
+
+/**
+ * 캔버스에서 누른 키인지 — 문서 본문(빈 곳을 눌러 포커스가 풀린 상태)이거나 캔버스(.react-flow) 안에서 키를 따로 갖지 않는 곳.
+ * 실행 모드의 Esc 단계 닫기가 이때만 움직인다(실행 바 ⋯ 메뉴·대화창·입력 칸·버튼 줄은 각자 Esc를 맡는다).
+ */
+export function isRunCanvasKeyTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  const doc = target.ownerDocument;
+  if (target === doc.body || target === doc.documentElement) return true;
+  return target.closest(".react-flow") !== null && target.closest(KEY_OWNERS) === null;
+}
+
+/** 캔버스의 Enter(선택한 노드의 버튼 줄로 들어가기)를 받을 곳 — 위와 같되 버튼·링크에서 누른 Enter는 그 버튼 몫이다. */
+export function isRunCanvasEnterTarget(target: EventTarget | null): boolean {
+  return isRunCanvasKeyTarget(target) && !(target instanceof Element && target.closest(ENTER_OWNERS) !== null);
 }
 
 /** 하위프로세스 노드의 하위 맵(그 아래 하위 맵 포함)에 기록이 있는지 — 있으면 취소 전에 확인을 받는다(R5). */

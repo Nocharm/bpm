@@ -357,7 +357,13 @@ import { buildNodeRefCheck } from "@/lib/node-ref-warnings";
 import { runGuardedNavigation, setNavigationGuard } from "@/lib/navigation-guard";
 import { listSaveBlockers } from "@/lib/save-blockers";
 import { useClosingKeys } from "@/lib/use-closing-keys";
-import { findRunBlockerKeys, getRunScopeHostKeys, type RunPop } from "@/lib/run-actions";
+import {
+  findRunBlockerKeys,
+  getRunScopeHostKeys,
+  isInRunBarSurface,
+  isRunCanvasKeyTarget,
+  type RunPop,
+} from "@/lib/run-actions";
 import { buildMapVersionHref, buildRunHref } from "@/lib/run-links";
 import { applyRunEdgeKind, buildRunView, splitRunNodeKey, splitRunScopeGraphs } from "@/lib/run-view";
 import { useRepairRunNodeInternals, useRunSession } from "@/lib/use-run-session";
@@ -1687,7 +1693,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (runPop?.kind !== "why" || runPop.key !== selectedId || !runDetail || !runGraphs || !runView) return null;
     return new Set(findRunBlockerKeys(runDetail, runGraphs, runView, runPop.key));
   }, [runPop, selectedId, runDetail, runGraphs, runView]);
-  // 실행 모드 Esc — 팝오버 → 선택 순서로 닫는다(빈 캔버스 누르기는 onPaneClick이 둘 다 닫는다)
+  // 실행 모드 Esc(캔버스에 포커스가 있을 때만) — 팝오버 → 선택 순서로 닫는다(빈 캔버스 누르기는 onPaneClick이 둘 다 닫는다).
+  // 버튼 줄·팝오버 안 Esc는 버튼 줄이, 입력 칸·실행 바 ⋯ 메뉴·대화창의 Esc는 그쪽이 맡는다(R31)
   const closeRunLayer = useEffectEvent(() => {
     // 다른 노드에 남은 팝오버(Tab 이동 등)는 이미 안 보이므로 선택과 같이 닫는다
     const isPopShown = runPop !== null && runPop.key === selectedId;
@@ -1700,7 +1707,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     if (!runMode) return;
     const handleRunEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) closeRunLayer();
+      if (event.key === "Escape" && !event.defaultPrevented && isRunCanvasKeyTarget(event.target)) closeRunLayer();
     };
     window.addEventListener("keydown", handleRunEscape);
     return () => window.removeEventListener("keydown", handleRunEscape);
@@ -9588,6 +9595,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           target.closest("[data-editor-outline]") !== null)
       ) {
         return; // 입력/아웃라인 포커스 중엔 기본 동작(아웃라인 Tab 보존)
+      }
+      // 실행 노드 버튼 줄·팝오버 안 — Tab은 그 안에서 기본대로 움직이고 선택을 옮기지 않는다(R31)
+      if (isInRunBarSurface(target)) {
+        return;
       }
       // F2 — 노드/엣지 이름·라벨 편집 진입 + 열린 컨텍스트 메뉴 닫기. selectedId 가드보다 위(엣지도 처리).
       if (event.key === "F2") {

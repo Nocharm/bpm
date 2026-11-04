@@ -2,11 +2,14 @@
 // 열리면 제자리 반짝임 + 토스트, 대기 노드의 꺼진 완료에 올리면 먼저 끝낼 단계 2개(점선 안내)·누르면 화면 밖 노드로 이동(가운데),
 // 문제 → 한 줄 메모 Enter, 코멘트 팝오버(Esc → 팝오버 → 선택 순서로 닫힘), 하위 맵 들어가기·하위 단계 완료 → 시작 취소 시
 // 하위 맵 기록 취소 확인(모두 취소 = cascade), 하위 맵을 끝까지 → 바깥 자동 완료, 끝난 실행은 안내만. 콘솔 에러 0.
+// 키보드(R31): 선택 노드에서 Enter → 버튼 줄 첫 버튼(꺼진 완료면 먼저 끝낼 단계가 열림), Tab은 버튼 줄·팝오버 안에서만 움직이고
+// 선택을 옮기지 않음, 팝오버 Esc → 연 버튼으로, 버튼 Esc → 캔버스 노드로. 개인 실행은 메모 칸·토스트가 알림을 약속하지 않음.
 // 실행(frontend/ 에서):
 //   bash       BASE_URL=http://localhost:3047 API_URL=http://localhost:8048 node scripts/pw-smoke-run-bar.mjs
 //   PowerShell $env:BASE_URL="http://localhost:3047"; $env:API_URL="http://localhost:8048"; node scripts\pw-smoke-run-bar.mjs
 // 전제: backend는 AI_ENABLED=false DEV_ENFORCE_PERMISSIONS=false BPM_SYSADMINS="" 로, frontend는 BACKEND_URL=<backend>로 기동.
-//       시드는 스크립트가 API로 만든다(하위 맵 게시·하위프로세스 지정 → 바깥 맵 게시 → 개인 실행). 끝에 실행과 두 맵을 지운다
+//       시드는 스크립트가 API로 만든다(하위 맵 게시·하위프로세스 지정 → 바깥 맵 게시 → 공유 실행, 끝에 개인 실행 하나 더).
+//       끝에 실행들과 두 맵을 지운다
 //       (KEEP=1이면 남긴다). 산출물은 저장소 루트 .shots/run-bar-*.png(gitignore).
 import { mkdirSync } from "node:fs";
 
@@ -112,12 +115,14 @@ const parent = await createPublishedMap(
     edge("spe", "sp", "e", { source_handle: "__primary__" }),
   ],
 );
+// 공유 실행(다른 참여자 없음, R29) — 문제 메모가 문제 알림에 붙는 문구를 본다. 개인 실행 문구는 끝에서 따로 본다
 const run = await api("POST", `/maps/${parent.mapId}/runs`, {
   name: `버튼 줄 스모크 ${tag}`,
   version_id: parent.versionId,
-  scope: "solo",
+  scope: "shared",
   participants: [],
 });
+const createdRunIds = [run.id];
 check("seeded maps and run", true, `child ${child.mapId} parent ${parent.mapId} run ${run.id}`);
 
 // ---- 브라우저 ----
@@ -152,9 +157,13 @@ async function waitBarOn(key, status) {
     { timeout: 8000 },
   );
 }
-// 앞 노드의 버튼 줄이 다음 노드를 덮을 수 있어(줌이 작을 때) Esc로 팝오버 → 선택을 먼저 닫고 누른다
+// 앞 노드의 버튼 줄이 다음 노드를 덮을 수 있어(줌이 작을 때) Esc로 먼저 닫고 누른다 — 포커스가 팝오버·버튼 줄에 있으면
+// Esc가 팝오버 → 버튼 → 캔버스 → 선택 순서로 한 단계씩 물러난다(R31)
 async function selectNode(key) {
-  for (let i = 0; i < 2 && (await bar.count()) > 0; i += 1) await page.keyboard.press("Escape");
+  for (let i = 0; i < 4 && (await bar.count()) > 0; i += 1) {
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(60);
+  }
   await bar.waitFor({ state: "detached" });
   await nodeEl(key).click();
   await waitBarOn(key, null);
@@ -185,6 +194,12 @@ async function waitFlash(keys) {
     )
     .then(() => true)
     .catch(() => false);
+}
+async function activeId() {
+  return page.evaluate(() => document.activeElement?.getAttribute("data-id") ?? null);
+}
+async function barNode() {
+  return bar.getAttribute("data-node");
 }
 async function readStates() {
   return (await api("GET", `/runs/${run.id}`)).states;
@@ -267,7 +282,7 @@ try {
   check("selection stays on the completed step", JSON.stringify(await barButtons()) === JSON.stringify(["run-act-undo", "run-act-comments"]));
   await page.screenshot({ path: `${OUT}/run-bar-parallel.png` });
 
-  // 5) 결과 취합(대기) 쪽으로 확대 → 꺼진 완료에 올리면 먼저 끝낼 단계 2개 + 점선 안내
+  // 5) 결과 취합(대기) 쪽으로 확대 → 선택한 노드에서 Enter = 꺼진 완료에 포커스 → 먼저 끝낼 단계 2개 + 점선 안내(R31)
   await fitAll();
   await zoomAt(nid("j"), 3);
   await selectNode(nid("j"));
@@ -277,22 +292,36 @@ try {
       (await page.locator('[data-id="run-act-why"]').getAttribute("aria-disabled")) === "true",
   );
   check("the step to jump to is off screen", !(await isInsidePane(nid("x"))));
-  await page.locator('[data-id="run-act-why"]').hover();
-  await pop.waitFor();
+  await page.keyboard.press("Enter");
+  await page.locator('[data-id="run-pop"][data-kind="why"]').waitFor();
+  check("keyboard: Enter on the selected node focuses the switched-off complete and opens why", (await activeId()) === "run-act-why");
   const gotoIds = await pop.locator('[data-id^="run-pop-goto-"]').evaluateAll((els) => els.map((el) => el.getAttribute("data-id")));
   check(
     "why popover lists the two steps to finish first",
-    (await pop.getAttribute("data-kind")) === "why" &&
-      (await pop.textContent()).includes("먼저 끝내야 할 단계") &&
+    (await pop.textContent()).includes("먼저 끝내야 할 단계") &&
       JSON.stringify(gotoIds) === JSON.stringify([`run-pop-goto-${nid("w")}`, `run-pop-goto-${nid("x")}`]),
     gotoIds.join(","),
   );
   check("hint ring on both targets", (await page.locator('[data-id="run-node-ring"][data-run-hint]').count()) === 2);
+  // Esc on the bar closes the popover and keeps focus on the button; hovering opens it again
+  await page.keyboard.press("Escape");
+  await pop.waitFor({ state: "detached" });
+  check("keyboard: Esc on the bar closes the popover, focus stays", (await activeId()) === "run-act-why");
+  await page.locator('[data-id="run-act-why"]').hover();
+  await pop.waitFor();
+  check("hover on the switched-off complete opens why", (await pop.getAttribute("data-kind")) === "why");
   await page.waitForTimeout(300); // 등장 애니메이션
   await page.screenshot({ path: `${OUT}/run-bar-why.png` });
 
-  // 6) 누르면 그 노드로 이동(화면 밖 → 가운데), 이동해 온 노드 반짝임
-  await page.locator(`[data-id="run-pop-goto-${nid("x")}"]`).click();
+  // 6) Tab으로 갈 곳 목록에 들어가 Enter = 그 노드로 이동(화면 밖 → 가운데), 이동해 온 노드 반짝임
+  await page.keyboard.press("Tab");
+  check("keyboard: Tab from the switched-off complete enters the first target", (await activeId()) === `run-pop-goto-${nid("w")}`);
+  await page.keyboard.press("Tab");
+  check(
+    "keyboard: Tab moves inside the popover without moving the selection",
+    (await activeId()) === `run-pop-goto-${nid("x")}` && (await barNode()) === nid("j"),
+  );
+  await page.keyboard.press("Enter");
   const jumpedFlash = waitFlash([nid("x")]);
   await waitBarOn(nid("x"), "ready");
   check("jump selects the step", true);
@@ -302,15 +331,25 @@ try {
   check("hint rings cleared after the jump", (await page.locator("[data-run-hint]").count()) === 0);
   await page.screenshot({ path: `${OUT}/run-bar-jump.png` });
 
-  // 7) 문제 → 한 줄 메모(입력 포커스) → Enter
-  await page.locator('[data-id="run-act-problem"]').click();
+  // 7) 키보드로 문제 → 한 줄 메모(입력 포커스) → Tab으로 건너뛰기·남기기(선택은 그대로) → 남기기에서 Enter
+  await page.keyboard.press("Enter"); // 이동해 온 뒤 포커스는 본문 — Enter로 버튼 줄 첫 버튼(완료)
+  check("keyboard: Enter from the page body enters the bar", (await activeId()) === "run-act-complete");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  check("keyboard: Tab moves inside the bar, selection stays", (await activeId()) === "run-act-problem" && (await barNode()) === nid("x"));
+  await page.keyboard.press("Enter");
   await page.locator('[data-id="run-pop"][data-kind="note"]').waitFor();
+  check("problem opens the note line with focus", (await activeId()) === "run-pop-note-input");
   check(
-    "problem opens the note line with focus",
-    await page.evaluate(() => document.activeElement?.getAttribute("data-id") === "run-pop-note-input"),
+    "shared run: the note placeholder promises the problem notice",
+    (await page.locator('[data-id="run-pop-note-input"]').getAttribute("placeholder")) === "남기면 문제 알림에 같이 가요",
   );
   await page.keyboard.type("시약이 부족해요");
   await page.screenshot({ path: `${OUT}/run-bar-note.png` });
+  await page.keyboard.press("Tab");
+  check("keyboard: Tab from the note reaches Skip", (await activeId()) === "run-pop-note-skip" && (await barNode()) === nid("x"));
+  await page.keyboard.press("Tab");
+  check("keyboard: Tab reaches Post, selection stays", (await activeId()) === "run-pop-note-submit" && (await barNode()) === nid("x"));
   await page.keyboard.press("Enter");
   await page.getByText("문제 알림에 메모를 같이 보냈어요").waitFor({ timeout: 5000 });
   check("note posted with the problem toast", true);
@@ -362,10 +401,22 @@ try {
   await page.screenshot({ path: `${OUT}/run-bar-comments.png` });
   await page.keyboard.press("Escape");
   await pop.waitFor({ state: "detached" });
-  check("Esc closes the popover first", (await bar.count()) === 1);
+  check("Esc in the popover closes it and returns focus to its button", (await bar.count()) === 1 && (await activeId()) === "run-act-comments");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
+  check(
+    "Esc on a bar button returns focus to the canvas node, selection kept",
+    (await bar.count()) === 1 &&
+      (await page.evaluate(
+        (key) =>
+          document.activeElement?.classList.contains("react-flow__node") === true &&
+          document.activeElement.getAttribute("data-id") === key,
+        nid("sp"),
+      )),
+  );
   await page.keyboard.press("Escape");
   await bar.waitFor({ state: "detached" });
-  check("second Esc clears the selection", true);
+  check("Esc on the canvas clears the selection", true);
 
   // 11) 하위 맵 들어가기 → 하위 단계 완료(바깥은 진행 중) → 바깥 시작 취소 = 하위 맵 기록 취소 확인
   await selectNode(nid("sp"));
@@ -434,6 +485,28 @@ try {
   await page.mouse.click(pane.x + 30, pane.y + pane.height - 30);
   await bar.waitFor({ state: "detached" });
   check("pane click closes the bar", true);
+
+  // 14) 개인 실행 — 문제 알림이 없으니 메모 칸·토스트가 "알림에 같이 간다"고 말하지 않는다
+  const soloRun = await api("POST", `/maps/${parent.mapId}/runs`, {
+    name: `버튼 줄 스모크 개인 ${tag}`,
+    version_id: parent.versionId,
+    scope: "solo",
+    participants: [],
+  });
+  createdRunIds.push(soloRun.id);
+  await page.goto(`${BASE}/maps/${parent.mapId}?version=${parent.versionId}&run=${soloRun.id}`);
+  await page.locator('[data-id="run-bar"][data-state="ready"]').waitFor();
+  await page.waitForTimeout(800);
+  await fitAll();
+  await selectNode(nid("a"));
+  await page.locator('[data-id="run-act-problem"]').click();
+  const soloNote = page.locator('[data-id="run-pop-note-input"]');
+  await soloNote.waitFor();
+  check("solo run: note placeholder without the notice promise", (await soloNote.getAttribute("placeholder")) === "무슨 일인지 적어 두세요");
+  await page.keyboard.type("혼자 보는 메모");
+  await page.keyboard.press("Enter");
+  await page.getByText("메모를 남겼어요", { exact: true }).waitFor({ timeout: 5000 });
+  check("solo run: note toast without the notice promise", (await page.getByText("문제 알림에 메모를 같이 보냈어요").count()) === 0);
 } catch (err) {
   failures += 1;
   console.log("FAIL exception", err);
@@ -444,7 +517,9 @@ try {
   check("console errors", unexpected.length === 0, unexpected.slice(0, 3).join(" | "));
   await browser.close();
   if (!KEEP) {
-    await api("DELETE", `/runs/${run.id}`).catch((err) => console.warn("run cleanup skipped", String(err).slice(0, 120)));
+    for (const runId of createdRunIds) {
+      await api("DELETE", `/runs/${runId}`).catch((err) => console.warn("run cleanup skipped", String(err).slice(0, 120)));
+    }
     for (const mapId of [parent.mapId, child.mapId]) {
       await api("DELETE", `/maps/${mapId}`).catch((err) => console.warn("map cleanup skipped", String(err).slice(0, 120)));
     }
