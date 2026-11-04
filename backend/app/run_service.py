@@ -29,6 +29,7 @@ from app.models import (
 )
 from app.permissions.access import get_effective_role, get_eligible_users
 from app.permissions.logic import role_rank
+from app.run_access import get_hidden_scope_paths, is_hidden_scope
 from app.run_graph import (
     ACTIONABLE_TYPES,
     RunGraph,
@@ -209,15 +210,14 @@ async def _can_keep(session: AsyncSession, run: Run, user: str) -> bool:
 
 async def build_run_detail(session: AsyncSession, run: Run, user: str) -> RunDetailOut:
     row = await build_run_row(session, run, user)
-    states = (
-        await session.scalars(select(RunNodeState).where(RunNodeState.run_id == run.id).order_by(RunNodeState.id))
-    ).all()
-    scopes = (await session.scalars(select(RunScope).where(RunScope.run_id == run.id).order_by(RunScope.id))).all()
+    hidden = await get_hidden_scope_paths(session, run, user)  # 볼 수 없는 하위 맵의 노드 id·제목은 싣지 않는다
+    states = await session.scalars(select(RunNodeState).where(RunNodeState.run_id == run.id).order_by(RunNodeState.id))
+    scopes = await session.scalars(select(RunScope).where(RunScope.run_id == run.id).order_by(RunScope.id))
     return RunDetailOut(
         **row.model_dump(),
-        states=[RunNodeStateOut.model_validate(s) for s in states],
-        scopes=[RunScopeOut.model_validate(s) for s in scopes],
-        comment_counts=await _count_comments(session, run.id),
+        states=[RunNodeStateOut.model_validate(s) for s in states.all() if not is_hidden_scope(s.scope_path, hidden)],
+        scopes=[RunScopeOut.model_validate(s) for s in scopes.all() if not is_hidden_scope(s.scope_path, hidden)],
+        comment_counts=[c for c in await _count_comments(session, run.id) if not is_hidden_scope(c.scope_path, hidden)],
         can_act=_is_actor(run, {p.login_id for p in row.participants}, user),
         can_manage=run.starter == user,
         can_keep=await _can_keep(session, run, user),
@@ -386,13 +386,15 @@ async def _assert_sub_runnable(session: AsyncSession, user: str, version_id: int
     """하위 범위로 밟을 수 있는 버전 — 사용자가 볼 수 있고, 게시본·지난 게시본이며, 임베드 가능한 하위 맵의 것.
 
     Draft는 편집으로 노드 id가 바뀌어 기록이 엉키고, 휴지통·미지정 맵은 라이브러리 임베드와 같이 막는다.
+    L5 연계 캔버스(framework)는 실행 대상이 아니라 하위 맵으로도 들이지 않는다(보안 리뷰 S3, 임베드 판정은 그대로).
     """
     version = await session.get(MapVersion, version_id)
     if role_rank(await get_effective_role(session, user, version.map_id)) < role_rank("viewer"):
         raise HTTPException(status_code=403, detail=ERR_SUB_ACCESS)
     if version.status not in _RUNNABLE_VERSION_STATUSES:
         raise HTTPException(status_code=422, detail=ERR_SUB_NOT_PUBLISHED)
-    if not is_embeddable_subprocess_map(await session.get(ProcessMap, version.map_id)):
+    sub_map = await session.get(ProcessMap, version.map_id)
+    if not is_embeddable_subprocess_map(sub_map) or sub_map.mode == "framework":
         raise HTTPException(status_code=422, detail=ERR_SUB_UNAVAILABLE)
 
 

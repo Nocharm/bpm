@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.db import SessionLocal
-from app.models import Run, RunComment, RunEvent
+from app.models import ProcessMap, Run, RunComment, RunEvent
 from app.run_graph import RunScopeState, derive_run_statuses
 from app.run_service import load_version_graph
 from tests.run_helpers import as_user, load_case_graph, republish_map, seed_published_map
@@ -507,6 +507,56 @@ def test_undesignated_subprocess_map_is_unavailable(client: TestClient, monkeypa
     assert _rejected(_get_graph(client, run, q)) == (422, "subprocess map is unavailable")
     # 하위 맵에 들어갈 수 없어도 바깥에서 바로 완료하는 길은 열려 있다
     assert _states(_ok(_act(client, run, q, "complete", exit_key="__primary__"))) == {q: "done"}
+
+
+def test_framework_subprocess_map_is_unavailable(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    parent, child = _seed_sp_pair(client, monkeypatch, "framework child")
+    q = parent["ids"]["q"]
+
+    async def _flip(session) -> None:
+        # L5 연계 캔버스는 지정할 수 없지만, 지정·게시된 맵이 framework가 된 경우까지 실행이 막는지 본다
+        (await session.get(ProcessMap, child["map_id"])).mode = "framework"
+
+    _write_db(_flip)
+    run = _create_run(client, parent)
+
+    assert _rejected(_act(client, run, child["ids"]["a"], "start", scope_path=q)) == (
+        422,
+        "subprocess map is unavailable",
+    )
+    assert _rejected(_get_graph(client, run, q)) == (422, "subprocess map is unavailable")
+
+
+def test_child_scope_hidden_from_viewer_without_child_access(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    enforce_permissions: None,
+) -> None:
+    parent, child = _seed_sp_pair(client, monkeypatch, "hidden scope", parent_visibility="public")
+    q, child_a = parent["ids"]["q"], child["ids"]["a"]
+    member, outsider = "hide.child.member", "hide.child.outsider"  # 둘 다 공개 바깥 맵은 본다
+    grant = client.post(
+        f"/api/maps/{child['map_id']}/permissions",
+        json={"principal_type": "user", "principal_id": member, "role": "viewer"},
+        headers=as_user(client, child["owner"]),
+    )
+    assert grant.status_code == 201, grant.text
+    run = _create_run(client, parent, member, scope="shared")
+    _ok(_act(client, run, child_a, "start", scope_path=q))
+    _ok(_act(client, run, child_a, "complete", scope_path=q))
+
+    async def _comment(session) -> None:
+        session.add(RunComment(run_id=run["id"], scope_path=q, node_id=child_a, author=member, body="note"))
+
+    _write_db(_comment)
+
+    seen = _get_detail(client, run, outsider)
+    assert [s["scope_path"] for s in seen["states"]] == [""]  # 바깥 호스트(진행 중)만 보인다
+    assert (seen["scopes"], seen["comment_counts"]) == ([], [])
+    assert _rejected(_get_graph(client, run, q, outsider)) == (403, "cannot view the subprocess map")
+    own = _get_detail(client, run, member)
+    assert {s["scope_path"] for s in own["states"]} == {"", q} and len(own["scopes"]) == 1
+    assert own["comment_counts"] == [{"scope_path": q, "node_id": child_a, "count": 1}]
 
 
 def test_stale_action_is_rejected_and_state_kept(
