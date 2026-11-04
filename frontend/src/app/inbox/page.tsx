@@ -7,6 +7,7 @@ import {
   CalendarClock,
   Check,
   CheckSquare,
+  ClipboardList,
   FileCheck,
   List,
   Mail,
@@ -61,7 +62,13 @@ import type { MessageKey } from "@/lib/i18n-messages";
 import { genId } from "@/lib/id";
 import { formatKst } from "@/lib/datetime";
 import { getNotificationCategory, NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notification-categories";
-import { formatNotification, formatNotificationBodyParts, getNotificationIcon, sumRefFixCounts } from "@/lib/notification-format";
+import {
+  formatNotification,
+  formatNotificationBodyParts,
+  getNotificationIcon,
+  getRunNotificationHref,
+  sumRefFixCounts,
+} from "@/lib/notification-format";
 import { filterByQuery } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { useQuietScroll } from "@/lib/use-quiet-scroll";
@@ -418,6 +425,7 @@ export default function InboxPage() {
   ];
 
   const CATEGORY_ICONS: Record<NotificationCategory, LucideIcon> = {
+    run: ClipboardList,
     version: FileCheck,
     checkout: ArrowLeftRight,
     permission: ShieldCheck,
@@ -1046,6 +1054,7 @@ function NotificationDetail({
   t: Translate;
 }) {
   const view = formatNotification(notification, t);
+  const runHref = getRunNotificationHref(notification);
   return (
     <article className="px-6 py-4">
       {/* 유형 칩 + 제목(맵 이름) — 언어 토글 반영, 본문은 상세 문장.
@@ -1115,13 +1124,23 @@ function NotificationDetail({
         {/* 절대 시각(KST) — 상대 필과 병기 */}
         <span className="text-fine text-ink-tertiary">{formatKst(notification.created_at)}</span>
       </div>
-      {notification.map_id !== null && (
+      {runHref ? (
         <Link
-          href={`/maps/${notification.map_id}`}
+          href={runHref}
+          data-id="notif-run-open"
           className="mt-4 inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
         >
-          {t("inbox.relatedMap")}
+          {t("inbox.openRun")}
         </Link>
+      ) : (
+        notification.map_id !== null && (
+          <Link
+            href={`/maps/${notification.map_id}`}
+            className="mt-4 inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
+          >
+            {t("inbox.relatedMap")}
+          </Link>
+        )
       )}
     </article>
   );

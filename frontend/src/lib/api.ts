@@ -2175,6 +2175,13 @@ export interface NotificationPayload {
   count?: number; // fw_external_linked — 이번 전달로 이어진 자리표 수
   maps?: NotificationMapEntry[]; // ref_fix_requested — 오너당 묶음 알림의 맵 목록
   as?: "owner" | "holder"; // ref_fix_requested — 받는 자격(맵 오너 또는 작업본 점유자)
+  // 실행 체크(run_*) — node_title은 그 범위를 볼 수 있는 받는 사람에게만 실린다(없을 수 있음)
+  run_id?: number;
+  run_name?: string;
+  node_title?: string;
+  actors?: string[]; // run_steps_done — 묶인 완료를 한 사람들의 login
+  days?: number; // run_stopped(자동 중단 방치 일수)·run_idle_warning(자동 중단까지 남은 날)
+  auto?: boolean; // run_stopped — 방치로 자동 중단됐는가
 }
 
 export interface NotificationItem {

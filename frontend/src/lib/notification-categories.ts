@@ -1,8 +1,9 @@
 // 알림 type → 카테고리 매핑 — 인박스 필 필터 공용 (design 2026-07-16)
 
-export type NotificationCategory = "version" | "checkout" | "permission" | "subprocess" | "notice";
+export type NotificationCategory = "run" | "version" | "checkout" | "permission" | "subprocess" | "notice";
 
 export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
+  "run",
   "version",
   "checkout",
   "permission",
@@ -19,6 +20,7 @@ const VERSION_TYPES = new Set([
 ]);
 
 export function getNotificationCategory(type: string): NotificationCategory | null {
+  if (type.startsWith("run_")) return "run"; // 실행 체크 알림 7종 — 실행 필터 (design 2026-11-04 §4.5)
   if (VERSION_TYPES.has(type)) return "version";
   if (type.startsWith("checkout_")) return "checkout";
   if (type.startsWith("permission_")) return "permission";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getNotificationCategory } from "./notification-categories";
+import { getNotificationCategory, NOTIFICATION_CATEGORIES } from "./notification-categories";
 
 describe("getNotificationCategory", () => {
   it("maps version workflow types", () => {
@@ -30,5 +30,13 @@ describe("getNotificationCategory", () => {
     expect(getNotificationCategory("fw_confirm_requested")).toBe("permission");
     expect(getNotificationCategory("fw_confirm_done")).toBe("permission");
     expect(getNotificationCategory("fw_confirm_rejected")).toBe("permission");
+  });
+  it("classifies run_ types as run, listed first in the filter order", () => {
+    for (const t of [
+      "run_invited", "run_steps_done", "run_problem", "run_resolved", "run_finished", "run_stopped", "run_idle_warning",
+    ]) {
+      expect(getNotificationCategory(t)).toBe("run");
+    }
+    expect(NOTIFICATION_CATEGORIES[0]).toBe("run");
   });
 });

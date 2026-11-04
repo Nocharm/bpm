@@ -1,9 +1,17 @@
 // 알림 렌더 포맷 — 언어 토글 렌더·레거시 폴백·사유 처리 계약 (design 2026-08-26)
 import { describe, expect, it } from "vitest";
 
-import type { NotificationItem, NotificationMapEntry } from "@/lib/api";
+import { AlertTriangle, Bell, ClipboardList, ListChecks } from "lucide-react";
+
+import type { NotificationItem, NotificationMapEntry, NotificationPayload } from "@/lib/api";
 import { messages, type Lang, type MessageKey } from "@/lib/i18n-messages";
-import { formatNotification, formatNotificationBodyParts, sumRefFixCounts } from "@/lib/notification-format";
+import {
+  formatNotification,
+  formatNotificationBodyParts,
+  getNotificationIcon,
+  getRunNotificationHref,
+  sumRefFixCounts,
+} from "@/lib/notification-format";
 
 const makeT = (lang: Lang) => (key: MessageKey, vars?: Record<string, string | number>) => {
   let str: string = messages[lang][key] ?? key;
@@ -242,5 +250,119 @@ describe("sumRefFixCounts", () => {
   });
   it("옛 알림(키 4개)은 빠진 키를 0으로 센다", () => {
     expect(sumRefFixCounts({ id: 2, name: "Refund", node_dept: 3, node_assignee: 0, sp_dept: 0, sp_assignee: 1 })).toBe(4);
+  });
+});
+
+// 실행 체크(Run) 알림 — 유형 7종 렌더·숨은 노드 변형·딥링크 (design 2026-11-04 §4.5)
+describe("run notifications", () => {
+  const runBase: Omit<NotificationItem, "type" | "message" | "payload"> = {
+    id: 5, map_id: 3, version_id: 9, read: false, created_at: "2026-11-04T10:00:00+09:00",
+  };
+  const makeRun = (type: string, payload: NotificationPayload): NotificationItem => ({
+    ...runBase, type, message: "fallback", payload: {
+      map_name: "시험 일탈 관리", run_id: 21, run_name: "11월 점검", actor: "park.s", actor_name: "박서연", ...payload,
+    },
+  });
+  const ko = makeT("ko");
+  const en = makeT("en");
+
+  it("라벨 - 7종 모두 언어별 라벨이 있고 미지 라벨로 떨어지지 않는다", () => {
+    const labels = {
+      run_invited: "실행 초대", run_steps_done: "실행 단계 완료", run_problem: "실행 문제",
+      run_resolved: "문제 해결", run_finished: "실행 완료", run_stopped: "실행 중단", run_idle_warning: "자동 중단 예정",
+    };
+    for (const [type, label] of Object.entries(labels)) {
+      expect(formatNotification(makeRun(type, {}), ko).label).toBe(label);
+      expect(formatNotification(makeRun(type, {}), en).label).not.toBe("Notification");
+    }
+  });
+
+  it("run_invited - 제목=맵 이름, 본문에 행위자·실행 이름", () => {
+    const view = formatNotification(makeRun("run_invited", {}), ko);
+    expect(view.title).toBe("시험 일탈 관리");
+    expect(view.body).toBe("박서연 님이 '11월 점검' 실행에 초대했어요");
+  });
+
+  it("run_steps_done - 1명이면 단일 문구, 2명 이상이면 외 N명 문구", () => {
+    const one = makeRun("run_steps_done", { count: 3, actors: ["park.s"], node_title: "시료 채취" });
+    expect(formatNotification(one, ko).body).toBe("박서연 님이 단계 3개를 완료했어요 · 최근: 시료 채취");
+    const many = makeRun("run_steps_done", { count: 3, actors: ["lee.j", "kim.a", "park.s"], node_title: "시료 채취" });
+    expect(formatNotification(many, ko).body).toBe("박서연 님 외 2명이 단계 3개를 완료했어요 · 최근: 시료 채취");
+    expect(formatNotification(many, en).body).toBe("박서연 and 2 other(s) completed 3 step(s) · Latest: 시료 채취");
+  });
+
+  it("run_steps_done - node_title이 없으면(숨은 범위) 최근 구절 없는 변형", () => {
+    const one = makeRun("run_steps_done", { count: 2, actors: ["park.s"] });
+    expect(formatNotification(one, ko).body).toBe("박서연 님이 단계 2개를 완료했어요");
+    const many = makeRun("run_steps_done", { count: 4, actors: ["lee.j", "park.s"] });
+    expect(formatNotification(many, ko).body).toBe("박서연 님 외 1명이 단계 4개를 완료했어요");
+    expect(formatNotification(many, ko).body).not.toContain("최근");
+  });
+
+  it("run_problem - 노드가 보이면 노드 이름, 안 보이면 노드 없는 문구", () => {
+    const seen = makeRun("run_problem", { node_title: "시료 채취" });
+    expect(formatNotification(seen, ko).body).toBe("박서연 님이 '시료 채취'에 문제를 표시했어요");
+    const hidden = makeRun("run_problem", {});
+    expect(formatNotification(hidden, ko).body).toBe("박서연 님이 문제를 표시했어요");
+  });
+
+  it("run_problem - snippet은 말미에 붙고 파츠로는 인용 칩이 된다", () => {
+    const item = makeRun("run_problem", { node_title: "시료 채취", snippet: "시약이 모자라요" });
+    expect(formatNotification(item, ko).body).toBe("박서연 님이 '시료 채취'에 문제를 표시했어요 · \"시약이 모자라요\"");
+    const parts = formatNotificationBodyParts(item, ko);
+    expect(parts).toContainEqual({ chip: "시약이 모자라요", kind: "quote" });
+    expect(parts).toContainEqual({ chip: "시료 채취", kind: "name" });
+    expect(parts).toContainEqual({ actorLogin: "park.s", actorName: "박서연" });
+    expect(parts.some((part) => typeof part === "string" && part.includes("'"))).toBe(false);
+  });
+
+  it("run_resolved - 노드 유무 두 문구", () => {
+    expect(formatNotification(makeRun("run_resolved", { node_title: "시료 채취" }), ko).body)
+      .toBe("박서연 님이 '시료 채취' 문제를 해결했어요");
+    expect(formatNotification(makeRun("run_resolved", {}), ko).body).toBe("박서연 님이 문제를 해결했어요");
+  });
+
+  it("run_finished·run_stopped·run_idle_warning - 실행 이름·자동 중단·남은 일수", () => {
+    expect(formatNotification(makeRun("run_finished", {}), ko).body).toBe("'11월 점검' 실행이 모두 완료됐어요");
+    expect(formatNotification(makeRun("run_stopped", { auto: false }), ko).body).toBe("박서연 님이 '11월 점검' 실행을 중단했어요");
+    const auto = makeRun("run_stopped", { auto: true, days: 40, actor: undefined, actor_name: "" });
+    expect(formatNotification(auto, ko).body).toBe("'11월 점검' 실행이 오래 그대로라 자동으로 중단됐어요");
+    const idle = makeRun("run_idle_warning", { days: 10, actor: undefined, actor_name: "" });
+    expect(formatNotification(idle, ko).body).toBe("'11월 점검' 실행을 10일 안에 손대지 않으면 자동으로 중단돼요");
+  });
+
+  it("실행 이름은 리치 파츠에서 이름 칩으로 분할된다(행위자 없는 알림 포함)", () => {
+    const idle = makeRun("run_idle_warning", { days: 10, actor: undefined, actor_name: "" });
+    expect(formatNotificationBodyParts(idle, ko)).toContainEqual({ chip: "11월 점검", kind: "name" });
+  });
+
+  it("아이콘 - 문제=경고, 단계 완료·실행 완료=체크 목록, 나머지 run_*=클립보드", () => {
+    expect(getNotificationIcon("run_problem")).toBe(AlertTriangle);
+    expect(getNotificationIcon("run_steps_done")).toBe(ListChecks);
+    expect(getNotificationIcon("run_finished")).toBe(ListChecks);
+    for (const type of ["run_invited", "run_resolved", "run_stopped", "run_idle_warning"]) {
+      expect(getNotificationIcon(type)).toBe(ClipboardList);
+    }
+    expect(getNotificationIcon("mystery")).toBe(Bell);
+  });
+});
+
+describe("getRunNotificationHref", () => {
+  const item = (over: Partial<NotificationItem>): NotificationItem => ({
+    id: 1, type: "run_problem", map_id: 3, version_id: 9, message: "x", read: false,
+    created_at: "2026-11-04T10:00:00+09:00", payload: { run_id: 21 }, ...over,
+  });
+
+  it("run 유형이고 맵·버전·실행 id가 있으면 실행 화면 주소", () => {
+    expect(getRunNotificationHref(item({}))).toBe("/maps/3?version=9&run=21");
+  });
+  it("run 아닌 유형은 null", () => {
+    expect(getRunNotificationHref(item({ type: "published" }))).toBeNull();
+  });
+  it("맵·버전·실행 id 중 하나라도 없으면 null", () => {
+    expect(getRunNotificationHref(item({ map_id: null }))).toBeNull();
+    expect(getRunNotificationHref(item({ version_id: null }))).toBeNull();
+    expect(getRunNotificationHref(item({ payload: {} }))).toBeNull();
+    expect(getRunNotificationHref(item({ payload: null }))).toBeNull();
   });
 });

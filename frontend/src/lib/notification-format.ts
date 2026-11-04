@@ -2,16 +2,19 @@
 // payload 없는 레거시 행은 영어 message 원문 폴백 (design 2026-08-26).
 
 import {
+  AlertTriangle,
   ArrowLeftRight,
   BadgeCheck,
   Bell,
   CircleAlert,
   CircleCheck,
   CircleX,
+  ClipboardList,
   Copy,
   Crown,
   FileCheck,
   Link2,
+  ListChecks,
   Megaphone,
   MessageSquareReply,
   Network,
@@ -24,6 +27,7 @@ import {
 
 import type { NotificationItem, NotificationMapEntry, NotificationPayload } from "@/lib/api";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { buildRunHref } from "@/lib/run-links";
 
 export interface NotificationView {
   /** 유형 칩 라벨 (언어별) */
@@ -49,6 +53,7 @@ const KNOWN_TYPES = new Set([
   "fw_slot_requested", "fw_slot_applied", "fw_slot_rejected",
   "fw_external_linked", "fw_admin_removed",
   "ref_fix_requested", "owner_assigned",
+  "run_invited", "run_steps_done", "run_problem", "run_resolved", "run_finished", "run_stopped", "run_idle_warning",
 ]);
 
 // 기계 코드 사유(bundled/direct/auto)는 번역, 자유 텍스트(거절 사유)는 원문 유지
@@ -84,6 +89,9 @@ export function getNotificationIcon(type: string): LucideIcon {
   if (type === "notice") return Megaphone;
   if (type === "ref_fix_requested") return TriangleAlert;
   if (type === "owner_assigned") return Crown;
+  if (type === "run_problem") return AlertTriangle;
+  if (type === "run_steps_done" || type === "run_finished") return ListChecks;
+  if (type.startsWith("run_")) return ClipboardList;
   if (type === "fw_external_linked") return Link2;
   if (type === "fw_admin_removed") return ShieldCheck;
   if (type.startsWith("fw_slot")) return ArrowLeftRight;
@@ -101,8 +109,26 @@ export function sumRefFixCounts(entry: NotificationMapEntry): number {
   return REF_FIX_COUNT_KEYS.reduce((sum, key) => sum + (entry[key] ?? 0), 0);
 }
 
+// 실행 알림 본문 키 — node_title이 없으면(그 범위를 못 보는 사람) 노드 구절 없는 _hidden 변형, 완료는 2명 이상이면 _many, 자동 중단은 _auto
+function getRunBodyKey(type: string, p: NotificationPayload): string {
+  const hidden = p.node_title ? "" : "_hidden";
+  if (type === "run_steps_done") return `notifBody.run_steps_done${(p.actors?.length ?? 0) > 1 ? "_many" : ""}${hidden}`;
+  if (type === "run_problem" || type === "run_resolved") return `notifBody.${type}${hidden}`;
+  if (type === "run_stopped" && p.auto) return "notifBody.run_stopped_auto";
+  return `notifBody.${type}`;
+}
+
+/** 실행 알림이 가리키는 실행 화면 주소 — run_ 유형이고 맵·버전·실행 id가 다 있을 때만, 아니면 null(인박스로 간다). */
+export function getRunNotificationHref(item: NotificationItem): string | null {
+  const runId = item.payload?.run_id;
+  if (!item.type.startsWith("run_") || item.map_id === null || item.version_id === null || runId === undefined) {
+    return null;
+  }
+  return buildRunHref(item.map_id, item.version_id, runId);
+}
+
 // 리치 렌더로 치환 가능한 변수 — 파츠 분할 시 센티널로 대체된다
-type RichVar = "actor" | "version" | "from" | "to" | "copy" | "snippet";
+type RichVar = "actor" | "version" | "from" | "to" | "copy" | "snippet" | "run" | "node";
 
 function buildBody(
   item: NotificationItem,
@@ -120,13 +146,21 @@ function buildBody(
     snippet: overrides.snippet ?? p.snippet ?? "",
     status: p.status_label ?? "",
     count: p.count ?? "",
+    run: overrides.run ?? p.run_name ?? "",
+    node: overrides.node ?? p.node_title ?? "",
+    days: p.days ?? "",
+    others: Math.max((p.actors?.length ?? 0) - 1, 0),
   };
-  // permission_requested는 kind(visibility_change)별 문구 분기
-  const bodyKey =
-    item.type === "permission_requested" && p.kind === "visibility_change"
+  // permission_requested는 kind(visibility_change)별 문구, 실행 알림은 payload 모양별 문구 분기
+  const bodyKey = item.type.startsWith("run_")
+    ? getRunBodyKey(item.type, p)
+    : item.type === "permission_requested" && p.kind === "visibility_change"
       ? "notifBody.permission_requested_visibility"
       : `notifBody.${item.type}`;
   let body = t(bodyKey as MessageKey, vars);
+  if (item.type === "run_problem" && p.snippet) {
+    body = `${body} ${t("notifBody.run_problem_note" as MessageKey, vars)}`;
+  }
   if (p.reason && REASON_SUFFIX_TYPES.has(item.type)) {
     const reasonText = REASON_CODES.has(p.reason)
       ? t(`notifReason.${p.reason}` as MessageKey)
@@ -172,8 +206,10 @@ const SENTINELS: Record<RichVar, string> = {
   to: "⟬to⟭",
   copy: "⟬copy⟭",
   snippet: "⟬snippet⟭",
+  run: "⟬run⟭",
+  node: "⟬node⟭",
 };
-const SENTINEL_SPLIT = /(⟬actor⟭|⟬version⟭|⟬from⟭|⟬to⟭|⟬copy⟭|⟬snippet⟭)/;
+const SENTINEL_SPLIT = /(⟬actor⟭|⟬version⟭|⟬from⟭|⟬to⟭|⟬copy⟭|⟬snippet⟭|⟬run⟭|⟬node⟭)/;
 
 export function formatNotificationBodyParts(
   item: NotificationItem,
@@ -188,6 +224,8 @@ export function formatNotificationBodyParts(
         to: p.to_name ?? undefined,
         copy: p.copy_name ?? undefined,
         snippet: p.snippet ?? undefined,
+        run: p.run_name ?? undefined,
+        node: p.node_title ?? undefined,
       }
     : {};
   const hasRich = Object.values(richValues).some(Boolean);
@@ -220,6 +258,8 @@ export function formatNotificationBodyParts(
       if (seg === SENTINELS.to && p.to_name) return { chip: p.to_name, kind: "name" };
       if (seg === SENTINELS.copy && p.copy_name) return { chip: p.copy_name, kind: "name" };
       if (seg === SENTINELS.snippet && p.snippet) return { chip: p.snippet, kind: "quote" };
+      if (seg === SENTINELS.run && p.run_name) return { chip: p.run_name, kind: "name" };
+      if (seg === SENTINELS.node && p.node_title) return { chip: p.node_title, kind: "name" };
       return seg;
     });
 }

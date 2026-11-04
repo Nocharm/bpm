@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { deleteNotification, listNotifications, markNotificationRead, type NotificationItem } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
-import { formatNotification, getNotificationIcon } from "@/lib/notification-format";
+import { formatNotification, getNotificationIcon, getRunNotificationHref } from "@/lib/notification-format";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { runGuardedNavigation } from "@/lib/navigation-guard";
 
@@ -77,8 +77,18 @@ export function NotificationBell() {
     }
   };
 
-  const handleOpen = (id: number) => {
+  const handleOpen = (item: NotificationItem) => {
+    const { id } = item;
     setOpen(false);
+    const runHref = getRunNotificationHref(item);
+    if (runHref) {
+      // 실행 알림은 인박스를 거치지 않고 그 실행 화면으로 — 이동이 확정될 때 읽음 처리(이탈 가드에서 머물면 안 읽음 그대로)
+      runGuardedNavigation(() => {
+        void handleRead(id);
+        router.push(runHref);
+      });
+      return;
+    }
     if (window.location.pathname === "/inbox") {
       // 같은 라우트에선 push가 리마운트를 안 일으켜 딥링크 소비(마운트 1회 effect)가 무동작 — 하드 네비게이션으로 강제
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- 위 이유로 의도된 하드 네비게이션
@@ -117,7 +127,7 @@ export function NotificationBell() {
                   <li
                     key={item.id}
                     data-id={`notif-bell-row-${item.id}`}
-                    onClick={() => handleOpen(item.id)}
+                    onClick={() => handleOpen(item)}
                     className="group flex cursor-pointer items-start gap-2 rounded-sm px-1.5 py-2 hover:bg-surface-alt"
                   >
                     <TypeIcon
