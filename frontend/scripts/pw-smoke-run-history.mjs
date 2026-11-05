@@ -380,30 +380,43 @@ try {
     "history: fewer groups than rows and one day separator",
     groupShapes.length < allTexts.length && (await page.locator('[data-id^="run-history-day-"]').count()) === 1,
   );
-  // 줄의 사람 이름은 오른쪽 끝에서 잘리지 않고(모자라면 다음 줄), 아이콘은 동작 글자와 같은 높이 가운데,
-  // 시각은 세로선 왼쪽에 바로 위 줄과 같은 분이면 비운다
+  // 줄은 한 줄(아이콘 · 동작 · 사람 필), 사람 필은 오른쪽 끝에서 잘리지 않고, 아이콘은 동작 글자와 같은 높이 가운데,
+  // 시각은 세로선 위 따로 한 줄로 바로 위 줄과 같은 분이면 쓰지 않는다(서버 이력의 분과 대조)
   const rowFit = await page.locator(HISTORY_ENTRIES).evaluateAll((rows) =>
     rows.map((row) => {
+      const line = row.querySelector(":scope > div > div");
       const actor = row.querySelector('[data-id^="run-history-actor-"]');
+      const pill = actor?.querySelector(".truncate");
       const icon = row.querySelector("svg")?.getBoundingClientRect();
       const label = row.querySelector("span.font-semibold")?.getBoundingClientRect();
-      const time = row.querySelector('[data-id^="run-history-time-"]');
       return {
-        clipped: actor !== null && actor.scrollWidth > actor.clientWidth + 1,
-        rightGap: actor === null ? 0 : Math.round(row.getBoundingClientRect().right - actor.getBoundingClientRect().right),
+        id: row.getAttribute("data-id"),
+        height: Math.round(line?.getBoundingClientRect().height ?? 99),
+        clipped: pill !== null && pill !== undefined && pill.scrollWidth > pill.clientWidth + 1,
+        rightGap: actor === null ? 0 : Math.round(line.getBoundingClientRect().right - actor.getBoundingClientRect().right),
         offset: icon && label ? Math.abs(icon.top + icon.height / 2 - (label.top + label.height / 2)) : 99,
-        shown: (time?.textContent ?? "") !== "",
-        minute: (time?.getAttribute("title") ?? "").slice(0, 16),
+        shown: row.querySelector('[data-id^="run-history-time-"]') !== null,
       };
     }),
   );
-  check("history: actor names are not clipped", rowFit.every((row) => !row.clipped), JSON.stringify(rowFit));
-  check("history: actor names sit at the right edge", rowFit.every((row) => row.rightGap <= 1), JSON.stringify(rowFit.map((row) => row.rightGap)));
+  check("history: every row is one line", rowFit.every((row) => row.height <= 24), JSON.stringify(rowFit.map((row) => row.height)));
+  check("history: actor pills are not clipped", rowFit.every((row) => !row.clipped), JSON.stringify(rowFit.map((row) => row.clipped)));
+  check("history: actor pills sit at the right edge", rowFit.every((row) => row.rightGap <= 1), JSON.stringify(rowFit.map((row) => row.rightGap)));
   check("history: icons sit level with their labels", rowFit.every((row) => row.offset <= 1), JSON.stringify(rowFit.map((row) => row.offset)));
+  // 사람 필에 올리면 유저 카드(UserPill 재사용)
+  await page.locator('[data-id^="run-history-actor-"]').first().hover();
+  const userCard = page.locator('[role="tooltip"]').filter({ hasText: "System Admin" });
+  await userCard.waitFor({ state: "visible", timeout: 4000 });
+  check("history: hovering an actor pill opens the user card", await userCard.isVisible());
+  await page.mouse.move(800, 500);
+  const historyItems = await api(USER_A, "GET", `/runs/${run.id}/history`);
+  const minuteOf = (item) => item.created_at.slice(0, 16);
+  const expectedShown = historyItems.map((item, index) => index === 0 || minuteOf(item) !== minuteOf(historyItems[index - 1]));
   check(
-    "history: a repeated minute is written once",
-    rowFit.length > 0 && rowFit[0].shown && rowFit.slice(1).every((row, index) => row.shown === (row.minute !== rowFit[index].minute)),
-    JSON.stringify(rowFit.map((row) => [row.shown, row.minute.slice(11)])),
+    "history: the time is written above the line once per minute",
+    JSON.stringify(rowFit.map((row) => row.id)) === JSON.stringify(historyItems.map((item) => `run-history-${item.kind}-${item.id}`)) &&
+      JSON.stringify(rowFit.map((row) => row.shown)) === JSON.stringify(expectedShown),
+    JSON.stringify({ shown: rowFit.map((row) => row.shown), expectedShown }),
   );
   await page.waitForTimeout(250);
   await page.screenshot({ path: `${OUT}/run-hist-sidebar-all.png` });

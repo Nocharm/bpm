@@ -298,11 +298,12 @@ export function EditorLeftSidebar({
     { keys: "Ctrl+⇧E", label: t("legend.exportPng") },
     { keys: "1–4·E·A…", label: t("legend.menuKeys") },
   ];
+  // 실행 모드는 넓게 — 이력 줄(동작 · 사람 필)이 한 줄에 들어가게(사용자 요청 2026-11-05). 탭마다 바꾸면 캔버스가 출렁여 모드 단위
   return (
     <aside
       ref={asideRef}
       onScroll={handleSidebarScroll}
-      className="scrollbar-hidden relative flex w-56 shrink-0 flex-col overflow-y-auto border-r border-hairline bg-surface p-2"
+      className={`scrollbar-hidden relative flex ${isRunMode ? "w-80" : "w-56"} shrink-0 flex-col overflow-y-auto border-r border-hairline bg-surface p-2`}
     >
       {isRunMode && (
         <div
