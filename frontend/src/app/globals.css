@@ -663,6 +663,54 @@ button:not(:disabled):active {
   }
 }
 
+/* 홈 첫 실행 소개(dashboard-run-onboard.tsx) — 세 단계 원이 차례로 완료 색으로 차고 사이 선이 자란다. 차례는 --step-delay,
+   전체 길이는 RUN_ONBOARD_INTRO_MS와 맞춘다. 정지 모습(animation: none)이 곧 완료 모습이라 모션 축소에서도 그림이 맞다. */
+.run-onboard-step {
+  animation: run-onboard-step 450ms var(--ease-overshoot) both;
+  animation-delay: var(--step-delay, 0ms);
+}
+@keyframes run-onboard-step {
+  0% {
+    scale: 0.85;
+    border-color: var(--color-run-wait-stroke);
+    background-color: var(--color-run-wait-fill);
+    color: var(--color-run-wait-ink);
+  }
+  60% {
+    scale: 1.1;
+  }
+  100% {
+    scale: 1;
+    border-color: var(--color-run-done);
+    background-color: var(--color-run-done-fill);
+    color: var(--color-run-done);
+  }
+}
+.run-onboard-link {
+  transform-origin: left center;
+  animation: run-onboard-link 400ms var(--ease-smooth) both;
+  animation-delay: var(--step-delay, 0ms);
+}
+@keyframes run-onboard-link {
+  from {
+    scale: 0 1;
+  }
+  to {
+    scale: 1 1;
+  }
+}
+.run-onboard-caption {
+  animation: item-fade-in 300ms var(--ease-smooth) both;
+  animation-delay: var(--step-delay, 0ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-onboard-step,
+  .run-onboard-link,
+  .run-onboard-caption {
+    animation: none;
+  }
+}
+
 /* Excel 내보내기 미리보기 행 — 위에서부터 쌓이며 등장. 딜레이는 행별 --row-delay로 주입,
    fill both라 자기 차례 전엔 숨김 상태를 유지한다(스태거 핵심). */
 .preview-row-in {

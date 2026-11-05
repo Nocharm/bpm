@@ -2,18 +2,21 @@
 // Check out·진행 중 실행·알림 · 피드백 타일은 누르면 타일 줄 아래로 목록을 아코디언으로 펼친다(한 번에 하나, 접힘 고스트는 useClosingKeys,
 // design 2026-11-04 §4.8). 페이지 이동 타일은 1클릭 지연 이동 — 누른 타일 한 칸만 레이어로 덮이며 가운데에 링 + "…로 이동 중"이 뜨고,
 // 레이어를 클릭하면 취소(실수 클릭 복귀, 사용자 지시 2026-09-18). 타일로 칸을 접거나 바꾸면 대기 중인 이동도 취소된다.
+// 실행을 써 본 적 없으면 진행 중 실행 타일이 첫 실행을 권하고 누르면 권유 칸을 펼친다(한 번 펼치면 끝, lib/run-onboard).
 "use client";
 
 import { Bell, Globe, Inbox, ListChecks, Lock, Send } from "lucide-react";
-import { useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 
-import type { MeDashboard } from "@/lib/api";
+import type { MapSummary, MeDashboard } from "@/lib/api";
 import { loadHomeListPrefs, saveHomeListPrefs, type HomeListPrefs } from "@/lib/home-list-prefs";
 import { useI18n } from "@/lib/i18n";
+import { isRunOnboardSeen, markRunOnboardSeen, pickRunOnboardMaps, shouldShowRunOnboard } from "@/lib/run-onboard";
 import { useAgo } from "@/lib/use-ago";
 import { useClosingKeys } from "@/lib/use-closing-keys";
 import { cancelActiveDelayedNav, useDelayedNav } from "@/lib/use-delayed-nav";
 import { DashboardInboxPanel } from "@/components/maps/dashboard-inbox-panel";
+import { DashboardRunOnboard } from "@/components/maps/dashboard-run-onboard";
 import { DashboardRunPanel } from "@/components/maps/dashboard-run-panel";
 import { HoverLinkedRow } from "@/components/maps/dashboard-hover-row";
 import { NavPendingScope } from "@/components/nav-pending-scope";
@@ -23,15 +26,32 @@ type PanelKey = "checkouts" | "runs" | "inbox";
 
 interface DashboardActivityTilesProps {
   data: MeDashboard | null; // 도착 전 null → 스켈레톤
+  maps: MapSummary[]; // 접근 가능한 맵 전체 — 첫 실행 권유 칸의 후보
   unread: number; // 알림 · 피드백 타일 수 — 홈 대시보드가 프로필 배지와 같은 값으로 내려 준다
   onUnreadChange: (n: number) => void; // 알림 칸이 읽어 온·읽음 처리한 미읽음 수를 위로 올린다
   onSelect: (mapId: number) => void;
 }
 
-export function DashboardActivityTiles({ data, unread, onUnreadChange, onSelect }: DashboardActivityTilesProps) {
+export function DashboardActivityTiles({ data, maps, unread, onUnreadChange, onSelect }: DashboardActivityTilesProps) {
   const { t } = useI18n();
   const ago = useAgo();
   const [open, setOpen] = useState<PanelKey | null>(null);
+  // 이 화면 동안은 처음 읽은 값 — 펼쳐서 기록한 뒤에도 권유 칸을 다시 접고 펼 수 있다(다음 홈 방문부터 안 보임)
+  const [isOnboardSeen] = useState(isRunOnboardSeen);
+  const hasRunHistory = data !== null && (data.activity.runs_open > 0 || data.runs_ended.length > 0);
+  // 실행을 한 번이라도 썼으면 권유는 끝 — 끝난 실행이 목록에서 빠진 뒤 다시 권하지 않게
+  useEffect(() => {
+    if (hasRunHistory) markRunOnboardSeen();
+  }, [hasRunHistory]);
+  const onboardMaps = pickRunOnboardMaps(maps);
+  const isOnboarding =
+    data !== null &&
+    shouldShowRunOnboard({
+      isSeen: isOnboardSeen,
+      openRuns: data.activity.runs_open,
+      endedRuns: data.runs_ended.length,
+      candidateCount: onboardMaps.length,
+    });
   // 펼침 목록의 거르기·정렬 — 브라우저에 기억(펼침 여부는 기억하지 않는다)
   const [prefs, setPrefs] = useState<HomeListPrefs>(loadHomeListPrefs);
   const { closingKeys, beginClose, cancelClose, getSectionClass } = useClosingKeys<PanelKey>();
@@ -44,6 +64,7 @@ export function DashboardActivityTiles({ data, unread, onUnreadChange, onSelect 
     }
     cancelClose(key);
     setOpen(key);
+    if (key === "runs" && isOnboarding) markRunOnboardSeen();
   };
   const updatePrefs = (next: HomeListPrefs) => {
     setPrefs(next);
@@ -71,6 +92,7 @@ export function DashboardActivityTiles({ data, unread, onUnreadChange, onSelect 
         a={a}
         waiting={waiting}
         endedRuns={data.runs_ended.length}
+        isOnboarding={isOnboarding}
         unread={unread}
         open={open}
         onToggle={togglePanel}
@@ -109,7 +131,11 @@ export function DashboardActivityTiles({ data, unread, onUnreadChange, onSelect 
       )}
       {isShown("runs") && (
         <div className={getSectionClass("runs")}>
-          <DashboardRunPanel runs={data.runs} endedRuns={data.runs_ended} prefs={prefs} onPrefs={updatePrefs} />
+          {isOnboarding ? (
+            <DashboardRunOnboard maps={onboardMaps} />
+          ) : (
+            <DashboardRunPanel runs={data.runs} endedRuns={data.runs_ended} prefs={prefs} onPrefs={updatePrefs} />
+          )}
         </div>
       )}
       {isShown("inbox") && (
@@ -126,12 +152,13 @@ interface TileGridProps {
   waiting: number;
   // 최근 끝난 실행 수 — 진행 중이 0이어도 끝난 실행이 있으면 실행 타일을 펼친다
   endedRuns: number;
+  isOnboarding: boolean; // 첫 실행 권유 중 — 실행 타일이 0이어도 눌러 권유 칸을 펼친다
   unread: number;
   open: PanelKey | null;
   onToggle: (key: PanelKey) => void;
 }
 
-function TileGrid({ a, waiting, endedRuns, unread, open, onToggle }: TileGridProps) {
+function TileGrid({ a, waiting, endedRuns, isOnboarding, unread, open, onToggle }: TileGridProps) {
   const { t } = useI18n();
   const inbox = { href: "/inbox", label: t("home.dash.navGoing", { dest: t("home.dash.destInbox") }) };
   // Check out·실행 타일은 0이면 펼치지 않는다(펼친 채 0이 되면 다시 눌러 접을 수 있게 둔다). 실행 타일은 최근 끝난 실행도 펼칠 거리다.
@@ -179,7 +206,9 @@ function TileGrid({ a, waiting, endedRuns, unread, open, onToggle }: TileGridPro
         label={t("home.dash.tileRuns")}
         value={a.runs_open}
         sub={
-          a.runs_open === 0
+          isOnboarding
+            ? t("home.dash.tileRunsTry")
+            : a.runs_open === 0
             ? endedRuns > 0
               ? t("home.dash.tileRunsEnded", { n: endedRuns })
               : t("home.dash.tileRunsNone")
@@ -188,8 +217,9 @@ function TileGrid({ a, waiting, endedRuns, unread, open, onToggle }: TileGridPro
               : t("home.dash.tileRunsCalm")
         }
         warn={runIssues > 0}
+        hint={isOnboarding}
         pressed={open === "runs"}
-        onClick={toggleFor("runs", a.runs_open + endedRuns)}
+        onClick={isOnboarding ? () => onToggle("runs") : toggleFor("runs", a.runs_open + endedRuns)}
       />
       <Tile
         dataId="home-activity-inbox"
@@ -214,6 +244,7 @@ interface TileProps {
   sub: string;
   hot?: boolean; // 0 초과일 때 액센트 강조(내 결정 필요)
   warn?: boolean; // 보조 문구 경고색
+  hint?: boolean; // 보조 문구 액센트색 — 눌러 볼 거리를 권할 때(첫 실행 권유)
   pressed?: boolean; // 아래 목록을 펼친 타일 — 틴트 배경
   onClick?: (e: MouseEvent<HTMLButtonElement>) => void; // 즉시 동작(아래 목록 펼침)
   nav?: { href: string; label: string }; // 지연 페이지 이동 — 타일 한 칸이 스코프가 되어 자기 위에 레이어를 띄운다
@@ -234,7 +265,7 @@ function NavTile({ nav, ...rest }: TileProps & { nav: { href: string; label: str
   return <TileBody {...rest} onClick={() => toggle(nav.href, nav.label)} />;
 }
 
-function TileBody({ dataId, icon, label, value, unit, sub, hot, warn, pressed, onClick }: TileProps) {
+function TileBody({ dataId, icon, label, value, unit, sub, hot, warn, hint, pressed, onClick }: TileProps) {
   const zero = value === 0;
   const cls = `flex w-full min-w-0 flex-col gap-1.5 rounded-sm border px-3 py-2.5 text-left transition-[border-color,box-shadow,background-color] duration-150 ease-smooth ${
     pressed ? "border-accent-tint-border bg-accent-tint shadow-sm" : "border-hairline bg-surface"
@@ -249,7 +280,7 @@ function TileBody({ dataId, icon, label, value, unit, sub, hot, warn, pressed, o
         {value}
         {unit && <span className="ml-1 text-fine font-normal text-ink-tertiary">{unit}</span>}
       </span>
-      <span className={`truncate text-[11px] ${warn ? "text-warn" : "text-ink-tertiary"}`}>{sub}</span>
+      <span className={`truncate text-[11px] ${warn ? "text-warn" : hint ? "font-semibold text-accent" : "text-ink-tertiary"}`}>{sub}</span>
     </>
   );
   return onClick ? (

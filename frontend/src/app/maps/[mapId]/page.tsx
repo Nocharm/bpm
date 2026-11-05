@@ -374,6 +374,7 @@ import {
   type RunPop,
 } from "@/lib/run-actions";
 import { buildMapVersionHref, buildRunHref } from "@/lib/run-links";
+import { hasNewRunParam } from "@/lib/run-onboard";
 import {
   applyRunBranchPreview,
   applyRunEdgeKind,
@@ -2960,6 +2961,18 @@ function MapEditor({ mapId }: { mapId: number }) {
         if (paramVersion && detail.versions.some((v) => v.id === paramVersion)) {
           initialId = paramVersion;
         }
+        // 홈 첫 실행 권유 — ?newRun=1이면 최신 게시본에 착지해 새 실행 창을 연다. 주소에서 바로 지워 새로고침에 다시 뜨지 않게
+        const shouldOpenNewRun =
+          hasNewRunParam(window.location.search) && detail.mode !== "framework" && latestPublished !== undefined;
+        if (hasNewRunParam(window.location.search)) {
+          const params = new URLSearchParams(window.location.search);
+          params.delete("newRun");
+          const query = params.toString();
+          window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+        }
+        if (shouldOpenNewRun && latestPublished) {
+          initialId = latestPublished.id;
+        }
         // AI 챗 딥링크 — ?aiChat=<sessionId>로 진입 시 패널 자동 오픈 + 해당 세션 활성 (async 콜백이라 set-state-in-effect 아님)
         const paramChat = Number(new URLSearchParams(window.location.search).get("aiChat"));
         if (paramChat) {
@@ -2975,6 +2988,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           setVersionId(initialId ?? detail.versions[0].id);
           setScopes([{ kind: "root", title: detail.name }]);
           setActiveIndex(0);
+          if (shouldOpenNewRun) setRunStartOpen(true);
         }
       } catch (err) {
         if (active) {

@@ -65,7 +65,7 @@ export function HomeDashboard({
             {t("home.dash.loadError")}
           </p>
         )}
-        {!loadError && <DashboardActivityTiles data={data} unread={unread} onUnreadChange={setLiveUnread} onSelect={onSelect} />}
+        {!loadError && <DashboardActivityTiles data={data} maps={maps} unread={unread} onUnreadChange={setLiveUnread} onSelect={onSelect} />}
       </div>
       {/* 2열은 같은 높이(stretch) — 섹션 자체가 SECTION_CAP으로 상한을 갖는다(dashboard-section.tsx) */}
       <div className="grid grid-cols-1 gap-2.5 @[42rem]:grid-cols-2">
