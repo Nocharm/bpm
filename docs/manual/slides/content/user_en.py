@@ -431,9 +431,9 @@ DECK = {
                     ("Hidden", "People who can't view the sub map don't see what's inside."),
                 ]},
                 {"title": "Running by keyboard", "shot": "manual11/en-run-legend.jpg", "caption": "The keyboard section of the Run legend", "pts": [
-                    ("Arrow keys", "Nearest step that way; with nothing selected, the first step to do."),
+                    ("Arrows · Tab", "Arrows go to the nearest step that way, Tab to the next step in the flow."),
                     ("N · Shift+N", "Next or previous step to do (in progress, problem, ready)."),
-                    ("Tab · Shift+Tab", "Next or previous step along the flow."),
+                    ("Ctrl+Z", "Undoes your last action on this screen, one at a time."),
                     ("Enter", "Into the button row. Move with <code>←</code> <code>→</code>, press with <code>Enter</code>."),
                     ("Esc", "Back to the step, then clear the selection."),
                 ]},
