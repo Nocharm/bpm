@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { RunDetail, RunNodeState } from "@/lib/api";
 import {
   buildRunBarButtons,
+  buildRunUndoSteps,
   findNextRunTodoKey,
   findRunBlockerKeys,
   findRunDownstreamKeys,
@@ -454,6 +455,40 @@ describe("findRunDownstreamKeys", () => {
       scopes: [{ scope_path: "sp", version_id: 200, closed: false }],
     });
     expect(findRunDownstreamKeys(detail, graphs, buildRunView(detail, graphs), "sp/x")).toEqual([]);
+  });
+});
+
+describe("buildRunUndoSteps", () => {
+  const plain = { clearsOthers: false };
+
+  it("returns each action to the status it left", () => {
+    expect(buildRunUndoSteps("start", "ready", null, plain)).toEqual([{ action: "unstart" }]);
+    expect(buildRunUndoSteps("complete", "ready", null, plain)).toEqual([{ action: "undo" }]);
+    expect(buildRunUndoSteps("complete", "active", null, plain)).toEqual([{ action: "undo" }, { action: "start" }]);
+    expect(buildRunUndoSteps("complete", "problem", null, plain)).toEqual([
+      { action: "undo" },
+      { action: "start" },
+      { action: "problem" },
+    ]);
+    expect(buildRunUndoSteps("problem", "ready", null, plain)).toEqual([{ action: "resolve" }, { action: "unstart" }]);
+    expect(buildRunUndoSteps("problem", "active", null, plain)).toEqual([{ action: "resolve" }]);
+    expect(buildRunUndoSteps("resolve", "problem", null, plain)).toEqual([{ action: "problem" }]);
+    expect(buildRunUndoSteps("unstart", "active", null, plain)).toEqual([{ action: "start" }]);
+  });
+
+  it("completes again with the branch or exit an undone completion had", () => {
+    expect(buildRunUndoSteps("undo", "done", { chosenEdgeId: "e-yes", exitKey: null }, plain)).toEqual([
+      { action: "complete", edgeId: "e-yes", exitKey: undefined },
+    ]);
+    expect(buildRunUndoSteps("undo", "done", { chosenEdgeId: null, exitKey: "보류" }, plain)).toEqual([
+      { action: "complete", edgeId: undefined, exitKey: "보류" },
+    ]);
+  });
+
+  it("gives up on actions that cleared other records or came from an unexpected status", () => {
+    expect(buildRunUndoSteps("undo", "done", null, { clearsOthers: true })).toBeNull();
+    expect(buildRunUndoSteps("start", "problem", null, plain)).toBeNull();
+    expect(buildRunUndoSteps("complete", "waiting", null, plain)).toBeNull();
   });
 });
 

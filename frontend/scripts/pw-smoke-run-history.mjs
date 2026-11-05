@@ -1,6 +1,6 @@
 // 실행 체크 후속 스모크 2(2026-11-05) — 갈래 미리보기 · 뒤 단계 함께 취소 확인 창(마우스 자리·키보드 가운데) · 코멘트 고치기/지우기
 // (줄에 올리면 버튼, 지우기 두 번 누르기) · 좌측 사이드바 실행 탭(이력, 줄에 올리면 노드 강조) · 인스펙터 맵/승인 탭 꺼짐 ·
-// 실행 이름 워터마크 · 실행 바 ⋯ 메뉴 아이콘과 높이 가운데 ·
+// Ctrl+Z 되돌리기 · 사이드바 맵 설정 링크가 이력을 가리지 않음 · 실행 이름 워터마크 · 실행 바 ⋯ 메뉴 아이콘과 높이 가운데 ·
 // 실행 메뉴 모든 실행 아이콘 버튼 · 모든 실행 창 "다른 맵" 칸 → 그 맵 실행으로 이동 · 홈 실행 타일 "최근 끝남". 콘솔 에러 0.
 // 실행(frontend/ 에서):
 //   bash       BASE_URL=http://localhost:3047 API_URL=http://localhost:8048 node scripts/pw-smoke-run-history.mjs
@@ -229,6 +229,22 @@ try {
   check("branch focus: focus previews too", (await edgeLook("e-dr"))?.opacity === "0.15");
   await page.locator(`[data-id="run-act-branch-${nid("e-dc")}"]`).click();
   await page.waitForTimeout(400);
+  // Ctrl+Z — 방금 고른 갈래 완료를 되돌리고, 더 되돌릴 것이 없으면 알린다. 다시 골라 이어 간다
+  check("undo: the branch completion is recorded", (await stateOf(run.id))[nid("d")] === "done");
+  await page.keyboard.press("Control+z");
+  let undone = false;
+  for (let i = 0; i < 40 && !undone; i += 1) {
+    await page.waitForTimeout(200);
+    undone = !((await stateOf(run.id))[nid("d")] !== undefined);
+  }
+  check("undo: Ctrl+Z undoes my last action", undone);
+  await page.getByText("판정? · 완료 되돌렸어요").first().waitFor({ timeout: 5000 });
+  await page.keyboard.press("Control+z");
+  await page.getByText("되돌릴 동작이 없어요").first().waitFor({ timeout: 5000 });
+  check("undo: an empty stack says so", true);
+  await page.locator(`.react-flow__node[data-id="${nid("d")}"]`).click();
+  await page.locator(`[data-id="run-act-branch-${nid("e-dc")}"]`).click();
+  await page.waitForTimeout(400);
   await act(run.id, "c", "start");
   await page.waitForTimeout(300);
 
@@ -355,6 +371,25 @@ try {
   );
   await page.waitForTimeout(250);
   await page.screenshot({ path: `${OUT}/run-hist-sidebar-all.png` });
+  // 짧은 창에서 이력이 넘쳐 사이드바가 스크롤될 때 — 맵 설정 링크는 늘 사이드바 바닥에 붙고 중간에 뜨지 않는다
+  await page.setViewportSize({ width: 1600, height: 640 });
+  await page.waitForTimeout(300);
+  const aside = page.locator('aside:has([data-id="sidebar-run-panel"])');
+  const settingsLink = aside.locator('a[href$="/settings"]');
+  const scrollable = await aside.evaluate((el) => el.scrollHeight > el.clientHeight + 20);
+  await aside.evaluate((el) => {
+    el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
+  });
+  await page.waitForTimeout(200);
+  const asideBox = await aside.boundingBox();
+  const linkBox = await settingsLink.boundingBox();
+  check(
+    "sidebar: the settings link stays at the bottom while history scrolls",
+    scrollable && Math.abs(linkBox.y + linkBox.height - (asideBox.y + asideBox.height)) <= 10, // 사이드바 p-2(8px) 안쪽 바닥
+    JSON.stringify({ scrollable, asideBottom: asideBox.y + asideBox.height, linkBottom: linkBox.y + linkBox.height }),
+  );
+  await page.screenshot({ path: `${OUT}/run-hist-sidebar-scrolled.png` });
+  await page.setViewportSize({ width: 1600, height: 1000 });
 
   // 7) 실행 메뉴 — 모든 실행 보기는 머리 줄 오른쪽 아이콘(툴팁), 모든 실행 창 "다른 맵" 칸 → 그 맵의 실행으로
   await page.locator('[data-id="run-bar-close"]').click();

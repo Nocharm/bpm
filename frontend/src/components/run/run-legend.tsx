@@ -18,13 +18,14 @@ interface RunLegendProps {
 
 const STATUS_ORDER: readonly RunNodeStatus[] = ["waiting", "ready", "active", "done", "problem", "skipped"];
 const EDGE_ORDER: readonly RunEdgeKind[] = ["past", "now", "prob", "fut", "skip"];
-// 실행 모드 캔버스 키(page.tsx 실행 키보드 이동·Tab 흐름 이동, 버튼 줄 run-action-bar) — 키 표기는 언어와 무관하다
+// 실행 모드 캔버스 키(page.tsx 실행 키보드 이동·Tab 흐름 이동·Ctrl+Z 되돌리기, 버튼 줄 run-action-bar) — 키 표기는 언어와 무관하다
 const KEY_ROWS: readonly { keys: string; label: MessageKey }[] = [
   { keys: "← ↑ → ↓", label: "run.legend.key.arrows" },
   { keys: "Tab ⇧Tab", label: "run.legend.key.tab" },
   { keys: "N ⇧N", label: "run.legend.key.todo" },
   { keys: "Enter", label: "run.legend.key.enter" },
   { keys: "Esc", label: "run.legend.key.esc" },
+  { keys: "Ctrl+Z", label: "run.legend.key.undo" },
 ];
 
 export function RunLegend({ open, onToggle }: RunLegendProps) {

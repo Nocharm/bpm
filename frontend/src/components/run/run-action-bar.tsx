@@ -53,6 +53,7 @@ import { useNodeActions } from "@/lib/node-actions";
 import { getOutputKey } from "@/lib/output-rules";
 import {
   buildRunBarButtons,
+  buildRunUndoSteps,
   findRunBlockerKeys,
   findRunDownstreamKeys,
   getBranchLabel,
@@ -72,7 +73,7 @@ import {
   type RunRect,
   type RunSize,
 } from "@/lib/run-actions";
-import { findOpenedNodeIds, getBranchOptions, type RunGraph, type RunNodeStatus } from "@/lib/run-graph";
+import { findOpenedNodeIds, findRunBackEdgeIds, getBranchOptions, type RunGraph, type RunNodeStatus } from "@/lib/run-graph";
 import {
   buildRunView,
   humanizeRunError,
@@ -422,6 +423,15 @@ function RunActionBarBody({
     }
     onPreviewBranch(null); // 갈래를 고르면 버튼이 바뀌어 가리키던 버튼이 mouseleave 없이 사라진다
     const before = Object.fromEntries(view.statusByKey);
+    // Ctrl+Z 되돌리기 — 동작 전 상태(완료 취소면 그때의 갈래·출구)로 돌릴 동작들. 역행 갈래(다시 하기)는 고리 기록을 지워 되돌릴 수 없다
+    const priorRow = detail.states.find((row) => row.scope_path === scopePath && row.node_id === nodeId) ?? null;
+    const isLoopChoice = button.edgeId !== undefined && findRunBackEdgeIds(graph).has(button.edgeId);
+    const undoSteps = buildRunUndoSteps(
+      action,
+      status,
+      priorRow ? { chosenEdgeId: priorRow.chosen_edge_id, exitKey: priorRow.exit_key } : null,
+      { clearsOthers: isLoopChoice || cascade || downstream },
+    );
     setBusy(true);
     const next = await session.act(
       {
@@ -433,13 +443,16 @@ function RunActionBarBody({
         cascade: cascade || undefined,
         downstream: downstream || undefined,
       },
-      isClear
-        ? {
-            onNeedsCascade: () => openCascade(action, downstream),
-            onNeedsDownstream: (title) =>
-              setDownstreamAsk({ button, titles: [], fallbackTitle: title, includesSubMap: hasChildProgress, origin: null }),
-          }
-        : undefined,
+      {
+        undo: { key: nodeKey, title: getRunNodeTitle(graphs, nodeKey, geom.label), steps: undoSteps },
+        ...(isClear
+          ? {
+              onNeedsCascade: () => openCascade(action, downstream),
+              onNeedsDownstream: (title: string) =>
+                setDownstreamAsk({ button, titles: [], fallbackTitle: title, includesSubMap: hasChildProgress, origin: null }),
+            }
+          : {}),
+      },
     );
     setBusy(false);
     if (next === null) return;

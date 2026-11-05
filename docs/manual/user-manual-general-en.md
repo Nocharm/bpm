@@ -260,6 +260,7 @@ Use these after clicking a node or an empty spot on the canvas.
 | `N` / `Shift+N` | To the next / previous step to do (in progress, problem, or ready; a folded sub map is unfolded when the step is inside it) |
 | `Enter` | Into the selected step's button row. Inside it, `←` `→` (`Home` `End`) move between buttons and `Enter` presses one |
 | `Esc` | Back from the button row to the step, then clears the selection on a second press |
+| `Ctrl+Z` | Undoes your own last action on this screen, one at a time (start, complete, problem, resolve, undo). Actions that also cleared later steps or sub map records can't be undone |
 
 Pressing `Enter` twice completes that step and moves on to the next.
 

@@ -62,6 +62,16 @@ const ACTION_LABEL: Record<string, MessageKey> = {
   auto_stop: "run.history.action.autoStop",
 };
 
+// 동작 글씨 색 — 아이콘과 같은 뜻, 글씨는 한 단계 진하게(완료·해결 초록, 문제·함께 취소 빨강, 시작·다시 열기 악센트)
+const ACTION_TEXT_TONE: Record<string, string> = {
+  complete: "text-run-done",
+  resolve: "text-run-done",
+  problem: "text-run-problem",
+  cleared: "text-run-problem",
+  start: "text-accent",
+  reopen: "text-accent",
+};
+
 // 아이콘 색 — 상태 색(globals.css --color-run-*)과 같은 뜻
 const ACTION_TONE: Record<string, string> = {
   complete: "text-run-done",
@@ -137,7 +147,7 @@ export function RunHistoryPanel({ session, graphs, selectedKey, onSelect, onHove
   return (
     <section data-id="run-history" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-caption-strong text-ink-secondary">{t("run.history.title")}</h2>
+        <h2 className="text-body-strong text-ink">{t("run.history.title")}</h2>
         {selectedKey !== null && (
           <div
             role="group"
@@ -161,7 +171,7 @@ export function RunHistoryPanel({ session, graphs, selectedKey, onSelect, onHove
           </div>
         )}
       </div>
-      <p data-id="run-history-scope" className="break-words text-fine text-ink-tertiary">
+      <p data-id="run-history-scope" className="break-words text-fine font-light leading-snug text-ink-tertiary">
         {isStepMode ? t("run.history.scopeStep", { title: selectedTitle || t("run.downstream.untitled") }) : t("run.history.scopeAll")}
       </p>
       {detail.status === "summarized" ? (
@@ -203,7 +213,7 @@ export function RunHistoryPanel({ session, graphs, selectedKey, onSelect, onHove
                 {group.isNewDay && (
                   <p
                     data-id={`run-history-day-${group.day}`}
-                    className="mb-1 mt-1.5 flex items-center gap-2 text-fine font-semibold text-ink-tertiary"
+                    className="mb-1 mt-2 flex items-center gap-2 text-fine font-semibold tracking-widest text-ink-muted"
                   >
                     <span className="shrink-0">{formatRunDay(first.created_at, t)}</span>
                     <span aria-hidden className="h-px flex-1 bg-hairline" />
@@ -215,19 +225,19 @@ export function RunHistoryPanel({ session, graphs, selectedKey, onSelect, onHove
                       <button
                         type="button"
                         data-id={`run-history-step-${group.key}`}
-                        className="flex max-w-full items-center gap-1.5 text-left text-caption-strong text-accent hover:underline"
+                        className="flex max-w-full items-center gap-1.5 text-left text-[15px] font-semibold leading-tight text-ink transition-colors duration-150 hover:text-accent"
                         title={stepTitle}
                         onClick={() => onSelect(stepKey)}
                       >
                         <span className="truncate">{stepTitle || t("run.downstream.untitled")}</span>
                         {group.entries.length > 1 && (
-                          <span className="shrink-0 rounded-full bg-accent-tint px-1.5 text-fine tabular-nums">
+                          <span className="shrink-0 rounded-full bg-accent-tint px-1.5 font-mono text-[11px] leading-4 text-accent">
                             {group.entries.length}
                           </span>
                         )}
                       </button>
                     ) : (
-                      <p className="text-caption-strong text-ink-secondary">{t("run.history.runLevel")}</p>
+                      <p className="text-[15px] font-semibold leading-tight text-ink-secondary">{t("run.history.runLevel")}</p>
                     ))}
                   <ul className={`flex flex-col gap-1 ${isHeaderShown ? "ml-1 mt-1 border-l border-hairline pl-2" : ""}`}>
                     {group.entries.map(({ item, isSameActor }) => {
@@ -250,16 +260,25 @@ export function RunHistoryPanel({ session, graphs, selectedKey, onSelect, onHove
                           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                             <div className="flex items-baseline justify-between gap-2">
                               {/* 동작이 먼저 — 좁은 사이드바에서 잘리는 쪽은 사람 이름. 바로 위 줄과 같은 사람이면 이름을 다시 쓰지 않는다(lib/run-history) */}
-                              <span className="min-w-0 truncate text-caption" title={`${what} · ${nameOf(item.actor)}`}>
-                                <span className="font-semibold text-ink">{what}</span>
-                                {!isSameActor && <span className="text-ink-tertiary"> · {nameOf(item.actor)}</span>}
+                              <span className="min-w-0 truncate" title={`${what} · ${nameOf(item.actor)}`}>
+                                {/* 동작은 상태 색의 굵은 글씨, 사람은 작고 가는 글씨 — 한 줄에서 무엇을 했는지가 먼저 읽히게 */}
+                                <span className={`text-caption-strong ${item.kind === "comment" ? "text-ink-secondary" : (ACTION_TEXT_TONE[item.action ?? ""] ?? "text-ink")}`}>
+                                  {what}
+                                </span>
+                                {!isSameActor && (
+                                  <span className="text-fine font-light text-ink-tertiary"> · {nameOf(item.actor)}</span>
+                                )}
                               </span>
-                              <time dateTime={item.created_at} className="shrink-0 text-fine tabular-nums text-ink-tertiary" title={stamp}>
+                              <time
+                                dateTime={item.created_at}
+                                className="shrink-0 font-mono text-[11px] tabular-nums text-ink-muted"
+                                title={stamp}
+                              >
                                 {stamp.slice(11)}
                               </time>
                             </div>
                             {item.kind === "comment" && item.body !== null && (
-                              <p className="whitespace-pre-wrap break-words rounded-sm bg-surface px-2 py-1 text-caption text-ink ring-1 ring-hairline">
+                              <p className="whitespace-pre-wrap break-words border-l-2 border-accent-tint-border pl-2 text-[13px] font-light leading-relaxed text-ink">
                                 {item.body}
                                 {item.edited_at !== null && (
                                   <span className="ml-1 text-fine text-ink-tertiary">{t("run.pop.commentEditedTag")}</span>

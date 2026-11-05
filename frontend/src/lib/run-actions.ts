@@ -323,6 +323,47 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
+// 되돌리기(Ctrl+Z) 한 걸음 — 서버 동작 하나(갈래 완료는 고른 연결선·출구를 함께)
+export interface RunUndoStep {
+  action: RunActionName;
+  edgeId?: string;
+  exitKey?: string;
+}
+
+/**
+ * 방금 한 동작을 되돌리는 동작들(순서대로 보낸다) — 동작 전 상태로 돌린다. 시작↔시작 취소, 문제↔해결, 완료 → 완료 취소
+ * (+ 진행 중이었으면 시작, 문제였으면 시작·문제), 완료 취소 → 그때의 갈래·출구로 다시 완료. 되돌릴 수 없으면 null —
+ * 다른 기록까지 지운 동작(하위 맵 함께 취소 cascade·뒤 단계 함께 취소 downstream·역행 갈래로 다시 하기)과 알 수 없는 전 상태.
+ */
+export function buildRunUndoSteps(
+  action: RunActionName,
+  before: RunNodeStatus,
+  prior: { chosenEdgeId: string | null; exitKey: string | null } | null,
+  options: { clearsOthers: boolean },
+): RunUndoStep[] | null {
+  if (options.clearsOthers) return null;
+  switch (action) {
+    case "start":
+      return before === "ready" ? [{ action: "unstart" }] : null;
+    case "complete":
+      if (before === "ready") return [{ action: "undo" }];
+      if (before === "active") return [{ action: "undo" }, { action: "start" }];
+      if (before === "problem") return [{ action: "undo" }, { action: "start" }, { action: "problem" }];
+      return null;
+    case "problem":
+      if (before === "ready") return [{ action: "resolve" }, { action: "unstart" }];
+      if (before === "active") return [{ action: "resolve" }];
+      return null;
+    case "resolve":
+      return before === "problem" ? [{ action: "problem" }] : null;
+    case "unstart":
+      return before === "active" ? [{ action: "start" }] : null;
+    case "undo":
+      if (before !== "done") return null;
+      return [{ action: "complete", edgeId: prior?.chosenEdgeId ?? undefined, exitKey: prior?.exitKey ?? undefined }];
+  }
+}
+
 // 확인 창을 누른 자리에 띄울 때 화면 가장자리와 둘 최소 여백(px)
 const CONFIRM_EDGE_MARGIN = 8;
 

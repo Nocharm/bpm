@@ -299,6 +299,7 @@ import {
   type GraphNode,
   type LibraryProcess,
   type MapSummary,
+  type RunActionName,
   type SubprocessRef,
   type SubprocessUsage,
   type VersionGraph,
@@ -306,6 +307,7 @@ import {
   type VersionSummary,
   type WorkflowState,
 } from "@/lib/api";
+import type { MessageKey } from "@/lib/i18n-messages";
 import { humanizeApiError, isCanvasRepointedError, PERMISSION_PENDING_DETAIL_PREFIX } from "@/lib/api-errors";
 import { buildDownloadName } from "@/lib/download-name";
 import {
@@ -437,6 +439,16 @@ const nodeTypes: NodeTypes = { process: ProcessNode };
 // 돌려줘 RF가 무변경 노드를 리렌더하지 않게 한다. 종전엔 오프셋≠0인 노드 전부가 displayNodes
 // 재계산(드래그 프레임마다)에서 새 객체가 돼 전 노드 리렌더를 유발했다. WeakMap이라 노드 교체 시 자동 회수.
 const shiftedNodeCache = new WeakMap<AppNode, { yOff: number; out: AppNode }>();
+
+// 실행 되돌리기 알림의 동작 이름 — 실행 이력 줄과 같은 문구
+const RUN_UNDO_ACTION_LABEL: Record<RunActionName, MessageKey> = {
+  start: "run.history.action.start",
+  complete: "run.history.action.complete",
+  problem: "run.history.action.problem",
+  resolve: "run.history.action.resolve",
+  unstart: "run.history.action.unstart",
+  undo: "run.history.action.undo",
+};
 
 const DWELL_MS = 300; // 노드 위에 머무는 시간이 이만큼 넘으면 드롭 영역(앞/그룹/뒤) 표시
 const DROP_GAP = 24; // 삽입 시 A를 B 좌/우로 떨어뜨리는 간격
@@ -9137,6 +9149,36 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (event.target instanceof HTMLElement && event.target !== document.body) event.target.blur();
     selectRunNode(target, { flash: false, reveal: true });
   });
+  // 실행 모드의 Ctrl+Z — 편집 되돌리기 대신 이 화면에서 내가 한 실행 동작을 하나 되돌린다(다시 하기는 없다, 사용자 요청 2026-11-05)
+  const undoRunActionByKey = useEffectEvent(() => {
+    if (!runSession) return;
+    void runSession.undoLast().then((result) => {
+      if (result.kind === "empty") {
+        showToast(t("run.undo.empty"));
+      } else if (result.kind === "done") {
+        const title = result.entry.title || t("run.downstream.untitled");
+        showToast(t("run.undo.done", { title, action: t(RUN_UNDO_ACTION_LABEL[result.entry.action]) }));
+        selectRunNode(result.entry.key, { flash: true, reveal: true });
+      }
+    });
+  });
+  useEffect(() => {
+    if (!runMode) return;
+    // 캡처 단계 — 편집 되돌리기 리스너(창 버블 단계)보다 먼저 받아 멈춘다. 입력 칸은 브라우저 글자 되돌리기를 그대로 둔다
+    const handleRunUndoKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing) return;
+      const key = event.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      // 눌러 둔 키의 반복은 하나만 — 여러 동작이 한꺼번에 되돌아가지 않게
+      if (key === "z" && !event.shiftKey && !event.repeat) undoRunActionByKey();
+    };
+    window.addEventListener("keydown", handleRunUndoKey, true);
+    return () => window.removeEventListener("keydown", handleRunUndoKey, true);
+  }, [runMode]);
   useEffect(() => {
     if (!runMode) return;
     const handleRunMoveKey = (event: KeyboardEvent) => {

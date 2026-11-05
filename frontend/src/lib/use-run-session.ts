@@ -2,12 +2,15 @@
 // 폴링을 맡는다. 실행 상태는 페이지의 편집 상태(nodes·edges)와 섞지 않고 이 훅에만 둔다(lessons react-ts-patterns §4).
 // 서버가 진실이라 동작 응답의 전체 상세로 바꾸고, 409·403(먼저 바뀜·권한)이면 최신 상세로 다시 읽은 뒤 알린다.
 // 처음 읽기가 실패하면 토스트 대신 loadError로 돌려준다 — 실행 바가 오류 줄과 "실행 닫기"를 보인다(R24).
+// 이 화면에서 내가 한 동작은 되돌리기 목록에 쌓여 Ctrl+Z(undoLast)가 거꾸로 하나씩 되돌린다(사용자 요청 2026-11-05).
+// 목록은 이 화면에만 있고(새로 고치면 비움), 다른 기록까지 지운 동작(cascade·downstream·역행 갈래)이 들어오면 비운다.
 
 import { useStoreApi, useUpdateNodeInternals, type Node } from "@xyflow/react";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import { actOnRun, ApiError, getRun, getRunScopeGraph, type Graph, type RunActionName, type RunDetail } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import type { RunUndoStep } from "@/lib/run-actions";
 import { getRunTouchedAfterTitle, humanizeRunError, isRunSubProgressError } from "@/lib/run-view";
 
 // 공유 실행 다시 읽기 주기(ms) — 실행 화면이 열려 있고 탭이 보이는 동안만 돈다(계획 "공유 실행 동기화")
@@ -28,13 +31,32 @@ export interface RunActOptions {
   onNeedsCascade?: () => void;
   // 뒤 단계가 이미 진행돼 downstream 확인이 필요하다는 409(첫 막은 단계 이름) — 화면이 못 본 뒤 단계 대비
   onNeedsDownstream?: (title: string) => void;
+  // 성공하면 되돌리기 목록에 쌓을 것 — steps가 null이면 되돌릴 수 없는 동작이라 목록을 비운다(lib/run-actions buildRunUndoSteps)
+  undo?: { key: string; title: string; steps: RunUndoStep[] | null };
 }
+
+// 되돌리기 목록 한 칸 — 노드 키·이름과 되돌린 동작(알림 문구), 보낼 동작들
+export interface RunUndoEntry {
+  key: string;
+  title: string;
+  action: RunActionName;
+  scopePath: string;
+  nodeId: string;
+  steps: RunUndoStep[];
+}
+
+export type RunUndoResult = { kind: "empty" } | { kind: "done"; entry: RunUndoEntry } | { kind: "failed" };
+
+// 되돌리기 목록 길이 상한 — 오래된 것부터 버린다
+const RUN_UNDO_LIMIT = 50;
 
 export interface RunSession {
   detail: RunDetail;
   // 범위 경로 → 그 범위 그래프(실행이 고정한 버전) — 맵 화면 합성 트리(getEmbed)가 링크 해석보다 먼저 쓴다
   scopeGraphs: Map<string, Graph>;
   act(input: RunActInput, options?: RunActOptions): Promise<RunDetail | null>;
+  // 이 화면에서 내가 한 마지막 동작을 되돌린다 — 목록이 비었으면 empty, 서버가 거절하면 알리고 failed(그 칸은 버린다)
+  undoLast(): Promise<RunUndoResult>;
   reload(): Promise<void>;
   loadScopeGraph(scopePath: string): Promise<void>;
   update(next: RunDetail): void;
@@ -81,6 +103,12 @@ export function useRunSession(
   const requestSeqRef = useRef(0);
   const appliedSeqRef = useRef(0);
   const inFlightGraphsRef = useRef(new Set<string>());
+  // 되돌리기 목록 — 실행 id로 표시해 다른 실행으로 바뀌면 버린다
+  const undoStackRef = useRef<{ runId: number | null; entries: RunUndoEntry[] }>({ runId: null, entries: [] });
+  const getUndoEntries = useCallback((): RunUndoEntry[] => {
+    if (undoStackRef.current.runId !== runId) undoStackRef.current = { runId, entries: [] };
+    return undoStackRef.current.entries;
+  }, [runId]);
 
   const applyRead = useCallback((id: number, seq: number, next: RunDetail) => {
     if (seq < appliedSeqRef.current) return;
@@ -206,6 +234,14 @@ export function useRunSession(
           downstream: input.downstream,
         });
         applyWrite(runId, next);
+        const entries = getUndoEntries();
+        const undo = options?.undo;
+        if (input.cascade || input.downstream || (undo !== undefined && undo.steps === null)) {
+          entries.length = 0; // 다른 기록까지 지웠다 — 앞서 쌓인 되돌리기는 더는 맞지 않는다
+        } else if (undo !== undefined && undo.steps !== null) {
+          entries.push({ ...undo, steps: undo.steps, action: input.action, scopePath: input.scopePath, nodeId: input.nodeId });
+          if (entries.length > RUN_UNDO_LIMIT) entries.shift();
+        }
         return next;
       } catch (err) {
         // 먼저 바뀜(409)·권한(403) — 화면이 낡았으니 최신 상세로 다시 그린 뒤 알린다
@@ -227,8 +263,36 @@ export function useRunSession(
         return null;
       }
     },
-    [runId, applyWrite, fetchDetail, onToast, t],
+    [runId, applyWrite, fetchDetail, onToast, t, getUndoEntries],
   );
+
+  const undoLast = useCallback(async (): Promise<RunUndoResult> => {
+    if (runId === null) return { kind: "empty" };
+    const entry = getUndoEntries().pop();
+    if (entry === undefined) return { kind: "empty" };
+    try {
+      for (const step of entry.steps) {
+        const next = await actOnRun(runId, {
+          scope_path: entry.scopePath,
+          node_id: entry.nodeId,
+          action: step.action,
+          edge_id: step.edgeId,
+          exit_key: step.exitKey,
+        });
+        applyWrite(runId, next);
+      }
+      return { kind: "done", entry };
+    } catch (err) {
+      // 그 사이 다른 사람이 바꿨거나(409) 실행이 끝났다 — 최신으로 다시 그리고 알린다. 이 칸은 버린다
+      if (err instanceof ApiError && (err.status === 409 || err.status === 403)) {
+        await fetchDetail(runId).catch((reloadErr: unknown) => {
+          console.warn("run reload after undo failed", { runId, err: reloadErr });
+        });
+      }
+      onToast(humanizeRunError(err, t), "error");
+      return { kind: "failed" };
+    }
+  }, [runId, getUndoEntries, applyWrite, fetchDetail, onToast, t]);
 
   const loadScopeGraph = useCallback(
     async (scopePath: string): Promise<void> => {
@@ -264,8 +328,8 @@ export function useRunSession(
   );
 
   const session = useMemo(
-    () => (detail === null ? null : { detail, scopeGraphs, act, reload, loadScopeGraph, update }),
-    [detail, scopeGraphs, act, reload, loadScopeGraph, update],
+    () => (detail === null ? null : { detail, scopeGraphs, act, undoLast, reload, loadScopeGraph, update }),
+    [detail, scopeGraphs, act, undoLast, reload, loadScopeGraph, update],
   );
   return { session, loadError };
 }

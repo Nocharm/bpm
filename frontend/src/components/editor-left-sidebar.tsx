@@ -332,7 +332,8 @@ export function EditorLeftSidebar({
         </div>
       )}
       {isRunPanel ? (
-        <div data-id="sidebar-run-panel" className="min-h-0 flex-1 px-1">
+        // 줄지 않는 칸 — min-h-0으로 줄면 넘친 이력 뒤가 아니라 칸 끝에 맵 설정 링크(sticky)가 붙어 스크롤 중간에 떠서 이력을 가렸다
+        <div data-id="sidebar-run-panel" className="shrink-0 px-1">
           {runSlot}
         </div>
       ) : (
