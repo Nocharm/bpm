@@ -86,6 +86,9 @@ const edgeLook = (key) =>
     const path = group?.querySelector(".react-flow__edge-path");
     return path ? { opacity: path.style.opacity, flow: group.querySelector(".bpm-run-flow") !== null } : null;
   }, nid(key));
+// 이력 한 줄(묶음 안 줄) — 상태 변경·코멘트
+const HISTORY_ENTRIES =
+  '[data-id="run-history-list"] li[data-id^="run-history-event-"], [data-id="run-history-list"] li[data-id^="run-history-comment-"]';
 const stateOf = async (runId) =>
   Object.fromEntries((await api(USER_A, "GET", `/runs/${runId}`)).states.map((row) => [row.node_id, row.status]));
 
@@ -190,10 +193,10 @@ try {
     "inspector: clicking the map tab does nothing",
     (await page.locator('[data-id="inspector-tab-map"]').getAttribute("aria-pressed")) === "false",
   );
-  const allItems = await page.locator('[data-id="run-history-list"] > li').count();
+  const allItems = await page.locator(HISTORY_ENTRIES).count();
   check("history: whole run shows the two completions", allItems === 2, String(allItems));
-  // 이력 줄에 올리면 그 노드에 강조 링, 벗어나면 풀린다
-  const firstRow = page.locator('[data-id="run-history-list"] > li').first();
+  // 이력 묶음에 올리면 그 노드에 강조 링, 벗어나면 풀린다
+  const firstRow = page.locator('[data-id^="run-history-group-"]').first();
   await firstRow.hover();
   await page.waitForTimeout(200);
   const isLit = (key) =>
@@ -330,12 +333,26 @@ try {
 
   // 6) 실행 탭 — 단계를 고른 동안 그 단계 이력(접수 완료 한 줄), 전체로 바꾸면 함께 취소 줄도
   await page.locator('[data-id="run-history-mode-step"]').waitFor();
-  const stepTexts = await page.locator('[data-id="run-history-list"] > li').allTextContents();
+  const stepTexts = await page.locator(HISTORY_ENTRIES).allTextContents();
   check("history: step mode shows only that step", stepTexts.length === 1 && stepTexts[0].includes("완료"), stepTexts.join(" | "));
   await page.locator('[data-id="run-history-mode-all"]').click();
-  await page.waitForFunction(() => document.querySelectorAll('[data-id="run-history-list"] > li').length > 6);
-  const allTexts = await page.locator('[data-id="run-history-list"] > li').allTextContents();
+  await page.waitForFunction((selector) => document.querySelectorAll(selector).length > 6, HISTORY_ENTRIES);
+  const allTexts = await page.locator(HISTORY_ENTRIES).allTextContents();
   check("history: whole run shows steps cleared with an undo", allTexts.some((text) => text.includes("함께 취소")));
+  // 이어진 같은 단계 줄은 한 묶음 — 단계 이름은 머리에 한 번, 바로 위와 같은 사람이면 이름 생략, 날짜는 구분 줄 한 번
+  const groupShapes = await page.locator('[data-id^="run-history-group-"]').evaluateAll((groups) =>
+    groups.map((group) => [...group.querySelectorAll('li[data-id^="run-history-"]')].map((li) => li.textContent ?? "")),
+  );
+  const folded = groupShapes.find((entries) => entries.length >= 2);
+  check(
+    "history: consecutive rows of one step fold into a group without repeating the name",
+    folded !== undefined && folded[0].includes("System Admin") && !folded[1].includes("System Admin"),
+    JSON.stringify(groupShapes.map((entries) => entries.length)),
+  );
+  check(
+    "history: fewer groups than rows and one day separator",
+    groupShapes.length < allTexts.length && (await page.locator('[data-id^="run-history-day-"]').count()) === 1,
+  );
   await page.waitForTimeout(250);
   await page.screenshot({ path: `${OUT}/run-hist-sidebar-all.png` });
 

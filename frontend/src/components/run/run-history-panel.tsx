@@ -2,7 +2,8 @@
 
 // 좌측 사이드바 "실행" 탭 — 실행 모드 맵 화면에서 상태 변경 이력과 코멘트를 최근 순으로 섞어 보인다(사용자 결정 2026-11-05,
 // 오른쪽 인스펙터의 노드 속성과 함께 보려고 왼쪽에 둔다). 단계를 고르면 그 단계 것이 먼저(이 단계 · 전체 전환), 전체에선 줄의
-// 단계 이름을 눌러 캔버스에서 그 단계로 간다. 줄에 마우스를 올리면 캔버스의 그 노드를 강조한다(onHoverStep).
+// 단계 이름을 눌러 캔버스에서 그 단계로 간다. 이어진 같은 단계 줄은 한 묶음(단계 이름 한 번, 같은 사람 이름 생략, 날이 바뀌면
+// 날짜 구분 줄, lib/run-history)이고, 묶음에 마우스를 올리면 캔버스의 그 노드를 강조한다(onHoverStep).
 // 이력은 서버가 볼 수 있는 범위만 준다(listRunHistory). 실행이 바뀌면(동작·코멘트·폴링) 다시 읽는다.
 
 import { useEffect, useEffectEvent, useState } from "react";
@@ -21,12 +22,13 @@ import {
 } from "lucide-react";
 
 import { listRunHistory, type RunHistoryItem } from "@/lib/api";
-import { formatKstShort } from "@/lib/datetime";
+import { formatKst } from "@/lib/datetime";
 import { useDirectoryState } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import type { RunGraph } from "@/lib/run-graph";
-import { humanizeRunError, splitRunNodeKey, toRunNodeKey } from "@/lib/run-view";
+import { groupRunHistory } from "@/lib/run-history";
+import { formatRunDay, humanizeRunError, splitRunNodeKey } from "@/lib/run-view";
 import type { RunSession } from "@/lib/use-run-session";
 
 type HistoryMode = "step" | "all";
@@ -120,6 +122,8 @@ export function RunHistoryPanel({ session, graphs, selectedKey, onSelect, onHove
 
   const isLoading = loaded === null || loaded.key !== requestKey;
   const items = loaded?.items ?? null;
+  // 이어진 같은 날·같은 단계 줄을 묶는다 — 날짜는 KST 달력 날짜
+  const groups = items === null ? [] : groupRunHistory(items, (iso) => formatKst(iso).slice(0, 10));
   const nameOf = (login: string | null) =>
     login === null ? t("run.history.system") : (users.get(login)?.name ?? login);
   const getStepTitle = (item: RunHistoryItem): string => {
@@ -180,63 +184,93 @@ export function RunHistoryPanel({ session, graphs, selectedKey, onSelect, onHove
         <ol
           data-id="run-history-list"
           aria-busy={isLoading}
-          className={`flex flex-col transition-opacity ${isLoading ? "opacity-60" : ""}`}
+          className={`flex flex-col gap-1 transition-opacity ${isLoading ? "opacity-60" : ""}`}
         >
-          {items.map((item) => {
-            const Icon = item.kind === "comment" ? MessageCircle : (ACTION_ICON[item.action ?? ""] ?? Check);
-            const tone = item.kind === "comment" ? "text-ink-tertiary" : (ACTION_TONE[item.action ?? ""] ?? "text-ink-tertiary");
-            const labelKey = item.action !== null ? ACTION_LABEL[item.action] : undefined;
-            const what =
-              item.kind === "comment" ? t("run.history.comment") : labelKey !== undefined ? t(labelKey) : (item.action ?? "");
-            const stepTitle = getStepTitle(item);
-            const stepKey = item.node_id !== null ? toRunNodeKey(item.scope_path, item.node_id) : null;
+          {groups.map((group) => {
+            const first = group.entries[0].item;
+            const stepTitle = getStepTitle(first);
+            const { stepKey } = group;
+            // 이 단계 보기는 모두 같은 단계라 머리(단계 이름)를 쓰지 않는다
+            const isHeaderShown = !isStepMode;
             return (
               <li
-                key={`${item.kind}-${item.id}`}
-                data-id={`run-history-${item.kind}-${item.id}`}
-                className="-mx-1 flex gap-2 rounded-sm border-b border-hairline px-1 py-1.5 transition-colors duration-150 last:border-b-0 hover:bg-surface-alt"
+                key={group.key}
+                data-id={`run-history-group-${group.key}`}
+                className="flex flex-col"
                 onMouseEnter={stepKey !== null ? () => onHoverStep(stepKey) : undefined}
                 onMouseLeave={stepKey !== null ? () => onHoverStep(null) : undefined}
               >
-                <span className={`mt-0.5 shrink-0 ${tone}`}>
-                  <Icon size={14} strokeWidth={1.5} />
-                </span>
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="min-w-0 truncate text-caption text-ink" title={`${nameOf(item.actor)} · ${what}`}>
-                    <span className="font-semibold">{nameOf(item.actor)}</span>
-                    <span className="text-ink-secondary"> · {what}</span>
-                  </span>
-                  {/* 좁은 사이드바 — 단계 이름과 시각을 둘째 줄에 나눠 싣는다 */}
-                  <div className="flex items-baseline justify-between gap-2">
-                    {!isStepMode && stepKey !== null ? (
+                {group.isNewDay && (
+                  <p
+                    data-id={`run-history-day-${group.day}`}
+                    className="mb-1 mt-1.5 flex items-center gap-2 text-fine font-semibold text-ink-tertiary"
+                  >
+                    <span className="shrink-0">{formatRunDay(first.created_at, t)}</span>
+                    <span aria-hidden className="h-px flex-1 bg-hairline" />
+                  </p>
+                )}
+                <div className="-mx-1 rounded-sm px-1 py-1 transition-colors duration-150 hover:bg-surface-alt">
+                  {isHeaderShown &&
+                    (stepKey !== null ? (
                       <button
                         type="button"
-                        data-id={`run-history-step-${item.kind}-${item.id}`}
-                        className="min-w-0 truncate text-left text-fine text-accent hover:underline"
+                        data-id={`run-history-step-${group.key}`}
+                        className="flex max-w-full items-center gap-1.5 text-left text-caption-strong text-accent hover:underline"
                         title={stepTitle}
                         onClick={() => onSelect(stepKey)}
                       >
-                        {stepTitle || t("run.downstream.untitled")}
+                        <span className="truncate">{stepTitle || t("run.downstream.untitled")}</span>
+                        {group.entries.length > 1 && (
+                          <span className="shrink-0 rounded-full bg-accent-tint px-1.5 text-fine tabular-nums">
+                            {group.entries.length}
+                          </span>
+                        )}
                       </button>
                     ) : (
-                      <span />
-                    )}
-                    <time
-                      dateTime={item.created_at}
-                      className="shrink-0 text-fine tabular-nums text-ink-tertiary"
-                      title={formatKstShort(item.created_at)}
-                    >
-                      {formatKstShort(item.created_at)}
-                    </time>
-                  </div>
-                  {item.kind === "comment" && item.body !== null && (
-                    <p className="whitespace-pre-wrap break-words rounded-sm bg-surface-alt px-2 py-1 text-caption text-ink">
-                      {item.body}
-                      {item.edited_at !== null && (
-                        <span className="ml-1 text-fine text-ink-tertiary">{t("run.pop.commentEditedTag")}</span>
-                      )}
-                    </p>
-                  )}
+                      <p className="text-caption-strong text-ink-secondary">{t("run.history.runLevel")}</p>
+                    ))}
+                  <ul className={`flex flex-col gap-1 ${isHeaderShown ? "ml-1 mt-1 border-l border-hairline pl-2" : ""}`}>
+                    {group.entries.map(({ item, isSameActor }) => {
+                      const Icon = item.kind === "comment" ? MessageCircle : (ACTION_ICON[item.action ?? ""] ?? Check);
+                      const tone =
+                        item.kind === "comment" ? "text-ink-tertiary" : (ACTION_TONE[item.action ?? ""] ?? "text-ink-tertiary");
+                      const labelKey = item.action !== null ? ACTION_LABEL[item.action] : undefined;
+                      const what =
+                        item.kind === "comment"
+                          ? t("run.history.comment")
+                          : labelKey !== undefined
+                            ? t(labelKey)
+                            : (item.action ?? "");
+                      const stamp = formatKst(item.created_at);
+                      return (
+                        <li key={`${item.kind}-${item.id}`} data-id={`run-history-${item.kind}-${item.id}`} className="flex gap-2">
+                          <span className={`mt-0.5 shrink-0 ${tone}`}>
+                            <Icon size={14} strokeWidth={1.5} />
+                          </span>
+                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                            <div className="flex items-baseline justify-between gap-2">
+                              {/* 동작이 먼저 — 좁은 사이드바에서 잘리는 쪽은 사람 이름. 바로 위 줄과 같은 사람이면 이름을 다시 쓰지 않는다(lib/run-history) */}
+                              <span className="min-w-0 truncate text-caption" title={`${what} · ${nameOf(item.actor)}`}>
+                                <span className="font-semibold text-ink">{what}</span>
+                                {!isSameActor && <span className="text-ink-tertiary"> · {nameOf(item.actor)}</span>}
+                              </span>
+                              <time dateTime={item.created_at} className="shrink-0 text-fine tabular-nums text-ink-tertiary" title={stamp}>
+                                {stamp.slice(11)}
+                              </time>
+                            </div>
+                            {item.kind === "comment" && item.body !== null && (
+                              <p className="whitespace-pre-wrap break-words rounded-sm bg-surface px-2 py-1 text-caption text-ink ring-1 ring-hairline">
+                                {item.body}
+                                {item.edited_at !== null && (
+                                  <span className="ml-1 text-fine text-ink-tertiary">{t("run.pop.commentEditedTag")}</span>
+                                )}
+                              </p>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
               </li>
             );
