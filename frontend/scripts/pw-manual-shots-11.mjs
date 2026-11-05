@@ -252,7 +252,7 @@ try {
     childKey,
   );
   await page.locator('[data-id="run-act-complete"]').click();
-  await page.locator('[data-id="run-bar"]').getByText(LANG === "ko" ? "실행 완료" : "Run complete").waitFor({ timeout: 8000 });
+  await page.locator('[data-id="run-bar"]').getByText("Run complete").waitFor({ timeout: 8000 });
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/${LANG}-run-submap.png`, clip: { x: 0, y: 40, width: 1456, height: 400 } });
   console.log(`shot ${LANG}-run-submap`);

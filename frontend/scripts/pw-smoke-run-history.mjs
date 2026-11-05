@@ -238,7 +238,7 @@ try {
     undone = !((await stateOf(run.id))[nid("d")] !== undefined);
   }
   check("undo: Ctrl+Z undoes my last action", undone);
-  await page.getByText("판정? · 완료 되돌렸어요").first().waitFor({ timeout: 5000 });
+  await page.getByText("판정? · Complete 되돌렸어요").first().waitFor({ timeout: 5000 });
   await page.keyboard.press("Control+z");
   await page.getByText("되돌릴 동작이 없어요").first().waitFor({ timeout: 5000 });
   check("undo: an empty stack says so", true);
@@ -350,11 +350,11 @@ try {
   // 6) 실행 탭 — 단계를 고른 동안 그 단계 이력(접수 완료 한 줄), 전체로 바꾸면 함께 취소 줄도
   await page.locator('[data-id="run-history-mode-step"]').waitFor();
   const stepTexts = await page.locator(HISTORY_ENTRIES).allTextContents();
-  check("history: step mode shows only that step", stepTexts.length === 1 && stepTexts[0].includes("완료"), stepTexts.join(" | "));
+  check("history: step mode shows only that step", stepTexts.length === 1 && stepTexts[0].includes("Complete"), stepTexts.join(" | "));
   await page.locator('[data-id="run-history-mode-all"]').click();
   await page.waitForFunction((selector) => document.querySelectorAll(selector).length > 6, HISTORY_ENTRIES);
   const allTexts = await page.locator(HISTORY_ENTRIES).allTextContents();
-  check("history: whole run shows steps cleared with an undo", allTexts.some((text) => text.includes("함께 취소")));
+  check("history: whole run shows steps cleared with an undo", allTexts.some((text) => text.includes("Also undone")));
   // 이어진 같은 단계 줄은 한 묶음 — 단계 이름은 머리에 한 번, 바로 위와 같은 사람이면 이름 생략, 날짜는 구분 줄 한 번
   const groupShapes = await page.locator('[data-id^="run-history-group-"]').evaluateAll((groups) =>
     groups.map((group) => [...group.querySelectorAll('li[data-id^="run-history-"]')].map((li) => li.textContent ?? "")),
