@@ -3,7 +3,7 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
-## 2026-11-05 — 홈 첫 실행 권유 (feat/run-onboard)
+## 2026-11-05 — v1.6.0 main 머지: 홈 첫 실행 권유
 
 - 실행을 써 본 적 없고 볼 수 있는 게시 맵이 있으면 홈 "진행 중 실행" 타일이 "첫 실행 해 보기"로 권하고, 누르면 세 단계 소개 애니메이션(2.6초, 누르면 건너뜀, 모션 축소면 생략) 뒤 실행해 볼 맵 최대 3개(내 맵 먼저)를 보인다. 줄은 `/maps/{id}?newRun=1`로 가서 맵 화면이 최신 게시본에 착지해 새 실행 창을 열고 주소에서 newRun을 지운다.
 - 사용자 결정: 타일 문구+누르면 펼침(자동 펼침 아님), 한 번 펼치면 끝이고 기록은 브라우저(`bpm.runOnboardSeen`, `lib/run-onboard.ts`). 실행 기록이 생겨도 기록해 끝난 실행이 목록에서 빠진 뒤 다시 권하지 않는다. 스모크 `pw-smoke-run-onboard.mjs`.
