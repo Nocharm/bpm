@@ -1,5 +1,6 @@
-// 매뉴얼 11차 캡처(2026-11-05) — 실행 체크와 배포 문서 파일. 사용자 덱: 새 실행 창 · 실행 화면 · 버튼 줄 · 문제 메모 · 하위 맵 자동 완료 ·
-// 실행 범례(키보드) · 모든 실행 창 · 홈 진행 중 실행 목록. 관리자 덱: 설정 › 실행 · 매뉴얼 파일 동기화 · 공지 파일에서 불러오기.
+// 매뉴얼 11차 캡처(2026-11-05) — 실행 체크와 배포 문서 파일. 사용자 덱: 새 실행 창 · 실행 이력(좌측 실행 탭, 묶음·노드 강조) ·
+// 실행 화면 · 버튼 줄 · 문제 메모 · 코멘트 고치기/지우기 · 하위 맵 자동 완료 · 실행 범례(키보드) · 뒤 단계 함께 취소 창 · 모든 실행 창 ·
+// 홈 진행 중 실행 목록(최근 끝남). 관리자 덱: 설정 › 실행 · 매뉴얼 파일 동기화 · 공지 파일에서 불러오기.
 // 앱 전체 화면은 슬라이드 프레임에서 작아서 각 화면의 해당 범위만 자른다.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3047 BACKEND_URL=http://localhost:8048 PW_LANG=ko|en node scripts/pw-manual-shots-11.mjs
 //   산출물은 저장소 루트 .shots/manual11/<lang>-*.png (gitignore). 시드 맵은 끝에 영구 삭제한다(실행·실행 알림도 같이 지워진다).
@@ -23,7 +24,7 @@ const T =
         s: "시작", a: "접수", b: "서류 검토", d: "판정?", pass: "합격", fail: "불합격", c: "시료 채취", sp: "품질 시험",
         r: "반품 처리", re: "반품 끝", c1: "측정",
         run: "11월 1차 입고 · LOT 2611-07", solo: "11월 2차 입고 · LOT 2611-12", prob: "11월 3차 입고 · LOT 2611-15",
-        stopped: "10월 4차 입고 · LOT 2610-31", memo: "라벨 인쇄가 흐려서 다시 뽑는 중",
+        stopped: "10월 4차 입고 · LOT 2610-31", memo: "라벨 인쇄가 흐려서 다시 뽑는 중", remark: "시료 라벨 번호 확인",
         fit: "화면 맞춤(좌상단)", newNotice: "새 공지 등록",
       }
     : {
@@ -31,7 +32,7 @@ const T =
         s: "Start", a: "Receive", b: "Review documents", d: "Pass?", pass: "Pass", fail: "Fail", c: "Take samples",
         sp: "Quality test", r: "Return goods", re: "Returned", c1: "Measure",
         run: "Nov intake 1 · LOT 2611-07", solo: "Nov intake 2 · LOT 2611-12", prob: "Nov intake 3 · LOT 2611-15",
-        stopped: "Oct intake 4 · LOT 2610-31", memo: "Label print is blurry, reprinting",
+        stopped: "Oct intake 4 · LOT 2610-31", memo: "Label print is blurry, reprinting", remark: "Check the sample label numbers",
         fit: "Fit to view (top-left)", newNotice: "New notice",
       };
 
@@ -133,7 +134,13 @@ try {
   await act(main.id, "b", "complete");
   await act(main.id, "d", "complete", { edge_id: nid("e-dc") });
   await act(main.id, "c", "start");
-  await runOf(T.solo, "solo");
+  await api(USER_A, "POST", `/runs/${main.id}/comments`, { scope_path: "", node_id: nid("c"), body: T.remark });
+  // 뒤 단계 함께 취소 창 — 서류 검토 뒤로 판정·시료 채취까지 진행된 개인 실행
+  const solo = await runOf(T.solo, "solo");
+  await act(solo.id, "a", "complete");
+  await act(solo.id, "b", "complete");
+  await act(solo.id, "d", "complete", { edge_id: nid("e-dc") });
+  await act(solo.id, "c", "start");
   const prob = await runOf(T.prob, "shared", [USER_B]);
   await act(prob.id, "a", "complete");
   await act(prob.id, "b", "problem");
@@ -178,11 +185,20 @@ try {
   await shotAround(page, "run-start", [dialog], 24);
   await page.locator('[data-id="run-start-cancel"]').click();
 
-  // 2) 실행 화면 — 완료 3 · 진행 중 1 · 대기 · 건너뜀
+  // 2) 실행 이력 — 좌측 사이드바 실행 탭(같은 단계 묶음), 시료 채취 묶음에 올려 캔버스 노드 강조
   await page.goto(`${BASE}/maps/${parent.mapId}?version=${parent.versionId}&run=${main.id}`);
   await page.locator('[data-id="run-bar"][data-state="ready"]').waitFor();
   await nodeEl(nid("a")).waitFor();
   await page.waitForTimeout(800);
+  await fit();
+  await page.locator('[data-id="sidebar-run-panel"] [data-id^="run-history-group-"]').first().waitFor();
+  await page.locator('[data-id="sidebar-run-panel"] [data-id^="run-history-group-"]').first().hover();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${OUT}/${LANG}-run-history.png`, clip: { x: 0, y: 40, width: 1080, height: 560 } });
+  console.log(`shot ${LANG}-run-history`);
+  await page.mouse.move(700, 780);
+
+  // 3) 실행 화면 — 완료 3 · 진행 중 1 · 대기 · 건너뜀(좌·우 패널을 접어 캔버스를 넓힌다)
   await page.keyboard.press("Alt+ArrowLeft");
   await page.keyboard.press("Alt+ArrowRight");
   await page.waitForTimeout(500);
@@ -191,7 +207,7 @@ try {
   await page.screenshot({ path: `${OUT}/${LANG}-run-screen.png`, clip: { x: 0, y: 40, width: 1456, height: 520 } });
   console.log(`shot ${LANG}-run-screen`);
 
-  // 3) 버튼 줄(진행 중 노드) → 문제 메모
+  // 4) 버튼 줄(진행 중 노드) → 문제 메모 → 코멘트
   await nodeEl(nid("c")).click();
   await bar.waitFor();
   await page.waitForTimeout(400);
@@ -208,6 +224,14 @@ try {
       document.querySelector('[data-id="run-action-bar"]')?.getAttribute("data-status") === "problem",
     nid("c"),
   );
+  // 코멘트 — 내 코멘트 줄에 올리면 고치기·지우기
+  await page.locator('[data-id="run-act-comments"]').click();
+  const commentRow = page.locator('[data-id="run-pop-comments"] [class*="group/comment"]').last();
+  await commentRow.waitFor();
+  await commentRow.hover();
+  await page.waitForTimeout(400);
+  await shotAround(page, "run-comments", [nodeEl(nid("c")), bar, page.locator('[data-id="run-pop"]')], 40);
+  await page.locator('[data-id="run-act-comments"]').click();
   await page.locator('[data-id="run-act-resolve"]').click();
   await page.waitForFunction(() => document.querySelector('[data-id="run-action-bar"]')?.getAttribute("data-status") === "active");
   await page.locator('[data-id="run-act-complete"]').click();
@@ -216,7 +240,7 @@ try {
     nid("sp"),
   );
 
-  // 4) 하위 맵 들어가 마지막 단계 완료 → 바깥 자동 완료 + 실행 끝
+  // 5) 하위 맵 들어가 마지막 단계 완료 → 바깥 자동 완료 + 실행 끝
   await page.locator('[data-id="run-act-enter"]').click();
   const childKey = `${nid("sp")}/${nid("c1")}`;
   await nodeEl(childKey).waitFor({ timeout: 8000 });
@@ -233,7 +257,7 @@ try {
   await page.screenshot({ path: `${OUT}/${LANG}-run-submap.png`, clip: { x: 0, y: 40, width: 1456, height: 400 } });
   console.log(`shot ${LANG}-run-submap`);
 
-  // 5) 실행 범례(키보드 칸)
+  // 5b) 실행 범례(키보드 칸)
   await page.keyboard.press("Escape");
   await page.locator('[data-id="run-legend-toggle"]').click();
   await page.locator('[data-id="run-legend-keys"]').waitFor();
@@ -241,7 +265,24 @@ try {
   await shotAround(page, "run-legend", [page.locator('[data-id="run-legend-card"]'), page.locator('[data-id="run-legend-toggle"]')], 24);
   await page.locator('[data-id="run-legend-toggle"]').click();
 
-  // 6) 모든 실행 창
+  // 6) 뒤 단계 함께 취소 창 — 서류 검토의 완료 취소(마우스로 열어 확인 버튼이 누른 자리에)
+  await page.goto(`${BASE}/maps/${parent.mapId}?version=${parent.versionId}&run=${solo.id}`);
+  await page.locator('[data-id="run-bar"][data-state="ready"]').waitFor();
+  await nodeEl(nid("b")).waitFor();
+  await page.waitForTimeout(600);
+  await fit();
+  await nodeEl(nid("b")).click();
+  const undoButton = page.locator('[data-id="run-act-undo"]');
+  await undoButton.waitFor();
+  const undoBox = await undoButton.boundingBox();
+  await page.mouse.click(undoBox.x + undoBox.width / 2, undoBox.y + undoBox.height / 2);
+  const downstream = page.locator('[data-id="run-downstream-dialog"]');
+  await downstream.waitFor();
+  await page.waitForTimeout(400);
+  await shotAround(page, "run-downstream", [downstream, nodeEl(nid("b")), nodeEl(nid("c"))], 40);
+  await page.locator('[data-id="run-downstream-cancel"]').click();
+
+  // 7) 모든 실행 창
   await page.locator('[data-id="run-menu"]').click();
   await page.locator('[data-id="run-menu-all"]').click();
   const modal = page.locator('[data-id="run-list-modal"]');
@@ -250,14 +291,14 @@ try {
   await shotAround(page, "run-list", [modal], 16);
   await page.locator('[data-id="run-list-close"]').click();
 
-  // 7) 홈 — 진행 중 실행 타일을 펼친 목록
+  // 8) 홈 — 진행 중 실행 타일을 펼친 목록(아래 최근 끝남)
   await page.goto(BASE);
   await page.locator('[data-id="home-activity-runs"]').click();
   await page.locator('[data-id="home-run-list"]').waitFor();
   await page.waitForTimeout(600);
   await shotAround(page, "home-runs", [page.locator('[data-id="home-activity"]'), page.locator('[data-id="home-run-panel"]')], 16);
 
-  // 8) 관리자 — 설정 › 실행, 매뉴얼(파일 동기화), 공지 파일에서 불러오기
+  // 9) 관리자 — 설정 › 실행, 매뉴얼(파일 동기화), 공지 파일에서 불러오기
   await page.goto(`${BASE}/settings`);
   await page.locator('[data-id="settings-tab-runs"]').click();
   await page.locator('[data-id="run-settings-panel"]').waitFor();
