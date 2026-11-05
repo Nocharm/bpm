@@ -14,6 +14,7 @@ import {
   findOpenedNodeIds,
   findRunBackEdgeIds,
   findRunFrontier,
+  findRunTouchedAfter,
   getBranchOptions,
   getReachedEndKey,
   getRunEdgeKind,
@@ -70,11 +71,20 @@ interface OptionsCase {
   exit_keys: string[];
 }
 
+interface TouchedAfterCase {
+  graph: string;
+  state: RawState;
+  node: string;
+  title: string | null;
+  ids: string[];
+}
+
 interface CaseFile {
   graphs: Record<string, { nodes: RawNode[]; edges: RawEdge[] }>;
   cases: RunCase[];
   back_edges: Record<string, string[]>;
   options: OptionsCase[];
+  touched_after: TouchedAfterCase[];
 }
 
 const FIXTURE_URL = new URL("../../../backend/tests/fixtures/run_graph_cases.json", import.meta.url);
@@ -151,6 +161,16 @@ describe.each(CASES.options)("shared options $graph/$node", (entry) => {
     expect(options.kind).toBe(entry.kind);
     expect(options.kind === "edge" ? options.edgeIds : []).toEqual(entry.edge_ids);
     expect(options.kind === "exit" ? options.exitKeys : []).toEqual(entry.exit_keys);
+  });
+});
+
+describe.each(CASES.touched_after)("shared touched after $graph/$node", (entry) => {
+  it("lists the later steps an undo clears, in flow order", () => {
+    const graph = buildGraph(entry.graph);
+    const ids = findRunTouchedAfter(graph, buildState(entry.state), entry.node);
+
+    expect(ids).toEqual(entry.ids);
+    expect(ids.length > 0 ? graph.nodes.find((n) => n.id === ids[0])?.title : null).toBe(entry.title);
   });
 });
 

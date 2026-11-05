@@ -8,6 +8,7 @@ import type { MessageKey } from "@/lib/i18n-messages";
 import { getOutputKey } from "@/lib/output-rules";
 import {
   findRunFrontier,
+  findRunTouchedAfter,
   getRunTopoOrder,
   type BranchOptions,
   type RunGraph,
@@ -46,9 +47,10 @@ export interface RunBarInput {
 }
 
 // 버튼 줄 아래에 여는 작은 팝오버 — 맵 화면이 들고 있어 Esc·빈 캔버스로 닫고, 먼저 끝낼 단계에 점선을 그린다
+// cascade의 downstream — 뒤 단계 취소 확인을 이미 거친 완료 취소라 하위 맵 확인 뒤 둘 다 실어 다시 보낸다
 export type RunPop =
   | { key: string; kind: "why" | "note" | "comments" }
-  | { key: string; kind: "cascade"; action: "unstart" | "undo" };
+  | { key: string; kind: "cascade"; action: "unstart" | "undo"; downstream?: boolean };
 
 export interface RunRect {
   left: number;
@@ -218,6 +220,31 @@ export function findRunBlockerKeys(
 }
 
 /**
+ * 완료 취소와 함께 지울 뒤 단계(노드 키, 이 범위 먼저·위상 순서) — 같은 범위의 손댄 뒤 단계에, 하위 맵 안이면 완료된 바깥
+ * 호스트의 손댄 뒤 단계를 루트까지 더한다(서버 `_clear_touched_after`·`_settle_outer_after`와 같은 범위). 비어 있으면 확인 없이 보낸다.
+ * 화면이 못 보는 하위 범위는 셀 수 없어 서버 409가 같은 확인을 띄운다.
+ */
+export function findRunDownstreamKeys(
+  detail: RunDetail,
+  graphs: ReadonlyMap<string, RunGraph>,
+  view: RunView,
+  key: string,
+): string[] {
+  const states = buildRunScopeStates(detail);
+  const keys: string[] = [];
+  let { scopePath, nodeId } = splitRunNodeKey(key);
+  for (;;) {
+    const graph = graphs.get(scopePath);
+    if (!graph) break;
+    const state = states.get(scopePath) ?? EMPTY_SCOPE_STATE;
+    for (const id of findRunTouchedAfter(graph, state, nodeId)) keys.push(toRunNodeKey(scopePath, id));
+    if (scopePath === "" || view.statusByKey.get(scopePath) !== "done") break;
+    ({ scopePath, nodeId } = splitRunNodeKey(scopePath));
+  }
+  return keys;
+}
+
+/**
  * 하위 범위 잠김 — 그 범위와 바깥 하위 범위 중 하나라도 호스트가 대기·건너뜀이거나 닫혔으면(고정된 범위의 closed,
  * 고정 전이면 호스트를 바로 완료함) 그 안은 읽기 전용이다(서버 `_assert_hosts_reachable`이 사슬 전체를 보는 것과 같은 판정).
  * 닫힌 바깥 범위 안에서 끝난 손자 맵은 닫히지 않은 채 남으므로 바로 위 범위만 보면 완료 취소가 열려 보였다.
@@ -294,6 +321,25 @@ export function hasRunChildProgress(detail: RunDetail, hostKey: string): boolean
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
+}
+
+// 확인 창을 누른 자리에 띄울 때 화면 가장자리와 둘 최소 여백(px)
+const CONFIRM_EDGE_MARGIN = 8;
+
+/**
+ * 확인 창 자리(화면 px, 창 왼쪽 위) — 확인 버튼 가운데(창 안 좌표 buttonCenter)가 누른 자리에 오게 옮기고 화면 안으로 당긴다.
+ * 같은 자리를 한 번 더 누르면(더블클릭) 바로 확인된다. 가장자리에 막히면 버튼이 그만큼 비켜난다.
+ */
+export function placeRunConfirm(
+  pointer: { x: number; y: number },
+  panel: RunSize,
+  buttonCenter: { x: number; y: number },
+  viewport: RunSize,
+): { left: number; top: number } {
+  return {
+    left: clamp(pointer.x - buttonCenter.x, CONFIRM_EDGE_MARGIN, viewport.width - panel.width - CONFIRM_EDGE_MARGIN),
+    top: clamp(pointer.y - buttonCenter.y, CONFIRM_EDGE_MARGIN, viewport.height - panel.height - CONFIRM_EDGE_MARGIN),
+  };
 }
 
 /** 버튼 줄 자리(화면 px) — 노드 위 가운데, 위 여백이 모자라면 노드 아래. 가로는 캔버스 안으로 당긴다. */

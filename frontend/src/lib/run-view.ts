@@ -181,6 +181,44 @@ export const RUN_EDGE_LOOK: Readonly<Record<RunEdgeKind, { stroke: string; strok
   skip: { stroke: "var(--color-run-edge-skip)", strokeWidth: 1.5 },
 };
 
+// 실행 모드 캔버스 워터마크 글자 크기(px) — 게시 워터마크(120px)를 넘지 않고, 긴 이름은 한 줄에 들어가게 줄인다(하한 44px).
+// 한글은 라틴보다 넓어 글자 폭을 따로 센다. 캔버스는 넘치는 부분을 잘라 낸다(overflow hidden)
+const RUN_WATERMARK_MAX_PX = 120;
+const RUN_WATERMARK_MIN_PX = 44;
+const RUN_WATERMARK_SPAN_PX = 1100; // 기울인 한 줄이 차지할 너비 기준 — 보통 캔버스 폭(1,100~1,300px)
+
+/** 실행 이름 워터마크 글자 크기 — 넓은 글자(한글·한자) 1, 나머지 0.6 폭으로 세어 기준 너비에 맞춘다. */
+export function getRunWatermarkFontSize(name: string): number {
+  let ems = 0;
+  for (const ch of name) ems += /[\u1100-\u11ff\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]/.test(ch) ? 1 : 0.6;
+  if (ems === 0) return RUN_WATERMARK_MAX_PX;
+  return Math.round(Math.min(RUN_WATERMARK_MAX_PX, Math.max(RUN_WATERMARK_MIN_PX, RUN_WATERMARK_SPAN_PX / ems)));
+}
+
+/** 갈래 버튼에 올리거나 포커스한 동안의 미리보기 — 같은 노드의 갈래 연결선 키 전부와 그중 지금 가리키는 것(노드 키 꼴). */
+export interface RunBranchPreview {
+  siblingKeys: ReadonlySet<string>;
+  activeKeys: ReadonlySet<string>;
+}
+
+/**
+ * 갈래 미리보기 — 가리킨 갈래 선만 지금 갈 길처럼(악센트 + 흐르는 점) 살리고 같은 노드의 다른 갈래는 흐리게 끈다
+ * (`data.runPreview`, multiline-edge가 선·라벨을 흐린다). 갈래가 아닌 연결선은 그대로. applyRunEdgeKind 뒤에 쓴다.
+ */
+export function applyRunBranchPreview(edge: Edge, preview: RunBranchPreview | null): Edge {
+  if (preview === null || !preview.siblingKeys.has(edge.id)) return edge;
+  if (!preview.activeKeys.has(edge.id)) {
+    return { ...edge, data: { ...edge.data, runFlow: false, runPreview: "off" } };
+  }
+  const stroke = RUN_EDGE_LOOK.now.stroke;
+  return {
+    ...edge,
+    style: { ...edge.style, stroke, strokeWidth: 2.5, strokeDasharray: undefined, opacity: 1 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
+    data: { ...edge.data, runFlow: true, runPreview: "on" },
+  };
+}
+
 /**
  * 실행 모드 연결선 모양 — 종류별 선·화살표 색, 지금 갈 길만 `data.runFlow`(흐르는 점, multiline-edge). 편집 화면의
  * 행진 점선(animated)은 끈다. 종류가 없는 연결선(펼침 게이트웨이 등)은 그대로 둔다.
@@ -218,6 +256,8 @@ const RUN_ERROR_KEYS: [string, MessageKey][] = [
   ["only the starter can do this", "run.err.starterOnly"],
   ["summarized runs cannot be changed", "run.err.summarized"],
   ["node is not actionable", "run.err.notActionable"],
+  ["comment not found", "run.err.commentNotFound"],
+  ["only the author can change this comment", "run.err.authorOnly"],
 ];
 const TOUCHED_AFTER_PREFIX = "later steps already changed: ";
 // 자리값이 든 서버 문구 — BE ERR_PARTICIPANT_ACCESS("participant {login} cannot view this map")·load_visible_run 404
@@ -244,6 +284,15 @@ export function getRunCapKind(err: unknown): "solo" | "shared" | null {
 /** 하위 맵 기록이 있는 하위프로세스 취소(409) — 버튼 줄이 "하위 맵 기록도 모두 취소돼요" 확인을 띄우고 cascade로 다시 보낸다(R5). */
 export function isRunSubProgressError(err: unknown): boolean {
   return getApiErrorDetail(err).startsWith("subprocess has progress");
+}
+
+/**
+ * 뒤 단계가 이미 진행된 완료 취소(409)의 첫 막은 단계 이름 — 아니면 null. 버튼 줄이 뒤 단계 취소 확인을 띄우고
+ * downstream으로 다시 보낸다(화면이 못 본 뒤 단계: 다른 참여자가 방금 손댐·못 보는 하위 범위).
+ */
+export function getRunTouchedAfterTitle(err: unknown): string | null {
+  const detail = getApiErrorDetail(err);
+  return detail.startsWith(TOUCHED_AFTER_PREFIX) ? detail.slice(TOUCHED_AFTER_PREFIX.length) : null;
 }
 
 export function humanizeRunError(err: unknown, t: TFunc): string {

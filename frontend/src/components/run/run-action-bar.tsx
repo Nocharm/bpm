@@ -5,9 +5,23 @@
 // (design run-check §4.3, 목업 buildBarHtml·buildPopHtml·placeBar). NodeActionBar처럼 ViewportPortal 안에서 선택 노드
 // 위치를 store로 읽되, 줌과 무관하게 화면 크기 그대로 보이게 1/zoom으로 되돌린다. 팝오버·선택·반짝임은 맵 화면이 들고
 // (Esc·빈 캔버스로 닫기, 먼저 끝낼 단계 점선 data.runHint) 여기서는 콜백으로만 바꾼다. 버튼 계산은 lib/run-actions.
+// 갈래 버튼에 올리거나 포커스하면 그 갈래 선만 살린다(onPreviewBranch → 맵 화면 연결선). 뒤 단계가 진행된 완료 취소는
+// 확인 창(run-downstream-dialog)을 거쳐 뒤 단계까지 지운다. 코멘트는 쓴 사람이 줄에 올리면 고치기·지우기가 보인다.
 
 import { useStore, useStoreApi, type ReactFlowState } from "@xyflow/react";
-import { AlertCircle, ArrowRight, Check, ChevronsDownUp, LogIn, MessageCircle, Play, Undo2, type LucideIcon } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowRight,
+  Check,
+  ChevronsDownUp,
+  LogIn,
+  MessageCircle,
+  Pencil,
+  Play,
+  Trash2,
+  Undo2,
+  type LucideIcon,
+} from "lucide-react";
 import {
   useEffect,
   useEffectEvent,
@@ -15,20 +29,32 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject,
 } from "react";
 
-import { addRunComment, listRunComments, type RunActionName, type RunComment, type RunDetail } from "@/lib/api";
+import {
+  addRunComment,
+  deleteRunComment,
+  editRunComment,
+  listRunComments,
+  type RunActionName,
+  type RunComment,
+  type RunDetail,
+} from "@/lib/api";
 import type { NodeData } from "@/lib/canvas";
 import { formatKstShort } from "@/lib/datetime";
 import { useDirectoryState } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { useMe } from "@/lib/me";
 import { useNodeActions } from "@/lib/node-actions";
+import { getOutputKey } from "@/lib/output-rules";
 import {
   buildRunBarButtons,
   findRunBlockerKeys,
+  findRunDownstreamKeys,
   getBranchLabel,
   getExitLabels,
   getRunScopeLock,
@@ -47,9 +73,17 @@ import {
   type RunSize,
 } from "@/lib/run-actions";
 import { findOpenedNodeIds, getBranchOptions, type RunGraph, type RunNodeStatus } from "@/lib/run-graph";
-import { buildRunView, humanizeRunError, splitRunNodeKey, type RunView } from "@/lib/run-view";
+import {
+  buildRunView,
+  humanizeRunError,
+  splitRunNodeKey,
+  toRunNodeKey,
+  type RunBranchPreview,
+  type RunView,
+} from "@/lib/run-view";
 import type { SubEnd } from "@/lib/subprocess-embed";
 import type { RunSession } from "@/lib/use-run-session";
+import { RunDownstreamDialog } from "@/components/run/run-downstream-dialog";
 
 // 캔버스 플로팅 크롬 단(오버레이 z 사다리 1100) — 선택 노드(1000/1001) 위
 const RUN_BAR_Z = 1100;
@@ -73,6 +107,8 @@ export interface RunActionBarProps {
   onFlash: (keys: string[]) => void;
   // 하위 맵 펼치기·접기(펼칠 때 그 범위 그래프를 실행 기준으로 받는다)
   onEnterSubprocess: (key: string) => void;
+  // 갈래 버튼을 가리키는 동안 그 갈래 선만 살린다 — null이면 풀기
+  onPreviewBranch: (preview: RunBranchPreview | null) => void;
   onToast: ToastFn;
 }
 
@@ -239,6 +275,27 @@ function getActionDataId(button: ActionButton): string {
   return `run-act-${button.action}`;
 }
 
+interface RunActOptions {
+  cascade?: boolean;
+  downstream?: boolean;
+  // 누른 자리(화면 px) — 확인 창을 그 자리에 띄운다. 키보드로 눌렀으면 null(가운데)
+  origin?: { x: number; y: number } | null;
+}
+
+// 뒤 단계 함께 취소 확인을 기다리는 완료 취소
+interface DownstreamAsk {
+  button: ActionButton;
+  titles: string[];
+  fallbackTitle: string | null;
+  includesSubMap: boolean;
+  origin: { x: number; y: number } | null;
+}
+
+/** 클릭한 자리 — 키보드(Enter·Space)로 누른 클릭은 detail이 0이라 null(확인 창을 가운데 띄운다). */
+function getClickOrigin(event: ReactMouseEvent): { x: number; y: number } | null {
+  return event.detail > 0 ? { x: event.clientX, y: event.clientY } : null;
+}
+
 /** 노드 이름 — 캔버스에 보이는 이름이 먼저(하위프로세스는 연결된 맵의 지금 이름), 없으면 실행 그래프의 저장 제목. */
 function getRunNodeTitle(graphs: ReadonlyMap<string, RunGraph>, key: string, label: string): string {
   if (label.trim()) return label;
@@ -255,6 +312,7 @@ function RunActionBarBody({
   onSelect,
   onFlash,
   onEnterSubprocess,
+  onPreviewBranch,
   onToast,
   nodeKey,
   scopePath,
@@ -276,7 +334,12 @@ function RunActionBarBody({
   const barSize = useElementSize(barRef);
   // 팝오버를 닫고 포커스를 버튼으로 돌리는 동안 — 꺼진 완료가 그 포커스로 팝오버를 다시 열지 않게 잠깐 막는다
   const quietFocusRef = useRef(false);
+  const [downstreamAsk, setDownstreamAsk] = useState<DownstreamAsk | null>(null);
   const { detail } = session;
+
+  // 버튼 줄이 사라지면(다른 노드 선택) 갈래 미리보기도 푼다 — 가리키던 버튼은 mouseleave 없이 사라진다
+  const clearPreviewOnUnmount = useEffectEvent(() => onPreviewBranch(null));
+  useEffect(() => () => clearPreviewOnUnmount(), []);
 
   // 캔버스에서 Enter — 선택한 노드의 버튼 줄 첫 버튼으로 들어온다(R31). 다른 노드에 포커스가 있으면 React Flow가 그 노드를 고른다
   useEffect(() => {
@@ -320,23 +383,63 @@ function RunActionBarBody({
     // 잠긴·지정 해제된 하위프로세스는 펼칠 수 없어 들어가기를 뺀다(캔버스 펼침 게이트와 같다)
   }).filter((button) => button.kind !== "enter" || geom.expandable);
 
-  const openCascade = (action: "unstart" | "undo") => onPopChange({ key: nodeKey, kind: "cascade", action });
+  const openCascade = (action: "unstart" | "undo", downstream: boolean) =>
+    onPopChange({ key: nodeKey, kind: "cascade", action, downstream: downstream || undefined });
+  const hasChildProgress = nodeType === "subprocess" && hasRunChildProgress(detail, nodeKey);
+
+  // 갈래 미리보기 — 같은 노드의 갈래 선 전부와 그중 이 버튼이 고르는 선(출구 버튼은 그 출구의 선들)
+  const previewBranch = (button: ActionButton) => {
+    const outgoing = graph.edges.filter((edge) => edge.source === nodeId);
+    const active = outgoing.filter((edge) =>
+      button.edgeId !== undefined ? edge.id === button.edgeId : getOutputKey(nodeType, edge.sourceHandle) === button.exitKey,
+    );
+    onPreviewBranch({
+      siblingKeys: new Set(outgoing.map((edge) => toRunNodeKey(scopePath, edge.id))),
+      activeKeys: new Set(active.map((edge) => toRunNodeKey(scopePath, edge.id))),
+    });
+  };
+
+  const getTitleOfKey = (key: string) => getRunNodeTitle(graphs, key, readNodeLabel(storeApi.getState().nodeLookup, key));
 
   // 동작 하나 — 서버 응답으로 실행 상세가 바뀐 뒤 완료면 이어 밟기(하나 열리면 그 노드로, 여럿이면 제자리 반짝임)
-  const runAct = async (button: ActionButton, cascade = false): Promise<void> => {
+  const runAct = async (button: ActionButton, options: RunActOptions = {}): Promise<void> => {
     if (busy) return;
+    const { cascade = false, downstream = false, origin = null } = options;
     const { action } = button;
     const isClear = action === "unstart" || action === "undo";
+    // 뒤 단계가 이미 진행된 완료 취소 — 함께 지울 단계를 보이고 묻는다(화면이 못 본 뒤 단계는 서버 409가 같은 확인을 띄운다)
+    if (action === "undo" && !downstream && !cascade) {
+      const keys = findRunDownstreamKeys(detail, graphs, view, nodeKey);
+      if (keys.length > 0) {
+        setDownstreamAsk({ button, titles: keys.map(getTitleOfKey), fallbackTitle: null, includesSubMap: hasChildProgress, origin });
+        return;
+      }
+    }
     // 하위 맵 기록이 있는 하위프로세스 취소 — 보이는 기록으로 먼저 묻는다(못 보는 하위 범위는 서버 409가 같은 확인을 띄운다)
-    if (isClear && !cascade && nodeType === "subprocess" && hasRunChildProgress(detail, nodeKey)) {
-      openCascade(action);
+    if (isClear && !cascade && hasChildProgress) {
+      openCascade(action, downstream);
       return;
     }
+    onPreviewBranch(null); // 갈래를 고르면 버튼이 바뀌어 가리키던 버튼이 mouseleave 없이 사라진다
     const before = Object.fromEntries(view.statusByKey);
     setBusy(true);
     const next = await session.act(
-      { scopePath, nodeId, action, edgeId: button.edgeId, exitKey: button.exitKey, cascade: cascade || undefined },
-      isClear ? { onNeedsCascade: () => openCascade(action) } : undefined,
+      {
+        scopePath,
+        nodeId,
+        action,
+        edgeId: button.edgeId,
+        exitKey: button.exitKey,
+        cascade: cascade || undefined,
+        downstream: downstream || undefined,
+      },
+      isClear
+        ? {
+            onNeedsCascade: () => openCascade(action, downstream),
+            onNeedsDownstream: (title) =>
+              setDownstreamAsk({ button, titles: [], fallbackTitle: title, includesSubMap: hasChildProgress, origin: null }),
+          }
+        : undefined,
     );
     setBusy(false);
     if (next === null) return;
@@ -444,8 +547,10 @@ function RunActionBarBody({
   const renderButton = (button: RunBarButton, index: number): ReactNode => {
     switch (button.kind) {
       case "action": {
-        const Icon = button.edgeId === undefined && button.exitKey === undefined ? ACTION_ICON[button.action] : null;
+        const isBranch = button.edgeId !== undefined || button.exitKey !== undefined;
+        const Icon = isBranch ? null : ACTION_ICON[button.action];
         const label = button.label || t(ACTION_LABEL[button.action]);
+        const clearPreview = () => onPreviewBranch(null);
         return (
           <button
             key={getActionDataId(button)}
@@ -454,7 +559,11 @@ function RunActionBarBody({
             disabled={busy}
             title={button.label ? label : undefined}
             className={`${BUTTON_BASE} ${TONE_CLASS[button.tone]}`}
-            onClick={() => void runAct(button)}
+            onMouseEnter={isBranch ? () => previewBranch(button) : undefined}
+            onMouseLeave={isBranch ? clearPreview : undefined}
+            onFocus={isBranch ? () => previewBranch(button) : undefined}
+            onBlur={isBranch ? clearPreview : undefined}
+            onClick={(event) => void runAct(button, { origin: getClickOrigin(event) })}
           >
             {Icon && <Icon size={16} strokeWidth={1.5} className="shrink-0" />}
             <span className="min-w-0 truncate">{label}</span>
@@ -599,10 +708,33 @@ function RunActionBarBody({
             <CascadePop
               busy={busy}
               onCancel={() => onPopChange(null)}
-              onConfirm={() => void runAct({ kind: "action", action: openPop.action, label: "", tone: "quiet" }, true)}
+              onConfirm={() =>
+                void runAct(
+                  { kind: "action", action: openPop.action, label: "", tone: "quiet" },
+                  { cascade: true, downstream: openPop.downstream },
+                )
+              }
             />
           )}
         </RunPopFrame>
+      )}
+      {downstreamAsk !== null && (
+        <RunDownstreamDialog
+          titles={downstreamAsk.titles}
+          fallbackTitle={downstreamAsk.fallbackTitle}
+          includesSubMap={downstreamAsk.includesSubMap}
+          origin={downstreamAsk.origin}
+          busy={busy}
+          onClose={() => {
+            setDownstreamAsk(null);
+            focusBarButton(`run-act-${downstreamAsk.button.action}`);
+          }}
+          onConfirm={() => {
+            const ask = downstreamAsk;
+            setDownstreamAsk(null);
+            void runAct(ask.button, { downstream: true, cascade: ask.includesSubMap });
+          }}
+        />
       )}
     </>
   );
@@ -883,7 +1015,8 @@ function NotePop({
   );
 }
 
-// 코멘트 목록 + "누가 언제"(상태 행) + 한 줄 입력(상태를 바꿀 수 있는 사람만, 닫힌 실행은 읽기만)
+// 코멘트 목록 + "누가 언제"(상태 행) + 한 줄 입력(상태를 바꿀 수 있는 사람만, 닫힌 실행은 읽기만). 내 코멘트는 줄에 올리거나
+// 포커스하면 고치기·지우기가 보인다(열린 실행만, 사용자 결정 2026-11-05)
 function CommentsPop({
   runId,
   scopePath,
@@ -902,6 +1035,7 @@ function CommentsPop({
 }) {
   const { t } = useI18n();
   const { users } = useDirectoryState();
+  const me = useMe()?.username ?? null;
   const [comments, setComments] = useState<RunComment[] | null>(null);
   const reportError = useEffectEvent((err: unknown) => onToast(humanizeRunError(err, t), "error"));
   useEffect(() => {
@@ -932,6 +1066,29 @@ function CommentsPop({
     void session.reload(); // 말풍선 개수, 처음 남긴 코멘트가 고정한 하위 범위
     return true;
   };
+  const saveEdit = async (comment: RunComment, body: string): Promise<boolean> => {
+    try {
+      const saved = await editRunComment(runId, comment.id, body);
+      setComments((prev) => (prev ?? []).map((row) => (row.id === saved.id ? saved : row)));
+    } catch (err) {
+      onToast(humanizeRunError(err, t), "error");
+      return false;
+    }
+    onToast(t("run.pop.commentEdited"));
+    void session.reload(); // 마지막 손댄 때 — 실행 탭 이력이 따라 읽는다
+    return true;
+  };
+  const removeComment = async (comment: RunComment): Promise<void> => {
+    try {
+      await deleteRunComment(runId, comment.id);
+    } catch (err) {
+      onToast(humanizeRunError(err, t), "error");
+      return;
+    }
+    setComments((prev) => (prev ?? []).filter((row) => row.id !== comment.id));
+    onToast(t("run.pop.commentDeleted"));
+    void session.reload(); // 말풍선 개수
+  };
   return (
     <>
       <h5 className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-fine text-ink-tertiary">
@@ -950,13 +1107,15 @@ function CommentsPop({
           </span>
         ) : (
           comments.map((comment) => (
-            <div key={comment.id} data-id={`run-pop-comment-${comment.id}`} className="rounded-sm bg-surface-alt px-2 py-1.5">
-              <div className="flex gap-2 text-fine text-ink-tertiary">
-                <span className="font-semibold text-ink">{nameOf(comment.author)}</span>
-                <time dateTime={comment.created_at}>{formatKstShort(comment.created_at)}</time>
-              </div>
-              <p className="whitespace-pre-wrap break-words text-caption text-ink">{comment.body}</p>
-            </div>
+            <RunCommentRow
+              key={comment.id}
+              comment={comment}
+              authorName={nameOf(comment.author)}
+              isMine={canWrite && me !== null && comment.author === me}
+              onSave={(body) => saveEdit(comment, body)}
+              onDelete={() => removeComment(comment)}
+              onEmpty={() => onToast(t("run.pop.emptyBody"), "error")}
+            />
           ))
         )}
       </div>
@@ -970,6 +1129,147 @@ function CommentsPop({
         />
       )}
     </>
+  );
+}
+
+/**
+ * 코멘트 한 줄 — 내 코멘트는 줄에 올리거나 포커스하면 오른쪽 위에 고치기·지우기가 보인다. 지우기는 한 번 누르면 같은 자리의
+ * 같은 버튼이 "지우기?"로 바뀌는 확인 단계이고 한 번 더 누르면(빠르게 두 번 = 바로) 지운다. 줄을 벗어나거나 Esc면 되돌린다.
+ * 버튼 묶음이 오른쪽에 붙어 있어 버튼이 왼쪽으로 늘어나도 누른 자리는 그 버튼 위에 남는다.
+ */
+function RunCommentRow({
+  comment,
+  authorName,
+  isMine,
+  onSave,
+  onDelete,
+  onEmpty,
+}: {
+  comment: RunComment;
+  authorName: string;
+  isMine: boolean;
+  onSave: (body: string) => Promise<boolean>;
+  onDelete: () => Promise<void>;
+  onEmpty: () => void;
+}) {
+  const { t } = useI18n();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const editRef = useRef<HTMLInputElement>(null);
+  const isEditing = draft !== null;
+  useEffect(() => {
+    if (isEditing) editRef.current?.focus({ preventScroll: true });
+  }, [isEditing]);
+
+  const save = async () => {
+    if (draft === null || saving) return;
+    const body = draft.trim();
+    if (!body) {
+      onEmpty();
+      return;
+    }
+    setSaving(true);
+    const ok = await onSave(body);
+    setSaving(false);
+    if (ok) setDraft(null);
+  };
+  const handleDelete = () => {
+    if (!isConfirmingDelete) {
+      setIsConfirmingDelete(true);
+      return;
+    }
+    setIsConfirmingDelete(false);
+    void onDelete();
+  };
+  const actionBase = "inline-flex h-6 items-center justify-center rounded-xs transition-colors duration-150";
+  return (
+    <div
+      data-id={`run-pop-comment-${comment.id}`}
+      className="group/comment relative rounded-sm bg-surface-alt px-2 py-1.5"
+      onMouseLeave={() => setIsConfirmingDelete(false)}
+    >
+      <div className="flex gap-2 pr-14 text-fine text-ink-tertiary">
+        <span className="font-semibold text-ink">{authorName}</span>
+        <time dateTime={comment.created_at}>{formatKstShort(comment.created_at)}</time>
+        {comment.edited_at !== null && (
+          <span data-id={`run-pop-comment-edited-${comment.id}`} title={formatKstShort(comment.edited_at)}>
+            {t("run.pop.commentEditedTag")}
+          </span>
+        )}
+      </div>
+      {draft !== null ? (
+        <input
+          ref={editRef}
+          type="text"
+          data-id={`run-pop-comment-edit-input-${comment.id}`}
+          aria-label={t("run.pop.commentEditLabel")}
+          maxLength={RUN_COMMENT_MAX}
+          autoComplete="off"
+          value={draft}
+          disabled={saving}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation(); // 팝오버까지 닫지 않고 고치기만 거둔다
+              setDraft(null);
+            } else if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              if (!event.repeat) void save();
+            }
+          }}
+          className="mt-0.5 w-full rounded-sm border border-accent bg-surface px-2 py-1 text-caption text-ink outline-none"
+        />
+      ) : (
+        <p className="whitespace-pre-wrap break-words text-caption text-ink">{comment.body}</p>
+      )}
+      {isMine && draft === null && (
+        <div
+          // 줄 배경을 깐다 — "지울까요?"로 넓어지면 글쓴이·시각 줄 끝을 덮는다(글자가 반쯤 비쳐 보이지 않게)
+          className={`absolute right-1 top-1 flex items-center gap-0.5 rounded-xs bg-surface-alt pl-1 transition-opacity duration-150 group-hover/comment:opacity-100 focus-within:opacity-100 ${
+            isConfirmingDelete ? "opacity-100" : "opacity-0"
+          }`}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && isConfirmingDelete) {
+              event.preventDefault();
+              event.stopPropagation();
+              setIsConfirmingDelete(false);
+            }
+          }}
+        >
+          {!isConfirmingDelete && (
+            <button
+              type="button"
+              data-id={`run-pop-comment-edit-${comment.id}`}
+              aria-label={t("run.pop.commentEdit")}
+              title={t("run.pop.commentEdit")}
+              className={`${actionBase} w-6 text-ink-tertiary hover:bg-surface hover:text-ink`}
+              onClick={() => setDraft(comment.body)}
+            >
+              <Pencil size={14} strokeWidth={1.5} />
+            </button>
+          )}
+          <button
+            type="button"
+            data-id={`run-pop-comment-delete-${comment.id}`}
+            aria-label={isConfirmingDelete ? t("run.pop.commentDeleteConfirm") : t("run.pop.commentDelete")}
+            title={isConfirmingDelete ? undefined : t("run.pop.commentDelete")}
+            data-confirming={isConfirmingDelete || undefined}
+            className={`${actionBase} ${
+              isConfirmingDelete
+                ? "gap-1 bg-run-problem px-2 text-fine font-semibold text-on-accent hover:bg-run-problem/85"
+                : "w-6 text-ink-tertiary hover:bg-surface hover:text-run-problem"
+            }`}
+            onClick={handleDelete}
+            onBlur={() => setIsConfirmingDelete(false)}
+          >
+            <Trash2 size={14} strokeWidth={1.5} className="shrink-0" />
+            {isConfirmingDelete && t("run.pop.commentDeleteConfirm")}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

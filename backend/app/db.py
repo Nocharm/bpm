@@ -179,6 +179,7 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("framework_interview_sessions", "canvas", "JSON"),
     ("framework_interview_sessions", "feedback_log", "JSON"),
     ("framework_interview_tasks", "mode", "VARCHAR(10) DEFAULT 'new'"),
+    ("run_comments", "edited_at", "TIMESTAMPTZ"),  # 실행 코멘트 수정 표시(2026-11-05), NULL = 고친 적 없음
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

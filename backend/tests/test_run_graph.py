@@ -25,6 +25,7 @@ from app.run_graph import (
     get_reached_end_key,
     get_run_topo_order,
     is_run_scope_finished,
+    list_touched_after,
 )
 
 CASES: dict[str, Any] = json.loads(
@@ -106,9 +107,10 @@ def test_branch_options_match_cases(entry: dict[str, Any]) -> None:
     "entry", CASES["touched_after"], ids=lambda t: f"{t['graph']}-{t['node']}-{len(t['state']['manual'])}"
 )
 def test_touched_after_match_cases(entry: dict[str, Any]) -> None:
-    title = find_touched_after(_graph(entry["graph"]), _build_state(entry["state"]), entry["node"])
+    graph, state = _graph(entry["graph"]), _build_state(entry["state"])
 
-    assert title == entry["title"]
+    assert find_touched_after(graph, state, entry["node"]) == entry["title"]
+    assert list_touched_after(graph, state, entry["node"]) == entry["ids"]  # 함께 지울 뒤 단계, 위상 순서
 
 
 @pytest.mark.parametrize("entry", CASES["loop_body"], ids=lambda b: f"{b['graph']}-{b['edge']}")

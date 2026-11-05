@@ -30,7 +30,14 @@ from app.run_service import (
     load_version_graph,
     resolve_scope_version,
 )
-from app.schemas import RunCommentIn, RunParticipantsIn, RunPatchIn, RunShareIn
+from app.schemas import (
+    RunCommentEditIn,
+    RunCommentIn,
+    RunHistoryItemOut,
+    RunParticipantsIn,
+    RunPatchIn,
+    RunShareIn,
+)
 
 ERR_NODE_NOT_FOUND = "node not found"
 ERR_KEEP_ONLY = "only the starter or the map owner can change keep"
@@ -40,6 +47,10 @@ ERR_ALREADY_OPEN = "run is already open"
 ERR_SUMMARIZED_REOPEN = "summarized runs cannot reopen"
 ERR_SUMMARIZED = "summarized runs cannot be changed"
 ERR_STARTER_STAYS = "the starter stays in the run"
+ERR_COMMENT_NOT_FOUND = "comment not found"
+ERR_AUTHOR_ONLY = "only the author can change this comment"
+
+RUN_HISTORY_LIMIT = 300  # 인스펙터 실행 탭 한 번에 싣는 이력 줄 상한(최근 순) — 실행 하나의 이력은 보통 이보다 적다
 
 _ENDED_STATUSES = ("done", "stopped")
 
@@ -148,6 +159,93 @@ async def create_run_comment(session: AsyncSession, run: Run, user: str, body: R
     _touch_activity(run, now)
     await session.commit()
     return comment
+
+
+async def _load_own_comment(session: AsyncSession, run: Run, user: str, comment_id: int) -> RunComment:
+    """고칠·지울 코멘트 — 열린 실행에서 상태를 바꿀 수 있는 사람이, 볼 수 있는 범위에 쓴 자기 코멘트만 (사용자 결정 2026-11-05)."""
+    if run.status != "open":
+        raise HTTPException(status_code=409, detail=ERR_NOT_OPEN)
+    if not is_actor(run, set(await _list_participant_logins(session, run.id)), user):
+        raise HTTPException(status_code=403, detail=ERR_PARTICIPANT_ONLY)
+    comment = await session.get(RunComment, comment_id)
+    visible = await get_visible_scope_paths(session, run, user)
+    if comment is None or comment.run_id != run.id or not is_scope_visible(comment.scope_path, visible):
+        raise HTTPException(status_code=404, detail=ERR_COMMENT_NOT_FOUND)
+    if comment.author != user:
+        raise HTTPException(status_code=403, detail=ERR_AUTHOR_ONLY)
+    return comment
+
+
+async def update_run_comment(
+    session: AsyncSession, run: Run, user: str, comment_id: int, body: RunCommentEditIn
+) -> RunComment:
+    """자기 코멘트 고치기 — 글이 바뀌었을 때만 수정 표시(`edited_at`). 이미 보낸 문제 알림의 메모 조각은 그대로 둔다."""
+    comment = await _load_own_comment(session, run, user, comment_id)
+    now = clock.now()
+    if comment.body != body.body:
+        comment.body = body.body
+        comment.edited_at = now
+    _touch_activity(run, now)
+    await session.commit()
+    return comment
+
+
+async def delete_run_comment(session: AsyncSession, run: Run, user: str, comment_id: int) -> None:
+    comment = await _load_own_comment(session, run, user, comment_id)
+    await session.delete(comment)
+    _touch_activity(run, clock.now())
+    await session.commit()
+
+
+async def list_run_history(
+    session: AsyncSession, run: Run, user: str, *, scope_path: str | None, node_id: str | None
+) -> list[RunHistoryItemOut]:
+    """상태 변경 이력과 코멘트를 최근 순으로 섞은 실행 이력 — 볼 수 있는 범위만(기본 가림), 상한 `RUN_HISTORY_LIMIT`.
+
+    노드를 짚으면(scope_path + node_id) 그 단계 것만, 안 짚으면 실행 전체(중단·다시 열기처럼 노드 없는 이력 포함).
+    닫힌·요약 전 실행도 읽는다. 요약된 실행은 이력·코멘트가 지워져 빈 목록이다.
+    """
+    visible = await get_visible_scope_paths(session, run, user)
+    events = select(RunEvent).where(RunEvent.run_id == run.id)
+    comments = select(RunComment).where(RunComment.run_id == run.id)
+    if node_id is not None:
+        path = scope_path or ""
+        events = events.where(RunEvent.scope_path == path, RunEvent.node_id == node_id)
+        comments = comments.where(RunComment.scope_path == path, RunComment.node_id == node_id)
+    event_rows = await session.scalars(events.order_by(RunEvent.created_at.desc(), RunEvent.id.desc()).limit(RUN_HISTORY_LIMIT))
+    comment_rows = await session.scalars(
+        comments.order_by(RunComment.created_at.desc(), RunComment.id.desc()).limit(RUN_HISTORY_LIMIT)
+    )
+    items = [
+        RunHistoryItemOut(
+            kind="event",
+            id=e.id,
+            actor=e.actor,
+            action=e.action,
+            scope_path=e.scope_path,
+            node_id=e.node_id,
+            node_title=e.node_title,
+            created_at=e.created_at,
+        )
+        for e in event_rows.all()
+        if is_scope_visible(e.scope_path, visible)
+    ] + [
+        RunHistoryItemOut(
+            kind="comment",
+            id=c.id,
+            actor=c.author,
+            scope_path=c.scope_path,
+            node_id=c.node_id,
+            body=c.body,
+            edited_at=c.edited_at,
+            created_at=c.created_at,
+        )
+        for c in comment_rows.all()
+        if is_scope_visible(c.scope_path, visible)
+    ]
+    # 같은 때(한 동작이 남긴 여러 줄)는 나중에 쓴 것이 위 — 코멘트는 같은 때의 상태 변경보다 위에 둔다
+    items.sort(key=lambda item: (item.created_at, item.kind == "comment", item.id), reverse=True)
+    return items[:RUN_HISTORY_LIMIT]
 
 
 # ── 설정 (이름 · 보존 · 알림 끄기) ──

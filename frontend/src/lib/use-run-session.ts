@@ -8,7 +8,7 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } fro
 
 import { actOnRun, ApiError, getRun, getRunScopeGraph, type Graph, type RunActionName, type RunDetail } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { humanizeRunError, isRunSubProgressError } from "@/lib/run-view";
+import { getRunTouchedAfterTitle, humanizeRunError, isRunSubProgressError } from "@/lib/run-view";
 
 // 공유 실행 다시 읽기 주기(ms) — 실행 화면이 열려 있고 탭이 보이는 동안만 돈다(계획 "공유 실행 동기화")
 export const RUN_POLL_MS = 10_000;
@@ -20,11 +20,14 @@ export interface RunActInput {
   edgeId?: string;
   exitKey?: string;
   cascade?: boolean;
+  downstream?: boolean;
 }
 
 export interface RunActOptions {
   // 하위 맵 기록이 있어 cascade 확인이 필요하다는 409 — 주면 오류 토스트 대신 이것을 부른다(R5, 화면이 못 보는 하위 범위 대비)
   onNeedsCascade?: () => void;
+  // 뒤 단계가 이미 진행돼 downstream 확인이 필요하다는 409(첫 막은 단계 이름) — 화면이 못 본 뒤 단계 대비
+  onNeedsDownstream?: (title: string) => void;
 }
 
 export interface RunSession {
@@ -200,6 +203,7 @@ export function useRunSession(
           edge_id: input.edgeId,
           exit_key: input.exitKey,
           cascade: input.cascade,
+          downstream: input.downstream,
         });
         applyWrite(runId, next);
         return next;
@@ -212,6 +216,11 @@ export function useRunSession(
         }
         if (!input.cascade && options?.onNeedsCascade && isRunSubProgressError(err)) {
           options.onNeedsCascade();
+          return null;
+        }
+        const touchedTitle = getRunTouchedAfterTitle(err);
+        if (!input.downstream && options?.onNeedsDownstream && touchedTitle !== null) {
+          options.onNeedsDownstream(touchedTitle);
           return null;
         }
         onToast(humanizeRunError(err, t), "error");

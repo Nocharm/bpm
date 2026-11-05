@@ -1,11 +1,11 @@
 "use client";
 
-// 실행 진입 메뉴 — 맵 화면 상단바의 "Run" 버튼과 압축 드롭다운(내가 참여한 진행 중 3줄 + 최근 끝난 1줄 + 모든 실행 보기 + 새 실행,
-// design run-check §4.1). Draft·결재 중·거절 버전과 업무 체계 캔버스에선 버튼이 꺼지고 이유를 툴팁으로 보인다.
+// 실행 진입 메뉴 — 맵 화면 상단바의 "Run" 버튼과 압축 드롭다운(내가 참여한 진행 중 3줄 + 최근 끝난 1줄 + 새 실행,
+// design run-check §4.1). 모든 실행 보기는 머리 줄 오른쪽 작은 아이콘 버튼(호버 툴팁, 사용자 결정 2026-11-05). Draft·결재 중·거절 버전과 업무 체계 캔버스에선 버튼이 꺼지고 이유를 툴팁으로 보인다.
 // 드롭다운은 AI 메뉴와 같은 플로팅 크롬(z-1100, 바깥 누름·Esc 닫기), 본문은 열 때마다 마운트돼 목록을 다시 읽는다.
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, ListChecks, Plus } from "lucide-react";
+import { ListChecks, ListTree, Plus } from "lucide-react";
 
 import { listRuns, type Run } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -139,7 +139,22 @@ function RunMenuPopover({ mapId, onOpenRun, onNewRun, onShowAll }: RunMenuPopove
       data-id="run-menu-pop"
       className="absolute right-0 top-full z-[1100] mt-1 w-72 rounded-md border p-1 glass glass-dense"
     >
-      <p className="px-2 pb-1 pt-1.5 text-fine font-semibold text-ink-tertiary">{t("run.menu.openHeading")}</p>
+      <div className="flex items-center justify-between gap-2 pl-2 pt-0.5">
+        <p className="text-fine font-semibold text-ink-tertiary">{t("run.menu.openHeading")}</p>
+        {onShowAll && (
+          <Tooltip label={t("run.menu.showAll")}>
+            <button
+              type="button"
+              data-id="run-menu-all"
+              aria-label={t("run.menu.showAll")}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-ink-tertiary hover:bg-surface-alt hover:text-accent"
+              onClick={onShowAll}
+            >
+              <ListTree size={14} strokeWidth={1.5} />
+            </button>
+          </Tooltip>
+        )}
+      </div>
       {loadError !== null ? (
         <p data-id="run-menu-error" className="px-2 py-1.5 text-fine text-error">
           {loadError}
@@ -171,17 +186,6 @@ function RunMenuPopover({ mapId, onOpenRun, onNewRun, onShowAll }: RunMenuPopove
             onOpen={() => onOpenRun(endedRun.id, endedRun.version_id)}
           />
         </>
-      )}
-      {onShowAll && (
-        <button
-          type="button"
-          data-id="run-menu-all"
-          className="mt-1 flex w-full items-center justify-between rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink hover:bg-accent-tint hover:text-accent"
-          onClick={onShowAll}
-        >
-          {t("run.menu.showAll")}
-          <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />
-        </button>
       )}
       <button
         type="button"

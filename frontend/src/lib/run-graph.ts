@@ -327,6 +327,28 @@ export function findRunFrontier(
   return order.filter((id) => collected.has(id));
 }
 
+/**
+ * 완료 취소와 함께 지울 뒤 단계 — 정방향으로 닿는 노드 중 이미 손댄(수동 상태·선택·출구) 것, 위상 순서.
+ * BE `list_touched_after`와 같다(사례 파일 touched_after). 비어 있지 않으면 서버는 downstream 확인 없이 409를 준다.
+ */
+export function findRunTouchedAfter(graph: RunGraph, state: RunScopeState, nodeId: string): string[] {
+  const forward = getForwardEdges(graph);
+  const successors = groupEdgesBy(forward, (e) => e.source);
+  const after = new Set<string>();
+  const stack = [nodeId];
+  for (let current = stack.pop(); current !== undefined; current = stack.pop()) {
+    for (const edge of successors.get(current) ?? []) {
+      if (after.has(edge.target)) continue;
+      after.add(edge.target);
+      stack.push(edge.target);
+    }
+  }
+  after.delete(nodeId);
+  const isTouched = (id: string) =>
+    readOwn(state.manual, id) !== undefined || readOwn(state.choice, id) !== undefined || readOwn(state.exit, id) !== undefined;
+  return orderNodes(graph, forward).filter((id) => after.has(id) && isTouched(id));
+}
+
 /** 방금 열린 노드 — 전에 진행 가능이 아니던 것 중 지금 진행 가능. 순서는 `after`의 키 순서(= deriveRunStatuses의 위상 순서). */
 export function findOpenedNodeIds(before: RunStatusMap, after: RunStatusMap): string[] {
   return Object.keys(after).filter((id) => after[id] === "ready" && readNodeStatus(before, id) !== "ready");

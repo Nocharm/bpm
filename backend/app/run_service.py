@@ -28,7 +28,7 @@ from app.models import (
     RunParticipant,
     RunScope,
 )
-from app.permissions.access import get_effective_role, get_eligible_users
+from app.permissions.access import get_effective_role, get_eligible_users, load_my_roles
 from app.permissions.logic import role_rank
 from app.run_access import get_visible_scope_paths, is_scope_visible
 from app.run_graph import (
@@ -40,10 +40,10 @@ from app.run_graph import (
     derive_run_statuses,
     find_loop_body,
     find_run_back_edge_ids,
-    find_touched_after,
     get_branch_options,
     get_reached_end_key,
     is_run_scope_finished,
+    list_touched_after,
 )
 from app.schemas import (
     RunActionIn,
@@ -72,7 +72,7 @@ ERR_NOT_ACTIONABLE = "node is not actionable"
 ERR_BAD_STATE = "action not allowed in this state"
 ERR_CHOOSE_BRANCH = "choose a branch"
 ERR_CHOOSE_EXIT = "choose an exit"
-ERR_TOUCHED_AFTER = "later steps already changed: {title}"
+ERR_TOUCHED_AFTER = "later steps already changed: {title}"  # FE는 뒤 단계 취소 확인 후 downstream=true로 다시 보낸다
 ERR_SUB_PROGRESS = "subprocess has progress"  # FE는 "하위 맵 기록도 모두 취소돼요" 안내 후 cascade=true로 다시 보낸다
 ERR_TOO_DEEP = "subprocess is too deep"
 ERR_SUB_ACCESS = "cannot view the subprocess map"
@@ -268,6 +268,55 @@ async def list_runs(
     return RunListOut(
         items=[await build_run_row(session, run, user) for run in runs],
         total=total or 0,
+        page=page,
+        page_size=RUN_LIST_PAGE_SIZE,
+    )
+
+
+async def list_my_runs(
+    session: AsyncSession,
+    user: str,
+    *,
+    tab: RunTab,
+    q: str,
+    page: int,
+    exclude_map_id: int | None,
+) -> RunListOut:
+    """내가 참여한 실행 한 쪽(모든 맵) — 모든 실행 창의 "다른 맵" 칸. 최근 활동순, 이름·맵 이름 검색.
+
+    휴지통 맵과 볼 수 없게 된 맵의 실행은 뺀다(볼 권한은 맵마다 달라 행을 다 읽은 뒤 거르고 쪽을 나눈다 — 내 실행 수는
+    개인 상한 10 + 참여한 공유 실행이라 작다). 남의 개인 실행은 참여자 행이 있어도 보이지 않는다(홈 대시보드와 같다).
+    """
+    conditions = [
+        Run.status.in_(_TAB_STATUSES[tab]),
+        Run.id.in_(select(RunParticipant.run_id).where(RunParticipant.login_id == user)),
+        or_(Run.scope == "shared", Run.starter == user),
+        ProcessMap.deleted_at.is_(None),
+    ]
+    if exclude_map_id is not None:
+        conditions.append(Run.map_id != exclude_map_id)
+    needle = q.strip().lower()
+    if needle:
+        conditions.append(
+            or_(
+                func.lower(Run.name).contains(needle, autoescape=True),
+                func.lower(ProcessMap.name).contains(needle, autoescape=True),
+            )
+        )
+    rows = (
+        await session.execute(
+            select(Run, ProcessMap)
+            .join(ProcessMap, ProcessMap.id == Run.map_id)
+            .where(*conditions)
+            .order_by(Run.last_activity_at.desc(), Run.id.desc())
+        )
+    ).all()
+    roles = await load_my_roles(session, user, list({pm.id: pm for _, pm in rows}.values()))
+    runs = [run for run, pm in rows if role_rank(roles.get(pm.id)) >= role_rank("viewer")]
+    start = (page - 1) * RUN_LIST_PAGE_SIZE
+    return RunListOut(
+        items=[await build_run_row(session, run, user) for run in runs[start : start + RUN_LIST_PAGE_SIZE]],
+        total=len(runs),
         page=page,
         page_size=RUN_LIST_PAGE_SIZE,
     )
@@ -617,27 +666,45 @@ async def _complete(ctx: _ActionContext, body: RunActionIn, node: RunGraphNode) 
     return "changed"
 
 
-async def _assert_outer_untouched(ctx: _ActionContext, scope_path: str) -> None:
-    """하위 맵 안의 완료 취소는 완료된 바깥 호스트의 뒤 단계를 누가 손댔으면 막는다 — 완료된 호스트를 따라 루트까지."""
+async def _clear_touched_after(
+    ctx: _ActionContext, scope_path: str, state: RunScopeState, node_id: str, *, downstream: bool
+) -> None:
+    """완료 취소의 뒤 단계 — 손댄 뒤 단계가 있으면 막거나(409), downstream이면 그 기록과 그 단계가 연 하위 기록까지 지운다.
+
+    뒤 단계마다 이력 `cleared`를 남긴다. 고정 버전·코멘트는 남겨 다시 밟아도 같은 하위 맵을 쓴다(cascade와 같다).
+    """
+    graph = ctx.graphs[scope_path]
+    touched = list_touched_after(graph, state, node_id)
+    if not touched:
+        return
+    if not downstream:
+        raise HTTPException(status_code=409, detail=ERR_TOUCHED_AFTER.format(title=graph.node(touched[0]).title))
+    for later_id in touched:
+        await _delete_state(ctx, scope_path, later_id)
+        await _clear_child_scopes(ctx.session, ctx.run.id, _join_scope(scope_path, later_id), drop_pins=False)
+        _record(ctx, "cleared", scope_path, graph.node(later_id))
+
+
+async def _settle_outer_after(ctx: _ActionContext, scope_path: str, *, downstream: bool) -> None:
+    """하위 맵 안의 완료 취소 — 완료된 바깥 호스트의 뒤 단계를 누가 손댔으면 막거나(downstream이면 지운다), 루트까지."""
     path = scope_path
     while path:
         parent_path, host_id = _split_scope(path)
         parent_state, parent_statuses = await _derive_scope(ctx, parent_path)
         if parent_statuses[host_id] != "done":
             return
-        blocker = find_touched_after(ctx.graphs[parent_path], parent_state, host_id)
-        if blocker is not None:
-            raise HTTPException(status_code=409, detail=ERR_TOUCHED_AFTER.format(title=blocker))
+        await _clear_touched_after(ctx, parent_path, parent_state, host_id, downstream=downstream)
         path = parent_path
 
 
 async def _clear_node(ctx: _ActionContext, body: RunActionIn, node: RunGraphNode, state: RunScopeState) -> None:
-    """시작 취소·완료 취소 — 수동 상태와 선택을 지운다. 하위 기록이 있는 하위프로세스는 cascade여야 함께 지운다."""
+    """시작 취소·완료 취소 — 수동 상태와 선택을 지운다. 하위 기록이 있는 하위프로세스는 cascade여야 함께 지운다.
+
+    완료 취소는 손댄 뒤 단계가 있으면 막고, downstream이면 뒤 단계(바깥 범위 포함)를 먼저 지운다.
+    """
     if body.action == "undo":
-        blocker = find_touched_after(ctx.graphs[body.scope_path], state, node.id)
-        if blocker is not None:
-            raise HTTPException(status_code=409, detail=ERR_TOUCHED_AFTER.format(title=blocker))
-        await _assert_outer_untouched(ctx, body.scope_path)
+        await _clear_touched_after(ctx, body.scope_path, state, node.id, downstream=body.downstream)
+        await _settle_outer_after(ctx, body.scope_path, downstream=body.downstream)
     if node.node_type == "subprocess":
         child_path = _join_scope(body.scope_path, node.id)
         if not body.cascade and await _has_child_progress(ctx.session, ctx.run.id, child_path):

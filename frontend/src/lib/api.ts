@@ -981,6 +981,21 @@ export interface MeDashboardRun {
   last_activity_at: string;
 }
 
+// 내가 참여한 최근 끝난 실행 한 줄(완료·중단, 모든 맵, 끝난 순)
+export interface MeDashboardEndedRun {
+  run_id: number;
+  map_id: number;
+  map_name: string;
+  version_id: number;
+  name: string;
+  scope: "solo" | "shared";
+  participant_count: number;
+  status: "done" | "stopped";
+  done: number;
+  total: number;
+  ended_at: string;
+}
+
 export interface MeDashboard {
   activity: MeDashboardActivity;
   checkouts: MeDashboardCheckout[];
@@ -988,6 +1003,7 @@ export interface MeDashboard {
   recent_events: MeDashboardEvent[];
   framework: MeDashboardCategory[];
   runs: MeDashboardRun[];
+  runs_ended: MeDashboardEndedRun[];
 }
 
 export function getMeDashboard(): Promise<MeDashboard> {
@@ -3858,6 +3874,23 @@ export interface RunComment {
   author: string;
   body: string;
   created_at: string;
+  // 쓴 사람이 고친 때 — 고친 적 없으면 null
+  edited_at: string | null;
+}
+
+// 실행 이력 한 줄 — 상태 변경(event)과 코멘트(comment)를 최근 순으로 섞는다. event의 action은 BE RunEvent.action
+// (start·complete·problem·resolve·unstart·undo·cleared·loop·stop·reopen·auto_stop), actor null = 정리 잡
+export interface RunHistoryItem {
+  kind: "event" | "comment";
+  id: number;
+  actor: string | null;
+  action: string | null;
+  scope_path: string;
+  node_id: string | null;
+  node_title: string;
+  body: string | null;
+  edited_at: string | null;
+  created_at: string;
 }
 
 export type RunActionName = "start" | "complete" | "problem" | "resolve" | "unstart" | "undo";
@@ -3869,6 +3902,15 @@ export function createRun(
   body: { name: string; version_id: number; scope: "solo" | "shared"; participants: string[] },
 ): Promise<RunDetail> {
   return request<RunDetail>(`/maps/${mapId}/runs`, { method: "POST", body: JSON.stringify(body) });
+}
+
+// 내가 참여한 실행(모든 맵) — 모든 실행 창 "다른 맵" 칸은 지금 맵을 excludeMapId로 뺀다. q는 실행 이름·맵 이름
+export function listMyRuns(q: { tab: RunListTab; q?: string; page?: number; excludeMapId?: number }): Promise<RunList> {
+  const params = new URLSearchParams({ tab: q.tab });
+  if (q.q) params.set("q", q.q);
+  if (q.page) params.set("page", String(q.page));
+  if (q.excludeMapId !== undefined) params.set("exclude_map_id", String(q.excludeMapId));
+  return request<RunList>(`/runs?${params.toString()}`);
 }
 
 export function listRuns(
@@ -3894,7 +3936,8 @@ export function getRunScopeGraph(runId: number, scopePath: string): Promise<Grap
 }
 
 // 노드 동작 하나 — 서버가 전이표로 다시 판정한다. edge_id는 갈래 노드 완료 때 고른 연결선, exit_key는 끝이 여럿인 SP를
-// 바로 완료할 때 나갈 출구, cascade는 하위 맵 기록이 있는 SP를 취소할 때 하위 기록까지 지우겠다는 확인
+// 바로 완료할 때 나갈 출구, cascade는 하위 맵 기록이 있는 SP를 취소할 때 하위 기록까지 지우겠다는 확인,
+// downstream은 뒤 단계가 이미 진행된 완료 취소에서 뒤 단계 기록까지 지우겠다는 확인
 export function actOnRun(
   runId: number,
   body: {
@@ -3904,6 +3947,7 @@ export function actOnRun(
     edge_id?: string;
     exit_key?: string;
     cascade?: boolean;
+    downstream?: boolean;
   },
 ): Promise<RunDetail> {
   return request<RunDetail>(`/runs/${runId}/actions`, { method: "POST", body: JSON.stringify(body) });
@@ -3919,6 +3963,26 @@ export function addRunComment(
   body: { scope_path: string; node_id: string; body: string },
 ): Promise<RunComment> {
   return request<RunComment>(`/runs/${runId}/comments`, { method: "POST", body: JSON.stringify(body) });
+}
+
+// 쓴 사람만, 열린 실행에서 고치고 지운다
+export function editRunComment(runId: number, commentId: number, body: string): Promise<RunComment> {
+  return request<RunComment>(`/runs/${runId}/comments/${commentId}`, { method: "PATCH", body: JSON.stringify({ body }) });
+}
+
+export function deleteRunComment(runId: number, commentId: number): Promise<void> {
+  return request<void>(`/runs/${runId}/comments/${commentId}`, { method: "DELETE" });
+}
+
+// 실행 이력 — target을 주면 그 단계만, 없으면 실행 전체(최근 순, 볼 수 있는 범위만)
+export function listRunHistory(runId: number, target?: { scopePath: string; nodeId: string }): Promise<RunHistoryItem[]> {
+  const params = new URLSearchParams();
+  if (target) {
+    params.set("scope", target.scopePath);
+    params.set("node_id", target.nodeId);
+  }
+  const query = params.toString();
+  return request<RunHistoryItem[]>(`/runs/${runId}/history${query ? `?${query}` : ""}`);
 }
 
 // 이름(시작한 사람)·영구 보존·내 알림 끄기 — 보낸 것만 바뀐다

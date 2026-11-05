@@ -8,7 +8,22 @@
 
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, Archive, Bookmark, Check, Loader2, MoreHorizontal, Square, UserPlus, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Archive,
+  Bell,
+  BellOff,
+  Bookmark,
+  Check,
+  Loader2,
+  MoreHorizontal,
+  RotateCcw,
+  Square,
+  Trash2,
+  UserPlus,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 
 import {
   ApiError,
@@ -131,6 +146,7 @@ interface RunMenuItem {
   key: string;
   label: string;
   hint: string;
+  icon: LucideIcon;
   isDanger: boolean;
   onSelect: () => void;
 }
@@ -199,6 +215,7 @@ function RunBarBody({ session, onToast, onClose, onOpenCurrentVersion }: RunBarB
       key: "mute",
       label: myParticipant.muted ? t("run.bar.unmute") : t("run.bar.mute"),
       hint: myParticipant.muted ? t("run.bar.unmuteHint") : t("run.bar.muteHint"),
+      icon: myParticipant.muted ? Bell : BellOff,
       isDanger: false,
       onSelect: () =>
         void runChange(
@@ -212,6 +229,7 @@ function RunBarBody({ session, onToast, onClose, onOpenCurrentVersion }: RunBarB
       key: "stop",
       label: t("run.bar.stop"),
       hint: t("run.bar.starterOnlyHint"),
+      icon: Square,
       isDanger: true,
       onSelect: () => setConfirm("stop"),
     });
@@ -221,6 +239,7 @@ function RunBarBody({ session, onToast, onClose, onOpenCurrentVersion }: RunBarB
       key: "reopen-menu",
       label: t("run.bar.reopen"),
       hint: t("run.bar.starterOnlyHint"),
+      icon: RotateCcw,
       isDanger: false,
       onSelect: reopen,
     });
@@ -230,6 +249,7 @@ function RunBarBody({ session, onToast, onClose, onOpenCurrentVersion }: RunBarB
       key: "delete",
       label: t("run.bar.delete"),
       hint: t("run.bar.starterOnlyHint"),
+      icon: Trash2,
       isDanger: true,
       onSelect: () => setConfirm("delete"),
     });
@@ -409,14 +429,15 @@ function RunBarBody({ session, onToast, onClose, onOpenCurrentVersion }: RunBarB
             sharedDisabledReason={!isShared && !(detail.can_manage && isOpen) ? t("run.bar.shareUnavailable") : undefined}
           />
           {menuItems.length > 0 && (
-            <div className="relative" onPointerDown={markMenuInside}>
+            // flex — 툴팁 래퍼(inline-flex)가 블록 안 글줄로 놓여 아래 여백만큼 위로 떠 보였다(나만·공유 탭과 가운데가 어긋남)
+            <div className="relative flex" onPointerDown={markMenuInside}>
               <Tooltip label={t("run.bar.more")}>
                 <button
                   type="button"
                   data-id="run-bar-more"
                   aria-label={t("run.bar.more")}
                   aria-expanded={menuOpen}
-                  className={`rounded-sm p-1 text-ink-secondary hover:bg-surface-alt ${menuOpen ? "bg-surface-alt text-ink" : ""}`}
+                  className={`inline-flex h-6.5 w-6.5 items-center justify-center rounded-sm text-ink-secondary hover:bg-surface-alt ${menuOpen ? "bg-surface-alt text-ink" : ""}`}
                   onClick={() => setMenuOpen((value) => !value)}
                 >
                   <MoreHorizontal size={16} strokeWidth={1.5} />
@@ -433,7 +454,7 @@ function RunBarBody({ session, onToast, onClose, onOpenCurrentVersion }: RunBarB
                       type="button"
                       data-id={`run-bar-${item.key}`}
                       disabled={busy}
-                      className={`flex w-full flex-col items-start rounded-sm px-2 py-1.5 text-left text-caption disabled:opacity-40 ${
+                      className={`flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left text-caption disabled:opacity-40 ${
                         item.isDanger ? "text-error hover:bg-error/10" : "text-ink hover:bg-surface-alt"
                       }`}
                       onClick={() => {
@@ -441,8 +462,11 @@ function RunBarBody({ session, onToast, onClose, onOpenCurrentVersion }: RunBarB
                         item.onSelect();
                       }}
                     >
-                      {item.label}
-                      <span className="text-fine text-ink-tertiary">{item.hint}</span>
+                      <item.icon size={16} strokeWidth={1.5} className="mt-px shrink-0" />
+                      <span className="flex min-w-0 flex-col">
+                        {item.label}
+                        <span className="text-fine text-ink-tertiary">{item.hint}</span>
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -454,7 +478,7 @@ function RunBarBody({ session, onToast, onClose, onOpenCurrentVersion }: RunBarB
               type="button"
               data-id="run-bar-close"
               aria-label={t("run.bar.close")}
-              className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt"
+              className="inline-flex h-6.5 w-6.5 items-center justify-center rounded-sm text-ink-secondary hover:bg-surface-alt"
               onClick={onClose}
             >
               <X size={16} strokeWidth={1.5} />

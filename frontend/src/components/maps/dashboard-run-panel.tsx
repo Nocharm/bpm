@@ -1,10 +1,11 @@
 // 홈 대시보드 "진행 중 실행" 펼침 칸 — 거르기 필 5개(개수)·정렬 메뉴 + 실행 줄(상태 글씨가 맨 앞이라 좁아도 잘리지 않는다).
 // 줄을 누르면 0.6초 지연 이동으로 그 맵의 실행 화면을 연다: 칸 전체를 레이어가 덮고 레이어 클릭 = 취소. 활동 타일이 펼친다 (design 2026-11-04 §4.8).
+// 아래 "최근 끝남" 칸은 내가 참여한 끝난 실행(모든 맵, 끝난 순) — 끝난 실행만 남아도 맵을 찾지 않고 연다(사용자 결정 2026-11-05).
 "use client";
 
 import { CircleAlert, Hourglass, List, User, Users, type LucideIcon } from "lucide-react";
 
-import type { MeDashboardRun } from "@/lib/api";
+import type { MeDashboardEndedRun, MeDashboardRun } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
 import {
   countRunFilters,
@@ -52,6 +53,8 @@ type Translate = ReturnType<typeof useI18n>["t"];
 
 interface DashboardRunPanelProps {
   runs: MeDashboardRun[];
+  // 최근 끝난 실행 — 거르기·정렬과 무관하게 끝난 순
+  endedRuns: MeDashboardEndedRun[];
   prefs: HomeListPrefs;
   onPrefs: (prefs: HomeListPrefs) => void;
 }
@@ -65,7 +68,7 @@ export function DashboardRunPanel(props: DashboardRunPanelProps) {
 }
 
 // 스코프 안쪽에서 훅을 돌려야 이 칸의 레이어에 보고된다
-function RunPanelBody({ runs, prefs, onPrefs }: DashboardRunPanelProps) {
+function RunPanelBody({ runs, endedRuns, prefs, onPrefs }: DashboardRunPanelProps) {
   const { t } = useI18n();
   const ago = useAgo();
   const { pending, toggle } = useDelayedNav();
@@ -97,8 +100,10 @@ function RunPanelBody({ runs, prefs, onPrefs }: DashboardRunPanelProps) {
           }}
         />
       </div>
-      {/* 목록 높이는 화면 높이에 맞춰 줄인다 — sticky 상단 안이라 짧은 화면에서도 아래 안내 줄이 붙은 채 보이게(상한 15rem) */}
-      <ul data-id="home-run-list" className="max-h-[clamp(5rem,calc(100dvh_-_24rem),15rem)] overflow-y-auto">
+      {/* 목록 높이는 화면 높이에 맞춰 줄인다 — sticky 상단 안이라 짧은 화면에서도 아래 안내 줄이 붙은 채 보이게(상한 15rem).
+          진행 중과 최근 끝남이 한 스크롤 칸이다 */}
+      <div className="max-h-[clamp(5rem,calc(100dvh_-_24rem),15rem)] overflow-y-auto">
+      <ul data-id="home-run-list">
         {shown.length === 0 ? (
           <li data-id="home-run-empty" className="px-3 py-4 text-center text-fine text-ink-muted">
             {t("home.dash.runs.empty")}
@@ -136,6 +141,55 @@ function RunPanelBody({ runs, prefs, onPrefs }: DashboardRunPanelProps) {
           })
         )}
       </ul>
+      {endedRuns.length > 0 && (
+        <>
+          <p className="sticky top-0 border-y border-hairline bg-surface-alt px-3 py-1 text-fine font-semibold text-ink-tertiary">
+            {t("home.dash.runs.endedHeading")}
+          </p>
+          <ul data-id="home-run-ended-list">
+            {endedRuns.map((run) => {
+              const href = buildRunHref(run.map_id, run.version_id, run.run_id);
+              const selecting = pending === href;
+              const isDone = run.status === "done";
+              return (
+                <li key={run.run_id}>
+                  <button
+                    type="button"
+                    data-id={`home-run-ended-row-${run.run_id}`}
+                    data-selecting={selecting || undefined}
+                    onClick={() => toggle(href, goingLabel)}
+                    className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 px-3 py-1.5 text-left transition-colors duration-150 hover:bg-surface-pearl [li+li>&]:border-t [li+li>&]:border-divider ${
+                      selecting ? "bg-accent-tint/40" : ""
+                    }`}
+                  >
+                    <span className="min-w-0 truncate text-caption-strong text-ink">{run.name}</span>
+                    <span className="row-span-2 flex flex-col items-end gap-1 text-fine tabular-nums text-ink-tertiary">
+                      <span
+                        className={`rounded-full border px-1.5 py-px ${
+                          isDone ? "border-added/40 bg-added/10 text-added" : "border-hairline bg-surface-alt text-ink-secondary"
+                        }`}
+                      >
+                        {t(isDone ? "run.menu.resultDone" : "run.menu.resultStopped")}
+                      </span>
+                      <span title={formatKstShort(run.ended_at)}>{ago(run.ended_at)}</span>
+                    </span>
+                    <span className="min-w-0 truncate text-fine text-ink-tertiary">
+                      {`${run.done}/${run.total} · ${run.map_name} · ${
+                        run.scope === "shared"
+                          ? t(run.participant_count === 1 ? "home.dash.runs.sharedOne" : "home.dash.runs.shared", {
+                              n: run.participant_count,
+                            })
+                          : t("home.dash.runs.solo")
+                      }`}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+      </div>
       <p className="border-t border-hairline px-3 py-1.5 text-fine text-ink-tertiary">{t("home.dash.runs.foot")}</p>
     </div>
   );

@@ -1,7 +1,8 @@
 "use client";
 
 // 에디터 좌측 사이드바 — 아웃라인 전용. 분기 흐름 들여쓰기 + 하위 프로세스 접기/펼치기(계층 색 구분).
-// 노드 추가·정렬·색 변경은 우클릭 컨텍스트 메뉴로 이동.
+// 노드 추가·정렬·색 변경은 우클릭 컨텍스트 메뉴로 이동. 실행 모드(runSlot)엔 위에 "아웃라인 · 실행" 전환이 붙고 실행 모드로
+// 들어오면 실행 탭(실행 이력)이 열린다 — 오른쪽 인스펙터의 노드 속성과 함께 보려고 왼쪽에 둔다(사용자 결정 2026-11-05).
 
 import {
   ChevronDown,
@@ -9,6 +10,8 @@ import {
   Circle,
   CircleDot,
   Diamond,
+  ListChecks,
+  ListTree,
   PanelsTopLeft,
   Settings,
   Square,
@@ -47,7 +50,11 @@ interface EditorLeftSidebarProps {
   onExpand: (id: string) => void;
   onCollapse: (id: string) => void;
   onFold: (id: string) => void;
+  // 실행 탭 내용(실행 이력) — 실행 모드에서만 온다. 있으면 "아웃라인 · 실행" 전환이 나타난다
+  runSlot?: ReactNode;
 }
+
+type SidebarPanel = "outline" | "run";
 
 // 사이드바 카드 접힘 상태 — 새로고침해도 세션 동안 유지(sessionStorage).
 const SIDEBAR_NAV_KEYS_KEY = "bpm.sidebar.navKeysOpen";
@@ -79,8 +86,18 @@ export function EditorLeftSidebar({
   onExpand,
   onCollapse,
   onFold,
+  runSlot,
 }: EditorLeftSidebarProps) {
   const { t } = useI18n();
+  const isRunMode = runSlot !== undefined && runSlot !== null;
+  const [panel, setPanel] = useState<SidebarPanel>(isRunMode ? "run" : "outline");
+  // 실행 모드로 들어오면 실행 탭, 나가면 아웃라인 — 렌더 중 상태 조정(슬롯 등장 비교)
+  const [seenRunMode, setSeenRunMode] = useState(isRunMode);
+  if (isRunMode !== seenRunMode) {
+    setSeenRunMode(isRunMode);
+    setPanel(isRunMode ? "run" : "outline");
+  }
+  const isRunPanel = isRunMode && panel === "run";
   // 카드 접힘 — 기본 펼침으로 초기화 후 마운트 시 sessionStorage 복원(초기 SSR 렌더와 일치).
   const [navKeysOpen, setNavKeysOpen] = useState(true);
   useEffect(() => {
@@ -287,6 +304,39 @@ export function EditorLeftSidebar({
       onScroll={handleSidebarScroll}
       className="scrollbar-hidden relative flex w-56 shrink-0 flex-col overflow-y-auto border-r border-hairline bg-surface p-2"
     >
+      {isRunMode && (
+        <div
+          role="tablist"
+          aria-label={t("sidebar.panels")}
+          className="mb-2 grid shrink-0 grid-cols-2 gap-0.5 rounded-sm border border-hairline bg-surface p-0.5"
+        >
+          {(["outline", "run"] as const).map((key) => {
+            const Icon = key === "run" ? ListChecks : ListTree;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                data-id={`sidebar-tab-${key}`}
+                aria-selected={panel === key}
+                className={`flex items-center justify-center gap-1 rounded-xs px-2 py-1 text-caption transition-colors ${
+                  panel === key ? "bg-accent-tint font-semibold text-accent" : "text-ink-secondary hover:bg-surface-alt"
+                }`}
+                onClick={() => setPanel(key)}
+              >
+                <Icon size={14} strokeWidth={1.5} className="shrink-0" />
+                {t(key === "run" ? "sidebar.tabRun" : "sidebar.tabOutline")}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {isRunPanel ? (
+        <div data-id="sidebar-run-panel" className="min-h-0 flex-1 px-1">
+          {runSlot}
+        </div>
+      ) : (
+      <>
       {/* 아웃라인 이동 단축키 — 접기/펼치기, 선택 노드 상태로 행별 활성/흐림. (노드 표시 정보 카드는 맵 탭으로 이관) */}
       <div className="contents">
         <div className="mb-2 rounded-sm border border-hairline bg-surface-alt">
@@ -509,6 +559,8 @@ export function EditorLeftSidebar({
             );
           })}
         </ul>
+      )}
+      </>
       )}
       {scrollThumb && (
         <div

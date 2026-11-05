@@ -269,18 +269,21 @@ def _collect_reachable(adjacency: dict[str, list[str]], start: str) -> set[str]:
     return seen
 
 
-def find_touched_after(graph: RunGraph, state: RunScopeState, node_id: str) -> str | None:
-    """정방향으로 닿는 뒤 단계 중 이미 손댄(수동 상태·선택·출구) 첫 노드의 제목 — 되돌리기를 막는 노드."""
+def list_touched_after(graph: RunGraph, state: RunScopeState, node_id: str) -> list[str]:
+    """정방향으로 닿는 뒤 단계 중 이미 손댄(수동 상태·선택·출구) 노드 id, 위상 순서 — 완료 취소를 막거나 함께 지울 노드."""
     forward = _get_forward_edges(graph)
     successors: dict[str, list[str]] = {}
     for e in forward:
         successors.setdefault(e.source, []).append(e.target)
     after = _collect_reachable(successors, node_id) - {node_id}
     touched = set(state.manual) | set(state.choice) | set(state.exit)
-    for candidate in _order_nodes(graph, forward):
-        if candidate in after and candidate in touched:
-            return graph.node(candidate).title
-    return None
+    return [candidate for candidate in _order_nodes(graph, forward) if candidate in after and candidate in touched]
+
+
+def find_touched_after(graph: RunGraph, state: RunScopeState, node_id: str) -> str | None:
+    """되돌리기를 막는 첫 뒤 단계의 제목 — 없으면 None."""
+    touched = list_touched_after(graph, state, node_id)
+    return graph.node(touched[0]).title if touched else None
 
 
 def find_loop_body(graph: RunGraph, back_edge_id: str) -> list[str]:

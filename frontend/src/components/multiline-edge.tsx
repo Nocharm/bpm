@@ -96,10 +96,18 @@ function renderEdge(props: EdgeProps, resolved: EdgePathResult) {
   const borderStyle = labelBgStyle?.strokeDasharray ? "dashed" : "solid";
   // 전달물 개수 점(렌더 전용, lib/edge-carry) — 라벨 오른쪽에 나란히, 라벨이 없으면 앵커에 혼자
   const carryItems = isEdgeCarry(data?.carry) ? data.carry.items : [];
+  // 실행 갈래 미리보기에서 가리키지 않은 갈래 — 선·라벨을 흐린다(lib/run-view applyRunBranchPreview, 렌더 전용)
+  const isPreviewOff = data?.runPreview === "off";
   return (
     <>
       {/* data-label-x/y — 해석기 라벨 앵커(플로우 좌표). 라벨이 없어도 실려 인라인 라벨 편집기가 같은 점에 붙는다 */}
-      <BaseEdge path={path} markerEnd={markerEnd} style={style} data-label-x={labelX} data-label-y={labelY} />
+      <BaseEdge
+        path={path}
+        markerEnd={markerEnd}
+        style={isPreviewOff ? { ...style, opacity: 0.15 } : style}
+        data-label-x={labelX}
+        data-label-y={labelY}
+      />
       {/* 실행 모드 "지금 갈 길" — 같은 경로 위로 악센트 점이 흐른다(globals.css .bpm-run-flow, lib/run-view applyRunEdgeKind) */}
       {data?.runFlow === true ? <path className="bpm-run-flow" d={path} /> : null}
       {pulse ? <EdgePulseDot path={path} pulse={pulse} travel={pulseTravel} /> : null}
@@ -108,8 +116,11 @@ function renderEdge(props: EdgeProps, resolved: EdgePathResult) {
           {/* pointer-events-none — 라벨은 경로 중앙에 놓이므로 클릭/더블클릭/우클릭이
               아래 엣지 path로 그대로 통과해야 선택·라벨편집·컨텍스트 메뉴가 유지된다(개수 점만 auto) */}
           <div
-            className="nodrag nopan pointer-events-none absolute flex items-center gap-1"
-            style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+            className="nodrag nopan pointer-events-none absolute flex items-center gap-1 transition-opacity duration-150"
+            style={{
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              opacity: isPreviewOff ? 0.3 : undefined,
+            }}
           >
           {label ? (
           <div

@@ -67,7 +67,14 @@ export function DashboardActivityTiles({ data, unread, onUnreadChange, onSelect 
   const waiting = data.checkouts.reduce((n, c) => n + c.waiting_requests, 0);
   return (
     <div data-id="home-activity" className="flex flex-col gap-2">
-      <TileGrid a={a} waiting={waiting} unread={unread} open={open} onToggle={togglePanel} />
+      <TileGrid
+        a={a}
+        waiting={waiting}
+        endedRuns={data.runs_ended.length}
+        unread={unread}
+        open={open}
+        onToggle={togglePanel}
+      />
       {isShown("checkouts") && data.checkouts.length > 0 && (
         <div className={getSectionClass("checkouts")}>
         <NavPendingScope className="rounded-sm">
@@ -102,7 +109,7 @@ export function DashboardActivityTiles({ data, unread, onUnreadChange, onSelect 
       )}
       {isShown("runs") && (
         <div className={getSectionClass("runs")}>
-          <DashboardRunPanel runs={data.runs} prefs={prefs} onPrefs={updatePrefs} />
+          <DashboardRunPanel runs={data.runs} endedRuns={data.runs_ended} prefs={prefs} onPrefs={updatePrefs} />
         </div>
       )}
       {isShown("inbox") && (
@@ -117,16 +124,18 @@ export function DashboardActivityTiles({ data, unread, onUnreadChange, onSelect 
 interface TileGridProps {
   a: MeDashboard["activity"];
   waiting: number;
+  // 최근 끝난 실행 수 — 진행 중이 0이어도 끝난 실행이 있으면 실행 타일을 펼친다
+  endedRuns: number;
   unread: number;
   open: PanelKey | null;
   onToggle: (key: PanelKey) => void;
 }
 
-function TileGrid({ a, waiting, unread, open, onToggle }: TileGridProps) {
+function TileGrid({ a, waiting, endedRuns, unread, open, onToggle }: TileGridProps) {
   const { t } = useI18n();
   const inbox = { href: "/inbox", label: t("home.dash.navGoing", { dest: t("home.dash.destInbox") }) };
-  // Check out·실행 타일은 0이면 펼치지 않는다(펼친 채 0이 되면 다시 눌러 접을 수 있게 둔다). 알림 · 피드백 타일은 읽은 알림(전체 필)과
-  // 내 피드백도 보여 주므로 수와 상관없이 늘 펼친다(R34)
+  // Check out·실행 타일은 0이면 펼치지 않는다(펼친 채 0이 되면 다시 눌러 접을 수 있게 둔다). 실행 타일은 최근 끝난 실행도 펼칠 거리다.
+  // 알림 · 피드백 타일은 읽은 알림(전체 필)과 내 피드백도 보여 주므로 수와 상관없이 늘 펼친다(R34)
   const toggleFor = (key: PanelKey, value: number) => (value > 0 || open === key ? () => onToggle(key) : undefined);
   const runIssues = a.runs_problem + a.runs_idle;
   return (
@@ -171,14 +180,16 @@ function TileGrid({ a, waiting, unread, open, onToggle }: TileGridProps) {
         value={a.runs_open}
         sub={
           a.runs_open === 0
-            ? t("home.dash.tileRunsNone")
+            ? endedRuns > 0
+              ? t("home.dash.tileRunsEnded", { n: endedRuns })
+              : t("home.dash.tileRunsNone")
             : runIssues > 0
               ? t("home.dash.tileRunsSub", { p: a.runs_problem, i: a.runs_idle })
               : t("home.dash.tileRunsCalm")
         }
         warn={runIssues > 0}
         pressed={open === "runs"}
-        onClick={toggleFor("runs", a.runs_open)}
+        onClick={toggleFor("runs", a.runs_open + endedRuns)}
       />
       <Tile
         dataId="home-activity-inbox"

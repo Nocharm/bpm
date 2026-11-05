@@ -50,6 +50,7 @@ from app.schemas import (
     MeDashboardActivityOut,
     MeDashboardCategoryOut,
     MeDashboardCheckoutOut,
+    MeDashboardEndedRunOut,
     MeDashboardEventOut,
     MeDashboardOut,
     MeDashboardRequestOut,
@@ -62,6 +63,7 @@ _CHECKOUT_LIMIT = 10
 _REQUEST_LIMIT = 10
 _EVENT_LIMIT = 20
 _RUN_LIMIT = 30  # 홈 실행 줄 상한 — 숫자(runs_open 등)는 상한과 무관하게 전부 센다
+_ENDED_RUN_LIMIT = 10  # 홈 "최근 끝남" 줄 상한 — 더 지난 것은 모든 실행 창 "다른 맵"·맵의 끝남 탭에서 찾는다
 # 내 드래프트 잡음(created/submitted/withdrawn)은 숨기고, 결과가 확정된 이벤트만 본인 것도 노출
 _OWN_EVENTS_KEPT = ("published", "confirmed", "rejected", "approved")
 _EDITING_ROLES = ("owner", "editor")
@@ -113,6 +115,7 @@ async def get_me_dashboard(
         recent_events=await _load_recent_events(session, user),
         framework=await _load_framework(session, user),
         runs=runs[:_RUN_LIMIT],
+        runs_ended=await _load_ended_runs(session, user),
     )
 
 
@@ -303,6 +306,69 @@ async def _load_runs(session: AsyncSession, user: str) -> list[MeDashboardRunOut
             )
         )
     out.sort(key=lambda r: (_RUN_KIND_ORDER[r.state_kind], -convert_to_kst(r.last_activity_at).timestamp(), -r.run_id))
+    return out
+
+
+async def _load_ended_runs(session: AsyncSession, user: str) -> list[MeDashboardEndedRunOut]:
+    """내가 참여한 최근 끝난 실행(완료·중단, 모든 맵)을 끝난 순으로 — 열린 실행이 없어도 맵을 찾지 않고 다시 연다.
+
+    휴지통 맵·볼 수 없게 된 맵·남의 개인 실행은 `_load_runs`와 같이 뺀다. 요약된 실행은 열어도 단계가 없어 넣지 않는다.
+    """
+    rows = (
+        await session.execute(
+            select(Run, ProcessMap)
+            .join(ProcessMap, ProcessMap.id == Run.map_id)
+            .join(RunParticipant, RunParticipant.run_id == Run.id)
+            .where(
+                RunParticipant.login_id == user,
+                Run.status.in_(("done", "stopped")),
+                ProcessMap.deleted_at.is_(None),
+                or_(Run.scope == "shared", Run.starter == user),
+            )
+            .order_by(Run.ended_at.desc(), Run.id.desc())
+        )
+    ).all()
+    if not rows:
+        return []
+    roles = await load_my_roles(session, user, list({pm.id: pm for _, pm in rows}.values()))
+    viewable = [(run, pm) for run, pm in rows if role_rank(roles.get(pm.id)) >= role_rank("viewer")][:_ENDED_RUN_LIMIT]
+    if not viewable:
+        return []
+    run_ids = [run.id for run, _ in viewable]
+    participant_counts = dict(
+        (
+            await session.execute(
+                select(RunParticipant.run_id, func.count())
+                .where(RunParticipant.run_id.in_(run_ids))
+                .group_by(RunParticipant.run_id)
+            )
+        ).all()
+    )
+    root_rows: dict[int, list[RunNodeState]] = {}
+    for row in await session.scalars(
+        select(RunNodeState).where(RunNodeState.run_id.in_(run_ids), RunNodeState.scope_path == "").order_by(RunNodeState.id)
+    ):
+        root_rows.setdefault(row.run_id, []).append(row)
+    views: dict[int, _VersionView] = {}
+    out: list[MeDashboardEndedRunOut] = []
+    for run, pm in viewable:
+        view = await _get_version_view(session, views, run.version_id)
+        done, total = count_run_progress(view.graph, build_scope_state(root_rows.get(run.id, [])))
+        out.append(
+            MeDashboardEndedRunOut(
+                run_id=run.id,
+                map_id=pm.id,
+                map_name=pm.name,
+                version_id=run.version_id,
+                name=run.name,
+                scope=run.scope,
+                participant_count=participant_counts.get(run.id, 0),
+                status=run.status,
+                done=done,
+                total=total,
+                ended_at=run.ended_at,
+            )
+        )
     return out
 
 

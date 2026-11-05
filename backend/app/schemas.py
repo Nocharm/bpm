@@ -1861,6 +1861,22 @@ class MeDashboardRunOut(BaseModel):
     last_activity_at: datetime
 
 
+class MeDashboardEndedRunOut(BaseModel):
+    """내가 참여한 최근 끝난 실행 한 줄(완료·중단, 모든 맵) — 끝난 실행만 남아도 맵을 찾지 않고 연다."""
+
+    run_id: int
+    map_id: int
+    map_name: str
+    version_id: int
+    name: str
+    scope: Literal["solo", "shared"]
+    participant_count: int
+    status: Literal["done", "stopped"]
+    done: int
+    total: int
+    ended_at: datetime
+
+
 class MeDashboardOut(BaseModel):
     activity: MeDashboardActivityOut
     checkouts: list[MeDashboardCheckoutOut] = []
@@ -1868,6 +1884,7 @@ class MeDashboardOut(BaseModel):
     recent_events: list[MeDashboardEventOut] = []
     framework: list[MeDashboardCategoryOut] = []
     runs: list[MeDashboardRunOut] = []
+    runs_ended: list[MeDashboardEndedRunOut] = []  # 최근 끝난 순 상한 _ENDED_RUN_LIMIT
 
 
 class EmployeeOut(BaseModel):
@@ -3143,6 +3160,7 @@ class RunActionIn(BaseModel):
     edge_id: str | None = Field(default=None, max_length=50)  # 갈래 노드를 완료할 때 고른 연결선
     exit_key: str | None = Field(default=None, max_length=200)  # 끝이 여럿인 하위프로세스를 바로 완료할 때 나갈 출구
     cascade: bool = False  # 하위 맵에 기록이 있는 하위프로세스의 취소 — 안내를 거친 뒤 하위 기록까지 지운다
+    downstream: bool = False  # 뒤 단계가 이미 진행된 완료 취소 — 확인을 거친 뒤 뒤 단계 기록(하위 맵 포함)까지 지운다
 
 
 # 컬럼 길이(100)만큼 — 참여자 로그인 한 명
@@ -3156,6 +3174,12 @@ class RunCommentIn(BaseModel):
     body: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
 
+class RunCommentEditIn(BaseModel):
+    """쓴 사람의 코멘트 고치기 — 새로 남길 때와 같은 규칙(앞뒤 공백 걷기, 빈 것 422, 2,000자)."""
+
+    body: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+
+
 class RunCommentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -3164,6 +3188,26 @@ class RunCommentOut(BaseModel):
     node_id: str
     author: str
     body: str
+    created_at: datetime
+    edited_at: datetime | None = None
+
+
+class RunHistoryItemOut(BaseModel):
+    """실행 이력 한 줄 — 상태 변경(event)과 코멘트(comment)를 한 시간축에 섞는다(인스펙터 실행 탭).
+
+    event: action = start|complete|problem|resolve|unstart|undo|cleared|loop|stop|reopen|auto_stop, actor None = 정리 잡.
+    comment: body·edited_at을 싣고 action은 None. 노드 없는 이벤트(중단·다시 열기)는 node_id None.
+    """
+
+    kind: Literal["event", "comment"]
+    id: int
+    actor: str | None
+    action: str | None = None
+    scope_path: str
+    node_id: str | None
+    node_title: str = ""
+    body: str | None = None
+    edited_at: datetime | None = None
     created_at: datetime
 
 

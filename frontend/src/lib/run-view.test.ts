@@ -8,6 +8,7 @@ import { messages, type MessageKey } from "@/lib/i18n-messages";
 import type { RunGraph } from "@/lib/run-graph";
 import { buildMapVersionHref, buildRunHref, readRunIdParam, readVersionIdParam } from "@/lib/run-links";
 import {
+  applyRunBranchPreview,
   applyRunEdgeKind,
   buildRunScopeStates,
   buildRunView,
@@ -16,6 +17,8 @@ import {
   formatSummaryCountdown,
   getRunCapKind,
   getRunMenuDisabledReason,
+  getRunTouchedAfterTitle,
+  getRunWatermarkFontSize,
   humanizeRunError,
   isRunSubProgressError,
   splitRunNodeKey,
@@ -326,9 +329,53 @@ describe("applyRunEdgeKind", () => {
   });
 });
 
+describe("applyRunBranchPreview", () => {
+  const preview = { siblingKeys: new Set(["e-yes", "e-no"]), activeKeys: new Set(["e-yes"]) };
+  const base = applyRunEdgeKind({ id: "e-yes", source: "d", target: "y" }, "fut");
+
+  it("lights the pointed branch like the next path with a flow", () => {
+    const next = applyRunBranchPreview(base, preview);
+    expect(next.style).toMatchObject({ stroke: "var(--color-run-edge-now-base)", strokeWidth: 2.5, opacity: 1 });
+    expect(next.data).toMatchObject({ runFlow: true, runPreview: "on" });
+  });
+
+  it("turns the other branches of that node off", () => {
+    const other = applyRunBranchPreview({ ...base, id: "e-no" }, preview);
+    expect(other.data).toMatchObject({ runFlow: false, runPreview: "off" });
+  });
+
+  it("leaves other edges and the no-preview state alone", () => {
+    const unrelated = { ...base, id: "e-else" };
+    expect(applyRunBranchPreview(unrelated, preview)).toBe(unrelated);
+    expect(applyRunBranchPreview(base, null)).toBe(base);
+  });
+});
+
 function makeApiError(status: number, detail: string): ApiError {
   return new ApiError(`API POST /runs/7/actions failed: ${status}`, status, JSON.stringify({ detail }));
 }
+
+describe("getRunWatermarkFontSize", () => {
+  it("keeps short names at the published watermark size", () => {
+    expect(getRunWatermarkFontSize("LOT 7")).toBe(120);
+  });
+
+  it("shrinks long names so they fit one line, Korean counted wider", () => {
+    expect(getRunWatermarkFontSize("11월 1차 입고 · LOT 2611-07")).toBe(71);
+    expect(getRunWatermarkFontSize("원자재 입고 검사 11월 1차")).toBeLessThan(getRunWatermarkFontSize("raw intake LOT 11 1st"));
+  });
+
+  it("never goes below the floor", () => {
+    expect(getRunWatermarkFontSize("x".repeat(200))).toBe(44);
+  });
+});
+
+describe("getRunTouchedAfterTitle", () => {
+  it("reads the first blocking step from the 409", () => {
+    expect(getRunTouchedAfterTitle(makeApiError(409, "later steps already changed: 시료 채취"))).toBe("시료 채취");
+    expect(getRunTouchedAfterTitle(makeApiError(409, "subprocess has progress"))).toBeNull();
+  });
+});
 
 describe("humanizeRunError", () => {
   it("names the later step that blocks an undo", () => {

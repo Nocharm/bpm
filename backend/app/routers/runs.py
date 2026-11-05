@@ -11,10 +11,12 @@ from app.routers.graph import _load_graph
 from app.schemas import (
     GraphOut,
     RunActionIn,
+    RunCommentEditIn,
     RunCommentIn,
     RunCommentOut,
     RunCreateIn,
     RunDetailOut,
+    RunHistoryItemOut,
     RunListOut,
     RunParticipantsIn,
     RunPatchIn,
@@ -58,6 +60,19 @@ async def list_map_runs(
 ) -> RunListOut:
     await run_service.load_live_map(session, map_id)
     return await run_service.list_runs(session, map_id, user, tab=tab, q=q, mine=mine, kept=kept, page=page)
+
+
+@router.get("/runs", response_model=RunListOut)
+async def list_my_runs(
+    tab: run_service.RunTab = "open",
+    q: str = Query(default="", max_length=200),
+    page: int = Query(default=1, ge=1),
+    exclude_map_id: int | None = None,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> RunListOut:
+    """내가 참여한 실행(모든 맵) — 모든 실행 창 "다른 맵" 칸은 지금 맵을 exclude_map_id로 뺀다."""
+    return await run_service.list_my_runs(session, user, tab=tab, q=q, page=page, exclude_map_id=exclude_map_id)
 
 
 @router.get("/runs/{run_id}", response_model=RunDetailOut)
@@ -118,6 +133,43 @@ async def add_run_comment(
 ) -> RunCommentOut:
     run = await run_service.load_visible_run(session, run_id, user, lock=True)
     return await run_manage.create_run_comment(session, run, user, body)
+
+
+@router.patch("/runs/{run_id}/comments/{comment_id}", response_model=RunCommentOut)
+async def edit_run_comment(
+    run_id: int,
+    comment_id: int,
+    body: RunCommentEditIn,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> RunCommentOut:
+    """쓴 사람만, 열린 실행에서 고친다."""
+    run = await run_service.load_visible_run(session, run_id, user, lock=True)
+    return await run_manage.update_run_comment(session, run, user, comment_id, body)
+
+
+@router.delete("/runs/{run_id}/comments/{comment_id}", status_code=204)
+async def delete_run_comment(
+    run_id: int,
+    comment_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> None:
+    run = await run_service.load_visible_run(session, run_id, user, lock=True)
+    await run_manage.delete_run_comment(session, run, user, comment_id)
+
+
+@router.get("/runs/{run_id}/history", response_model=list[RunHistoryItemOut])
+async def get_run_history(
+    run_id: int,
+    scope: str | None = Query(default=None, max_length=300),
+    node_id: str | None = Query(default=None, max_length=50),
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> list[RunHistoryItemOut]:
+    """상태 변경과 코멘트를 섞은 최근 순 이력 — node_id를 주면 그 단계만(scope 생략 = 최상위)."""
+    run = await run_service.load_visible_run(session, run_id, user)
+    return await run_manage.list_run_history(session, run, user, scope_path=scope, node_id=node_id)
 
 
 @router.patch("/runs/{run_id}", response_model=RunDetailOut)

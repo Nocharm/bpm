@@ -216,6 +216,51 @@ def test_undo_blocked_after_later_step(client: TestClient, monkeypatch: pytest.M
     assert _states(_ok(_act(client, run, ids["a"], "undo"))) == {}
 
 
+def test_undo_downstream_clears_later_steps(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    seeded = _seed(client, monkeypatch, "decision", "undo downstream")
+    ids = seeded["ids"]
+    run = _create_run(client, seeded)
+    _ok(_act(client, run, ids["a"], "complete"))
+    _ok(_act(client, run, ids["d"], "complete", edge_id=ids["e3"]))
+    _ok(_act(client, run, ids["y"], "start"))
+
+    detail = _ok(_act(client, run, ids["a"], "undo", downstream=True))
+
+    assert _states(detail) == {}  # 판단 선택·진행 중 뒤 단계까지 한꺼번에
+    assert _count_events(run, "cleared") == 2  # 적합?·등록 — 이 단계(입고)는 undo 한 줄
+    assert _count_events(run, "undo") == 1
+
+
+def test_child_undo_downstream_clears_outer_later_steps(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    parent, child = _seed_sp_pair(client, monkeypatch, "child undo downstream")
+    q, child_b = parent["ids"]["q"], child["ids"]["b"]
+    run = _create_run(client, parent)
+    _ok(_act(client, run, child["ids"]["a"], "complete", scope_path=q))
+    _ok(_act(client, run, child_b, "complete", scope_path=q))
+    _ok(_act(client, run, parent["ids"]["a"], "start"))
+
+    detail = _ok(_act(client, run, child_b, "undo", scope_path=q, downstream=True))
+
+    assert parent["ids"]["a"] not in _states(detail)  # 바깥 뒤 단계(출고)도 지워진다
+    host = _state_row(detail, q)
+    assert (host["status"], host["exit_key"]) == ("active", None)
+    assert _states(detail, q) == {child["ids"]["a"]: "done"}
+
+
+def test_undo_downstream_on_subprocess_still_needs_cascade(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    parent, child = _seed_sp_pair(client, monkeypatch, "downstream cascade")
+    q = parent["ids"]["q"]
+    run = _create_run(client, parent)
+    _ok(_act(client, run, child["ids"]["a"], "complete", scope_path=q))
+    _ok(_act(client, run, child["ids"]["b"], "complete", scope_path=q))
+    _ok(_act(client, run, parent["ids"]["a"], "start"))  # 완료하면 실행이 끝난다
+
+    assert _rejected(_act(client, run, q, "undo", downstream=True)) == (409, "subprocess has progress")
+    assert parent["ids"]["a"] in _states(_get_detail(client, run))  # 거절되면 뒤 단계도 그대로다
+    detail = _ok(_act(client, run, q, "undo", downstream=True, cascade=True))
+    assert detail["states"] == []
+
+
 def test_problem_resolve_and_unstart(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     seeded = _seed(client, monkeypatch, "linear", "problem")
     a = seeded["ids"]["a"]

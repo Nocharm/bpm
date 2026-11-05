@@ -2,6 +2,7 @@
 
 // 우측 인스펙터 (R5) — 4탭 패널(속성/맵/승인/활동). 각 탭 콘텐츠는 page.tsx가 slot으로 주입(빈상태·요약은 내부).
 // 탭 바: 좁으면 선택 탭만 라벨 노출, 폭 넉넉하면(@container ≥430px) 전 탭 라벨 펼침 — 잘림 방지.
+// 실행 모드(isRunMode)엔 쓰지 않는 맵·승인 탭이 꺼진다(사용자 결정 2026-11-05, 실행 이력은 좌측 사이드바 실행 탭).
 import {
   Boxes,
   ChevronRight,
@@ -35,6 +36,9 @@ const TABS: { key: InspectorTab; labelKey: MessageKey; icon: IconType }[] = [
   { key: "activity", labelKey: "inspector.tabActivity", icon: MessageSquare },
 ];
 
+// 실행 모드에서 쓰지 않는 탭 — 보이되 눌러도 열리지 않는다(게시본을 밟는 동안 맵 설정·결재는 손대지 않는다)
+const RUN_DISABLED_TABS: ReadonlySet<InspectorTab> = new Set<InspectorTab>(["map", "approval"]);
+
 // CSV 프리뷰 중에만 나타나는 탭 — importSlot이 있을 때 TABS 뒤에 붙는다
 const IMPORT_TAB: { key: InspectorTab; labelKey: MessageKey; icon: IconType } = {
   key: "import", labelKey: "csvImport.tabTitle", icon: FileUp,
@@ -58,6 +62,8 @@ interface InspectorPanelProps {
   // 승인 탭(워크플로 대시보드)·활동 탭(코멘트·버전 타임라인) 콘텐츠 — page.tsx 주입. 없으면 placeholder.
   approvalSlot?: ReactNode;
   activitySlot?: ReactNode;
+  // 실행 모드 — 맵·승인 탭을 끈다(보이되 눌러도 열리지 않고, 열려 있었으면 속성 탭으로)
+  isRunMode?: boolean;
   // CSV 임포트 프리뷰 — 슬롯이 있으면 Import 탭이 나타난다
   importSlot?: ReactNode;
   // 탭을 강제 고정(프리뷰 중). 내부 상태 대신 이 값이 이긴다.
@@ -99,6 +105,7 @@ export function InspectorPanel({
   mapTabSlot,
   approvalSlot,
   activitySlot,
+  isRunMode = false,
   importSlot,
   forcedTab,
   lockTabs,
@@ -128,7 +135,8 @@ export function InspectorPanel({
   }
   // 지정 해제로 슬롯이 사라지면 열려 있던 subprocess 탭을 Map 탭으로 폴백(렌더 파생 — effect 불요)
   const rawTab = forcedTab ?? internalTab;
-  const tab = rawTab === "subprocess" && !subprocessTabSlot ? "map" : rawTab;
+  const slotTab = rawTab === "subprocess" && !subprocessTabSlot ? "map" : rawTab;
+  const tab = isRunMode && RUN_DISABLED_TABS.has(slotTab) ? "properties" : slotTab;
   const tabs = [
     ...TABS,
     ...(subprocessTabSlot ? [SUBPROCESS_TAB] : []),
@@ -199,21 +207,28 @@ export function InspectorPanel({
         </button>
         {tabs.map(({ key, labelKey, icon: Icon }) => {
           const active = tab === key;
+          const isRunOff = isRunMode && RUN_DISABLED_TABS.has(key);
           return (
             <button
               key={key}
               type="button"
+              data-id={`inspector-tab-${key}`}
               disabled={lockTabs && key !== tab}
-              title={t(labelKey)}
+              aria-disabled={isRunOff || undefined}
+              title={isRunOff ? t("inspector.tabRunOff", { tab: t(labelKey) }) : t(labelKey)}
               aria-label={t(labelKey)}
               aria-pressed={active}
               // 폭 부족 시 비선택 탭이 먼저 줄고(말줄임) 선택 탭 라벨은 지키지 않는다 (사용자 결정 2026-08-20)
               className={`flex items-center gap-1 rounded-sm px-2 py-1.5 text-caption transition-colors disabled:opacity-40 disabled:hover:bg-transparent ${
                 active
                   ? "shrink-0 bg-accent-tint font-semibold text-accent"
-                  : "min-w-0 text-ink-secondary hover:bg-surface-alt"
+                  : isRunOff
+                    ? "min-w-0 cursor-not-allowed text-ink-muted opacity-50"
+                    : "min-w-0 text-ink-secondary hover:bg-surface-alt"
               }`}
-              onClick={() => setInternalTab(key)}
+              onClick={() => {
+                if (!isRunOff) setInternalTab(key);
+              }}
             >
               <Icon size={16} strokeWidth={1.5} className="shrink-0" />
               <span

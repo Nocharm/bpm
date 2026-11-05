@@ -3,12 +3,14 @@
 // 모든 실행 창 — 맵의 실행을 진행 중·끝남·요약 세 탭으로 훑는 새 창(실행 메뉴 "모든 실행 보기", design run-check §4.3·§4.6).
 // 이름·LOT 검색(250ms 디바운스)·"내가 참여한 것만"·"영구 보존만" 거르기, 8줄 쪽 나눔, 줄마다 영구 보존 책갈피.
 // 요약된 실행은 열 수 없고 한 줄 집계(결과·기간·버전·문제 단계 수·참여자)만 보인다. 목록은 서버가 거르고 나눈다(listRuns).
+// 위 "이 맵 · 다른 맵" 칸 — 다른 맵은 내가 참여한 다른 맵의 실행(listMyRuns)이고 줄마다 맵 이름, 누르면 그 맵의 실행 화면으로
+// 간다(사용자 결정 2026-11-05: 끝난 실행만 남아도 맵을 찾지 않고 연다).
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Bookmark, Search, X } from "lucide-react";
+import { Bookmark, Map as MapIcon, Search, X } from "lucide-react";
 
-import { listRuns, patchRun, type Run, type RunList, type RunListTab, type RunSummaryInfo } from "@/lib/api";
+import { listMyRuns, listRuns, patchRun, type Run, type RunList, type RunListTab, type RunSummaryInfo } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useMe } from "@/lib/me";
 import { formatRunDay, formatRunSummaryParts, formatSummaryCountdown, humanizeRunError } from "@/lib/run-view";
@@ -24,12 +26,17 @@ const SEARCH_DEBOUNCE_MS = 250;
 
 const TABS: readonly RunListTab[] = ["open", "ended", "summary"];
 
+// 위 칸 — 이 맵의 실행 · 내가 참여한 다른 맵의 실행
+type RunListSection = "here" | "other";
+const SECTIONS: readonly RunListSection[] = ["here", "other"];
+
 type ToastFn = (msg: string, tone?: "error") => void;
 
 interface RunListModalProps {
   mapId: number;
   onClose: () => void;
-  onOpenRun: (runId: number, versionId: number) => void;
+  // 다른 맵 칸의 줄은 그 맵 id를 함께 준다 — 맵 화면이 그 맵의 실행 주소로 간다
+  onOpenRun: (runId: number, versionId: number, mapId: number) => void;
   onToast: ToastFn;
   // 맵 오너 — 공유 실행의 영구 보존은 시작한 사람과 맵 오너만 켜고 끈다(서버 can_keep과 같은 기준)
   isMapOwner?: boolean;
@@ -46,6 +53,7 @@ interface LoadedRuns {
 export function RunListModal({ mapId, onClose, onOpenRun, onToast, isMapOwner = false }: RunListModalProps) {
   const { t } = useI18n();
   const me = useMe()?.username ?? null;
+  const [section, setSection] = useState<RunListSection>("here");
   const [tab, setTab] = useState<RunListTab>("open");
   const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
@@ -60,10 +68,13 @@ export function RunListModal({ mapId, onClose, onOpenRun, onToast, isMapOwner = 
   // 요약 전 남은 날 계산의 기준 시각 — 창을 연 때
   const [now] = useState(() => new Date());
 
-  // 요약 탭엔 영구 보존이 없다(요약된 실행은 보존할 수 없다) — 거르기도 숨기고 서버에도 보내지 않는다
-  const isKeptFilterShown = tab !== "summary";
+  // 요약 탭엔 영구 보존이 없다(요약된 실행은 보존할 수 없다) — 거르기도 숨기고 서버에도 보내지 않는다.
+  // 다른 맵 칸은 이미 내가 참여한 실행만이라 두 거르기를 모두 숨긴다
+  const isOther = section === "other";
+  const isKeptFilterShown = tab !== "summary" && !isOther;
   const keptParam = isKeptFilterShown && isKeptOnly;
-  const requestKey = `${tab}|${query}|${isMineOnly}|${keptParam}|${page}|${reloadKey}`;
+  const mineParam = !isOther && isMineOnly;
+  const requestKey = `${section}|${tab}|${query}|${mineParam}|${keptParam}|${page}|${reloadKey}`;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -78,7 +89,11 @@ export function RunListModal({ mapId, onClose, onOpenRun, onToast, isMapOwner = 
 
   useEffect(() => {
     let active = true;
-    listRuns(mapId, { tab, q: query, mine: isMineOnly, kept: keptParam, page })
+    const request =
+      section === "other"
+        ? listMyRuns({ tab, q: query, page, excludeMapId: mapId })
+        : listRuns(mapId, { tab, q: query, mine: mineParam, kept: keptParam, page });
+    request
       .then((list) => {
         if (!active) return;
         // 마지막 쪽의 마지막 줄이 사라졌으면(책갈피를 꺼서 "영구 보존만"에서 빠짐 등) 한 쪽 앞으로
@@ -94,7 +109,7 @@ export function RunListModal({ mapId, onClose, onOpenRun, onToast, isMapOwner = 
     return () => {
       active = false;
     };
-  }, [mapId, tab, query, isMineOnly, keptParam, page, requestKey]);
+  }, [mapId, section, tab, query, mineParam, keptParam, page, requestKey]);
 
   const isLoading = loaded === null || loaded.key !== requestKey;
   const list = loaded?.list ?? null;
@@ -102,6 +117,12 @@ export function RunListModal({ mapId, onClose, onOpenRun, onToast, isMapOwner = 
   const handleTab = (next: RunListTab) => {
     if (next === tab) return;
     setTab(next);
+    setPage(1);
+  };
+
+  const handleSection = (next: RunListSection) => {
+    if (next === section) return;
+    setSection(next);
     setPage(1);
   };
 
@@ -122,7 +143,7 @@ export function RunListModal({ mapId, onClose, onOpenRun, onToast, isMapOwner = 
 
   const handleOpen = (run: Run) => {
     onClose();
-    onOpenRun(run.id, run.version_id);
+    onOpenRun(run.id, run.version_id, run.map_id);
   };
 
   const pageSize = list?.page_size ?? 8;
@@ -154,6 +175,26 @@ export function RunListModal({ mapId, onClose, onOpenRun, onToast, isMapOwner = 
           </button>
         </div>
 
+        <div role="tablist" aria-label={t("run.list.sections")} className="flex shrink-0 gap-4 border-b border-hairline">
+          {SECTIONS.map((key) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              data-id={`run-list-section-${key}`}
+              aria-selected={section === key}
+              className={`-mb-px border-b-2 px-0.5 pb-1.5 text-caption transition-colors ${
+                section === key
+                  ? "border-accent font-semibold text-ink"
+                  : "border-transparent text-ink-secondary hover:text-ink"
+              }`}
+              onClick={() => handleSection(key)}
+            >
+              {t(`run.list.section.${key}`)}
+            </button>
+          ))}
+        </div>
+
         <div
           role="group"
           aria-label={t("run.list.tabs")}
@@ -182,23 +223,25 @@ export function RunListModal({ mapId, onClose, onOpenRun, onToast, isMapOwner = 
               data-id="run-list-search"
               value={queryInput}
               onChange={(event) => setQueryInput(event.target.value)}
-              placeholder={t("run.list.search")}
-              aria-label={t("run.list.search")}
+              placeholder={t(isOther ? "run.list.searchOther" : "run.list.search")}
+              aria-label={t(isOther ? "run.list.searchOther" : "run.list.search")}
               autoComplete="off"
               className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-muted"
             />
           </label>
-          <label className="flex cursor-pointer items-center gap-1.5 text-caption text-ink-secondary">
-            <CheckInput
-              data-id="run-list-mine"
-              checked={isMineOnly}
-              onChange={() => {
-                setIsMineOnly((value) => !value);
-                setPage(1);
-              }}
-            />
-            {t("run.list.mine")}
-          </label>
+          {!isOther && (
+            <label className="flex cursor-pointer items-center gap-1.5 text-caption text-ink-secondary">
+              <CheckInput
+                data-id="run-list-mine"
+                checked={isMineOnly}
+                onChange={() => {
+                  setIsMineOnly((value) => !value);
+                  setPage(1);
+                }}
+              />
+              {t("run.list.mine")}
+            </label>
+          )}
           {isKeptFilterShown && (
             <label className="flex cursor-pointer items-center gap-1.5 text-caption text-ink-secondary">
               <CheckInput
@@ -231,7 +274,7 @@ export function RunListModal({ mapId, onClose, onOpenRun, onToast, isMapOwner = 
             </p>
           ) : list !== null && list.items.length === 0 && !isLoading ? (
             <p data-id="run-list-empty" className="py-7 text-center text-caption text-ink-tertiary">
-              {t("run.list.empty")}
+              {t(isOther ? "run.list.emptyOther" : "run.list.empty")}
             </p>
           ) : (
             <ul>
@@ -240,7 +283,8 @@ export function RunListModal({ mapId, onClose, onOpenRun, onToast, isMapOwner = 
                   key={run.id}
                   run={run}
                   now={now}
-                  canKeep={run.starter === me || (run.scope === "shared" && isMapOwner)}
+                  showMap={run.map_id !== mapId}
+                  canKeep={run.starter === me || (run.scope === "shared" && isMapOwner && run.map_id === mapId)}
                   isBusy={busyRunId === run.id}
                   onOpen={() => handleOpen(run)}
                   onToggleKeep={() => void handleToggleKeep(run)}
@@ -265,6 +309,8 @@ export function RunListModal({ mapId, onClose, onOpenRun, onToast, isMapOwner = 
 interface RunListRowProps {
   run: Run;
   now: Date;
+  // 다른 맵의 실행 — 부제 맨 앞에 맵 이름
+  showMap: boolean;
   canKeep: boolean;
   isBusy: boolean;
   onOpen: () => void;
@@ -272,7 +318,7 @@ interface RunListRowProps {
 }
 
 // 줄 하나 — 모양은 줄의 상태(진행 중·끝남·요약됨)가 정한다. 탭이 바뀌는 사이 남은 이전 줄도 제 모양으로 그려진다
-function RunListRow({ run, now, canKeep, isBusy, onOpen, onToggleKeep }: RunListRowProps) {
+function RunListRow({ run, now, showMap, canKeep, isBusy, onOpen, onToggleKeep }: RunListRowProps) {
   const { t } = useI18n();
   const ago = useAgo();
   const isOpen = run.status === "open";
@@ -301,6 +347,14 @@ function RunListRow({ run, now, canKeep, isBusy, onOpen, onToggleKeep }: RunList
   }
 
   const parts: ReactNode[] = [scopeLabel, versionMarker];
+  if (showMap) {
+    parts.unshift(
+      <span data-id={`run-list-map-${run.id}`} className="flex min-w-0 items-center gap-1 text-ink-secondary" title={run.map_name}>
+        <MapIcon size={12} strokeWidth={1.5} className="shrink-0" />
+        <span className="truncate">{run.map_name}</span>
+      </span>,
+    );
+  }
   if (isOpen) {
     parts.push(ago(run.last_activity_at));
     if (run.keep) parts.push(keptTag);

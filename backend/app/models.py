@@ -1279,6 +1279,8 @@ class RunComment(Base):
     author: Mapped[str] = mapped_column(String(100))
     body: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # 쓴 사람이 고친 때 — 열린 실행에서만 고치고 지운다(run_manage.update_run_comment)
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
 class RunEvent(Base):
@@ -1289,7 +1291,7 @@ class RunEvent(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     run_id: Mapped[int] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
     actor: Mapped[str | None] = mapped_column(String(100), default=None)
-    # start|complete|problem|resolve|unstart|undo|loop|stop|reopen|auto_stop
+    # start|complete|problem|resolve|unstart|undo|cleared|loop|stop|reopen|auto_stop (cleared = 앞 단계 완료 취소로 함께 지운 뒤 단계)
     action: Mapped[str] = mapped_column(String(20))
     scope_path: Mapped[str] = mapped_column(String(300), default="")
     node_id: Mapped[str | None] = mapped_column(String(50), default=None)

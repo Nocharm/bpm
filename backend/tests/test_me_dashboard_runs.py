@@ -279,6 +279,42 @@ def test_dashboard_excludes_ended_runs(client: TestClient, monkeypatch: pytest.M
     assert body["activity"]["runs_open"] == 1
 
 
+def test_dashboard_lists_recent_ended_runs_of_every_map(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    first = _seed(client, monkeypatch, "linear", "ended first")
+    second = _seed(client, monkeypatch, "linear", "ended second")
+    trashed = _seed(client, monkeypatch, "linear", "ended trashed")
+    user = _user("ended list")
+    _create_run(client, first, user, name="still open")
+    stopped = _create_run(client, first, user, name="stopped")
+    done = _create_run(client, second, user, name="done")
+    gone = _create_run(client, trashed, user, name="gone")
+    assert _call(client, "POST", f"/runs/{stopped['id']}/stop", user).status_code == 200
+    for node in ("a", "b"):
+        _act(client, done, user, second["ids"][node], "complete")
+    assert _call(client, "POST", f"/runs/{gone['id']}/stop", user).status_code == 200
+    _set_run_fields(stopped["id"], ended_at=_days_ago(2))  # 끝난 순 — 완료가 먼저
+    assert client.delete(f"/api/maps/{trashed['map_id']}").status_code == 204
+
+    ended = _dashboard(client, user)["runs_ended"]
+
+    assert [(r["run_id"], r["status"], r["map_name"]) for r in ended] == [
+        (done["id"], "done", done["map_name"]),
+        (stopped["id"], "stopped", stopped["map_name"]),
+    ]  # 열린 실행·휴지통 맵의 실행은 빠진다
+    assert (ended[0]["map_id"], ended[0]["done"], ended[0]["total"]) == (second["map_id"], 2, 2)
+    assert (ended[1]["map_id"], ended[1]["participant_count"]) == (first["map_id"], 1)
+
+
+def test_dashboard_ended_runs_are_capped(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    seeded = _seed(client, monkeypatch, "linear", "ended cap")
+    user = _user("ended cap")
+    for index in range(me_dashboard._ENDED_RUN_LIMIT + 1):
+        run = _create_run(client, seeded, user, name=f"stopped-{index}")
+        assert _call(client, "POST", f"/runs/{run['id']}/stop", user).status_code == 200
+
+    assert len(_dashboard(client, user)["runs_ended"]) == me_dashboard._ENDED_RUN_LIMIT
+
+
 def test_dashboard_excludes_trashed_map_runs(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     kept = _seed(client, monkeypatch, "linear", "trash kept")
     trashed = _seed(client, monkeypatch, "linear", "trash gone")

@@ -54,9 +54,11 @@
     {"graph": "dangling", "node": "a", "kind": "none", "edge_ids": [], "exit_keys": []}
   ],
   "touched_after": [
-    {"graph": "decision", "state": {"manual": {"a": "done"}}, "node": "a", "title": null},
-    {"graph": "decision", "state": {"manual": {"a": "done", "d": "done"}, "choice": {"d": "e3"}}, "node": "a", "title": "적합?"},
-    {"graph": "loop", "state": {"manual": {"w": "done"}}, "node": "w", "title": null}
+    {"graph": "decision", "state": {"manual": {"a": "done"}}, "node": "a", "title": null, "ids": []},
+    {"graph": "decision", "state": {"manual": {"a": "done", "d": "done"}, "choice": {"d": "e3"}}, "node": "a", "title": "적합?", "ids": ["d"]},
+    {"graph": "decision", "state": {"manual": {"a": "done", "d": "done", "y": "done", "j": "active"}, "choice": {"d": "e3"}}, "node": "a", "title": "적합?", "ids": ["d", "y", "j"]},
+    {"graph": "decision", "state": {"manual": {"a": "done", "d": "done", "y": "done", "j": "active"}, "choice": {"d": "e3"}}, "node": "d", "title": "등록", "ids": ["y", "j"]},
+    {"graph": "loop", "state": {"manual": {"w": "done"}}, "node": "w", "title": null, "ids": []}
   ],
   "loop_body": [{"graph": "loop", "edge": "h3", "nodes": ["w", "r"]}]
 }

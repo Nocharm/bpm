@@ -8,6 +8,7 @@ import {
   buildRunBarButtons,
   findNextRunTodoKey,
   findRunBlockerKeys,
+  findRunDownstreamKeys,
   findRunNodeInDirection,
   getBranchLabel,
   getExitLabels,
@@ -22,6 +23,7 @@ import {
   listRunFlowKeys,
   pickAutoAdvance,
   placeRunBar,
+  placeRunConfirm,
   placeRunPop,
   type RunBarButton,
   type RunBarInput,
@@ -407,6 +409,66 @@ describe("findRunBlockerKeys", () => {
   it("is empty for a scope without a graph", () => {
     const detail = makeDetail();
     expect(findRunBlockerKeys(detail, new Map(), buildRunView(detail, new Map()), "j")).toEqual([]);
+  });
+});
+
+describe("findRunDownstreamKeys", () => {
+  // rs → a → sp(하위프로세스) → b → re, 하위 맵: s → x → y → e
+  const root: RunGraph = {
+    nodes: [makeNode("rs", "start"), makeNode("a"), makeNode("sp", "subprocess"), makeNode("b"), makeNode("re", "end")],
+    edges: [makeEdge("r1", "rs", "a"), makeEdge("r2", "a", "sp"), makeEdge("r3", "sp", "b"), makeEdge("r4", "b", "re")],
+  };
+  const child: RunGraph = {
+    nodes: [makeNode("s", "start"), makeNode("x"), makeNode("y"), makeNode("e", "end")],
+    edges: [makeEdge("c1", "s", "x"), makeEdge("c2", "x", "y"), makeEdge("c3", "y", "e")],
+  };
+  const graphs = new Map([
+    ["", root],
+    ["sp", child],
+  ]);
+
+  it("lists touched later steps of the same scope in flow order", () => {
+    const detail = makeDetail({
+      states: [makeState("", "a", "done"), makeState("", "sp", "done"), makeState("", "b", "active")],
+    });
+    expect(findRunDownstreamKeys(detail, graphs, buildRunView(detail, graphs), "a")).toEqual(["sp", "b"]);
+  });
+
+  it("adds later steps after a finished host when undoing inside a sub map", () => {
+    const detail = makeDetail({
+      states: [
+        makeState("", "a", "done"),
+        makeState("", "sp", "done"),
+        makeState("", "b", "active"),
+        makeState("sp", "x", "done"),
+        makeState("sp", "y", "done"),
+      ],
+      scopes: [{ scope_path: "sp", version_id: 200, closed: false }],
+    });
+    expect(findRunDownstreamKeys(detail, graphs, buildRunView(detail, graphs), "sp/x")).toEqual(["sp/y", "b"]);
+  });
+
+  it("stops at a host that is not done", () => {
+    const detail = makeDetail({
+      states: [makeState("", "a", "done"), makeState("", "sp", "active"), makeState("sp", "x", "done")],
+      scopes: [{ scope_path: "sp", version_id: 200, closed: false }],
+    });
+    expect(findRunDownstreamKeys(detail, graphs, buildRunView(detail, graphs), "sp/x")).toEqual([]);
+  });
+});
+
+describe("placeRunConfirm", () => {
+  const panel = { width: 320, height: 200 };
+  const button = { x: 260, y: 176 };
+  const viewport = { width: 1440, height: 900 };
+
+  it("puts the confirm button center under the pointer", () => {
+    expect(placeRunConfirm({ x: 700, y: 400 }, panel, button, viewport)).toEqual({ left: 440, top: 224 });
+  });
+
+  it("keeps the panel on screen near the edges", () => {
+    expect(placeRunConfirm({ x: 100, y: 60 }, panel, button, viewport)).toEqual({ left: 8, top: 8 });
+    expect(placeRunConfirm({ x: 1439, y: 899 }, panel, button, viewport)).toEqual({ left: 1112, top: 692 });
   });
 });
 

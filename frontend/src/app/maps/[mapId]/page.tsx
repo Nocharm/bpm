@@ -58,6 +58,7 @@ import { NodeActionBar } from "@/components/node-action-bar";
 import { RunBar } from "@/components/run/run-bar";
 import { RunLegend } from "@/components/run/run-legend";
 import { RunActionBar } from "@/components/run/run-action-bar";
+import { RunHistoryPanel } from "@/components/run/run-history-panel";
 import { RunListModal } from "@/components/run/run-list-modal";
 import { RunMenu } from "@/components/run/run-menu";
 import { RunStartDialog } from "@/components/run/run-start-dialog";
@@ -371,7 +372,15 @@ import {
   type RunPop,
 } from "@/lib/run-actions";
 import { buildMapVersionHref, buildRunHref } from "@/lib/run-links";
-import { applyRunEdgeKind, buildRunView, splitRunNodeKey, splitRunScopeGraphs } from "@/lib/run-view";
+import {
+  applyRunBranchPreview,
+  applyRunEdgeKind,
+  buildRunView,
+  getRunWatermarkFontSize,
+  splitRunNodeKey,
+  splitRunScopeGraphs,
+  type RunBranchPreview,
+} from "@/lib/run-view";
 import { useRepairRunNodeInternals, useRunSession } from "@/lib/use-run-session";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import {
@@ -1433,6 +1442,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 실행 노드 버튼 줄의 팝오버(먼저 끝낼 단계·문제 메모·코멘트·하위 맵 취소 확인) — 여기 두어 Esc·빈 캔버스로 닫고
   // 먼저 끝낼 단계에 점선(data.runHint)을 그린다. 반짝임(data.runFlash)은 잠깐 켰다가 스스로 끈다(nonce로 겹침 구분)
   const [runPop, setRunPop] = useState<RunPop | null>(null);
+  // 실행 버튼 줄의 갈래 버튼을 가리키는 동안 그 갈래 선만 살린다(렌더 전용, lib/run-view applyRunBranchPreview)
+  const [runBranchPreview, setRunBranchPreview] = useState<RunBranchPreview | null>(null);
+  // 실행 이력 줄에 올린 동안 강조할 노드 키(좌측 사이드바 실행 탭, 렌더 전용 — IO 링크 호버와 같은 링)
+  const [runHoverKey, setRunHoverKey] = useState<string | null>(null);
   const [runFlash, setRunFlash] = useState<{ keys: ReadonlySet<string>; nonce: number } | null>(null);
   const runFlashNonceRef = useRef(0);
   const [runLegendOpen, setRunLegendOpen] = useState(false);
@@ -3715,8 +3728,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [runMapId, runVersionId, runDetailId, mapId, router]);
   // 실행 열기·닫기 — 주소가 진실(RunUrlSync가 runId를 따라 맞춘다). 닫을 때는 runId를 먼저 비워 위 버전 맞춤 이펙트가
   // 다른 버전으로 옮기는 전환을 되돌리지 않게 한다(같은 값이 주소 동기화로 다시 온다)
-  const openRun = (nextRunId: number, runVersion: number) => {
-    runGuardedNavigation(() => router.push(buildRunHref(mapId, runVersion, nextRunId)));
+  // 다른 맵의 실행(모든 실행 창 "다른 맵")은 그 맵의 실행 주소로 — 맵 화면이 그 맵으로 바뀐다
+  const openRun = (nextRunId: number, runVersion: number, runMapId: number = mapId) => {
+    runGuardedNavigation(() => router.push(buildRunHref(runMapId, runVersion, nextRunId)));
   };
   const latestPublishedId = versions.find((v) => v.status === "published")?.id ?? null;
   const leaveRun = (targetVersionId: number | null) => {
@@ -8175,7 +8189,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const withCopyStyle = ctrlGhostIdSet?.has(node.id)
         ? { ...withWarning, className: [withWarning.className, "bpm-node-ctrl-copy"].filter(Boolean).join(" ") }
         : withWarning;
-      const withIoHighlight = ioHighlightIdSet?.has(node.id)
+      const withIoHighlight = ioHighlightIdSet?.has(node.id) || (runMode && node.id === runHoverKey)
         ? { ...withCopyStyle, className: [withCopyStyle.className, "io-node-highlight"].filter(Boolean).join(" ") }
         : withCopyStyle;
       // 루트 하위프로세스 노드(이 경로는 미주입)에 subEnds 주입 — 펼침 토글·끝 핸들 렌더 활성화.
@@ -8259,6 +8273,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     runMode,
     runHintKeys,
     runFlash,
+    runHoverKey,
   ]);
   useEffect(() => {
     displayNodesRef.current = displayNodes; // 동결 드래그 프레임의 스토어 echo 베이스(#R2)
@@ -8309,7 +8324,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     const applyFlowHighlight = (edge: Edge, liftDim = false): Edge => {
       // 실행 모드 — 흐름 강조 대신 실행 연결선 종류별 선(지금 갈 길만 점이 흐른다, lib/run-view)
       if (runView) {
-        return applyRunEdgeKind(edge, runView.edgeKindByKey.get(edge.id));
+        return applyRunBranchPreview(applyRunEdgeKind(edge, runView.edgeKindByKey.get(edge.id)), runBranchPreview);
       }
       // 엣지 선택 시 selectedId는 비어 흐름 강조와 겹치지 않는다 — 선택 라벨이 우선.
       if (edge.id === selectedEdgeId) {
@@ -8480,7 +8495,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ),
     );
     return finishEdges([...currentStyled, ...childStyled, ...gatewayStyled]);
-  }, [edges, nodes, layoutNodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, yOffsets, edgeCarry, printView, runView, runMode]);
+  }, [edges, nodes, layoutNodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, endHoverEdgeIds, ctrlDragActive, ctrlDragGhosts, l5Charcoal, yOffsets, edgeCarry, printView, runView, runMode, runBranchPreview]);
   // 흐름 점 범례(우하단 노드 표시 정보 카드) — 펄스가 붙은 엣지가 하나라도 있을 때만
   const hasFlowPulse = styledEdges.some((edge) => isEdgePulse(edge.data?.pulse));
 
@@ -10185,6 +10200,17 @@ function MapEditor({ mapId }: { mapId: number }) {
 
       <div className="relative flex min-h-0 flex-1">
         <EditorLeftSidebar
+          runSlot={
+            runMode && runSession ? (
+              <RunHistoryPanel
+                session={runSession}
+                graphs={runGraphs}
+                selectedKey={selectedId !== null && runView?.statusByKey.has(selectedId) ? selectedId : null}
+                onSelect={(key) => selectRunNode(key, { flash: true, reveal: true })}
+                onHoverStep={setRunHoverKey}
+              />
+            ) : undefined
+          }
           collapsed={leftCollapsed}
           onToggleCollapse={() => setLeftCollapsed((value) => !value)}
           mapId={mapId}
@@ -10766,6 +10792,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             onSelect={selectRunNode}
                             onFlash={flashRunNodes}
                             onEnterSubprocess={toggleRunSubprocess}
+                            onPreviewBranch={setRunBranchPreview}
                             onToast={showToast}
                           />
                         )}
@@ -10898,7 +10925,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                     </ReactFlow>
                     {/* 뷰모드 워터마크 — 편집 불가 상태를 배경으로 즉시 인지(점 그리드 대체) / read-only watermark
                         게시=PUBLISHED(액센트), 만료=EXPIRED(회색), 그 외 READ ONLY — 상태 텍스트는 한/영 모두 영어 고정
-                        framework draft는 아래 별도 블록(DRAFT 스탬프)이 담당 — 여기선 제외(중복 렌더 방지) */}
+                        framework draft는 아래 별도 블록(DRAFT 스탬프)이 담당 — 여기선 제외(중복 렌더 방지)
+                        실행 모드는 상태 대신 실행 이름(긴 이름은 글자를 줄여 한 줄에, getRunWatermarkFontSize, 사용자 요청 2026-11-05) */}
                     {readOnly && !isFrameworkDraft && (
                       <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
                         {currentVersion?.status === "confirmed" ? (
@@ -10934,6 +10962,16 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 {t("editor.watermarkLatest", { label: latestConfirmed?.label ?? "-" })}
                               </span>
                             )}
+                          </span>
+                        ) : runMode && runSession ? (
+                          <span
+                            data-id="editor-run-watermark"
+                            className={`-rotate-[18deg] select-none whitespace-nowrap font-semibold tracking-wide opacity-[0.14] ${
+                              currentVersion?.status === "expired" ? "text-ink-tertiary" : "text-accent"
+                            }`}
+                            style={{ fontSize: getRunWatermarkFontSize(runSession.detail.name) }}
+                          >
+                            {runSession.detail.name}
                           </span>
                         ) : (
                           <span
@@ -11368,6 +11406,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-hairline bg-surface">
               <InspectorPanel
                 onCollapse={() => setInspectorOpen(false)}
+                isRunMode={runMode}
                 propertiesTabNonce={propertiesTabNonce}
                 mapId={mapId}
                 canCompare={versions.some(

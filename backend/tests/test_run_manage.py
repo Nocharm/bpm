@@ -227,6 +227,114 @@ def test_comment_needs_participant_but_bystander_can_read(
     assert [c["body"] for c in _ok(seen)] == ["hello"]
 
 
+def test_author_edits_and_deletes_own_comment(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, seed_employee: Callable[..., None]
+) -> None:
+    seeded = _seed(client, monkeypatch, "comment edit")
+    a = seeded["ids"]["a"]
+    starter, member = _user("author"), _user("other")
+    seed_employee(member)
+    run = _create_run(client, seeded, starter, scope="shared", participants=[member])
+    mine = _comment(client, run, starter, "first", node_id=a).json()
+    theirs = _comment(client, run, member, "theirs", node_id=a).json()
+    path = f"/runs/{run['id']}/comments"
+
+    same = _ok(_call(client, "PATCH", f"{path}/{mine['id']}", starter, json={"body": " first "}))
+    edited = _ok(_call(client, "PATCH", f"{path}/{mine['id']}", starter, json={"body": "  fixed  "}))
+    blank = _call(client, "PATCH", f"{path}/{mine['id']}", starter, json={"body": "   "})
+    not_author = _call(client, "PATCH", f"{path}/{theirs['id']}", starter, json={"body": "nope"})
+    not_author_delete = _call(client, "DELETE", f"{path}/{theirs['id']}", starter)
+    missing = _call(client, "DELETE", f"{path}/999999", starter)
+
+    assert same["edited_at"] is None  # 글이 그대로면 수정 표시를 남기지 않는다
+    assert (edited["body"], edited["edited_at"] is not None) == ("fixed", True)
+    assert blank.status_code == 422
+    assert _rejected(not_author) == (403, "only the author can change this comment")
+    assert _rejected(not_author_delete) == (403, "only the author can change this comment")
+    assert _rejected(missing) == (404, "comment not found")
+    assert _call(client, "DELETE", f"{path}/{mine['id']}", starter).status_code == 204
+    listed = _ok(_call(client, "GET", path, starter))
+    assert [c["body"] for c in listed] == ["theirs"]
+    detail = _ok(_call(client, "GET", f"/runs/{run['id']}", starter))
+    assert detail["comment_counts"] == [{"scope_path": "", "node_id": a, "count": 1}]
+
+
+def test_comment_edit_needs_open_run_and_same_run(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    seeded = _seed(client, monkeypatch, "comment edit closed")
+    a = seeded["ids"]["a"]
+    starter = _user("closed")
+    run = _create_run(client, seeded, starter)
+    other = _create_run(client, seeded, starter, name="LOT-2")
+    comment = _comment(client, run, starter, "keep", node_id=a).json()
+
+    wrong_run = _call(client, "PATCH", f"/runs/{other['id']}/comments/{comment['id']}", starter, json={"body": "x"})
+    _ok(_call(client, "POST", f"/runs/{run['id']}/stop", starter))
+    closed_edit = _call(client, "PATCH", f"/runs/{run['id']}/comments/{comment['id']}", starter, json={"body": "x"})
+    closed_delete = _call(client, "DELETE", f"/runs/{run['id']}/comments/{comment['id']}", starter)
+
+    assert _rejected(wrong_run) == (404, "comment not found")
+    assert _rejected(closed_edit) == (409, "run is not open")
+    assert _rejected(closed_delete) == (409, "run is not open")
+
+
+def test_run_history_mixes_events_and_comments(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    seeded = _seed(client, monkeypatch, "history")
+    a, b = seeded["ids"]["a"], seeded["ids"]["b"]
+    starter = _user("history")
+    run = _create_run(client, seeded, starter)
+    act = f"/runs/{run['id']}/actions"
+    _ok(_call(client, "POST", act, starter, json={"node_id": a, "action": "start"}))
+    _comment(client, run, starter, "on a", node_id=a)
+    _ok(_call(client, "POST", act, starter, json={"node_id": a, "action": "complete"}))
+    _comment(client, run, starter, "on b", node_id=b)
+
+    whole = _ok(_call(client, "GET", f"/runs/{run['id']}/history", starter))
+    only_a = _ok(_call(client, "GET", f"/runs/{run['id']}/history", starter, params={"scope": "", "node_id": a}))
+
+    assert [(h["kind"], h["action"] or h["body"]) for h in whole] == [
+        ("comment", "on b"),
+        ("event", "complete"),
+        ("comment", "on a"),
+        ("event", "start"),
+    ]  # 최근 순
+    assert [(h["kind"], h["action"] or h["body"]) for h in only_a] == [
+        ("event", "complete"),
+        ("comment", "on a"),
+        ("event", "start"),
+    ]
+    assert {h["actor"] for h in whole} == {starter}
+    assert whole[1]["node_title"] == "접수"
+
+
+def test_my_runs_lists_other_maps_i_take_part_in(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, seed_employee: Callable[..., None]
+) -> None:
+    here = _seed(client, monkeypatch, "mine here")
+    there = _seed(client, monkeypatch, "mine there")
+    trashed = _seed(client, monkeypatch, "mine trashed")
+    starter, member = _user("mine"), _user("mine member")
+    seed_employee(member)
+    _create_run(client, here, starter, name="here")
+    shared = _create_run(client, there, starter, scope="shared", participants=[member], name="shared there")
+    solo = _create_run(client, there, starter, name="solo there")
+    _create_run(client, trashed, starter, name="gone")
+    _ok(_call(client, "POST", f"/runs/{solo['id']}/stop", starter))
+    assert client.delete(f"/api/maps/{trashed['map_id']}").status_code == 204
+
+    params = {"exclude_map_id": here["map_id"]}
+    open_other = _ok(_call(client, "GET", "/runs", starter, params={**params, "tab": "open"}))
+    ended_other = _ok(_call(client, "GET", "/runs", starter, params={**params, "tab": "ended"}))
+    member_open = _ok(_call(client, "GET", "/runs", member, params={"tab": "open"}))
+    by_map_name = _ok(_call(client, "GET", "/runs", starter, params={"tab": "open", "q": "MINE THERE"}))
+
+    assert [r["id"] for r in open_other["items"]] == [shared["id"]]  # 지금 맵·휴지통 맵은 빠진다
+    assert open_other["items"][0]["map_id"] == there["map_id"]
+    assert [r["id"] for r in ended_other["items"]] == [solo["id"]]
+    assert [r["id"] for r in member_open["items"]] == [shared["id"]]  # 남의 개인 실행은 안 보인다
+    assert [r["id"] for r in by_map_name["items"]] == [shared["id"]]  # 맵 이름으로도 찾는다
+    assert (open_other["total"], open_other["page_size"]) == (1, 8)
+
+
 def test_comment_in_child_scope_pins_it_and_hides_from_outsiders(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, enforce_permissions: None, seed_employee: Callable[..., None]
 ) -> None:
