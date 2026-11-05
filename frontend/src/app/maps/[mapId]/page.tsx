@@ -9790,8 +9790,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   return (
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
-          globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
-      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}${buildFlowHandleStyle()}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}.react-flow__node.io-node-highlight{outline:2px solid var(--color-accent-canvas);outline-offset:3px;border-radius:8px}`}</style>
+          globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림).
+          실행 모드(.bpm-run-canvas)는 연결할 일이 없어 호버 때 뜨는 연결 핸들 네모를 감춘다(엣지 앵커 측정은 그대로). */}
+      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}${buildFlowHandleStyle()}.bpm-run-canvas .react-flow__handle{visibility:hidden}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}.react-flow__node.io-node-highlight{outline:2px solid var(--color-accent-canvas);outline-offset:3px;border-radius:8px}`}</style>
       <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
         {/* 좌: 사이드바 토글 · 맵네임 드롭다운(검색·최근 맵·새 맵) · 브레드크럼 구분자 · 버전 pill */}
@@ -10401,7 +10402,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       index === 0 && isFrameworkMap
                         ? `absolute inset-2.5 overflow-hidden rounded-md shadow-md ${l5Charcoal ? "bpm-l5-sky" : "bg-canvas"}`
                         : "relative h-full w-full bg-canvas"
-                    }${expandAnimating ? " bpm-expand-anim" : ""}`}
+                    }${expandAnimating ? " bpm-expand-anim" : ""}${runMode ? " bpm-run-canvas" : ""}`}
                     onContextMenu={(event) => event.preventDefault()}
                     // 펼침 영역 호버 — 상시 selection 모드라 RF onPaneMouseMove가 바인딩되지 않아(pane은
                     // 내부 셀렉션 핸들러 사용) 래퍼에서 버블링 pointermove로 판정. 동일 값은 setState 베일아웃.
@@ -10869,7 +10870,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           `color-mix(in srgb, ${resolveNodeStroke(n.data.color, n.data.nodeType)} 38%, white)`
                         }
                       />
-                      {/* 실행 범례 — 실행 모드에서 흐름 펄스 범례 대신(펄스가 꺼져 NodeDisplayFloat 범례도 사라진다) */}
+                      {/* 실행 범례 — 실행 모드에서 흐름 펄스 범례 대신(펄스가 꺼져 NodeDisplayFloat 범례도 사라진다), 캔버스 오른쪽 위 */}
                       {runMode && (
                         <RunLegend open={runLegendOpen} onToggle={() => setRunLegendOpen((open) => !open)} />
                       )}

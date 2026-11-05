@@ -232,7 +232,7 @@ Walk a published map step by step against one real piece of work (for example "N
 
 ### The run screen
 
-- Opening a run makes the map read-only and colors every node by its state. Node positions stay exactly as in the published version. The **run bar** at the top shows the name, participants, progress (**n of N done**), **Keep**, Just me / Shared, and a ⋯ menu. The **Run legend** at the lower left of the canvas explains the states, the edge colors, and the keyboard.
+- Opening a run makes the map read-only and colors every node by its state. Node positions stay exactly as in the published version. The **run bar** at the top shows the name, participants, progress (**n of N done**), **Keep**, Just me / Shared, and a ⋯ menu. The **Run legend** at the upper right of the canvas explains the states, the edge colors, and the keyboard.
 - There are six states: **Waiting** (earlier steps are still open) · **Ready** (can start now) · **In progress** · **Done** · **Problem** (blocked, with the reason left in a comment) · **Skipped** (a branch that wasn't chosen). Dots flow along the edge of the path you are on.
 - Click a node to open a **button row** beside it: **Complete · Start · Problem · Comments** (**Undo start** while in progress, **Resolve** on a problem, **Undo complete** when done). A decision node uses one button per branch name to complete and pick the branch together. After completing, if there is one next step the selection moves to that node and it flashes. If there are several, the opened nodes flash.
 - Hover the greyed-out **Complete** on a waiting node and the steps to **Finish these first** are marked with dotted lines. Click one to jump to that node.

@@ -1,4 +1,4 @@
-// 실행 범례 — 맵 화면 실행 모드에서 캔버스 왼쪽 아래(미니맵 위) 칩. 펼치면 노드 상태 6종과 연결선 5종의 뜻, 키보드 이동을 보인다.
+// 실행 범례 — 맵 화면 실행 모드에서 캔버스 오른쪽 위 칩. 펼치면 아래로 노드 상태 6종과 연결선 5종의 뜻, 키보드 이동을 보인다.
 // 실행 모드에선 흐름 펄스 범례(PulseLegend) 대신 나온다. React Flow `Panel`이라 <ReactFlow> 안에서만 쓴다(에디터 page.tsx).
 "use client";
 
@@ -16,8 +16,6 @@ interface RunLegendProps {
   onToggle: () => void;
 }
 
-// 미니맵(높이 105 + React Flow 패널 여백 15)이 같은 왼쪽 아래 자리를 먼저 쓴다 — 그 위로 8px 띄운다
-const ABOVE_MINIMAP_PX = 128;
 const STATUS_ORDER: readonly RunNodeStatus[] = ["waiting", "ready", "active", "done", "problem", "skipped"];
 const EDGE_ORDER: readonly RunEdgeKind[] = ["past", "now", "prob", "fut", "skip"];
 // 실행 모드 캔버스 키(page.tsx 실행 키보드 이동·Tab 흐름 이동, 버튼 줄 run-action-bar) — 키 표기는 언어와 무관하다
@@ -32,14 +30,14 @@ const KEY_ROWS: readonly { keys: string; label: MessageKey }[] = [
 export function RunLegend({ open, onToggle }: RunLegendProps) {
   const { t } = useI18n();
   return (
-    <Panel position="bottom-left" className="select-none" style={{ marginBottom: ABOVE_MINIMAP_PX, zIndex: 20 }}>
+    <Panel position="top-right" className="select-none" style={{ zIndex: 20 }}>
       <div data-id="run-legend" className="relative">
         {open && (
           <div
             role="dialog"
             aria-label={t("run.legend.title")}
             data-id="run-legend-card"
-            className="absolute bottom-full left-0 mb-2 w-72 rounded-md border p-3 glass glass-dense"
+            className="absolute right-0 top-full mt-2 w-72 rounded-md border p-3 glass glass-dense"
           >
             <p className="mb-1.5 text-fine font-semibold text-ink-tertiary">{t("run.legend.statusHeading")}</p>
             <ul className="flex flex-col gap-1.5">
@@ -104,7 +102,7 @@ export function RunLegend({ open, onToggle }: RunLegendProps) {
         >
           <ListChecks size={16} strokeWidth={1.5} className="text-accent" />
           <span>{t("run.legend.title")}</span>
-          {open ? <ChevronDown size={16} strokeWidth={1.5} /> : <ChevronUp size={16} strokeWidth={1.5} />}
+          {open ? <ChevronUp size={16} strokeWidth={1.5} /> : <ChevronDown size={16} strokeWidth={1.5} />}
         </button>
       </div>
     </Panel>

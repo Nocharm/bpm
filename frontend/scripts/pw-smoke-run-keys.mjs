@@ -1,7 +1,7 @@
 // 실행 체크 후속 스모크(2026-11-05) — 키보드 실행 · 빈 코멘트 · 하위 맵 끝 → 바깥 자동 완료 · 휴지통 맵의 실행 알림.
 // 사용자 둘(A=admin.sys, B=시드의 다른 사용자)로 공개 맵 시드(선형 + 판단 + 하위프로세스) → A가 API로 공유 실행(B 참여) →
 // 실행 화면에서 키보드만으로: N(첫 할 단계) → Enter(버튼 줄) → →(다음 버튼) → Esc → Enter·Enter(완료, 이어 밟기) → 판단 갈래 Enter
-// → ↓/↑(옆 갈래 노드로) → 말풍선의 빈 코멘트 Enter = 토스트 → 하위 맵 들어가 마지막 단계 완료 = 바깥 하위프로세스 자동 완료
+// → ↓/↑(옆 갈래 노드로) → 호버해도 연결 핸들 없음·범례는 오른쪽 위(아래로 펼침) → 말풍선의 빈 코멘트 Enter = 토스트 → 하위 맵 들어가 마지막 단계 완료 = 바깥 하위프로세스 자동 완료
 // + 실행 끝 → A가 맵을 휴지통으로 → B의 홈 알림 줄·알림 벨·인박스에 "맵 삭제 대기"(줄 꺼짐, 인박스는 안내) → 영구 삭제하면
 // B의 그 실행 알림이 사라진다. 콘솔 에러 0.
 // 실행(frontend/ 에서):
@@ -237,8 +237,24 @@ try {
   await pressOnCanvas("ArrowUp");
   await waitBarOn(nid("c"), "ready");
   check("↑ comes back", true);
+  // 실행 캔버스엔 연결 핸들 네모가 없다(호버해도 숨김), 범례는 캔버스 오른쪽 위에서 아래로 펼친다
+  const nodeC = pageA.locator(`.react-flow__node[data-id="${nid("c")}"]`);
+  await nodeC.hover();
+  await pageA.waitForTimeout(200);
+  const handleVis = await nodeC.locator(".react-flow__handle").evaluateAll((els) => [...new Set(els.map((el) => getComputedStyle(el).visibility))]);
+  check("run canvas hides connection handles on hover", handleVis.length === 1 && handleVis[0] === "hidden", handleVis.join(","));
+  await pageA.screenshot({ path: `${OUT}/run-keys-hover-no-handles.png` });
+  const paneBox = await pageA.locator(".react-flow__pane").first().boundingBox();
+  const toggleBox = await pageA.locator('[data-id="run-legend-toggle"]').boundingBox();
+  check(
+    "legend sits at the canvas upper right",
+    paneBox !== null && toggleBox !== null && paneBox.x + paneBox.width - (toggleBox.x + toggleBox.width) < 40 && toggleBox.y - paneBox.y < 40,
+    JSON.stringify({ paneBox, toggleBox }),
+  );
   await pageA.locator('[data-id="run-legend-toggle"]').click();
   await pageA.locator('[data-id="run-legend-keys"]').waitFor();
+  const cardBox = await pageA.locator('[data-id="run-legend-card"]').boundingBox();
+  check("legend card opens below the chip", cardBox !== null && toggleBox !== null && cardBox.y > toggleBox.y + toggleBox.height, JSON.stringify(cardBox));
   await pageA.waitForTimeout(300);
   await pageA.screenshot({ path: `${OUT}/run-keys-legend.png` });
   await pageA.locator('[data-id="run-legend-toggle"]').click();
@@ -299,6 +315,8 @@ try {
   await pageA.screenshot({ path: `${OUT}/run-keys-subprocess-done.png` });
 
   // 9) A가 맵을 휴지통으로 → B: 홈 알림 줄·벨·인박스에 "맵 삭제 대기"
+  // A의 실행 화면을 먼저 떠난다 — 열어 둔 채 지우면 공유 실행 폴링이 지운 맵을 다시 읽어 404 콘솔 에러가 난다
+  await pageA.goto(BASE);
   await api(USER_A, "DELETE", `/maps/${parent.mapId}`);
   const trashedB = (await listNotifications(USER_B)).filter((n) => n.payload?.run_id === run.id);
   check(

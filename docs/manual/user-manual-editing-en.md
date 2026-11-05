@@ -366,7 +366,7 @@ Every leaf category (L5) of the business **Framework** can open a **linkage canv
 
 > **Tip:** In the editor, open **More shortcuts** at the bottom of the Outline keys card (left sidebar) to see this list in context.
 
-> The keys on the **run check screen** (arrow keys, `N`, and `Enter` to reach the button row) are in the Getting Around manual, section 7 "Keyboard", and in the **Run legend** at the lower left of the run screen.
+> The keys on the **run check screen** (arrow keys, `N`, and `Enter` to reach the button row) are in the Getting Around manual, section 7 "Keyboard", and in the **Run legend** at the upper right of the run screen.
 
 ---
 

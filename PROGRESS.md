@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-11-05 — 실행 캔버스 다듬기(fix/run-canvas-polish)
+
+- 사용자 요청: 실행 모드에선 연결할 일이 없으니 노드 호버 때 뜨는 연결 핸들 네모를 감추고(캔버스 래퍼 `.bpm-run-canvas`, `visibility:hidden`이라 엣지 앵커 측정은 유지), 실행 범례를 캔버스 오른쪽 위로 옮겨 아래로 펼친다. 매뉴얼·`app/manual.md`·공지 초안의 범례 위치 문장도 고쳤다(슬라이드 캡처는 범례 위치를 말하지 않아 그대로).
+
 ## 2026-11-05 — v1.5.0 main 머지: 실행 체크(Run)와 배포 문서 파일(매뉴얼 자동 동기화·공지 초안 불러오기)
 
 - 실행 체크(feat/run-check): 게시본 위에서 실제 일 한 건을 노드별로 밟아 가며 진행·문제·코멘트를 남긴다. 기록은 새 테이블 6종에 맵과 따로 두고(기존 컬럼 변경 없음) 캔버스에는 렌더 전용으로만 입힌다. 상태 계산은 BE `run_graph.py` ↔ FE `run-graph.ts` 이중 구현과 공용 사례 파일, 하위 맵 내용은 기본 가림. 계약은 `docs/spec.md` §7.x와 CLAUDE.md Lessons로 흡수했고 설계·계획 문서는 삭제(git history).
