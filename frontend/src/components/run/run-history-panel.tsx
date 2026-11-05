@@ -135,7 +135,8 @@ export function RunHistoryPanel({ session, graphs, selectedKey, onSelect, onHove
   const isLoading = loaded === null || loaded.key !== requestKey;
   const items = loaded?.items ?? null;
   // 이어진 같은 날·같은 단계 줄을 묶는다 — 날짜는 KST 달력 날짜
-  const groups = items === null ? [] : groupRunHistory(items, (iso) => formatKst(iso).slice(0, 10));
+  const groups =
+    items === null ? [] : groupRunHistory(items, (iso) => formatKst(iso).slice(0, 10), (iso) => formatKst(iso));
   const nameOf = (login: string | null) =>
     login === null ? t("run.history.system") : (users.get(login)?.name ?? login);
   const getStepTitle = (item: RunHistoryItem): string => {
@@ -241,8 +242,9 @@ export function RunHistoryPanel({ session, graphs, selectedKey, onSelect, onHove
                     ) : (
                       <p className="text-[15px] font-semibold leading-tight text-ink-secondary">{t("run.history.runLevel")}</p>
                     ))}
-                  <ul className={`flex flex-col gap-1 ${isHeaderShown ? "ml-1 mt-1 border-l border-hairline pl-2" : ""}`}>
-                    {group.entries.map(({ item, isSameActor }) => {
+                  {/* 줄마다 [시각 | 세로선 | 아이콘 · 동작 … 사람] — 세로선이 끊기지 않게 줄 간격은 gap 대신 안쪽 여백 */}
+                  <ul className={`flex flex-col ${isHeaderShown ? "mt-1" : ""}`}>
+                    {group.entries.map(({ item, isSameActor, isSameMinute }) => {
                       const Icon = item.kind === "comment" ? MessageCircle : (ACTION_ICON[item.action ?? ""] ?? Check);
                       const tone =
                         item.kind === "comment" ? "text-ink-tertiary" : (ACTION_TONE[item.action ?? ""] ?? "text-ink-tertiary");
@@ -255,38 +257,47 @@ export function RunHistoryPanel({ session, graphs, selectedKey, onSelect, onHove
                             : (item.action ?? "");
                       const stamp = formatKst(item.created_at);
                       return (
-                        <li key={`${item.kind}-${item.id}`} data-id={`run-history-${item.kind}-${item.id}`} className="flex gap-2">
-                          <span className={`mt-0.5 shrink-0 ${tone}`}>
-                            <Icon size={14} strokeWidth={1.5} />
-                          </span>
-                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                            <div className="flex items-baseline justify-between gap-2">
-                              {/* 동작이 먼저 — 좁은 사이드바에서 잘리는 쪽은 사람 이름. 바로 위 줄과 같은 사람이면 이름을 다시 쓰지 않는다(lib/run-history) */}
-                              <span className="min-w-0 truncate" title={`${what} · ${nameOf(item.actor)}`}>
+                        <li key={`${item.kind}-${item.id}`} data-id={`run-history-${item.kind}-${item.id}`} className="flex">
+                          {/* 시각은 세로선 왼쪽, 바로 위 줄과 같은 분이면 비운다(lib/run-history) */}
+                          <time
+                            dateTime={item.created_at}
+                            data-id={`run-history-time-${item.kind}-${item.id}`}
+                            className="w-10 shrink-0 pr-1.5 text-right font-mono text-[11px] leading-4 tabular-nums text-ink-muted"
+                            title={stamp}
+                          >
+                            {isSameMinute ? "" : stamp.slice(11)}
+                          </time>
+                          <div className="flex min-w-0 flex-1 gap-1.5 border-l border-hairline pb-1.5 pl-2">
+                            {/* 아이콘은 첫 줄(16px) 가운데 — 동작 글자와 높이를 맞춘다 */}
+                            <span className={`flex h-4 shrink-0 items-center ${tone}`}>
+                              <Icon size={12} strokeWidth={1.5} />
+                            </span>
+                            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                              {/* 동작은 왼쪽, 사람 이름은 오른쪽 끝 — 자리가 모자라면 이름이 다음 줄 오른쪽으로 내려 가리지 않는다(사용자 요청
+                                  2026-11-05). 바로 위 줄과 같은 사람이면 이름을 다시 쓰지 않는다(lib/run-history) */}
+                              <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5" title={`${what} · ${nameOf(item.actor)}`}>
                                 {/* 동작은 상태 색의 굵은 글씨, 사람은 작고 가는 글씨 — 한 줄에서 무엇을 했는지가 먼저 읽히게 */}
-                                <span className={`text-caption-strong ${item.kind === "comment" ? "text-ink-secondary" : (ACTION_TEXT_TONE[item.action ?? ""] ?? "text-ink")}`}>
+                                <span className={`text-[13px] font-semibold leading-4 ${item.kind === "comment" ? "text-ink-secondary" : (ACTION_TEXT_TONE[item.action ?? ""] ?? "text-ink")}`}>
                                   {what}
                                 </span>
                                 {!isSameActor && (
-                                  <span className="text-fine font-light text-ink-tertiary"> · {nameOf(item.actor)}</span>
+                                  <span
+                                    data-id={`run-history-actor-${item.kind}-${item.id}`}
+                                    className="ml-auto min-w-0 max-w-full truncate text-[11px] font-light leading-4 text-ink-tertiary"
+                                  >
+                                    {nameOf(item.actor)}
+                                  </span>
                                 )}
                               </span>
-                              <time
-                                dateTime={item.created_at}
-                                className="shrink-0 font-mono text-[11px] tabular-nums text-ink-muted"
-                                title={stamp}
-                              >
-                                {stamp.slice(11)}
-                              </time>
+                              {item.kind === "comment" && item.body !== null && (
+                                <p className="whitespace-pre-wrap break-words border-l-2 border-accent-tint-border pl-2 text-[13px] font-light leading-relaxed text-ink">
+                                  {item.body}
+                                  {item.edited_at !== null && (
+                                    <span className="ml-1 text-fine text-ink-tertiary">{t("run.pop.commentEditedTag")}</span>
+                                  )}
+                                </p>
+                              )}
                             </div>
-                            {item.kind === "comment" && item.body !== null && (
-                              <p className="whitespace-pre-wrap break-words border-l-2 border-accent-tint-border pl-2 text-[13px] font-light leading-relaxed text-ink">
-                                {item.body}
-                                {item.edited_at !== null && (
-                                  <span className="ml-1 text-fine text-ink-tertiary">{t("run.pop.commentEditedTag")}</span>
-                                )}
-                              </p>
-                            )}
                           </div>
                         </li>
                       );

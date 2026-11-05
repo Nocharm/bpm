@@ -380,6 +380,31 @@ try {
     "history: fewer groups than rows and one day separator",
     groupShapes.length < allTexts.length && (await page.locator('[data-id^="run-history-day-"]').count()) === 1,
   );
+  // 줄의 사람 이름은 오른쪽 끝에서 잘리지 않고(모자라면 다음 줄), 아이콘은 동작 글자와 같은 높이 가운데,
+  // 시각은 세로선 왼쪽에 바로 위 줄과 같은 분이면 비운다
+  const rowFit = await page.locator(HISTORY_ENTRIES).evaluateAll((rows) =>
+    rows.map((row) => {
+      const actor = row.querySelector('[data-id^="run-history-actor-"]');
+      const icon = row.querySelector("svg")?.getBoundingClientRect();
+      const label = row.querySelector("span.font-semibold")?.getBoundingClientRect();
+      const time = row.querySelector('[data-id^="run-history-time-"]');
+      return {
+        clipped: actor !== null && actor.scrollWidth > actor.clientWidth + 1,
+        rightGap: actor === null ? 0 : Math.round(row.getBoundingClientRect().right - actor.getBoundingClientRect().right),
+        offset: icon && label ? Math.abs(icon.top + icon.height / 2 - (label.top + label.height / 2)) : 99,
+        shown: (time?.textContent ?? "") !== "",
+        minute: (time?.getAttribute("title") ?? "").slice(0, 16),
+      };
+    }),
+  );
+  check("history: actor names are not clipped", rowFit.every((row) => !row.clipped), JSON.stringify(rowFit));
+  check("history: actor names sit at the right edge", rowFit.every((row) => row.rightGap <= 1), JSON.stringify(rowFit.map((row) => row.rightGap)));
+  check("history: icons sit level with their labels", rowFit.every((row) => row.offset <= 1), JSON.stringify(rowFit.map((row) => row.offset)));
+  check(
+    "history: a repeated minute is written once",
+    rowFit.length > 0 && rowFit[0].shown && rowFit.slice(1).every((row, index) => row.shown === (row.minute !== rowFit[index].minute)),
+    JSON.stringify(rowFit.map((row) => [row.shown, row.minute.slice(11)])),
+  );
   await page.waitForTimeout(250);
   await page.screenshot({ path: `${OUT}/run-hist-sidebar-all.png` });
   // 짧은 창에서 이력이 넘쳐 사이드바가 스크롤될 때 — 맵 설정 링크는 늘 사이드바 바닥에 붙고 중간에 뜨지 않는다
