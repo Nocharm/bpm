@@ -1,8 +1,8 @@
 "use client";
 
 // 좌측 사이드바 "실행" 탭 — 실행 모드 맵 화면에서 상태 변경 이력과 코멘트를 최근 순으로 섞어 보인다(사용자 결정 2026-11-05,
-// 오른쪽 인스펙터의 노드 속성과 함께 보려고 왼쪽에 둔다). 단계를 고르면 그 단계 것이 먼저(이 단계 · 전체 전환), 전체에선 줄의
-// 단계 이름을 눌러 캔버스에서 그 단계로 간다. 이어진 같은 단계 줄은 한 묶음(단계 이름 한 번, 같은 사람 이름 생략, 날이 바뀌면
+// 오른쪽 인스펙터의 노드 속성과 함께 보려고 왼쪽에 둔다). 기본은 실행 전체이고, 단계를 고른 동안 이 단계 버튼을 누를 때만 고른 단계
+// 것을 보인다(고른 단계를 따라간다). 전체에선 줄의 단계 이름을 눌러 캔버스에서 그 단계로 가되 보기는 전체 그대로다(사용자 요청 2026-11-05). 이어진 같은 단계 줄은 한 묶음(단계 이름 한 번, 같은 사람 이름 생략, 날이 바뀌면
 // 날짜 구분 줄, lib/run-history)이고, 묶음에 마우스를 올리면 캔버스의 그 노드를 강조한다(onHoverStep).
 // 이력은 서버가 볼 수 있는 범위만 준다(listRunHistory). 실행이 바뀌면(동작·코멘트·폴링) 다시 읽는다.
 
@@ -102,8 +102,10 @@ export function RunHistoryPanel({ session, graphs, selectedKey, onSelect, onHove
   const { t } = useI18n();
   const { users } = useDirectoryState();
   const { detail } = session;
-  const [mode, setMode] = useState<HistoryMode>("step");
+  const [mode, setMode] = useState<HistoryMode>("all");
   const [loaded, setLoaded] = useState<LoadedHistory | null>(null);
+  // 고른 단계가 풀리면 전체로 돌아간다 — 다음에 단계를 골라도 저절로 이 단계 보기가 되지 않게
+  if (mode === "step" && selectedKey === null) setMode("all");
   const isStepMode = mode === "step" && selectedKey !== null;
   const target = isStepMode && selectedKey !== null ? splitRunNodeKey(selectedKey) : null;
   const targetScope = target?.scopePath ?? null;

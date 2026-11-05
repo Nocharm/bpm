@@ -399,7 +399,7 @@ DECK = {
                     ("Where", "The Run tab of the <b>Outline · Run</b> switch in the left sidebar. Opens with the run."),
                     ("What", "Who started, completed, flagged or undid what and when, plus comments, newest first."),
                     ("Groups", "Consecutive rows of one step fold together. Names once, dates as dividers."),
-                    ("This step · All", "Pick a step to see just its history. Hover a group to light that step."),
+                    ("This step · All", "All by default. Pick a step, then This step for just its history. Hover a group to light that step."),
                     ("Inspector", "Node properties stay on the right. Map and Approval tabs are off while running."),
                 ]},
                 {"title": "Working steps from the button row", "shot": "manual11/en-run-actions.jpg", "caption": "The button row on an in-progress step", "pts": [

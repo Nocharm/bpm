@@ -255,6 +255,15 @@ try {
   await pageA.locator('[data-id="run-legend-keys"]').waitFor();
   const cardBox = await pageA.locator('[data-id="run-legend-card"]').boundingBox();
   check("legend card opens below the chip", cardBox !== null && toggleBox !== null && cardBox.y > toggleBox.y + toggleBox.height, JSON.stringify(cardBox));
+  // 설명은 줄마다 한 줄 — 두 줄이면 행 높이가 40px 안팎이 된다
+  const legendRows = await pageA
+    .locator('[data-id="run-legend-card"] li')
+    .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
+  check("every legend row stays on one line", legendRows.length === 17 && legendRows.every((h) => h < 28), legendRows.join(","));
+  const legendFits = await pageA
+    .locator('[data-id="run-legend-card"]')
+    .evaluate((el) => el.scrollWidth <= el.clientWidth);
+  check("legend rows fit inside the card", legendFits);
   await pageA.waitForTimeout(300);
   await pageA.screenshot({ path: `${OUT}/run-keys-legend.png` });
   await pageA.locator('[data-id="run-legend-toggle"]').click();

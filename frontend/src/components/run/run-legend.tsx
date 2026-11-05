@@ -1,4 +1,5 @@
 // 실행 범례 — 맵 화면 실행 모드에서 캔버스 오른쪽 위 칩. 펼치면 아래로 노드 상태 6종과 연결선 5종의 뜻, 키보드 이동을 보인다.
+// 설명은 줄마다 한 줄이고 오른쪽 정렬 — 카드 폭이 가장 긴 줄을 따른다(사용자 요청 2026-11-05, 접힌 줄이 읽기 어려웠다).
 // 실행 모드에선 흐름 펄스 범례(PulseLegend) 대신 나온다. React Flow `Panel`이라 <ReactFlow> 안에서만 쓴다(에디터 page.tsx).
 "use client";
 
@@ -38,17 +39,15 @@ export function RunLegend({ open, onToggle }: RunLegendProps) {
             role="dialog"
             aria-label={t("run.legend.title")}
             data-id="run-legend-card"
-            className="absolute right-0 top-full mt-2 w-72 rounded-md border p-3 glass glass-dense"
+            className="absolute right-0 top-full mt-2 w-max min-w-80 whitespace-nowrap rounded-md border p-3 glass glass-dense"
           >
             <p className="mb-1.5 text-fine font-semibold text-ink-tertiary">{t("run.legend.statusHeading")}</p>
             <ul className="flex flex-col gap-1.5">
               {STATUS_ORDER.map((status) => (
                 <li key={status} data-id={`run-legend-status-${status}`} className="flex items-start gap-2 text-caption">
                   <span aria-hidden className="mt-0.5 h-3.5 w-5 shrink-0 rounded-xs" style={runNodeStyle(status)} />
-                  <span className="min-w-0">
-                    <span className="font-semibold text-ink">{t(`run.status.${status}`)}</span>{" "}
-                    <span className="text-ink-tertiary">{t(`run.legend.desc.${status}`)}</span>
-                  </span>
+                  <span className="font-semibold text-ink">{t(`run.status.${status}`)}</span>
+                  <span className="ml-auto pl-4 text-ink-tertiary">{t(`run.legend.desc.${status}`)}</span>
                 </li>
               ))}
             </ul>
@@ -71,10 +70,8 @@ export function RunLegend({ open, onToggle }: RunLegendProps) {
                     />
                     {kind === "now" ? <line className="bpm-run-flow" x1={1} y1={7} x2={25} y2={7} /> : null}
                   </svg>
-                  <span className="min-w-0">
-                    <span className="font-semibold text-ink">{t(`run.legend.edge.${kind}`)}</span>{" "}
-                    <span className="text-ink-tertiary">{t(`run.legend.edgeDesc.${kind}`)}</span>
-                  </span>
+                  <span className="font-semibold text-ink">{t(`run.legend.edge.${kind}`)}</span>
+                  <span className="ml-auto pl-4 text-ink-tertiary">{t(`run.legend.edgeDesc.${kind}`)}</span>
                 </li>
               ))}
             </ul>

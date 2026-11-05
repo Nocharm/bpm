@@ -347,12 +347,23 @@ try {
   await historyComment.waitFor({ state: "detached", timeout: 8000 });
   await page.keyboard.press("Escape");
 
-  // 6) 실행 탭 — 단계를 고른 동안 그 단계 이력(접수 완료 한 줄), 전체로 바꾸면 함께 취소 줄도
-  await page.locator('[data-id="run-history-mode-step"]').waitFor();
+  // 6) 실행 탭 — 단계를 골라도 전체 그대로(이 단계는 버튼으로만), 이 단계를 누르면 그 단계 이력(접수 완료 한 줄),
+  // 전체로 돌아가면 함께 취소 줄도. 전체에서 단계 이름을 눌러도 보기는 전체 그대로다
+  const modeAll = page.locator('[data-id="run-history-mode-all"]');
+  await modeAll.waitFor();
+  check("history: a selected step keeps the whole run until This step is pressed", (await modeAll.getAttribute("aria-pressed")) === "true");
+  await page.locator('[data-id="run-history-mode-step"]').click();
+  await page.waitForFunction((selector) => document.querySelectorAll(selector).length === 1, HISTORY_ENTRIES);
   const stepTexts = await page.locator(HISTORY_ENTRIES).allTextContents();
   check("history: step mode shows only that step", stepTexts.length === 1 && stepTexts[0].includes("Complete"), stepTexts.join(" | "));
-  await page.locator('[data-id="run-history-mode-all"]').click();
+  await modeAll.click();
   await page.waitForFunction((selector) => document.querySelectorAll(selector).length > 6, HISTORY_ENTRIES);
+  await page.locator('[data-id^="run-history-step-"]').last().click();
+  await page.waitForTimeout(400);
+  check(
+    "history: clicking a step name in All moves the selection but keeps All",
+    (await modeAll.getAttribute("aria-pressed")) === "true" && (await page.locator(HISTORY_ENTRIES).count()) > 6,
+  );
   const allTexts = await page.locator(HISTORY_ENTRIES).allTextContents();
   check("history: whole run shows steps cleared with an undo", allTexts.some((text) => text.includes("Also undone")));
   // 이어진 같은 단계 줄은 한 묶음 — 단계 이름은 머리에 한 번, 바로 위와 같은 사람이면 이름 생략, 날짜는 구분 줄 한 번
