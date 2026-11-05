@@ -30,7 +30,7 @@ main에 머지할 때마다(dev → main fast-forward 포함) 서비스 버전�
 
 - **단일 소스**: `frontend/package.json` `version`(SemVer). `frontend/`에서 `npm version <minor|patch> --no-git-tag-version`으로 올린다(`package-lock.json`이 같이 바뀐다). 빌드 때 `next.config.ts` `env.BPM_APP_VERSION`으로 번들에 들어간다.
 - **올림 규칙**: 사용자에게 보이는 기능·동작 변경이 있으면 MINOR, 버그 수정·문서·내부 변경만이면 PATCH. MAJOR는 사용자와 정한다.
-- **같은 커밋에서**: 버전 올림과 루트 `CHANGELOG.md` 항목(날짜·범위·주요 변경·배포 메모·공지 링크)을 머지 정리 커밋에 담는다. 그 커밋에 annotated 태그 `vX.Y.Z`를 달고 태그까지 푸시한다(`git push origin vX.Y.Z`). 태그는 옮기거나 다시 달지 않는다. 고칠 것이 생기면 다음 PATCH로.
+- **같은 커밋에서**: 버전 올림과 루트 `CHANGELOG.md` 항목(날짜·범위·주요 변경·배포 메모·공지 링크)을 머지 정리 커밋에 담는다. 그 커밋에 annotated 태그 `vX.Y.Z`를 달고 태그까지 푸시한다(`git push origin vX.Y.Z`). 태그는 옮기거나 다시 달지 않는다. 고칠 것이 생기면 다음 PATCH로. 예외: 그 버전이 아직 운영에 배포되지 않았고 사용자가 같은 버전에 담으라고 하면 CHANGELOG 항목을 보강하고 태그를 새 커밋으로 옮긴다(`git tag -fa` + `git push -f origin vX.Y.Z`, 사용자 결정 2026-11-05 v1.5.0).
 - **배포 기록**: 운영 서버에 올린 뒤 상단 바 버전으로 확인하고, `CHANGELOG.md` 해당 항목에 배포일을 적는다.
 - main에 직접 들어가는 문서만의 커밋은 버전을 올리지 않아도 된다. 앱 동작이 바뀌는 커밋이 main에 단독으로 들어가면 PATCH를 올린다.
 
