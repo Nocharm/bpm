@@ -150,7 +150,7 @@ try {
   const endedRow = rows.first();
   const endedText = (await endedRow.textContent()) ?? "";
   check("ended: countdown to summary", /\d+일 뒤 요약만 남음/.test(endedText), endedText);
-  check("ended: result chip", endedText.includes("중단"));
+  check("ended: result chip", endedText.includes("Stopped")); // 결과 칩은 언어 무관 영어(2026-11-05)
   await page.screenshot({ path: `${OUT}/run-list-ended.png` });
 
   // 5) 요약 탭 — 보존 거르기는 숨는다. 줄이 있으면 열 수 있는 버튼이 없다
