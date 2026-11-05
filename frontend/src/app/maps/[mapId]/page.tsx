@@ -6913,14 +6913,18 @@ function MapEditor({ mapId }: { mapId: number }) {
           },
         ],
       };
-      // 서브프로세스 라이브러리 열기 — 툴바 버튼·전역 S 단축키와 동일하게 읽기전용에서도 동작(조회 전용 진입점).
+      // 서브프로세스 라이브러리 열기/닫기 — 툴바 버튼과 동일하게 읽기전용에서도 동작(조회 전용 진입점).
+      // 키보드는 우클릭 후 S로 열고 다시 우클릭 후 S로 닫는다. 메뉴 없이 누르는 전역 S는 폐기
+      // (패널이 검색창에 자동 포커스라 S가 검색어로 들어간다, 사용자 결정 2026-11-05)
+      const isLibraryShown = isFrameworkMap ? frameworkPickerOpen : libraryOpen;
       const libraryItem: ContextMenuItem = {
-        label: isFrameworkMap ? t("framework.pickerOpen") : t("library.open"),
+        label: isFrameworkMap
+          ? t(isLibraryShown ? "framework.pickerClose" : "framework.pickerOpen")
+          : t(isLibraryShown ? "library.close" : "library.open"),
         icon: Network,
-        // accel 필수 — 전역 S 핸들러는 메뉴 열림 중 무시(!menu)라, 우클릭 후 S는 메뉴 가속기가 처리
         accel: "s",
         shortcut: "S",
-        onSelect: () => (isFrameworkMap ? setFrameworkPickerOpen(true) : setLibraryOpen(true)),
+        onSelect: () => (isFrameworkMap ? setFrameworkPickerOpen(!isLibraryShown) : setLibraryOpen(!isLibraryShown)),
       };
       if (readOnly) {
         // 실행 모드는 PNG 내보내기를 끈다(R36) — 실행 상태가 내보내기에 실리지 않게. 기타 하위메뉴엔 그것뿐이라 통째로 뺀다
@@ -7297,6 +7301,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     reactFlow,
     promptOpenLinkedMap,
     toggleEndParallel,
+    libraryOpen,
+    frameworkPickerOpen,
     t,
   ]);
 
@@ -9461,19 +9467,6 @@ function MapEditor({ mapId }: { mapId: number }) {
         fire(() => applyAutoLayout(dir));
         return;
       }
-      // S — 전역 서브프로세스 라이브러리 패널 열기. 컨텍스트 메뉴가 떠 있으면 무시
-      // (정렬 서브메뉴의 accel 's'=세로 자동정렬과 충돌 방지). Shift+S는 제외(다른 조합과 충돌 방지 여지).
-      if (
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        event.code === "KeyS" &&
-        !menu
-      ) {
-        fire(() => (isFrameworkMap ? setFrameworkPickerOpen(true) : setLibraryOpen(true)));
-        return;
-      }
       // Ctrl 조합 — 그룹 생성 / PNG 내보내기 / 노드 복사·붙여넣기 (undo/redo·검색은 별도 핸들러)
       if (event.ctrlKey || event.metaKey) {
         if (event.code === "KeyG" && !event.shiftKey) {
@@ -9544,14 +9537,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     managingApprovers,
     pending,
     previewSource,
-    menu,
     selectedId,
     applyNodesTransform,
     applyAutoLayout,
     createGroupFromSelection,
     handleCopy,
     handlePaste,
-    isFrameworkMap,
     runMode,
   ]);
 

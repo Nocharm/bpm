@@ -156,8 +156,8 @@ Pick **A4 portrait** or **A4 landscape** on the card (with Word's default 2.54 c
 
 A **Subprocess** node embeds another process as a single step. It is a reference, not a copy.
 
-- Subprocess nodes are created from the **process library** (library button in the top bar, or `S`): drag a map onto the canvas, or press **Add to map** in its preview peek. The top-bar **map-name dropdown** also offers **Add as link node** for an existing map. New links **follow the latest published version by default**; you can pin a specific version instead. When a newer published version appears, the node offers **Update to latest**.
-- The subprocess list also opens from the right-click menu or the **`S` shortcut**, and search supports Korean chosung matching. **A map already linked in this map cannot be added twice.**
+- Subprocess nodes are created from the **process library** (library button in the top bar, or right-click the canvas and press `S`): drag a map onto the canvas, or press **Add to map** in its preview peek. The top-bar **map-name dropdown** also offers **Add as link node** for an existing map. New links **follow the latest published version by default**; you can pin a specific version instead. When a newer published version appears, the node offers **Update to latest**.
+- The subprocess list also opens from the right-click menu (press **`S`** while it is open; the same keys close it), and search supports Korean chosung matching. **A map already linked in this map cannot be added twice.**
 - By default only maps **designated as subprocesses** appear in the library picker. The map's owner designates it in **Map Settings → Subprocess designation** with representative attributes (department required; assignee, **Role**, system, link, the seven per-run metrics, and input/output optional; click a tile to edit it in a popover right there; assignee and role share one 2:1 row; see section 5 of the Getting Around manual), and these show live on every node linking the map. There is no separate description; the **map description** is used as is.
 - With the published version open, the owner or an admin can also manage designation from the editor inspector's **Subprocess** card (same card on the Map and Approval tabs, body collapsed by default, with an ⓘ hover note in the header). The **Designate as subprocess** button shares its row with contextual buttons on the right: **Go to published version** while you're viewing a non-published version, and **Request registration** (ask the owner) when you're not the owner.
 - A link node pointing to an **undesignated** map shows a warning badge and is locked until the map is designated.
@@ -327,7 +327,7 @@ Every leaf category (L5) of the business **Framework** can open a **linkage canv
 
 ### Bringing in processes from other categories
 
-- Open the **Framework L6 picker** (library button in the top bar, **Add L6 process** in the canvas right-click menu, or `S`), expand another category, and **drag an L6 card onto the canvas** to add an external L6 node (the **L5 explorer** tree at the top left is for travelling to other L5 canvases). It renders with a neutral body, a **colored left tab, and an origin badge** (its home L5 color). Clicking the origin badge opens that L5's **drill-in peek**.
+- Open the **Framework L6 picker** (library button in the top bar, **Add L6 process** in the canvas right-click menu, or `S` while that menu is open), expand another category, and **drag an L6 card onto the canvas** to add an external L6 node (the **L5 explorer** tree at the top left is for travelling to other L5 canvases). It renders with a neutral body, a **colored left tab, and an origin badge** (its home L5 color). Clicking the origin badge opens that L5's **drill-in peek**.
 - The drill-in peek's **"Search other frameworks"** button opens the full **browse modal**. Explore sibling categories in a tree opened to the current path, search categories and maps by name, and click a map to travel there (leaving the editor goes through a confirmation gate).
 
 ### Placeholders and link replacement
@@ -343,7 +343,7 @@ Every leaf category (L5) of the business **Framework** can open a **linkage canv
 | Shortcut | Action |
 | --- | --- |
 | `/` | Node search (chosung supported) |
-| `S` | Open subprocess list (chosung search) |
+| Right-click, then `S` | Open or close the subprocess list (chosung search) |
 | `Ctrl+C` / `Ctrl+V` | Copy / paste nodes (works across tabs and maps) |
 | `Ctrl`+drag | Duplicate node |
 | `Shift`+drag | Axis-locked move (horizontal/vertical) |

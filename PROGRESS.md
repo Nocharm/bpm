@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-11-05 — v1.6.0 main: 서브프로세스 목록은 우클릭 후 S로 열고 닫기
+
+- 정렬 하위 메뉴 S가 SP 목록까지 열던 버그: 메뉴 가속기(창 캡처)가 setMenu(null)을 부르면 마이크로태스크에서 커밋돼 전역 단축키가 menu=null로 다시 붙고 같은 키의 버블 단계를 받았다. 가속기가 쓴 키는 `stopPropagation`(`context-menu.tsx`, 단위 테스트 `context-menu.test.ts`).
+- 메뉴 없이 누르는 전역 S 폐기, 우클릭 메뉴 항목을 열기/닫기 토글로(사용자 결정: 패널이 검색창에 자동 포커스라 S가 검색어로 들어가므로 닫기도 우클릭 후 S). 매뉴얼 단축키 표·스모크 `pw-verify-library-open.mjs` 갱신.
+
 ## 2026-11-05 — v1.5.0 main 머지·운영 배포: 실행 체크(Run)와 배포 문서 파일(매뉴얼 자동 동기화·공지 초안 불러오기)
 
 - 실행 체크(feat/run-check): 게시본 위에서 실제 일 한 건을 노드별로 밟아 가며 진행·문제·코멘트를 남긴다. 기록은 새 테이블 6종에 맵과 따로 두고(기존 컬럼 변경 없음) 캔버스에는 렌더 전용으로만 입힌다. 상태 계산은 BE `run_graph.py` ↔ FE `run-graph.ts` 이중 구현과 공용 사례 파일, 하위 맵 내용은 기본 가림. 계약은 `docs/spec.md` §7.x와 CLAUDE.md Lessons로 흡수했고 설계·계획 문서는 삭제(git history).

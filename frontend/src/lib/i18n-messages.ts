@@ -2406,6 +2406,7 @@ const en = {
   "library.emptyDesignated": "No designated subprocesses yet - a map owner can designate one in map settings.",
   "library.toggle": "Process library",
   "library.open": "Open subprocess library",
+  "library.close": "Close subprocess library",
   // ── 필터 필(부서/권한/미등록) — 영속 (2026-09-07) ──
   "library.filter": "Filter",
   "library.filterDepartment": "Department",
@@ -3002,6 +3003,7 @@ const en = {
   // ── L5 연계 캔버스 (design 2026-08-28) ──
   "framework.openLinkage": "Linkage canvas",
   "framework.pickerOpen": "Add L6 process",
+  "framework.pickerClose": "Close L6 picker",
   "framework.pickerTitle": "Framework L6",
   "framework.createPlaceholder": "Create placeholder",
   "framework.placeholderNamePlaceholder": "Placeholder name",
@@ -6029,6 +6031,7 @@ const ko: Record<MessageKey, string> = {
   "library.emptyDesignated": "지정된 서브프로세스가 없습니다 - 맵 오너가 맵 설정에서 지정할 수 있습니다.",
   "library.toggle": "프로세스 라이브러리",
   "library.open": "서브프로세스 목록 열기",
+  "library.close": "서브프로세스 목록 닫기",
   // ── 필터 필(부서/권한/미등록) — 영속 (2026-09-07) ──
   "library.filter": "필터",
   "library.filterDepartment": "부서",
@@ -6622,6 +6625,7 @@ const ko: Record<MessageKey, string> = {
   // ── L5 연계 캔버스 (design 2026-08-28) ──
   "framework.openLinkage": "연계 캔버스",
   "framework.pickerOpen": "L6 업무 추가",
+  "framework.pickerClose": "L6 업무 목록 닫기",
   "framework.pickerTitle": "업무 체계 L6",
   "framework.createPlaceholder": "플레이스홀더 만들기",
   "framework.placeholderNamePlaceholder": "플레이스홀더 이름",

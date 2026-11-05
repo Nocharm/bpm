@@ -121,6 +121,9 @@ export function ContextMenu({ x, y, items, onClose, wide = false }: ContextMenuP
         return;
       }
       event.preventDefault();
+      // 가속기가 쓴 키는 창 버블 리스너(에디터 전역 단축키)로 보내지 않는다. onClose가 마이크로태스크에서
+      // 커밋되면 전역 핸들러가 menu=null로 다시 붙어 같은 키를 또 받는다(정렬 하위 메뉴 S → SP 목록까지 열림)
+      event.stopPropagation();
       if ("submenu" in match && match.submenu) {
         const idx = items.indexOf(match);
         if (idx !== -1) {

@@ -1,7 +1,8 @@
-// SP 라이브러리 패널 신규 진입점 검증 — 우클릭 pane 메뉴 맨 아래 항목 + 전역 S 단축키.
+// SP 라이브러리 패널 진입점 검증 — 우클릭 pane 메뉴 맨 아래 항목(우클릭 후 S로 열고 닫기, 2026-11-05).
 // 시나리오: ①빈 캔버스 우클릭 → 메뉴 맨 아래 "Open subprocess library" 노출 → 클릭 → 패널 열림
-//           +검색창 자동포커스 ②캔버스 포커스 상태에서 S → 패널 열림 ③입력창(제목) 포커스 중 S →
-//           가드로 무시(패널 안 열림). 시나리오별 reload로 격리, 콘솔 에러 0.
+//           +검색창 자동포커스 ②메뉴 없이 S → 패널 안 열림(전역 S 폐기) ③우클릭 후 S → 열림, 검색창에
+//           포커스가 있어도 다시 우클릭 후 S → "Close subprocess library"로 닫힘 ④우클릭 → A(정렬) → S →
+//           세로 자동정렬만, 패널 안 열림(가속기 키가 전역 단축키로 새던 버그). 시나리오별 reload로 격리, 콘솔 에러 0.
 //
 // 실행 (frontend/ 에서): node scripts/pw-verify-library-open.mjs
 // 전제:
@@ -109,19 +110,18 @@ try {
   await page.waitForTimeout(300);
 
   // pane(빈 캔버스) 좌상단 우클릭 — 노드는 캔버스 중앙 부근(flow x:250/650,y:380)이라 여백 확보.
-  // 컨텍스트 메뉴 패널 class는 z-[1200]을 백드롭(fixed inset-0 bg-ink/20)과 공유하므로 border-hairline로 구분.
   const pane = page.locator(".react-flow__pane").first();
   await pane.click({ button: "right", position: { x: 100, y: 100 }, force: true });
   await page.waitForTimeout(300);
 
   const menuText = await page.evaluate(
-    () => document.querySelector(".fixed.z-\\[1200\\].border-hairline")?.innerText ?? "",
+    () => document.querySelector('[data-id="context-menu"]')?.innerText ?? "",
   );
   check("pane menu shows 'Open subprocess library'", menuText.includes("Open subprocess library"), menuText.slice(-120));
 
   // 메뉴 맨 아래 항목인지 — 버튼 목록 중 마지막 라벨이 'Open subprocess library'
   const isLast = await page.evaluate(() => {
-    const menu = document.querySelector(".fixed.z-\\[1200\\].border-hairline");
+    const menu = document.querySelector('[data-id="context-menu"]');
     if (!menu) return false;
     const buttons = [...menu.querySelectorAll("button")];
     const last = buttons[buttons.length - 1];
@@ -144,40 +144,61 @@ try {
   });
   check("(a) library panel search input auto-focused", focusedViaMenu);
 
-  // ── ② 캔버스 포커스 상태에서 S → 패널 열림 (reload로 격리) ──
-  await page.goto(editorUrl, { waitUntil: "networkidle" });
-  await page.waitForSelector(".react-flow__node", { timeout: 20000 });
-  await page.waitForTimeout(300);
+  const isPanelOpen = () =>
+    page.evaluate(() => !!document.querySelector('[data-id="process-library-panel"]'));
+  const openPaneMenu = async () => {
+    await pane.click({ button: "right", position: { x: 100, y: 100 }, force: true });
+    await page.waitForTimeout(300);
+  };
+  const reloadEditor = async () => {
+    await page.goto(editorUrl, { waitUntil: "networkidle" });
+    await page.waitForSelector(".react-flow__node", { timeout: 20000 });
+    await page.waitForTimeout(300);
+  };
 
-  const panelClosedBeforeS = await page.evaluate(
-    () => !document.querySelector('[data-id="process-library-panel"]'),
-  );
-  check("(b) library panel closed before S", panelClosedBeforeS);
-
+  // ── ② 메뉴 없이 S → 패널 안 열림 (전역 S 폐기) ──
+  await reloadEditor();
   await pane.click({ position: { x: 100, y: 100 }, force: true }); // 캔버스에 포커스(좌클릭, 여백)
   await page.keyboard.press("KeyS");
   await page.waitForTimeout(300);
+  check("(b) bare S without menu → library panel does NOT open", !(await isPanelOpen()));
 
-  const panelOpenViaKey = await page.evaluate(
-    () => !!document.querySelector('[data-id="process-library-panel"]'),
-  );
-  check("(b) S key (canvas focused) → library panel opens", panelOpenViaKey);
-
-  // ── ③ 입력창 포커스 중 S → 가드로 무시 (reload로 격리) ──
-  await page.goto(editorUrl, { waitUntil: "networkidle" });
-  await page.waitForSelector(".react-flow__node", { timeout: 20000 });
-  await page.waitForTimeout(300);
-
-  // 좌측 사이드바 노드 검색 입력창 — 타이핑 가드 대상 INPUT(항상 노출, leftCollapsed 기본 false)
-  const nodeSearchInput = page.locator('input[placeholder="Search nodes"]').first();
-  await nodeSearchInput.click({ force: true });
+  // ── ③ 우클릭 후 S → 열림, 다시 우클릭 후 S → 닫힘 ──
+  await reloadEditor();
+  await openPaneMenu();
   await page.keyboard.press("KeyS");
   await page.waitForTimeout(300);
+  check("(c) right-click then S → library panel opens", await isPanelOpen());
+  const focusedAfterS = await page.evaluate(() => {
+    const input = document.querySelector('input[placeholder="Search…"]');
+    return !!input && document.activeElement === input;
+  });
+  check("(c) search input focused after opening", focusedAfterS);
 
-  const panelOpenWhileTyping = await page.evaluate(
-    () => !!document.querySelector('[data-id="process-library-panel"]'),
+  await openPaneMenu();
+  const closeText = await page.evaluate(
+    () => document.querySelector('[data-id="context-menu"]')?.innerText ?? "",
   );
-  check("(c) S while typing in input → library panel does NOT open", !panelOpenWhileTyping);
+  check("(c) menu shows 'Close subprocess library' while open", closeText.includes("Close subprocess library"), closeText.slice(-80));
+  await page.keyboard.press("KeyS");
+  await page.waitForTimeout(300);
+  check("(c) right-click then S again → library panel closes", !(await isPanelOpen()));
+
+  // ── ④ 우클릭 → A(정렬 하위 메뉴) → S → 세로 정렬만, 패널 안 열림 ──
+  await reloadEditor();
+  const posBefore = await page.evaluate(() =>
+    [...document.querySelectorAll(".react-flow__node")].map((n) => n.style.transform).join("|"),
+  );
+  await openPaneMenu();
+  await page.keyboard.press("KeyA");
+  await page.waitForTimeout(200);
+  await page.keyboard.press("KeyS");
+  await page.waitForTimeout(800);
+  const posAfter = await page.evaluate(() =>
+    [...document.querySelectorAll(".react-flow__node")].map((n) => n.style.transform).join("|"),
+  );
+  check("(d) A → S runs vertical auto layout", posBefore !== posAfter);
+  check("(d) A → S does NOT open the library panel", !(await isPanelOpen()));
 } catch (err) {
   results.push({ name: "fatal", ok: false });
   console.error(`FATAL ${err instanceof Error ? err.message : String(err)}`);
