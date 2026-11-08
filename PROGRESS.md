@@ -3,9 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
-## 2026-11-08 — feat/run-intro: 맵 화면 Run 소개 말풍선 + ko 용어 "Run" 고정
+## 2026-11-08 — v1.7.0 main 머지: 맵 화면 Run 소개 말풍선 + ko 용어 "Run" 고정
 
-- Run을 시작해 본 적 없는 사람이 게시본 맵에 들어오면 Run 버튼 아래 유리 말풍선(`run-intro-bubble.tsx`)이 0.8초 뒤 떠서 6초 뒤 저절로 사라진다(호버 중 멈춤, 남은 시간 막대, [Run 시작하기]=새 Run 창, Run 메뉴를 열면 거둠). 사용자 결정: 클릭 없이 꺼지는 팝업 · Run을 해 볼 때까지 매 진입 · Run 버튼 바로 아래. 기록은 브라우저 `bpm.runIntroDone`(`lib/run-intro.ts`): Run을 만들면 남고, 이 맵에 내 Run 기록이 있으면(배포 전 사용자) 그 자리에서 남긴다. 스모크 `pw-smoke-run-intro.mjs`.
+- Run을 시작해 본 적 없는 사람이 게시본 맵에 들어오면 Run 버튼 아래 유리 말풍선(`run-intro-bubble.tsx`)이 0.8초 뒤 떠서 6초 뒤 저절로 사라진다(호버 중 멈춤, 남은 시간 막대, [Run 시작하기]=새 Run 창, Run 메뉴를 열면 거둠). 사용자 결정: 클릭 없이 꺼지는 팝업 · Run을 해 볼 때까지 매 진입 · Run 버튼 바로 아래. 기록은 브라우저 `bpm.runIntroDone`(`lib/run-intro.ts`): Run을 만들면 남고, 이 맵에 내 Run 기록이 있으면(배포 전 사용자) 그 자리에서 남긴다. 본문은 건조한 단계 체크 안내(사용자 결정: 추상·꾸민 문구 기각). 스모크 `pw-smoke-run-intro.mjs`.
 - ko 화면·매뉴얼의 Run 기능 "실행"을 영어 "Run"으로 고정(사용자 결정: Draft·Check out처럼, 앱 전체+매뉴얼. 실행취소·배치 실행 등 무관한 실행은 유지). 동사형은 "Run을 시작"으로 풀었다. ko 슬라이드 2종·PDF는 카피만 재생성(내장 캡처 속 버튼 글씨는 아직 "실행").
 
 ## 2026-11-05 — v1.6.0 main 머지: 홈 첫 실행 권유
