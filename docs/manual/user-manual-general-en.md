@@ -226,6 +226,7 @@ Walk a published map step by step against one real piece of work (for example "N
 ### Starting a run
 
 - Open the map's **published version** (or a past published one) and choose **Run** in the top bar → **New run**. For a Draft, a version in approval or rejected, and Framework linkage canvases the menu is disabled, with the reason in a tooltip.
+- If you have never started a run, a **New · Run** bubble appears under the **Run** button when you open a published map and fades out by itself after about 6 seconds (it waits while the pointer is on it). **Start a run** opens the New run dialog. Once you create a run, that browser stops showing it.
 - Enter a **Name** (for example a LOT number) and choose **Just me** or **Shared**. A shared run asks you to pick **Participants** (active employees who can view this map). Only participants change step states, and anyone who can view the map follows the progress. A Just me run is visible only to you, and you can switch it to shared while it runs (once shared, it can't go back).
 - Starting on a past published version asks you to confirm once, and a notice stays above the map while the run is open.
 - The **Run** menu lists your open runs and recently ended runs. The small icon at the top right of the menu (**All runs**) opens a window with **Open · Ended · Summary** tabs (search by name or LOT, **Only runs I'm in**, **Kept only**). Switch the **This map · Other maps** strip at the top to **Other maps** to see runs you are in on other maps, each with its map name. Click one to go to that map's run.

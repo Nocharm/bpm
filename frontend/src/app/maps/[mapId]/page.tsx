@@ -375,6 +375,7 @@ import {
 } from "@/lib/run-actions";
 import { buildMapVersionHref, buildRunHref } from "@/lib/run-links";
 import { hasNewRunParam } from "@/lib/run-onboard";
+import { markRunIntroDone } from "@/lib/run-intro";
 import {
   applyRunBranchPreview,
   applyRunEdgeKind,
@@ -10138,6 +10139,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             onOpenRun={openRun}
             onNewRun={() => setRunStartOpen(true)}
             onShowAll={() => setRunListOpen(true)}
+            introSuppressed={runMode || runStartOpen}
           />
           <button
             data-id="editor-save"
@@ -13083,6 +13085,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           onClose={() => setRunStartOpen(false)}
           onCreated={(detail) => {
             setRunStartOpen(false);
+            markRunIntroDone();
             showToast(t("run.start.created"));
             openRun(detail.id, detail.version_id);
           }}

@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 334개 · 2026-11-05 기준
+총 335개 · 2026-11-08 기준
 
 ## components/
 
@@ -379,6 +379,7 @@
 | `run-bar.tsx` | `RunBar` | 실행 바 | `app/maps/[mapId]/page.tsx` |
 | `run-downstream-dialog.tsx` | `RunDownstreamDialog` | 뒤 단계 함께 취소 확인 | `components/run/run-action-bar.tsx` |
 | `run-history-panel.tsx` | `RunHistoryPanel` | 좌측 사이드바 "실행" 탭 | `app/maps/[mapId]/page.tsx` |
+| `run-intro-bubble.tsx` | `RunIntroBubble` | Run 소개 말풍선 | `components/run/run-menu.tsx` |
 | `run-legend.tsx` | `RunLegend` | 실행 범례 | `app/maps/[mapId]/page.tsx` |
 | `run-list-modal.tsx` | `RunListModal` | 모든 실행 창 | `app/maps/[mapId]/page.tsx` |
 | `run-menu.tsx` | `RunMenu` | 실행 진입 메뉴 | `app/maps/[mapId]/page.tsx` |

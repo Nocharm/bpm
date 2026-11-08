@@ -1,4 +1,4 @@
-// 홈 첫 실행 권유 스모크 — 실행 기록이 없는 사람의 진행 중 실행 타일이 "첫 실행 해 보기"로 권하고, 누르면 세 단계 소개 →
+// 홈 첫 실행 권유 스모크 — 실행 기록이 없는 사람의 진행 중 실행 타일이 "첫 Run 시작해 보기"로 권하고, 누르면 세 단계 소개 →
 // 설명·맵 줄로 넘어간다. 줄을 누르면 그 맵의 최신 게시본에서 새 실행 창이 열리고 주소에 newRun이 남지 않는다. 한 번 펼친 뒤
 // 홈에 다시 오면 권유가 없다. 소개는 눌러서 건너뛰고, 모션 축소면 바로 본 칸이다. 콘솔 에러 0.
 // 실행(frontend/ 에서):
@@ -80,7 +80,7 @@ try {
   {
     const { ctx, page } = await openHome();
     const tileText = await tile(page).innerText();
-    check("tile invites the first run", tileText.includes("첫 실행 해 보기"), tileText.replace(/\n/g, " | "));
+    check("tile invites the first run", tileText.includes("첫 Run 시작해 보기"), tileText.replace(/\n/g, " | "));
     await page.locator('[data-id="home-activity"]').screenshot({ path: `${OUT}/run-onboard-tile.png` });
 
     await tile(page).click();
@@ -119,7 +119,7 @@ try {
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await tile(page).waitFor({ timeout: 20000 });
     const tileAgain = await tile(page).innerText();
-    check("no invitation on the next home visit", !tileAgain.includes("첫 실행 해 보기"), tileAgain.replace(/\n/g, " | "));
+    check("no invitation on the next home visit", !tileAgain.includes("첫 Run 시작해 보기"), tileAgain.replace(/\n/g, " | "));
     await ctx.close();
   }
 
@@ -147,7 +147,7 @@ try {
   {
     const { ctx, page } = await openHome({ seen: true });
     const tileText = await tile(page).innerText();
-    check("seen flag shows the usual tile", !tileText.includes("첫 실행 해 보기"), tileText.replace(/\n/g, " | "));
+    check("seen flag shows the usual tile", !tileText.includes("첫 Run 시작해 보기"), tileText.replace(/\n/g, " | "));
     await ctx.close();
   }
 } catch (err) {

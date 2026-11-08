@@ -235,7 +235,7 @@ try {
   await page.locator('[data-id="home-inbox-noti-kind"]').click();
   await page.locator('[data-id="home-inbox-noti-kind-option-run"]').click();
   const inviteRow = page.locator(`[data-id="home-inbox-noti-row-${invite.id}"]`);
-  check("inbox: run category chip", ((await inviteRow.textContent()) ?? "").includes("실행"));
+  check("inbox: run category chip", ((await inviteRow.textContent()) ?? "").includes("Run"));
   await inviteRow.click();
   await page.waitForURL((url) => url.searchParams.get("run") === String(invited.id), { timeout: 5000 });
   check("inbox: run notification opens the run screen", page.url().includes(`run=${invited.id}`), page.url());

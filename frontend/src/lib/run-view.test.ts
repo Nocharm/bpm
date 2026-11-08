@@ -398,12 +398,12 @@ describe("humanizeRunError", () => {
   });
 
   it.each([
-    [403, "only participants can change this run", "참여자만 이 실행을 바꿀 수 있어요"],
-    [403, "only the starter can do this", "실행을 시작한 사람만 할 수 있어요"],
-    [409, "summarized runs cannot be changed", "요약만 남은 실행이라 바꿀 수 없어요"],
+    [403, "only participants can change this run", "참여자만 이 Run을 바꿀 수 있어요"],
+    [403, "only the starter can do this", "Run을 시작한 사람만 할 수 있어요"],
+    [409, "summarized runs cannot be changed", "요약만 남은 Run이라 바꿀 수 없어요"],
     [422, "participant kim.a cannot view this map", "kim.a님은 이 맵을 볼 수 없어 참여할 수 없어요"],
-    [422, "node is not actionable", "이 단계는 실행에서 바꿀 수 없어요"],
-    [404, "run 42 not found", "실행이 없거나 볼 수 없어요"],
+    [422, "node is not actionable", "이 단계는 Run에서 바꿀 수 없어요"],
+    [404, "run 42 not found", "Run이 없거나 볼 수 없어요"],
   ])("maps the server message %s %s", (status, detail, expected) => {
     expect(humanizeRunError(makeApiError(status, detail), t)).toBe(expected);
   });

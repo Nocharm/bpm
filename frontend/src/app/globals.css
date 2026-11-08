@@ -711,6 +711,33 @@ button:not(:disabled):active {
   }
 }
 
+/* 맵 화면 Run 소개 말풍선(run-intro-bubble.tsx) — Run 버튼 아래에서 살짝 내려오며 뜨고, 남은 시간 막대가 오른쪽에서 줄어든다.
+   막대 길이·멈춤은 컴포넌트 inline style(타이머와 같은 값). 모션 축소에서는 둘 다 멈춘 모습이고 사라짐은 타이머가 맡는다. */
+.run-intro-in {
+  transform-origin: top right;
+  animation: dropdown-in 220ms var(--ease-overshoot);
+}
+.run-intro-timer {
+  transform-origin: left center;
+  animation-name: run-intro-timer;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+@keyframes run-intro-timer {
+  from {
+    scale: 1 1;
+  }
+  to {
+    scale: 0 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-intro-in,
+  .run-intro-timer {
+    animation: none;
+  }
+}
+
 /* Excel 내보내기 미리보기 행 — 위에서부터 쌓이며 등장. 딜레이는 행별 --row-delay로 주입,
    fill both라 자기 차례 전엔 숨김 상태를 유지한다(스태거 핵심). */
 .preview-row-in {

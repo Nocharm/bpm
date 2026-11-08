@@ -269,8 +269,8 @@ describe("run notifications", () => {
 
   it("라벨 - 7종 모두 언어별 라벨이 있고 미지 라벨로 떨어지지 않는다", () => {
     const labels = {
-      run_invited: "실행 초대", run_steps_done: "실행 단계 완료", run_problem: "실행 문제",
-      run_resolved: "문제 해결", run_finished: "실행 완료", run_stopped: "실행 중단", run_idle_warning: "자동 중단 예정",
+      run_invited: "Run 초대", run_steps_done: "Run 단계 완료", run_problem: "Run 문제",
+      run_resolved: "문제 해결", run_finished: "Run 완료", run_stopped: "Run 중단", run_idle_warning: "자동 중단 예정",
     };
     for (const [type, label] of Object.entries(labels)) {
       expect(formatNotification(makeRun(type, {}), ko).label).toBe(label);
@@ -281,7 +281,7 @@ describe("run notifications", () => {
   it("run_invited - 제목=맵 이름, 본문에 행위자·실행 이름", () => {
     const view = formatNotification(makeRun("run_invited", {}), ko);
     expect(view.title).toBe("시험 일탈 관리");
-    expect(view.body).toBe("박서연님이 '11월 점검' 실행에 초대했어요");
+    expect(view.body).toBe("박서연님이 '11월 점검' Run에 초대했어요");
   });
 
   it("run_steps_done - 1명이면 단일 문구, 2명 이상이면 외 N명 문구", () => {
@@ -324,12 +324,12 @@ describe("run notifications", () => {
   });
 
   it("run_finished·run_stopped·run_idle_warning - 실행 이름·자동 중단·남은 일수", () => {
-    expect(formatNotification(makeRun("run_finished", {}), ko).body).toBe("'11월 점검' 실행이 모두 완료됐어요");
-    expect(formatNotification(makeRun("run_stopped", { auto: false }), ko).body).toBe("박서연님이 '11월 점검' 실행을 중단했어요");
+    expect(formatNotification(makeRun("run_finished", {}), ko).body).toBe("'11월 점검' Run이 모두 완료됐어요");
+    expect(formatNotification(makeRun("run_stopped", { auto: false }), ko).body).toBe("박서연님이 '11월 점검' Run을 중단했어요");
     const auto = makeRun("run_stopped", { auto: true, days: 40, actor: undefined, actor_name: "" });
-    expect(formatNotification(auto, ko).body).toBe("'11월 점검' 실행이 오래 그대로라 자동으로 중단됐어요");
+    expect(formatNotification(auto, ko).body).toBe("'11월 점검' Run이 오래 그대로라 자동으로 중단됐어요");
     const idle = makeRun("run_idle_warning", { days: 10, actor: undefined, actor_name: "" });
-    expect(formatNotification(idle, ko).body).toBe("'11월 점검' 실행을 10일 안에 손대지 않으면 자동으로 중단돼요");
+    expect(formatNotification(idle, ko).body).toBe("'11월 점검' Run을 10일 안에 손대지 않으면 자동으로 중단돼요");
   });
 
   it("실행 이름은 리치 파츠에서 이름 칩으로 분할된다(행위자 없는 알림 포함)", () => {

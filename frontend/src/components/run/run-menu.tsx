@@ -3,14 +3,17 @@
 // 실행 진입 메뉴 — 맵 화면 상단바의 "Run" 버튼과 압축 드롭다운(내가 참여한 진행 중 3줄 + 최근 끝난 1줄 + 새 실행,
 // design run-check §4.1). 모든 실행 보기는 머리 줄 오른쪽 작은 아이콘 버튼(호버 툴팁, 사용자 결정 2026-11-05). Draft·결재 중·거절 버전과 업무 체계 캔버스에선 버튼이 꺼지고 이유를 툴팁으로 보인다.
 // 드롭다운은 AI 메뉴와 같은 플로팅 크롬(z-1100, 바깥 누름·Esc 닫기), 본문은 열 때마다 마운트돼 목록을 다시 읽는다.
+// Run을 해 본 적 없는 사람에게는 버튼 아래 소개 말풍선(run-intro-bubble.tsx)을 잠깐 띄운다(사용자 결정 2026-11-08).
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { ListChecks, ListTree, Plus } from "lucide-react";
 
 import { listRuns, type Run } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { isRunIntroDone, markRunIntroDone, RUN_INTRO_DELAY_MS, shouldShowRunIntro } from "@/lib/run-intro";
 import { getRunMenuDisabledReason, humanizeRunError } from "@/lib/run-view";
 import { useAgo } from "@/lib/use-ago";
+import { RunIntroBubble } from "@/components/run/run-intro-bubble";
 import { Tooltip } from "@/components/tooltip";
 
 // 드롭다운 줄 수 — 진행 중 3 + 끝난 1 (design §4.1 [판단: 줄 수])
@@ -24,6 +27,8 @@ interface RunMenuProps {
   onNewRun: () => void;
   // 모든 실행 창 열기 — 없으면 "모든 실행 보기" 줄을 숨긴다(누를 곳 없는 버튼을 두지 않는다)
   onShowAll?: () => void;
+  // Run 화면이나 새 Run 창이 열려 있음 — 소개 말풍선을 띄우지 않고, 떠 있으면 거둔다
+  introSuppressed: boolean;
 }
 
 interface RunMenuRows {
@@ -31,11 +36,52 @@ interface RunMenuRows {
   ended: Run | null;
 }
 
-export function RunMenu({ mapId, versionStatus, isFrameworkMap, onOpenRun, onNewRun, onShowAll }: RunMenuProps) {
+export function RunMenu({
+  mapId,
+  versionStatus,
+  isFrameworkMap,
+  onOpenRun,
+  onNewRun,
+  onShowAll,
+  introSuppressed,
+}: RunMenuProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  const [isIntroShown, setIsIntroShown] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const disabledReason = getRunMenuDisabledReason(versionStatus, isFrameworkMap);
+  const canRun = disabledReason === null;
+
+  // Run 화면·새 Run 창이 열리면 떠 있던 소개를 거둔다(렌더 중 조정 — 닫힌 뒤 다시 뜨지 않게 상태에서 지운다)
+  if (isIntroShown && introSuppressed) setIsIntroShown(false);
+
+  const revealIntro = useEffectEvent((hasMyRuns: boolean) => {
+    if (hasMyRuns) markRunIntroDone(); // 이 배포 전에 Run을 써 본 사람 — 다시 묻지 않는다
+    if (shouldShowRunIntro({ isDone: isRunIntroDone(), canRun, isSuppressed: introSuppressed || open, hasMyRuns })) {
+      setIsIntroShown(true);
+    }
+  });
+
+  // Run 소개 — Run 버튼이 켜진 화면에서 아직 Run을 해 본 적 없으면, 이 맵의 내 Run 기록을 확인하고 잠시 뒤 띄운다
+  useEffect(() => {
+    if (!canRun || isRunIntroDone()) return;
+    let active = true;
+    let timer: number | undefined;
+    Promise.all([listRuns(mapId, { tab: "open", mine: true }), listRuns(mapId, { tab: "ended", mine: true })])
+      .then(([openList, endedList]) => {
+        if (!active) return;
+        const hasMyRuns = openList.items.length > 0 || endedList.items.length > 0;
+        timer = window.setTimeout(() => revealIntro(hasMyRuns), hasMyRuns ? 0 : RUN_INTRO_DELAY_MS);
+      })
+      .catch((err: unknown) => {
+        // 소개는 부가 안내라 목록을 못 읽으면 조용히 건너뛴다(Run 메뉴 자체는 열 때 다시 읽고 오류를 보인다)
+        console.warn("run intro: listing my runs failed", { mapId, err });
+      });
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [canRun, mapId]);
 
   useEffect(() => {
     if (!open) return;
@@ -54,7 +100,14 @@ export function RunMenu({ mapId, versionStatus, isFrameworkMap, onOpenRun, onNew
   }, [open]);
 
   const handleToggle = () => {
-    if (disabledReason === null) setOpen((value) => !value);
+    if (disabledReason !== null) return;
+    setIsIntroShown(false); // 메뉴를 직접 열었으면 소개는 할 일을 다 했다
+    setOpen((value) => !value);
+  };
+
+  const handleIntroStart = () => {
+    setIsIntroShown(false);
+    onNewRun();
   };
 
   const pick = (action: () => void) => {
@@ -84,6 +137,9 @@ export function RunMenu({ mapId, versionStatus, isFrameworkMap, onOpenRun, onNew
   return (
     <div className="relative" ref={rootRef}>
       {disabledReason !== null ? <Tooltip content={t(disabledReason)}>{trigger}</Tooltip> : trigger}
+      {isIntroShown && canRun && !open && (
+        <RunIntroBubble onStart={handleIntroStart} onDismiss={() => setIsIntroShown(false)} />
+      )}
       {open && (
         <RunMenuPopover
           mapId={mapId}
