@@ -1024,7 +1024,7 @@ const en = {
   "run.menu.showAll": "All runs",
   "run.menu.new": "New run",
   "run.intro.title": "New · Run",
-  "run.intro.body": "Walk one real case through this map, step by step.",
+  "run.intro.body": "Work through this map one step at a time, checking off each step.",
   "run.intro.start": "Start a run",
   "run.menu.resultDone": "Done",
   "run.menu.resultStopped": "Stopped",
@@ -4660,7 +4660,7 @@ const ko: Record<MessageKey, string> = {
   "run.menu.showAll": "모든 Run 보기",
   "run.menu.new": "새 Run",
   "run.intro.title": "새 기능 · Run",
-  "run.intro.body": "실제 일 한 건을 단계별로 밟아 보세요.",
+  "run.intro.body": "이 맵의 단계를 하나씩 체크하며 업무를 진행해 볼 수 있어요.",
   "run.intro.start": "Run 시작하기",
   // 언어 무관 영어 고정 — 실행 동작·상태 이름(사용자 결정 2026-11-05)
   "run.menu.resultDone": "Done",
