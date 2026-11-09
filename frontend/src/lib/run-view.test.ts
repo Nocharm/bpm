@@ -16,7 +16,9 @@ import {
   formatRunSummaryParts,
   formatSummaryCountdown,
   getRunCapKind,
+  findRunnableVersionId,
   getRunMenuDisabledReason,
+  getRunMenuMode,
   getRunTouchedAfterTitle,
   getRunWatermarkFontSize,
   humanizeRunError,
@@ -417,28 +419,57 @@ describe("humanizeRunError", () => {
   });
 });
 
+describe("getRunMenuMode", () => {
+  it("starts a run on published and past published versions", () => {
+    expect(getRunMenuMode("published", false, true)).toBe("start");
+    expect(getRunMenuMode("expired", false, true)).toBe("start");
+  });
+
+  it("sends versions that are not published yet to the published version", () => {
+    for (const status of ["draft", "pending", "approved", "rejected"]) {
+      expect(getRunMenuMode(status, false, true)).toBe("goPublished");
+    }
+  });
+
+  it("has nothing to run when the map was never published", () => {
+    expect(getRunMenuMode("draft", false, false)).toBe("noPublished");
+  });
+
+  it("never runs a framework canvas", () => {
+    expect(getRunMenuMode("confirmed", true, true)).toBe("framework");
+    expect(getRunMenuMode("published", true, true)).toBe("framework");
+  });
+});
+
+describe("findRunnableVersionId", () => {
+  it("prefers the current published version", () => {
+    expect(findRunnableVersionId([{ id: 9, status: "draft" }, { id: 8, status: "expired" }, { id: 7, status: "published" }])).toBe(7);
+  });
+
+  it("falls back to the newest past published version", () => {
+    expect(findRunnableVersionId([{ id: 9, status: "draft" }, { id: 8, status: "expired" }, { id: 5, status: "expired" }])).toBe(8);
+  });
+
+  it("returns null when nothing was published", () => {
+    expect(findRunnableVersionId([{ id: 9, status: "draft" }, { id: 8, status: "rejected" }])).toBeNull();
+  });
+});
+
 describe("getRunMenuDisabledReason", () => {
-  it("allows published and past published versions", () => {
-    expect(getRunMenuDisabledReason("published", false)).toBeNull();
-    expect(getRunMenuDisabledReason("expired", false)).toBeNull();
+  it("keeps the button on when a run can start or the published version is a click away", () => {
+    expect(getRunMenuDisabledReason("start")).toBeNull();
+    expect(getRunMenuDisabledReason("goPublished")).toBeNull();
   });
 
-  it("blocks versions that are not published yet", () => {
-    expect(getRunMenuDisabledReason("draft", false)).toBe("run.menu.disabledDraft");
-    expect(getRunMenuDisabledReason("pending", false)).toBe("run.menu.disabledDraft");
-    expect(getRunMenuDisabledReason("approved", false)).toBe("run.menu.disabledDraft");
-    expect(getRunMenuDisabledReason("rejected", false)).toBe("run.menu.disabledDraft");
-  });
-
-  it("blocks framework canvases whatever the version", () => {
-    expect(getRunMenuDisabledReason("confirmed", true)).toBe("run.menu.disabledFramework");
-    expect(getRunMenuDisabledReason("published", true)).toBe("run.menu.disabledFramework");
+  it("explains why the button is off", () => {
+    expect(getRunMenuDisabledReason("noPublished")).toBe("run.menu.disabledNoPublished");
+    expect(getRunMenuDisabledReason("framework")).toBe("run.menu.disabledFramework");
   });
 
   it("has both reasons in en and ko", () => {
-    expect(t("run.menu.disabledDraft")).not.toBe("run.menu.disabledDraft");
+    expect(t("run.menu.disabledNoPublished")).not.toBe("run.menu.disabledNoPublished");
     expect(t("run.menu.disabledFramework")).not.toBe("run.menu.disabledFramework");
-    expect(messages.en["run.menu.disabledDraft"]).toBeTruthy();
+    expect(messages.en["run.menu.disabledNoPublished"]).toBeTruthy();
   });
 });
 

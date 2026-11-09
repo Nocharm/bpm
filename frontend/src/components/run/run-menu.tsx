@@ -1,17 +1,18 @@
 "use client";
 
 // 실행 진입 메뉴 — 맵 화면 상단바의 "Run" 버튼과 압축 드롭다운(내가 참여한 진행 중 3줄 + 최근 끝난 1줄 + 새 실행,
-// design run-check §4.1). 모든 실행 보기는 머리 줄 오른쪽 작은 아이콘 버튼(호버 툴팁, 사용자 결정 2026-11-05). Draft·결재 중·거절 버전과 업무 체계 캔버스에선 버튼이 꺼지고 이유를 툴팁으로 보인다.
+// design run-check §4.1). 모든 실행 보기는 머리 줄 오른쪽 작은 아이콘 버튼(호버 툴팁, 사용자 결정 2026-11-05). Draft·결재 중·거절 버전에선
+// 새 Run 자리에 "게시본으로 가기"를 두고(사용자 결정 2026-11-09), 게시본이 없는 맵과 업무 체계 캔버스에선 버튼이 꺼지고 이유를 툴팁으로 보인다.
 // 드롭다운은 AI 메뉴와 같은 플로팅 크롬(z-1100, 바깥 누름·Esc 닫기), 본문은 열 때마다 마운트돼 목록을 다시 읽는다.
 // Run을 해 본 적 없는 사람에게는 버튼 아래 소개 말풍선(run-intro-bubble.tsx)을 잠깐 띄운다(사용자 결정 2026-11-08).
 
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { ListChecks, ListTree, Plus } from "lucide-react";
+import { ArrowRight, ListChecks, ListTree, Plus } from "lucide-react";
 
 import { listRuns, type Run } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { isRunIntroDone, markRunIntroDone, RUN_INTRO_DELAY_MS, shouldShowRunIntro } from "@/lib/run-intro";
-import { getRunMenuDisabledReason, humanizeRunError } from "@/lib/run-view";
+import { getRunMenuDisabledReason, getRunMenuMode, humanizeRunError } from "@/lib/run-view";
 import { useAgo } from "@/lib/use-ago";
 import { RunIntroBubble } from "@/components/run/run-intro-bubble";
 import { Tooltip } from "@/components/tooltip";
@@ -23,8 +24,12 @@ interface RunMenuProps {
   mapId: number;
   versionStatus: string;
   isFrameworkMap: boolean;
+  // 게시본·지난 게시본이 하나라도 있는지 — Draft에서 "게시본으로 가기"를 둘지 정한다
+  hasRunnableVersion: boolean;
   onOpenRun: (runId: number, versionId: number) => void;
   onNewRun: () => void;
+  // 게시본으로 전환 — Draft·결재 중·거절 버전에서 새 Run 대신
+  onGoToPublished: () => void;
   // 모든 실행 창 열기 — 없으면 "모든 실행 보기" 줄을 숨긴다(누를 곳 없는 버튼을 두지 않는다)
   onShowAll?: () => void;
   // Run 화면이나 새 Run 창이 열려 있음 — 소개 말풍선을 띄우지 않고, 떠 있으면 거둔다
@@ -40,8 +45,10 @@ export function RunMenu({
   mapId,
   versionStatus,
   isFrameworkMap,
+  hasRunnableVersion,
   onOpenRun,
   onNewRun,
+  onGoToPublished,
   onShowAll,
   introSuppressed,
 }: RunMenuProps) {
@@ -49,22 +56,24 @@ export function RunMenu({
   const [open, setOpen] = useState(false);
   const [isIntroShown, setIsIntroShown] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const disabledReason = getRunMenuDisabledReason(versionStatus, isFrameworkMap);
-  const canRun = disabledReason === null;
+  const mode = getRunMenuMode(versionStatus, isFrameworkMap, hasRunnableVersion);
+  const disabledReason = getRunMenuDisabledReason(mode);
+  const isRunMap = mode !== "framework";
 
   // Run 화면·새 Run 창이 열리면 떠 있던 소개를 거둔다(렌더 중 조정 — 닫힌 뒤 다시 뜨지 않게 상태에서 지운다)
   if (isIntroShown && introSuppressed) setIsIntroShown(false);
 
   const revealIntro = useEffectEvent((hasMyRuns: boolean) => {
     if (hasMyRuns) markRunIntroDone(); // 이 배포 전에 Run을 써 본 사람 — 다시 묻지 않는다
-    if (shouldShowRunIntro({ isDone: isRunIntroDone(), canRun, isSuppressed: introSuppressed || open, hasMyRuns })) {
+    if (shouldShowRunIntro({ isDone: isRunIntroDone(), isRunMap, isSuppressed: introSuppressed || open, hasMyRuns })) {
       setIsIntroShown(true);
     }
   });
 
-  // Run 소개 — Run 버튼이 켜진 화면에서 아직 Run을 해 본 적 없으면, 이 맵의 내 Run 기록을 확인하고 잠시 뒤 띄운다
+  // Run 소개 — 업무 체계 캔버스가 아니고 아직 Run을 해 본 적 없으면, 이 맵의 내 Run 기록을 확인하고 잠시 뒤 띄운다.
+  // 메뉴 모양이 바뀌면(Draft에서 게시본으로 가기 등) 다시 확인해 그 버전에 맞는 말풍선을 띄운다
   useEffect(() => {
-    if (!canRun || isRunIntroDone()) return;
+    if (!isRunMap || isRunIntroDone()) return;
     let active = true;
     let timer: number | undefined;
     Promise.all([listRuns(mapId, { tab: "open", mine: true }), listRuns(mapId, { tab: "ended", mine: true })])
@@ -81,7 +90,7 @@ export function RunMenu({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [canRun, mapId]);
+  }, [isRunMap, mode, mapId]);
 
   useEffect(() => {
     if (!open) return;
@@ -105,9 +114,10 @@ export function RunMenu({
     setOpen((value) => !value);
   };
 
-  const handleIntroStart = () => {
+  const handleIntroAction = () => {
     setIsIntroShown(false);
-    onNewRun();
+    if (mode === "goPublished") onGoToPublished();
+    else onNewRun();
   };
 
   const pick = (action: () => void) => {
@@ -137,14 +147,15 @@ export function RunMenu({
   return (
     <div className="relative" ref={rootRef}>
       {disabledReason !== null ? <Tooltip content={t(disabledReason)}>{trigger}</Tooltip> : trigger}
-      {isIntroShown && canRun && !open && (
-        <RunIntroBubble onStart={handleIntroStart} onDismiss={() => setIsIntroShown(false)} />
+      {isIntroShown && mode !== "framework" && !open && (
+        <RunIntroBubble mode={mode} onAction={handleIntroAction} onDismiss={() => setIsIntroShown(false)} />
       )}
       {open && (
         <RunMenuPopover
           mapId={mapId}
           onOpenRun={(runId, versionId) => pick(() => onOpenRun(runId, versionId))}
-          onNewRun={() => pick(onNewRun)}
+          isGoToPublished={mode === "goPublished"}
+          onNewRun={() => pick(mode === "goPublished" ? onGoToPublished : onNewRun)}
           onShowAll={onShowAll ? () => pick(onShowAll) : undefined}
         />
       )}
@@ -155,12 +166,14 @@ export function RunMenu({
 interface RunMenuPopoverProps {
   mapId: number;
   onOpenRun: (runId: number, versionId: number) => void;
+  // 새 Run 자리가 "게시본으로 가기"인지(Draft·결재 중·거절 버전)
+  isGoToPublished: boolean;
   onNewRun: () => void;
   onShowAll?: () => void;
 }
 
 // 드롭다운 본문 — 열 때마다 새로 마운트돼 목록을 다시 읽고, 상대 시각(useAgo는 마운트 시점이 기준)도 그때로 맞춘다
-function RunMenuPopover({ mapId, onOpenRun, onNewRun, onShowAll }: RunMenuPopoverProps) {
+function RunMenuPopover({ mapId, onOpenRun, isGoToPublished, onNewRun, onShowAll }: RunMenuPopoverProps) {
   const { t } = useI18n();
   const ago = useAgo();
   const [rows, setRows] = useState<RunMenuRows | null>(null);
@@ -243,15 +256,32 @@ function RunMenuPopover({ mapId, onOpenRun, onNewRun, onShowAll }: RunMenuPopove
           />
         </>
       )}
-      <button
-        type="button"
-        data-id="run-menu-new"
-        className="mt-1 flex w-full items-center gap-1.5 border-t border-hairline px-2 pb-1 pt-2 text-caption font-semibold text-accent hover:bg-accent-tint"
-        onClick={onNewRun}
-      >
-        <Plus size={14} strokeWidth={1.5} className="shrink-0" />
-        {t("run.menu.new")}
-      </button>
+      {isGoToPublished ? (
+        <div className="mt-1 border-t border-hairline pt-1.5">
+          <p data-id="run-menu-go-published-hint" className="px-2 text-fine text-ink-tertiary">
+            {t("run.menu.goPublishedHint")}
+          </p>
+          <button
+            type="button"
+            data-id="run-menu-go-published"
+            className="mt-0.5 flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-caption font-semibold text-accent hover:bg-accent-tint"
+            onClick={onNewRun}
+          >
+            <ArrowRight size={14} strokeWidth={1.5} className="shrink-0" />
+            {t("run.menu.goPublished")}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          data-id="run-menu-new"
+          className="mt-1 flex w-full items-center gap-1.5 border-t border-hairline px-2 pb-1 pt-2 text-caption font-semibold text-accent hover:bg-accent-tint"
+          onClick={onNewRun}
+        >
+          <Plus size={14} strokeWidth={1.5} className="shrink-0" />
+          {t("run.menu.new")}
+        </button>
+      )}
     </div>
   );
 }

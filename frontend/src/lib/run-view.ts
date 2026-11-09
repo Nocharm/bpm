@@ -267,10 +267,27 @@ const RUN_NOT_FOUND_PATTERN = /^run \d+ not found$/;
 // 실행할 수 있는 버전 — 게시본과 지난 게시본만(design §4.1). 업무 체계 캔버스는 실행 대상이 아니다(BE ERR_FRAMEWORK)
 const RUNNABLE_VERSION_STATUSES: ReadonlySet<string> = new Set(["published", "expired"]);
 
-/** 헤더 실행 버튼이 꺼지는 이유(툴팁 문구 키) — 실행할 수 있으면 null. */
-export function getRunMenuDisabledReason(status: string, isFrameworkMap: boolean): MessageKey | null {
-  if (isFrameworkMap) return "run.menu.disabledFramework";
-  return RUNNABLE_VERSION_STATUSES.has(status) ? null : "run.menu.disabledDraft";
+/**
+ * 헤더 Run 메뉴의 모양 — start=이 버전에서 새 Run, goPublished=Draft·결재 중·거절이라 게시본으로 보내는 메뉴,
+ * noPublished=Run할 버전이 아직 없어 꺼짐, framework=업무 체계 캔버스라 꺼짐(사용자 결정 2026-11-09: Draft에서 막지 말고 게시본으로 안내).
+ */
+export type RunMenuMode = "start" | "goPublished" | "noPublished" | "framework";
+
+export function getRunMenuMode(status: string, isFrameworkMap: boolean, hasRunnableVersion: boolean): RunMenuMode {
+  if (isFrameworkMap) return "framework";
+  if (RUNNABLE_VERSION_STATUSES.has(status)) return "start";
+  return hasRunnableVersion ? "goPublished" : "noPublished";
+}
+
+/** "게시본으로 가기"가 갈 버전 — 지금 게시본, 없으면 가장 최근의 지난 게시본(versions는 최신 먼저). 없으면 null. */
+export function findRunnableVersionId(versions: readonly { id: number; status: string }[]): number | null {
+  return (versions.find((v) => v.status === "published") ?? versions.find((v) => RUNNABLE_VERSION_STATUSES.has(v.status)))?.id ?? null;
+}
+
+/** 헤더 Run 버튼이 꺼지는 이유(툴팁 문구 키) — 켜져 있으면(새 Run·게시본으로 가기) null. */
+export function getRunMenuDisabledReason(mode: RunMenuMode): MessageKey | null {
+  if (mode === "framework") return "run.menu.disabledFramework";
+  return mode === "noPublished" ? "run.menu.disabledNoPublished" : null;
 }
 
 /** 새 실행이 열린 실행 상한(409)에 막혔는지 — 개인(사람당)·공유(맵당) 중 어느 쪽인지. 다른 에러면 null. */

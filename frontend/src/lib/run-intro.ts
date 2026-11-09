@@ -4,8 +4,8 @@
 export const RUN_INTRO_DONE_KEY = "bpm.runIntroDone";
 // 맵이 그려진 뒤 말풍선이 뜨기까지 — 화면이 자리 잡기 전에 뜨면 눈에 안 들어온다
 export const RUN_INTRO_DELAY_MS = 800;
-// 말풍선이 떠 있는 시간 — 마우스를 올린 동안은 멈춘다. 두 줄 문구를 읽고 버튼을 누를 만큼
-export const RUN_INTRO_SHOW_MS = 6000;
+// 말풍선이 떠 있는 시간 — 마우스를 올린 동안은 멈춘다. 6초는 길다는 사용자 피드백(2026-11-09)으로 3초
+export const RUN_INTRO_SHOW_MS = 3000;
 
 export function isRunIntroDone(): boolean {
   try {
@@ -25,12 +25,15 @@ export function markRunIntroDone(): void {
   }
 }
 
-/** Run을 바로 시작할 수 있는 화면에서, 아직 Run을 해 본 적 없고 다른 Run 화면(실행 중·새 Run 창)이 없을 때만 띄운다. */
+/**
+ * 아직 Run을 해 본 적 없고 다른 Run 화면(실행 중·새 Run 창)이 없을 때 띄운다. 업무 체계 캔버스만 빼고 Draft·게시본 없는 맵에서도
+ * 뜨며, 그때는 말풍선이 게시본 안내를 덧붙인다(사용자 결정 2026-11-09).
+ */
 export function shouldShowRunIntro(state: {
   isDone: boolean;
-  canRun: boolean;
+  isRunMap: boolean;
   isSuppressed: boolean;
   hasMyRuns: boolean;
 }): boolean {
-  return !state.isDone && state.canRun && !state.isSuppressed && !state.hasMyRuns;
+  return !state.isDone && state.isRunMap && !state.isSuppressed && !state.hasMyRuns;
 }

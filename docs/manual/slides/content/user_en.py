@@ -382,7 +382,7 @@ DECK = {
             "desc": "Walk a published map through one real job, step by step, logging progress and problems.",
             "slides": [
                 {"title": "Starting a run", "shot": "manual11/en-run-start.jpg", "caption": "The New run dialog", "pts": [
-                    ("Run menu", "Open the published version, then <b>Run</b> → <b>New run</b>. Off for drafts and pending versions."),
+                    ("Run menu", "Open the published version, then <b>Run</b> → <b>New run</b>. Drafts show <b>Go to published version</b>."),
                     ("Just me · Shared", "Just me is visible only to you. Shared picks <b>Participants</b> who can view the map."),
                     ("Who can act", "Only participants change steps. Anyone who can view the map follows along."),
                     ("Past published", "Confirm once to start; a notice stays above the map while it runs."),

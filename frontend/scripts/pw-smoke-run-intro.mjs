@@ -1,6 +1,7 @@
 // 맵 화면 Run 소개 말풍선 스모크 — Run을 해 본 적 없는 사람이 게시본 맵에 들어오면 Run 버튼 아래 말풍선이 뜨고 스스로 사라진다.
 // 마우스를 올린 동안은 멈추고, 그냥 사라지면 다음 진입에 다시 뜬다. Run 메뉴를 직접 열면 거둔다. [Run 시작하기]는 새 Run 창을
-// 열고, Run을 만들면 브라우저 기록이 남아 더는 뜨지 않는다(만든 Run은 API로 지운다). Draft에선 뜨지 않고, 모션 축소에서도 뜬다. 콘솔 에러 0.
+// 열고, Run을 만들면 브라우저 기록이 남아 더는 뜨지 않는다(만든 Run은 API로 지운다). Draft에선 게시본 안내+[게시본으로 가기]로 뜨고
+// Run 메뉴도 새 Run 대신 게시본으로 보낸다. 게시본 없는 맵은 안내만(버튼 꺼짐). 모션 축소에서도 뜬다. 콘솔 에러 0.
 // 실행(frontend/ 에서):
 //   bash       BASE_URL=http://localhost:3047 API_URL=http://localhost:8048 node scripts/pw-smoke-run-intro.mjs
 //   PowerShell $env:BASE_URL="http://localhost:3047"; $env:API_URL="http://localhost:8048"; node scripts\pw-smoke-run-intro.mjs
@@ -15,7 +16,7 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3047";
 const API = process.env.API_URL ?? "http://localhost:8048";
 const OUT = "../.shots";
 const DONE_KEY = "bpm.runIntroDone";
-const SHOW_MS = 6000; // lib/run-intro RUN_INTRO_SHOW_MS
+const SHOW_MS = 3000; // lib/run-intro RUN_INTRO_SHOW_MS
 
 mkdirSync(OUT, { recursive: true });
 let failures = 0;
@@ -24,8 +25,9 @@ const check = (name, ok, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
-async function api(user, path, method = "GET") {
-  const res = await fetch(`${API}/api${path}`, { method, headers: { "X-Dev-User": user } });
+async function api(user, path, method = "GET", body = undefined) {
+  const headers = { "X-Dev-User": user, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) };
+  const res = await fetch(`${API}/api${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
   if (!res.ok) throw new Error(`${method} ${path} as ${user} -> ${res.status} ${await res.text()}`);
   return res.status === 204 ? null : res.json();
 }
@@ -49,6 +51,20 @@ const detail = await api(user, `/maps/${target.id}`);
 const published = detail.versions.find((v) => v.status === "published");
 const draft = detail.versions.find((v) => v.status === "draft");
 console.log(`user: ${user}, map: ${target.id} (published v${published.id}${draft ? `, draft v${draft.id}` : ""})`);
+// 게시본이 한 번도 없는 맵 — 말풍선은 안내만, Run 버튼은 꺼짐. 시드에 없으면 빈 맵을 만들고 끝에 휴지통으로 보낸다
+// (휴지통 맵도 이름을 쥐고 있어 이름에 시각을 붙인다)
+const UNPUBLISHED_NAME = "Run intro smoke unpublished";
+for (const stale of maps.filter((m) => m.name.startsWith(UNPUBLISHED_NAME) && !m.deleted_at)) {
+  await api(user, `/maps/${stale.id}`, "DELETE").catch(() => undefined);
+}
+let unpublished = maps.find((m) => m.published_version_number == null && m.my_role !== null && !m.deleted_at && m.mode !== "framework" && !m.name.startsWith(UNPUBLISHED_NAME));
+let createdUnpublishedId = null;
+if (!unpublished) {
+  const directory = await api(user, "/directory");
+  const owning = (directory.users.find((u) => u.id === user) ?? directory.users[0])?.org_path;
+  unpublished = await api(user, "/maps", "POST", { name: `${UNPUBLISHED_NAME} ${Date.now()}`, owning_department: owning, visibility: "private" });
+  createdUnpublishedId = unpublished.id;
+}
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const consoleErrors = [];
@@ -75,8 +91,8 @@ async function openContext({ reducedMotion = "no-preference" } = {}) {
   return { ctx, page };
 }
 
-async function gotoMap(page, versionId) {
-  await page.goto(`${BASE}/maps/${target.id}?version=${versionId}`, { waitUntil: "networkidle" });
+async function gotoMap(page, versionId, mapId = target.id) {
+  await page.goto(`${BASE}/maps/${mapId}${versionId !== null ? `?version=${versionId}` : ""}`, { waitUntil: "networkidle" });
   await page.locator('[data-id="run-menu"]').waitFor({ timeout: 30000 });
 }
 
@@ -140,15 +156,62 @@ try {
   check("no bubble after a run was started", (await bubble(page).count()) === 0);
   await ctx.close();
 
-  // ⑥ Draft에서는 뜨지 않는다(Run 버튼이 꺼진 버전)
+  // ⑥ Draft — 말풍선은 게시본 안내+[게시본으로 가기], Run 메뉴도 새 Run 대신 게시본으로 보낸다
   if (draft) {
     const { ctx: draftCtx, page: draftPage } = await openContext();
     await gotoMap(draftPage, draft.id);
-    await draftPage.waitForTimeout(3000);
-    check("no bubble on a Draft", (await bubble(draftPage).count()) === 0);
+    await bubble(draftPage).waitFor({ timeout: 8000 }).catch(() => {});
+    const draftText = (await bubble(draftPage).textContent()) ?? "";
+    check("Draft bubble points to the published version", draftText.includes("Run은 게시본에서 시작할 수 있어요.") && (await draftPage.locator('[data-id="run-intro-go-published"]').isVisible()), draftText);
+    const draftBox = await bubble(draftPage).boundingBox();
+    if (draftBox) await draftPage.screenshot({ path: `${OUT}/run-intro-draft.png`, clip: { x: draftBox.x - 360, y: 0, width: 1480 - (draftBox.x - 360), height: draftBox.y + draftBox.height + 40 } });
+    await draftPage.locator('[data-id="run-menu"]').click();
+    check(
+      "Draft Run menu offers Go to published instead of New run",
+      (await draftPage.locator('[data-id="run-menu-go-published"]').isVisible()) && (await draftPage.locator('[data-id="run-menu-new"]').count()) === 0,
+    );
+    await draftPage.locator('[data-id="run-menu-pop"]').screenshot({ path: `${OUT}/run-intro-draft-menu.png` });
+    await draftPage.locator('[data-id="run-menu-go-published"]').click();
+    // 편집 중인 Draft면 버전 전환 확인 창을 거친다
+    const confirm = draftPage.locator('[data-id="confirm-dialog-confirm"]');
+    await confirm.waitFor({ timeout: 1500 }).then(() => confirm.click()).catch(() => console.log("  (no switch confirm: read-only Draft)"));
+    await draftPage.locator('[data-id="run-menu"]').click();
+    await draftPage.locator('[data-id="run-menu-new"]').waitFor({ timeout: 8000 }).catch(() => {});
+    check("Go to published lands on a version that can start a run", await draftPage.locator('[data-id="run-menu-new"]').isVisible());
     await draftCtx.close();
   } else {
     console.log("SKIP no Draft on this map");
+  }
+
+  // ⑥-2 게시본이 없는 맵 — 말풍선은 안내만(버튼 없음), Run 버튼은 꺼져 있다
+  if (unpublished) {
+    const { ctx: noPubCtx, page: noPubPage } = await openContext();
+    await gotoMap(noPubPage, null, unpublished.id);
+    // 빈 새 맵이면 AI 컨설턴트 온보딩 카드가 같은 자리에 뜬다 — 그동안 Run 말풍선은 물러선다
+    if (createdUnpublishedId !== null) {
+      await noPubPage.waitForTimeout(2500);
+      check("Run bubble stays back while the AI consultant card shows", (await bubble(noPubPage).count()) === 0);
+      await noPubPage.evaluate((key) => window.localStorage.setItem(key, "1"), `bpm.consultOnboardSeen.${unpublished.id}`);
+      await gotoMap(noPubPage, null, unpublished.id);
+    }
+    await bubble(noPubPage).waitFor({ timeout: 8000 }).catch(() => {});
+    const noPubText = (await bubble(noPubPage).textContent()) ?? "";
+    check(
+      "unpublished map bubble says runs start once published",
+      noPubText.includes("게시본이 생기면 Run을 시작할 수 있어요.") && (await bubble(noPubPage).locator("button").count()) === 0,
+      noPubText,
+    );
+    check("Run button stays off on an unpublished map", (await noPubPage.locator('[data-id="run-menu"]').getAttribute("aria-disabled")) === "true");
+    const noPubBox = await bubble(noPubPage).boundingBox();
+    if (noPubBox) await noPubPage.screenshot({ path: `${OUT}/run-intro-unpublished.png`, clip: { x: noPubBox.x - 360, y: 0, width: 1480 - (noPubBox.x - 360), height: noPubBox.y + noPubBox.height + 40 } });
+    // 말풍선이 사라진 뒤 꺼진 Run 버튼의 이유 툴팁
+    await bubble(noPubPage).waitFor({ state: "detached", timeout: SHOW_MS + 2000 }).catch(() => {});
+    await noPubPage.locator('[data-id="run-menu"]').hover();
+    await noPubPage.waitForTimeout(800);
+    await noPubPage.screenshot({ path: `${OUT}/run-intro-unpublished-tooltip.png`, clip: { x: 760, y: 0, width: 720, height: 220 } });
+    await noPubCtx.close();
+  } else {
+    console.log("SKIP no unpublished map visible to this user");
   }
 
   // ⑦ 모션 축소에서도 뜬다(등장·막대 애니메이션만 없다)
@@ -160,6 +223,7 @@ try {
     await calmCtx.close();
   }
 } finally {
+  if (createdUnpublishedId !== null) await api(user, `/maps/${createdUnpublishedId}`, "DELETE").catch((e) => console.log("cleanup skipped:", String(e).slice(0, 120)));
   check("no console errors", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));
   await browser.close();
 }

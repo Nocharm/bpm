@@ -380,6 +380,7 @@ import {
   applyRunBranchPreview,
   applyRunEdgeKind,
   buildRunView,
+  findRunnableVersionId,
   getRunWatermarkFontSize,
   splitRunNodeKey,
   splitRunScopeGraphs,
@@ -3760,6 +3761,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     runGuardedNavigation(() => router.push(buildRunHref(runMapId, runVersion, nextRunId)));
   };
   const latestPublishedId = versions.find((v) => v.status === "published")?.id ?? null;
+  // Run 메뉴 "게시본으로 가기"의 목적지 — 게시본, 없으면 최근 지난 게시본
+  const runnableVersionId = findRunnableVersionId(versions);
   const leaveRun = (targetVersionId: number | null) => {
     runGuardedNavigation(() => {
       const nextVersionId = targetVersionId ?? versionId;
@@ -9849,6 +9852,13 @@ function MapEditor({ mapId }: { mapId: number }) {
   // importSlot 렌더 조건과 forcedTab/lockTabs 잠금 조건은 반드시 동일해야 한다 —
   // 어긋나면 Import 탭 없이 인스펙터가 잠기고(autosave도 중단) 빠져나올 방법이 없어진다.
   const csvPreviewActive = previewSource === "csv" && csvOutcome !== null;
+  // AI 컨설턴트 온보딩 카드 노출 — 시드 상태(Start/End 2노드 이하)의 편집 가능한 맵 + 미확인 사용자.
+  // Run 소개 말풍선도 이 값으로 물러선다(같은 상단바 오른쪽에 둘이 겹친다, 2026-11-09)
+  const isMapPristine =
+    !readOnly && nodes.length > 0 && nodes.length <= 2 &&
+    nodes.every((n) => n.data.nodeType === "start" || n.data.nodeType === "end") &&
+    edges.length <= 1;
+  const isConsultOnboardShown = isMapPristine && !consultOnboardSeen && !aiMenuOpen;
 
   return (
     <NodeActionsContext.Provider value={nodeActions}>
@@ -10001,12 +10011,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           </button>
           {/* AI 메뉴 — 챗·컨설턴트 진입 통합. 컨설턴트는 편집 불가 시 비활성+사유 툴팁 (2026-07-30) */}
           {(() => {
-            // 온보딩 노출 — 시드 상태(Start/End 2노드 이하)의 편집 가능한 맵 + 미확인 사용자
-            const pristine =
-              !readOnly && nodes.length > 0 && nodes.length <= 2 &&
-              nodes.every((n) => n.data.nodeType === "start" || n.data.nodeType === "end") &&
-              edges.length <= 1;
-            const showOnboard = pristine && !consultOnboardSeen && !aiMenuOpen;
+            const showOnboard = isConsultOnboardShown;
             const consultDisabledReason = !readOnly
               ? null
               : isViewer
@@ -10131,15 +10136,19 @@ function MapEditor({ mapId }: { mapId: number }) {
               </div>
             );
           })()}
-          {/* 실행 진입 — 게시본·지난 게시본에서만 켜진다(그 밖은 꺼진 버튼+이유 툴팁) */}
+          {/* 실행 진입 — 게시본·지난 게시본은 새 Run, Draft·결재 중·거절은 게시본으로 가기, 게시본 없는 맵·업무 체계는 꺼짐 */}
           <RunMenu
             mapId={mapId}
             versionStatus={currentVersion?.status ?? ""}
             isFrameworkMap={isFrameworkMap}
+            hasRunnableVersion={runnableVersionId !== null}
             onOpenRun={openRun}
             onNewRun={() => setRunStartOpen(true)}
+            onGoToPublished={() => {
+              if (runnableVersionId !== null) requestGoToVersion(runnableVersionId);
+            }}
             onShowAll={() => setRunListOpen(true)}
-            introSuppressed={runMode || runStartOpen}
+            introSuppressed={runMode || runStartOpen || isConsultOnboardShown}
           />
           <button
             data-id="editor-save"

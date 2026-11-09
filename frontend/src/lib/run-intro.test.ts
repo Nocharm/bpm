@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { isRunIntroDone, markRunIntroDone, RUN_INTRO_DONE_KEY, shouldShowRunIntro } from "./run-intro";
 
-const BASE = { isDone: false, canRun: true, isSuppressed: false, hasMyRuns: false };
+const BASE = { isDone: false, isRunMap: true, isSuppressed: false, hasMyRuns: false };
 
 describe("shouldShowRunIntro", () => {
   it("Run을 시작할 수 있고 해 본 적 없으면 띄운다", () => {
@@ -14,8 +14,8 @@ describe("shouldShowRunIntro", () => {
     expect(shouldShowRunIntro({ ...BASE, isDone: true })).toBe(false);
   });
 
-  it("Run 버튼이 꺼진 버전(Draft·결재 중·거절·업무 체계)에서는 띄우지 않는다", () => {
-    expect(shouldShowRunIntro({ ...BASE, canRun: false })).toBe(false);
+  it("업무 체계 캔버스에서는 띄우지 않는다(Draft·게시본 없는 맵은 안내를 덧붙여 띄운다)", () => {
+    expect(shouldShowRunIntro({ ...BASE, isRunMap: false })).toBe(false);
   });
 
   it("Run 화면이나 새 Run 창이 이미 열려 있으면 띄우지 않는다", () => {
