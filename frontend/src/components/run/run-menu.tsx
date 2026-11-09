@@ -6,7 +6,7 @@
 // 드롭다운은 AI 메뉴와 같은 플로팅 크롬(z-1100, 바깥 누름·Esc 닫기), 본문은 열 때마다 마운트돼 목록을 다시 읽는다.
 // Run을 해 본 적 없는 사람에게는 버튼 아래 소개 말풍선(run-intro-bubble.tsx)을 잠깐 띄운다(사용자 결정 2026-11-08).
 
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type RefObject } from "react";
 import { ArrowRight, ListChecks, ListTree, Plus } from "lucide-react";
 
 import { listRuns, type Run } from "@/lib/api";
@@ -34,6 +34,10 @@ interface RunMenuProps {
   onShowAll?: () => void;
   // Run 화면이나 새 Run 창이 열려 있음 — 소개 말풍선을 띄우지 않고, 떠 있으면 거둔다
   introSuppressed: boolean;
+  // 함께 떠 있는 AI 컨설턴트 온보딩 카드 — 있으면 소개 말풍선을 그 아래로 쌓는다
+  introStackBelowRef: RefObject<HTMLElement | null> | null;
+  // 쌓인 채 소개 말풍선이 닫힐 때 위 카드도 이번 진입 동안 닫는다(기록은 남기지 않아 다음 진입에 다시 뜬다)
+  onIntroStackClose: () => void;
 }
 
 interface RunMenuRows {
@@ -51,6 +55,8 @@ export function RunMenu({
   onGoToPublished,
   onShowAll,
   introSuppressed,
+  introStackBelowRef,
+  onIntroStackClose,
 }: RunMenuProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -108,14 +114,20 @@ export function RunMenu({
     };
   }, [open]);
 
+  // 소개 말풍선 닫기 — 위에 쌓인 카드가 있으면 같이 닫는다(둘은 한 묶음의 안내)
+  const hideIntro = () => {
+    if (isIntroShown && introStackBelowRef !== null) onIntroStackClose();
+    setIsIntroShown(false);
+  };
+
   const handleToggle = () => {
     if (disabledReason !== null) return;
-    setIsIntroShown(false); // 메뉴를 직접 열었으면 소개는 할 일을 다 했다
+    hideIntro(); // 메뉴를 직접 열었으면 소개는 할 일을 다 했다
     setOpen((value) => !value);
   };
 
   const handleIntroAction = () => {
-    setIsIntroShown(false);
+    hideIntro();
     if (mode === "goPublished") onGoToPublished();
     else onNewRun();
   };
@@ -148,7 +160,12 @@ export function RunMenu({
     <div className="relative" ref={rootRef}>
       {disabledReason !== null ? <Tooltip content={t(disabledReason)}>{trigger}</Tooltip> : trigger}
       {isIntroShown && mode !== "framework" && !open && (
-        <RunIntroBubble mode={mode} onAction={handleIntroAction} onDismiss={() => setIsIntroShown(false)} />
+        <RunIntroBubble
+          mode={mode}
+          onAction={handleIntroAction}
+          onDismiss={hideIntro}
+          stackBelowRef={introStackBelowRef}
+        />
       )}
       {open && (
         <RunMenuPopover

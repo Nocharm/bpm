@@ -187,14 +187,33 @@ try {
   if (unpublished) {
     const { ctx: noPubCtx, page: noPubPage } = await openContext();
     await gotoMap(noPubPage, null, unpublished.id);
-    // 빈 새 맵이면 AI 컨설턴트 온보딩 카드가 같은 자리에 뜬다 — 그동안 Run 말풍선은 물러선다
-    if (createdUnpublishedId !== null) {
-      await noPubPage.waitForTimeout(2500);
-      check("Run bubble stays back while the AI consultant card shows", (await bubble(noPubPage).count()) === 0);
-      await noPubPage.evaluate((key) => window.localStorage.setItem(key, "1"), `bpm.consultOnboardSeen.${unpublished.id}`);
-      await gotoMap(noPubPage, null, unpublished.id);
-    }
     await bubble(noPubPage).waitFor({ timeout: 8000 }).catch(() => {});
+    // 빈 새 맵이면 AI 컨설턴트 온보딩 카드도 뜬다 — Run 말풍선은 숨지 않고 그 카드 바로 아래로 쌓인다
+    const aiCard = noPubPage.locator('[data-id="consult-onboard"]');
+    if (await aiCard.isVisible()) {
+      const aiBox = await aiCard.boundingBox();
+      const runBox = await bubble(noPubPage).boundingBox();
+      check(
+        "Run bubble stacks under the AI consultant card without overlap",
+        aiBox && runBox && runBox.y >= aiBox.y + aiBox.height,
+        JSON.stringify({ aiBox, runBox }),
+      );
+      await noPubPage.screenshot({ path: `${OUT}/run-intro-stacked.png`, clip: { x: 760, y: 0, width: 720, height: runBox.y + runBox.height + 30 } });
+      // AI 카드에 올려도 멈추고, 떼면 둘이 같이 닫힌다(기록은 남기지 않음)
+      await aiCard.hover();
+      await noPubPage.waitForTimeout(SHOW_MS + 800);
+      check("hovering the AI card pauses the pair", (await bubble(noPubPage).isVisible()) && (await aiCard.isVisible()));
+      await noPubPage.mouse.move(400, 700);
+      await bubble(noPubPage).waitFor({ state: "detached", timeout: SHOW_MS + 2000 }).catch(() => {});
+      check("the AI card closes together with the Run bubble", (await bubble(noPubPage).count()) === 0 && (await aiCard.count()) === 0);
+      check(
+        "closing together records neither card as seen",
+        (await noPubPage.evaluate((key) => window.localStorage.getItem(key), `bpm.consultOnboardSeen.${unpublished.id}`)) === null && (await readDone(noPubPage)) === null,
+      );
+      await gotoMap(noPubPage, null, unpublished.id);
+      await bubble(noPubPage).waitFor({ timeout: 8000 }).catch(() => {});
+      check("both show again on the next visit", (await bubble(noPubPage).isVisible()) && (await aiCard.isVisible()));
+    }
     const noPubText = (await bubble(noPubPage).textContent()) ?? "";
     check(
       "unpublished map bubble says runs start once published",

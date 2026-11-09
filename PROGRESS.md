@@ -5,7 +5,7 @@
 
 ## 2026-11-09 — Run 메뉴·소개 말풍선 버전별 안내(feat/run-intro-versions)
 
-- 사용자 결정: 말풍선 닫힘 6초→3초 · Draft·결재 중·거절 버전에서 Run 버튼을 끄지 않고 새 Run 자리에 "게시본으로 가기"(편집 중이면 버전 전환 확인 창) · 게시본이 없는 맵은 버튼은 꺼진 채 말풍선에 "게시본이 생기면 Run을 시작할 수 있어요". 메뉴 모양은 `run-view.ts` `getRunMenuMode`(start·goPublished·noPublished·framework) 하나가 정하고 목적지는 `findRunnableVersionId`(게시본, 없으면 최근 지난 게시본). 빈 새 맵의 AI 컨설턴트 온보딩 카드가 같은 자리에 겹쳐 그동안은 말풍선이 물러선다(`isConsultOnboardShown`). 매뉴얼 3곳·user 슬라이드 2종·PDF 갱신.
+- 사용자 결정: 말풍선 닫힘 6초→3초 · Draft·결재 중·거절 버전에서 Run 버튼을 끄지 않고 새 Run 자리에 "게시본으로 가기"(편집 중이면 버전 전환 확인 창) · 게시본이 없는 맵은 버튼은 꺼진 채 말풍선에 "게시본이 생기면 Run을 시작할 수 있어요". 메뉴 모양은 `run-view.ts` `getRunMenuMode`(start·goPublished·noPublished·framework) 하나가 정하고 목적지는 `findRunnableVersionId`(게시본, 없으면 최근 지난 게시본). 빈 새 맵에서는 AI 컨설턴트 온보딩 카드와 겹쳐, 사용자 결정(둘 다 알림이라 숨기지 않음)대로 말풍선을 그 카드 아래로 쌓고(`stackBelowRef`, ResizeObserver로 위치) 둘을 같이 닫는다(카드는 이번 진입만 닫고 기록하지 않음, 어느 쪽 호버든 멈춤). 매뉴얼 3곳·user 슬라이드 2종·PDF 갱신.
 
 ## 2026-11-08 — v1.7.0 main 머지: 맵 화면 Run 소개 말풍선 + ko 용어 "Run" 고정
 

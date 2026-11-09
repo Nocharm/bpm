@@ -1002,6 +1002,10 @@ function MapEditor({ mapId }: { mapId: number }) {
       ? true
       : window.localStorage.getItem(consultOnboardKey) === "1",
   );
+  // 온보딩 카드 — Run 소개 말풍선이 이 카드 아래로 쌓일 때 높이를 잰다
+  const consultOnboardRef = useRef<HTMLDivElement>(null);
+  // 이번 진입 동안만 닫힘 — 쌓인 Run 소개 말풍선이 닫힐 때 같이 닫는다(기록하지 않아 다음 진입에 다시 뜬다, 2026-11-09)
+  const [isConsultOnboardClosedForVisit, setIsConsultOnboardClosedForVisit] = useState(false);
   function dismissConsultOnboard() {
     window.localStorage.setItem(consultOnboardKey, "1");
     setConsultOnboardSeen(true);
@@ -9853,12 +9857,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 어긋나면 Import 탭 없이 인스펙터가 잠기고(autosave도 중단) 빠져나올 방법이 없어진다.
   const csvPreviewActive = previewSource === "csv" && csvOutcome !== null;
   // AI 컨설턴트 온보딩 카드 노출 — 시드 상태(Start/End 2노드 이하)의 편집 가능한 맵 + 미확인 사용자.
-  // Run 소개 말풍선도 이 값으로 물러선다(같은 상단바 오른쪽에 둘이 겹친다, 2026-11-09)
+  // Run 소개 말풍선은 이 카드가 떠 있으면 그 아래로 쌓인다(같은 상단바 오른쪽, 둘 다 알림이라 숨기지 않는다, 2026-11-09)
   const isMapPristine =
     !readOnly && nodes.length > 0 && nodes.length <= 2 &&
     nodes.every((n) => n.data.nodeType === "start" || n.data.nodeType === "end") &&
     edges.length <= 1;
-  const isConsultOnboardShown = isMapPristine && !consultOnboardSeen && !aiMenuOpen;
+  const isConsultOnboardShown = isMapPristine && !consultOnboardSeen && !isConsultOnboardClosedForVisit && !aiMenuOpen;
 
   return (
     <NodeActionsContext.Provider value={nodeActions}>
@@ -10082,6 +10086,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 {showOnboard ? (
                   // z-[1100]: RF 선택 노드(1000)·연결선(1001)이 z-40을 덮는다 — 플로팅 크롬 층으로
                   <div
+                    ref={consultOnboardRef}
                     className="absolute right-0 top-full z-[1100] mt-2 w-72 rounded-md border p-3 glass glass-dense"
                     data-id="consult-onboard"
                   >
@@ -10148,7 +10153,9 @@ function MapEditor({ mapId }: { mapId: number }) {
               if (runnableVersionId !== null) requestGoToVersion(runnableVersionId);
             }}
             onShowAll={() => setRunListOpen(true)}
-            introSuppressed={runMode || runStartOpen || isConsultOnboardShown}
+            introSuppressed={runMode || runStartOpen}
+            introStackBelowRef={isConsultOnboardShown ? consultOnboardRef : null}
+            onIntroStackClose={() => setIsConsultOnboardClosedForVisit(true)}
           />
           <button
             data-id="editor-save"
