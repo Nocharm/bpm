@@ -402,7 +402,7 @@ AI 기능(챗·인터뷰·드래프터 등)이 쓰는 **내장 프롬프트를 �
 | `N8N_POSITION_URL` | backend `.env` | EDW 부서장 직책 목록 웹훅(비우면 직책 수집 비활성) |
 | `HR_SYNC_INTERVAL_HOURS` | backend `.env` | 내장 HR 동기화 스케줄러 주기(시간). 기본 24, 0 = 끔. 최초 이행 시 0으로 두고 프리뷰·수동 동기화 확인 후 올리세요 |
 | `HR_SYNC_DELETE_CAP_PCT` | backend `.env` | 전체 동기화 삭제 상한(관리 행의 %). 기본 20, 0 = 가드 끔 |
-| `FORWARDED_ALLOW_IPS` | `.env` (compose) | backend가 X-Forwarded-For를 믿을 프록시 대역. 비우면 compose 네트워크 서브넷(`172.36.0.0/16`). 틀리면 로그인 기록·로그인 제한이 nginx 주소를 봅니다 |
+| `FORWARDED_ALLOW_IPS` | `.env` (compose) | backend가 X-Forwarded-For를 믿을 프록시 대역. Docker가 정하는 compose 네트워크 서브넷을 적습니다. 첫 배포 뒤 확인해 넣고(`docs/deploy/gitlab-runner.md` 5), 어긋나면 배포 Job이 경고합니다. 비었거나 틀리면 로그인 기록·로그인 제한이 nginx 주소를 봅니다 |
 | `AI_BASE_URL` | backend `.env` | AI 서버 주소(OpenAI 호환). 예: `https://<ai-host>/v1`(사내 GPU 실주소는 서버 `.env`에만 적습니다) |
 | `AI_MODEL` | backend `.env` | 기본 모델 id. 사내 GPU는 **`glm-5.3-nvfp4` 하나**(2026-10-21 GLM-5.2에서 교체). 사고량은 모델명이 아니라 앱이 호출마다 정합니다 |
 | `AI_MAX_TOKENS` | backend `.env` | 응답 토큰 상한(사고 토큰 포함). 기본 8000. **너무 작으면 답이 빈 문자열로 돌아옵니다** |

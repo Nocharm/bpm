@@ -1,6 +1,6 @@
 # 초기 1회 셋업 모음
 
-배포 문서 전반에 흩어져 있던 **한 번만 하면 되는 작업**을 모은 문서. 매 배포마다 반복하는 절차는 각 런북에 있고([`deploy.md`](deploy.md) · [`db-migration-9910.md`](db-migration-9910.md) · [`backup.md`](backup.md) · [`kb-embedding.md`](kb-embedding.md)), 여기엔 **최초 1회**만 온다.
+배포 문서 전반에 흩어져 있던 **한 번만 하면 되는 작업**을 모은 문서. 매 배포마다 반복하는 절차는 각 런북에 있고([`gitlab-runner.md`](gitlab-runner.md) · [`deploy.md`](deploy.md) · [`db-migration-9910.md`](db-migration-9910.md) · [`backup.md`](backup.md) · [`kb-embedding.md`](kb-embedding.md)), 여기엔 **최초 1회**만 온다. 러너 등록·배포 폴더·손으로 띄운 스택에서 파이프라인으로 넘어가는 절차는 [`gitlab-runner.md`](gitlab-runner.md) 1~3·6절.
 
 1회성은 두 종류이고 성격이 다르다 — 섞으면 사고가 난다.
 
@@ -9,7 +9,9 @@
 | **A. 스택 구축 1회** | 새 서버·새 포트 스택을 처음 세울 때 | 대체로 무해(멱등) |
 | **B. 릴리스 이후 1회** | 특정 기능이 배포된 뒤 데이터·스키마를 한 번 보정 | **항목마다 다름 — 각 항목의 재실행 안전성 표기를 볼 것** |
 
-> 매 배포에 반복하는 것(코드 pull → `docker compose up -d --build` → 헬스체크)은 1회성이 아니다. [`deploy.md`](deploy.md) §3~§4.
+> 매 배포에 반복하는 것(GitLab 파이프라인 → 배포 Job → 헬스체크)은 1회성이 아니다. [`gitlab-runner.md`](gitlab-runner.md) 4절.
+>
+> 아래 서버 명령의 `docker compose`는 그 스택의 배포 폴더에서 `-p <프로젝트>`를 붙여 읽는다 — 운영 `/data/deployments/bpm`·`-p business-process-mgmt --profile backup`, 개발 `/data/deployments/bpm-dev`·`-p bpm-9910`.
 
 ---
 
@@ -22,7 +24,13 @@ docker --version && docker compose version   # Compose v2
 df -h .                                      # 덤프+볼륨 여유 확인
 ```
 
-앱 nginx는 **443/80을 쓰지 않는다** — 서버 엣지 nginx가 이미 점유 중이라 앱은 `APP_PORT`로만 노출한다: **운영 9900 · 검증 9910**.
+앱 nginx는 **443/80을 쓰지 않는다** — 서버 엣지 nginx가 이미 점유 중이라 앱은 `APP_PORT`로만 노출한다: **운영 9900 · 개발 9901**(개발은 2026-11 파이프라인 전환 때 9910에서 옮겼다).
+
+compose 내부 네트워크 대역은 Docker 자동 할당이다. 예전에는 기본 풀이 사내망과 겹쳐 172.36(운영)·172.44(개발)로 고정했는데, 지금은 데몬의 `default-address-pools`가 겹치지 않는 풀을 준다 — 새 서버라면 그것부터 확인한다:
+
+```bash
+grep -A6 default-address-pools /etc/docker/daemon.json   # 사내망과 겹치지 않는 풀
+```
 
 ### A2. Keycloak public 클라이언트 (realm당 1회)
 
@@ -37,7 +45,7 @@ realm `ai-portal`에 frontend용 **public(PKCE) 클라이언트** 생성:
 | Valid post logout redirect URIs | 위와 동일 |
 | Web origins | `http://<서버호스트>:<APP_PORT>` |
 
-- **⚠️ 클라이언트 자체는 realm당 1회지만, URI 등록은 포트·도메인이 늘어날 때마다 추가해야 한다.** 9910 검증 스택을 새로 열었는데 로그인이 안 되면 십중팔구 여기다 — `redirect_uri`는 코드가 `window.location.origin`으로 만들기 때문에 포트가 다르면 다른 origin이다.
+- **⚠️ 클라이언트 자체는 realm당 1회지만, URI 등록은 포트·도메인이 늘어날 때마다 추가해야 한다.** 개발 스택(9901)을 Keycloak 로그인으로 바꿨는데 로그인이 안 되면 십중팔구 여기다(지금 개발은 임시 로그인이라 등록하지 않았다) — `redirect_uri`는 코드가 `window.location.origin`으로 만들기 때문에 포트가 다르면 다른 origin이다.
 - **Web origins를 빼먹으면 로그인 왕복은 되는데 토큰 교환이 CORS로 죽는다**(`failed to fetch` / `No matching state found`). redirect URI와 별개 항목이다.
 - **post logout redirect URI는 실제로 쓰인다** — `/login`의 "Sign out of all sessions" 패널이 Keycloak `end_session`을 `post_logout_redirect_uri=<origin>/login`으로 호출한다. 미등록이면 Keycloak 확인 화면에서 멈춘다.
 - **Mappers**: 토큰 `preferred_username`이 AD `sAMAccountName`(= loginId)을 담아야 한다 — 백엔드가 이 값으로 `employees`를 매칭한다. Keycloak LDAP federation 기본 매핑이면 OK.
@@ -70,8 +78,10 @@ curl -s -X POST http://<n8n-host>:5678/webhook/hr-dept \
 
 ### A5. `.env` 작성 + 시크릿 발급 (스택당 1회)
 
+스택마다 배포 폴더에 `.env` 하나다(운영 `/data/deployments/bpm/.env`, 개발 `/data/deployments/bpm-dev/.env` — 파일 이름은 둘 다 `.env`):
+
 ```bash
-cp .env.example .env          # 검증 스택이면 .env.9910 등 스택별 파일명
+cp .env.example .env          # PC에서 채운 뒤 scp로 배포 폴더에 넣는다
 ```
 
 채울 값은 [`deploy.md`](deploy.md) §2의 블록 그대로. 최초 1회만 하는 것:
@@ -83,37 +93,38 @@ openssl rand -hex 32          # AUTH_JWT_SECRET — AUTH_MODE=ldap이면 필수(
 - **`.env`는 git 금지**(시크릿 포함). 서버 재구축에 필수 자산이니 **git 밖 안전한 위치에 사본을 따로 보관**한다 — 백업 사이드카는 DB만 덤프한다([`backup.md`](backup.md) §1).
 - **⚠️ compose backend에는 `env_file:`이 없다** — `.env`의 키가 컨테이너에 닿으려면 `docker-compose.yml`의 backend `environment:` 블록에 명시 매핑돼 있어야 한다. 신규 env를 추가할 땐 `.env.example` + `settings.py` + compose 셋이 함께 움직여야 한다(`rules/backend/config.md`).
 
-### A6. 백업 디렉터리 (스택당 1회)
+### A6. 백업 디렉터리 (운영 1회)
 
-`.env`의 `BACKUP_DIR`(기본 `./backups`, 저장소 루트 기준)·`BACKUP_RETENTION_DAYS`(기본 14)만 정하면 사이드카가 알아서 만든다. 첫 기동 직후 오늘자 덤프가 없으면 즉시 1회 덤프하므로, 배포 후 한 번 확인:
+백업 사이드카는 **운영에만** 뜬다(compose profile `backup`, 배포 Job이 운영에만 붙인다). 개발 스택은 백업하지 않는다(사용자 결정 2026-11-10).
 
-```bash
-docker compose logs --tail 5 db-backup   # "[db-backup] ... ok bpm-....dump (크기)"
-```
-
-### A7. 같은 서버에 스택을 하나 더 (검증 스택 1회)
-
-운영과 나란히 띄우려면 **세 가지가 전부 달라야 한다** — 프로젝트명 · 포트 · 브리지 서브넷.
-
-| 항목 | 방법 |
-|---|---|
-| 프로젝트명 | 모든 compose 명령에 `-p bpm-9910` |
-| env 파일 | `--env-file .env.9910` (그 안에서 `APP_PORT=9910`) |
-| 서브넷 | `docker-compose.yml` 맨 아래 `ipam.config`를 미점유 대역으로 직접 수정 |
-
-**⚠️ 서브넷은 오버라이드 파일로 못 바꾼다** — 사내 71번 서버의 compose는 `docker-compose.yml`과 `docker-compose.dev.yml`의 `ipam.config`를 교체가 아니라 **누적 병합**해서 `Pool overlaps with other one`으로 실패한다(실측). 검증 스택 클론의 `docker-compose.yml`을 직접 고치는 게 확실하다. 운영이 172.36을 점유 중이고 172.37~40·172.42는 과거 실패·점유 이력이 있다 — **172.43 / 172.44**를 쓴다.
+`.env`의 `BACKUP_DIR`(기본 `./backups`, 배포 폴더 기준)·`BACKUP_RETENTION_DAYS`(기본 14)만 정하면 사이드카가 알아서 만든다. 첫 기동 직후 오늘자 덤프가 없으면 즉시 1회 덤프하므로, 배포 후 한 번 확인:
 
 ```bash
-docker network ls | grep bpm                 # 잔재 확인
-docker network rm bpm-9910_default 2>/dev/null   # 잔재 정리
+cd /data/deployments/bpm
+docker compose -p business-process-mgmt --profile backup logs --tail 5 db-backup   # "[db-backup] ... ok bpm-....dump (크기)"
 ```
+
+### A7. 같은 서버에 스택을 하나 더 (개발 스택)
+
+운영과 나란히 띄우려면 **배포 폴더 · compose 프로젝트명 · 포트 · db 별칭**이 전부 달라야 한다. 내부 대역은 Docker가 스택마다 다르게 잡으므로 손대지 않는다.
+
+| 항목 | 운영 | 개발 |
+|---|---|---|
+| 배포 폴더(`.gitlab-ci.yml` `BPM_DEPLOY_DIR`) | `/data/deployments/bpm` | `/data/deployments/bpm-dev` |
+| 프로젝트명(`BPM_COMPOSE_PROJECT`) | `business-process-mgmt` | `bpm-9910`(옛 9910 스택의 볼륨을 이어 쓰려고 이름 유지) |
+| `.env`의 `APP_PORT` | 9900(또는 비움) | 9901 |
+| `.env`의 `DBV_DB_ALIAS` | `bpm-db`(또는 비움) | `bpm9910-db` |
+
+배포 Job이 이 넷이 어긋나거나 바뀐 것(다른 스택의 `.env`, 다른 스택의 프로젝트명, 공유 네트워크의 별칭 중복)을 거절한다 → [`gitlab-runner.md`](gitlab-runner.md) 3절. 스택을 하나 더 늘리려면 배포 러너에 그 배포 폴더 마운트를 더하고 `.gitlab-ci.yml`에 Job을 하나 더 둔다.
+
+**⚠️ 서브넷은 오버라이드 파일로 못 바꾼다** — compose가 `ipam.config`를 교체가 아니라 **누적 병합**해서 `Pool overlaps with other one`으로 실패한다(사내 71번 실측, 그래서 `docker-compose.dev.yml`을 지웠다). 고정 대역이 다시 필요하면 `docker-compose.yml`의 `networks.default`를 직접 고친다.
 
 ### A8. 신규·빈 DB 한정 — 데모 시드
 
-**운영 DB에는 절대 실행 금지**(`reset_db`는 `drop_all`이다). 데모·스테이징 빈 DB에서만, **그 스택의 프로젝트명과 env 파일을 반드시 붙인다** — 빠뜨리면 기본 프로젝트(운영 9900)의 backend에서 돈다:
+**운영 DB에는 절대 실행 금지**(`reset_db`는 `drop_all`이다). 데모·스테이징 빈 DB에서만, **그 스택의 배포 폴더에서 프로젝트명을 반드시 붙인다** — 다른 스택 이름을 쓰면 그 스택의 backend에서 돈다:
 
 ```bash
-docker compose -p <스택 프로젝트명> --env-file <스택 .env> exec backend python -m scripts.reset_db
+cd <그 스택의 배포 폴더> && docker compose -p <스택 프로젝트명> exec backend python -m scripts.reset_db
 ```
 
 postgres에서는 맵이나 직원이 한 건이라도 있으면 지우기 전에 `refusing to reset`으로 멈춘다(2026-10-20 가드). 그 메시지가 나오면 대상 스택이 맞는지부터 확인한다.
@@ -131,8 +142,8 @@ docker network create --subnet 10.203.0.0/24 dbv-shared      # 없을 때만
 
 `10.203.0.0/24`는 db-viewer가 정한 값이고 네트워크는 **어느 compose도 소유하지 않는다**(그 저장소
 `docs/connect-sources.md`). 실제 조회를 열려면 계정 발급·소스 등록이 더 필요하다 →
-[`db-viewer-readonly.md`](db-viewer-readonly.md). 9910처럼 스택을 하나 더 세울 땐 `.env`에
-`DBV_DB_ALIAS=bpm9910-db`로 별칭을 갈라 준다(공유 네트워크라 별칭이 겹치면 엉뚱한 DB에 붙는다).
+[`db-viewer-readonly.md`](db-viewer-readonly.md). 개발 스택은 `.env`에 `DBV_DB_ALIAS=bpm9910-db`로 별칭을
+갈라 준다(공유 네트워크라 별칭이 겹치면 엉뚱한 DB에 붙는다 — 배포 Job이 sop-archivist-db를 포함해 중복을 거절한다).
 
 ---
 

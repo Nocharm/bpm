@@ -1,0 +1,124 @@
+# GitLab CI for BPM (company GitLab, server deploy runner). Two stacks on the same server:
+#   dev        :9901  deploy-dev        — automatic on every push to `dev` (after the tests pass)
+#   production :9900  deploy-production — manual ▶ on `main` (after the tests pass)
+# Runner setup, project settings, the switch from the hand-run stacks, rollback and the emergency
+# manual path: docs/deploy/gitlab-runner.md.
+# Keep this file free of hostnames, IPs, secrets and pull_policy (that lives in the runner config).
+
+workflow:
+  rules:
+    # A dev → main MR would only repeat the dev branch pipeline of the same commit.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "dev"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push" && ($CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH == "dev")
+    - if: $CI_PIPELINE_SOURCE == "web"
+    # Anything else (feature-branch pushes, tag pushes) makes no pipeline, so a branch with
+    # an open MR never gets a duplicate branch pipeline.
+
+stages:
+  - test
+  - deploy
+
+backend-test:
+  stage: test
+  tags: [bpm-test]
+  # Same runtime as the backend image: catches 3.12+ syntax that would break the container.
+  image: python:3.11-slim
+  interruptible: true
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    # The "disabled by default" baseline the suite assumes (CLAUDE.md Commands).
+    AI_ENABLED: "false"
+    DEV_ENFORCE_PERMISSIONS: "false"
+    BPM_SYSADMINS: ""
+  cache:
+    key:
+      prefix: pip
+      files: [backend/requirements.txt, backend/requirements-dev.txt]
+    paths: [.cache/pip]
+  script:
+    - cd backend
+    - python -m pip install -r requirements-dev.txt
+    - ruff check app/ tests/
+    - python -m pytest tests/ -q
+
+frontend-test:
+  stage: test
+  tags: [bpm-test]
+  image: node:24.22.1-alpine
+  interruptible: true
+  variables:
+    npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+    # eslint over the whole app outgrows node's default heap in a container (~2.2 GB on an 8 GB
+    # host: "JavaScript heap out of memory", measured 2026-11-10). 4 GB passes.
+    NODE_OPTIONS: "--max-old-space-size=4096"
+  cache:
+    key:
+      prefix: npm
+      files: [frontend/package-lock.json]
+    paths: [.cache/npm]
+  script:
+    - cd frontend
+    - npm ci
+    - npm run lint
+    - npx tsc --noEmit -p tsconfig.json
+    - npx vitest run
+    - node scripts/build-component-catalog.mjs --check
+    # No `npm run build` here: the deploy's image build runs it.
+
+deploy-script-test:
+  stage: test
+  tags: [bpm-test]
+  # Same busybox userland as the deploy jobs; no Docker socket (the test fakes docker).
+  image: docker:27-cli
+  interruptible: true
+  script:
+    - sh ci/test-deploy.sh
+
+# Shared by both deploy jobs. The deploy runner is Protected, so it only takes jobs from
+# protected branches: `main` and `dev` are both in Settings → Repository → Protected branches.
+.deploy:
+  stage: deploy
+  # Protected runner with the host Docker socket and both deploy folders mounted at the same path.
+  tags: [bpm-deploy]
+  image: docker:27-cli
+  needs: [backend-test, frontend-test, deploy-script-test]
+  interruptible: false
+  timeout: 45 minutes
+  script:
+    - sh ci/deploy.sh
+
+# The stack is chosen here, not by CI/CD variables: a project-level BPM_* variable would apply to
+# both jobs. ci/deploy.sh also refuses a .env, project or folder that belongs to the other stack.
+deploy-dev:
+  extends: .deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+  variables:
+    BPM_DEPLOY_ENV: dev
+    BPM_DEPLOY_DIR: /data/deployments/bpm-dev
+    # Kept from the hand-run 9910 stack so its volume bpm-9910_pgdata carries over.
+    BPM_COMPOSE_PROJECT: bpm-9910
+  resource_group: bpm-dev
+  environment:
+    name: dev
+    deployment_tier: development
+
+deploy-production:
+  extends: .deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      # The main pipeline waits as "blocked" until ▶ is pressed; a failed deploy fails it.
+      allow_failure: false
+  variables:
+    BPM_DEPLOY_ENV: production
+    BPM_DEPLOY_DIR: /data/deployments/bpm
+    # The name the hand-run stack already uses, so business-process-mgmt_pgdata carries over.
+    BPM_COMPOSE_PROJECT: business-process-mgmt
+  resource_group: bpm-production
+  environment:
+    name: production
+    deployment_tier: production

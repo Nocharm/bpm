@@ -21,11 +21,11 @@ db-viewer 쪽 원본 런북(연결 방식·네트워크 정책·트러블슈팅 
 | ⬜ 수작업 | 읽기전용 계정 `dbviewer_ro` 발급(민감 테이블 REVOKE 포함) | 서버 psql — §5 |
 | ⬜ 수작업 | db-viewer `/admin`에 소스 등록 → 연결 테스트 → 수집 → 미리보기 허용 | db-viewer 화면 — §6 |
 
-§2~§6은 **스택마다 한 번씩** 밟는다(검증 9910 → 운영 9900). 앱을 재배포해도 반복하지 않는다.
+§2~§6은 **스택마다 한 번씩** 밟는다(개발 → 운영, 둘 다 끝났다). 앱을 재배포해도 반복하지 않는다. 2026-11 파이프라인 전환으로 개발 포트가 9910 → 9901로 바뀌었지만 프로젝트명·별칭은 그대로라 다시 할 것이 없다.
 
 ## 1. 스택별 값
 
-| 항목 | 검증 9910 | 운영 9900 |
+| 항목 | 개발 9901(옛 9910) | 운영 9900 |
 |---|---|---|
 | 공유 브리지 | `dbv-shared` (`10.203.0.0/24`) | 같음 |
 | db 별칭(= db-viewer가 host로 입력) | `bpm9910-db` | `bpm-db` |
@@ -37,7 +37,7 @@ db-viewer 쪽 원본 런북(연결 방식·네트워크 정책·트러블슈팅 
 `db`/`postgres`처럼 흔하다. 별칭이 겹치면 db-viewer가 **엉뚱한 DB에 붙고도 연결 테스트는 초록으로 뜬다** —
 이 방식의 유일한 함정이라 §6-2에서 DB명을 눈으로 대조한다.
 
-기존 `default` 네트워크(운영 172.36 · 9910 172.44)는 한 줄도 바뀌지 않는다. db는 두 네트워크에 동시에
+`default` 네트워크(대역은 Docker 자동 할당)는 이 합류로 바뀌지 않는다. db는 두 네트워크에 동시에
 속하고, backend·db-backup은 예전처럼 `default`로 db를 찾는다. 호스트 포트를 새로 여는 것이 아니다
 (`5432` 미노출) — 같은 브리지 안에서만 닿는다.
 
@@ -62,7 +62,7 @@ db-viewer backend는 이 네트워크에 **상시 합류**해 있다(그 저장�
 
 ```bash
 docker inspect -f '{{range .Mounts}}{{.Type}} {{.Name}} -> {{.Destination}}{{"\n"}}{{end}}' business-process-mgmt-db-1
-# 기대: volume business-process-mgmt_pgdata -> /var/lib/postgresql/data   (9910은 bpm-9910_pgdata)
+# 기대: volume business-process-mgmt_pgdata -> /var/lib/postgresql/data   (개발은 bpm-9910_pgdata)
 ```
 
 출력이 비면 **중단**. 운영에서는 오늘 자 덤프(`backups/bpm-*.dump`)가 있는지도 함께 본다
@@ -70,33 +70,35 @@ docker inspect -f '{{range .Mounts}}{{.Type}} {{.Name}} -> {{.Destination}}{{"\n
 
 ## 4. 반영 — `up -d db` (down 금지)
 
+지금은 배포 파이프라인이 이 합류를 담은 compose로 매번 배포한다([`gitlab-runner.md`](gitlab-runner.md)). 손으로 반영할 때는 배포 폴더에서(개발은 `-p bpm-9910`):
+
 ```bash
-cd <배포 디렉터리> && git pull
-docker compose config | grep -n -A2 aliases     # bpm-db(9910이면 bpm9910-db)로 보간됐는지
-docker compose up -d db                         # db만 in-place 재생성 (수 초)
-docker compose restart backend                  # 풀에 남은 구 DB 연결 정리
+cd /data/deployments/bpm
+docker compose -p business-process-mgmt config | grep -n -A2 aliases   # bpm-db(개발이면 bpm9910-db)로 보간됐는지
+docker compose -p business-process-mgmt up -d db                       # db만 in-place 재생성 (수 초)
+docker compose -p business-process-mgmt restart backend                # 풀에 남은 구 DB 연결 정리
 ```
 
 - **`docker compose down`은 쓰지 않는다** — 네트워크까지 지워 같은 스택의 다른 서비스가 영향을 받는다.
 - backend 재시작 이유: `create_async_engine`에 `pool_pre_ping`이 없어 db 재생성 직후 풀의 구 연결로
   한두 요청이 실패할 수 있다. 조용한 시간대에 하고 재시작으로 깔끔히 끊는다. db-backup은 psql 단발
   호출이라 불필요.
-- 9910 스택은 `docker compose -p bpm-9910 --env-file .env.9910 …` 형태로(스택 분리 규칙:
-  [`setup-once.md`](setup-once.md) A7), `.env.9910`에 `DBV_DB_ALIAS=bpm9910-db` 한 줄을 먼저 넣는다.
+- 개발 스택은 `/data/deployments/bpm-dev`에서 `docker compose -p bpm-9910 …`(스택 분리 규칙:
+  [`setup-once.md`](setup-once.md) A7), 그 `.env`에 `DBV_DB_ALIAS=bpm9910-db`. 배포 Job이 별칭 중복을 거절한다.
 
 ✅ 통과 기준:
 
 ```bash
 docker inspect -f '{{json .NetworkSettings.Networks}}' business-process-mgmt-db-1 | python3 -m json.tool | grep -E '"(business-process-mgmt_default|dbv-shared)"|Aliases' -A1
-docker compose ps                                 # db healthy · backend Up
+docker compose -p business-process-mgmt ps        # db healthy · backend Up
 curl -s http://localhost:9900/api/health          # {"status":"ok"}
 ```
 
 ## 5. 읽기전용 계정 `dbviewer_ro`
 
 ```bash
-# 컨테이너를 직접 지정한다 — compose exec는 프로젝트명(-p)·--env-file 조합이 어긋나면 자주 실패한다(실측).
-DB=business-process-mgmt-db-1        # 9910 스택이면 bpm-9910-db-1
+# 컨테이너를 직접 지정한다 — 프로젝트명(-p)을 빠뜨린 compose exec는 엉뚱한 스택을 찾는다.
+DB=business-process-mgmt-db-1        # 개발 스택이면 bpm-9910-db-1
 docker exec -it $DB psql -U processmap -d processmap
 ```
 
@@ -139,7 +141,7 @@ docker exec -i $DB psql -U dbviewer_ro -d processmap -c "SELECT count(*) FROM lo
 
 ## 6. db-viewer `/admin` 등록
 
-1. **등록** — 이름 `BPM (운영)`(9910이면 `BPM (9910)`), 엔진 `postgres`, host `bpm-db`/`bpm9910-db`,
+1. **등록** — 이름 `BPM (운영)`(개발이면 `BPM (개발)`, 예전 등록명 `BPM (9910)`), 엔진 `postgres`, host `bpm-db`/`bpm9910-db`,
    port `5432`, database `processmap`, username `dbviewer_ro`, password(§5).
    저장 후 목록에 `has_password: true`. 폼이 아예 안 뜨면 db-viewer의 `SOURCE_SECRET_KEY` 미설정이다.
 2. **[연결 테스트]** — 응답의 `database`가 **`processmap`**, `version`이 PostgreSQL 16인지 **눈으로 대조**.
@@ -159,7 +161,7 @@ docker exec -i $DB psql -U dbviewer_ro -d processmap -c "SELECT count(*) FROM lo
 **연결 해제**: db-viewer `/admin`에서 소스 비활성화(또는 스냅샷·정책 정리 후 삭제) → 이 스택에서
 `DROP ROLE dbviewer_ro`. compose 합류까지 빼려면 `docker-compose.yml`의 `dbv` 항목을 되돌리고 `up -d db`.
 
-**`docker compose down -v` 이후(검증 스택에서 흔함)** — `dbv-shared`는 `external`이라 남지만,
+**`docker compose down -v` 이후** — `dbv-shared`는 `external`이라 남지만,
 `pgdata`가 지워지면 **`dbviewer_ro` 롤과 권한도 함께 사라진다**. 운영 덤프를 복원해도 돌아오지 않는다
 (`pg_dump`는 롤을 담지 않는다) → §5 SQL 재실행. db-viewer 쪽 소스 등록은 그대로 유효하다.
 

@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > ㉒ **2026-10-22~23 main(v1.2.0·v1.3.1)**: 인스펙터 SP 카드 요약 줄·링크 주소 가드(v1.2.0) · **고아 참조 일반 사용자 오픈**(설정 › 점검 › 고아 참조, 줄마다 평소 권한=공통 규칙·sysadmin도 우회 없음, 판정 단일 소스 `app/ref_audit_policy.decide`, 노드는 작업본·새 Draft `Reference cleanup`, 빨간 점=직접 고칠 줄, 계약 `docs/spec.md` §7.x, 아래 Lessons) · 담당자 오경고 수정(v1.3.1).
 > ㉓ **2026-11-05 main(v1.5.0)**: **실행 체크(Run)**(게시본으로 실제 일 한 건을 밟는 실행 모드 `?run=`·홈 진행 중 실행/최근 끝남 · 알림 · 피드백 타일·실행 알림 7종·밤 정리 잡·좌측 사이드바 실행 이력 탭·뒤 단계 함께 취소·코멘트 고치기/지우기, 아래 Lessons 실행 체크 계약) · **배포 문서 파일**(compose가 `docs/manual`·`docs/notices`를 backend에 읽기 전용으로 붙여 매뉴얼 자동 동기화·공지 초안 불러오기, 아래 Lessons).
 > **서비스 버전**: `frontend/package.json` `version`이 단일 소스(빌드 때 상단 바 서비스 이름 옆 표시), 기록은 루트 `CHANGELOG.md`, main 머지마다 올리고 `vX.Y.Z` 태그(`rules/common/git.md` "On Main Merge — 서비스 버전"). 운영 배포 여부도 CHANGELOG에 적는다.
-> DB: 로컬 네이티브는 sqlite 파일(무설정, 연결마다 `PRAGMA foreign_keys=ON`이라 FK·cascade가 운영과 같다, 2026-10-20), 서버 compose는 postgres. 스키마는 startup `create_all`(마이그레이션 후속). **로컬 데모 시드: `backend/scripts/reset_db.py`**(`python -m scripts.reset_db` — `drop_all` 포함, 운영 실행 금지. postgres는 맵·직원이 있으면 스스로 멈춘다). **자동 백업·복구: `docs/deploy/backup.md`**(compose `db-backup` 사이드카, 일간 04:00 KST·14일 보존). **db-viewer 읽기전용 조회: `docs/deploy/db-viewer-readonly.md`** — compose의 db가 external `dbv-shared`에 합류하므로 서버에 그 네트워크가 없으면 `docker compose up`이 실패한다(`setup-once.md` A9).
+> DB: 로컬 네이티브는 sqlite 파일(무설정, 연결마다 `PRAGMA foreign_keys=ON`이라 FK·cascade가 운영과 같다, 2026-10-20), 서버 compose는 postgres. 스키마는 startup `create_all`(마이그레이션 후속). **로컬 데모 시드: `backend/scripts/reset_db.py`**(`python -m scripts.reset_db` — `drop_all` 포함, 운영 실행 금지. postgres는 맵·직원이 있으면 스스로 멈춘다). **자동 백업·복구: `docs/deploy/backup.md`**(compose `db-backup` 사이드카, 운영 전용 profile `backup`, 일간 04:00 KST·14일 보존). **db-viewer 읽기전용 조회: `docs/deploy/db-viewer-readonly.md`** — compose의 db가 external `dbv-shared`에 합류하므로 서버에 그 네트워크가 없으면 `docker compose up`이 실패한다(`setup-once.md` A9).
 > ⚠️ **캔버스/에디터 작업 전 `docs/lessons/`(시행착오 방지)를 먼저 읽을 것** — 아래 "Lessons" 섹션. (단, 인라인 계층 *편집*은 ⑦에서 제거됨 → 읽기전용 임베드. lessons는 React Flow/좌표/검증 함정 위주로 유효.)
 
 ## Commands
@@ -79,8 +79,10 @@ node scripts\build-component-catalog.mjs --check
 ```
 
 ```bash
-# 서버 배포 (리눅스 서버, 저장소 루트, .env 필요 — .env.example 참고)
-docker compose up -d --build   # 접속: http://<서버>:9900
+# 서버 배포 = 사내 GitLab 파이프라인 (docs/deploy/gitlab-runner.md) — 서버에서 손으로 up 하지 않는다
+git push gitlab dev    # 개발 :9901 — 테스트 통과 뒤 deploy-dev 자동 (배포 폴더 /data/deployments/bpm-dev, -p bpm-9910)
+git push gitlab main   # 운영 :9900 — 테스트 통과 뒤 deploy-production ▶ (배포 폴더 /data/deployments/bpm, -p business-process-mgmt)
+sh ci/test-deploy.sh   # 배포 스크립트(ci/deploy.sh) 검증 — 가짜 docker, busybox·GNU·macOS 공통
 ```
 
 ## Architecture
@@ -143,7 +145,7 @@ docker-compose.yml
 
 ## Operations / Deployment
 
-**파이프라인:** GitHub(Claude Code 수정) → Windows PC로 `git pull` → **로컬에서 Docker 없이 네이티브 실행·확인** → 서버(사내 71번)로 전송(scp 또는 gitlab pull) → **서버에서 docker-compose 배포**.
+**파이프라인:** GitHub(Claude Code 수정) → Windows PC로 `git pull` → **로컬에서 Docker 없이 네이티브 실행·확인** → 사내 GitLab으로 push → **GitLab Runner 배포 Job(`ci/deploy.sh`)이 서버 Docker 데몬에서 `compose -p <프로젝트> up -d --build`**(개발 9901 = `dev` push 자동, 운영 9900 = `main` ▶, 레지스트리·DinD 없음). 배포 폴더는 사람이 `.env`만 두고(운영은 `backups/`도) 나머지는 매번 checkout으로 바꾼다. 배포 스크립트 계약: 모든 docker 호출은 `env -i`(CI 변수가 `.env`를 덮지 않게), `set -x`·`.env`/`compose config` 출력·`down`/`prune`/`--remove-orphans` 금지, 가드가 걸리면 아무것도 지우지 않는다(`docs/deploy/gitlab-runner.md`).
 
 운영 환경이 코드에 부과하는 제약 — 위반하면 배포가 깨진다:
 
@@ -151,13 +153,15 @@ docker-compose.yml
 |------|------|-----------|
 | **줄바꿈은 LF 고정** | Windows PC 경유 시 CRLF 오염 → Linux/Docker에서 스크립트·빌드 깨짐 | `.gitattributes`로 `* text=auto eol=lf` 강제 (Windows 전용 스크립트만 CRLF) |
 | **로컬은 Docker 없음** | Windows PC에 Docker 미설치 | frontend/backend는 네이티브 실행 가능해야 함 (`npm run dev`, Python 직접 실행). DB·서비스 주소는 env로 분리 (`rules/backend/config.md`) — 로컬은 로컬 Postgres/원격, 서버는 compose 네트워크 |
-| **앱 nginx는 443/80 미점유** | 서버 엣지 nginx가 이미 443/80 사용 | compose nginx는 **9900** 노출. 우선 포트 직접 접속, 도메인 라우팅은 추후 엣지 nginx에 추가 |
+| **앱 nginx는 443/80 미점유** | 서버 엣지 nginx가 이미 443/80 사용 | compose nginx는 **9900**(개발 9901) 노출. 우선 포트 직접 접속, 도메인 라우팅은 추후 엣지 nginx에 추가 |
+| **compose 내부 대역은 자동 할당** | 서버 데몬 `default-address-pools`가 사내망과 겹치지 않는 풀을 준다(예전 172.36 고정은 풀 설정 전 충돌 회피) | `networks.default`에 `ipam` 없음. `FORWARDED_ALLOW_IPS`는 첫 배포 뒤 `docker network inspect <프로젝트>_default`로 확인해 스택별 `.env`에(배포 Job이 어긋나면 경고). 서브넷은 오버라이드 파일로 못 바꾼다(ipam 누적 병합 → "Pool overlaps") |
+| **두 스택은 프로젝트·폴더·포트·db 별칭이 모두 다르다** | 같은 서버·같은 `dbv-shared`. 프로젝트명이 볼륨 이름(`<프로젝트>_pgdata`)을 정한다 | 운영 `business-process-mgmt`·9900·`bpm-db`, 개발 `bpm-9910`(볼륨 이어 쓰기 위해 이름 유지)·9901·`bpm9910-db`. 배포 Job이 뒤바뀐 `.env`·별칭 중복·없는 볼륨·다른 폴더의 같은 프로젝트를 거절. 백업 사이드카는 운영 전용(compose profile `backup`) |
 | **서버는 평문 HTTP(원격 IP)** | 브라우저 secure context 아님(HTTPS·localhost만) → `crypto.subtle`/`crypto.randomUUID` 등 Web Crypto 미동작 | id는 `frontend/src/lib/id.ts`의 `genId()` 사용(`crypto.randomUUID` 금지), Keycloak 로그인은 PKCE 비활성(`disablePKCE`). **localhost는 secure context라 재현 안 됨 — 서버/원격 IP로 검증** |
 | **로컬↔서버 실행 경로 이원화** | 로컬=네이티브, 서버=Docker | 같은 코드가 양쪽에서 돌도록 환경 의존 값은 하드코딩 금지, 전부 `.env` 경유 |
 | **서버는 Docker Hub 차단** | 베이스 이미지는 연결된 PC에서 amd64 tar로 반입(`docker load`) — 이미지 프룬이 빌드 전용 베이스(node·python)를 지운다(2026-10-02 배포 실패) | Dockerfile에 `# syntax=` 지시어 금지(빌드마다 `docker/dockerfile` 이미지를 레지스트리에서 조회). `FROM` 태그를 바꾸면 서버에 tar 반입이 같이 필요 — `docs/deploy/deploy.md` §0 |
 | **배포 런타임이 로컬보다 낮음** | 이미지는 `python:3.11-slim` — 로컬은 3.12+. 프런트는 `node:24.22.1-alpine`으로 로컬과 같은 메이저(v1.3.2부터, 패치 버전 고정 — 유동 태그는 서버의 옛 tar로 조용히 빌드된다) | 상위 문법을 쓰면 **로컬 게이트는 전부 green인데 컨테이너에서 import SyntaxError로 기동 불능**(2026-08-31 PEP 695 실사고). `backend/ruff.toml`의 `target-version = "py311"`이 가드 — Dockerfile 베이스 상향 시 같이 올린다. 확실한 검증은 3.11 venv로 `import app.main` |
 
-**검증 단계:** 로컬 네이티브 실행으로 기능 확인 → 서버 docker-compose로 배포 확인. 로컬에서 통과해도 컨테이너 네트워크/포트/줄바꿈/**런타임 버전** 차이로 서버에서 깨질 수 있으니 양쪽 모두 검증한다. 배포 절차는 `docs/deploy/deploy.md`, 최초 1회 셋업은 `docs/deploy/setup-once.md`.
+**검증 단계:** 로컬 네이티브 실행으로 기능 확인 → 서버 docker-compose로 배포 확인. 로컬에서 통과해도 컨테이너 네트워크/포트/줄바꿈/**런타임 버전** 차이로 서버에서 깨질 수 있으니 양쪽 모두 검증한다. 배포 파이프라인은 `docs/deploy/gitlab-runner.md`, 서버 조건·앱 확인은 `docs/deploy/deploy.md`, 최초 1회 셋업은 `docs/deploy/setup-once.md`.
 
 ---
 

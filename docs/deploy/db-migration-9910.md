@@ -1,19 +1,21 @@
 # DB 마이그레이션 & 9910 검증 스택 가이드
 
-운영 스택(포트 **9900**)의 DB를 **복사**해서 dev를 포트 **9910**에 별도 스택으로 띄워, 마이그레이션과 기능을 검증하는 절차. 검증이 끝나면 dev→main 머지 후 운영(9900)을 같은 방식으로 승격한다. **운영 스택과 볼륨은 일절 건드리지 않는다**(덤프 읽기만).
+운영 스택(포트 **9900**)의 DB를 **복사**해서 개발 스택(포트 **9901**, 옛 9910)에 넣고, 마이그레이션과 기능을 검증하는 절차. 검증이 끝나면 dev→main 머지 후 운영(9900)을 같은 방식으로 승격한다. **운영 스택과 볼륨은 일절 건드리지 않는다**(덤프 읽기만).
 
 회차마다 반복하는 절차다 — §1의 "이번 회차" 표만 갱신해서 재사용한다. 스택을 처음 세울 때만 하는 준비(Keycloak URI 등록·n8n 워크플로·서브넷 분리)는 [`setup-once.md`](setup-once.md)로 분리했다.
 
+> **2026-11 파이프라인 전환 뒤 읽는 법** ([`gitlab-runner.md`](gitlab-runner.md)): 개발 스택은 `dev` push마다 GitLab의 `deploy-dev`가 배포 폴더 `/data/deployments/bpm-dev`에 배포하고, 포트는 9901이다. 서버에서 dev 코드를 체크아웃하거나 `up -d --build`를 손으로 치지 않는다. env 파일은 그 폴더의 `.env` 하나라(옛 `.env.9910`) `--env-file`이 없다. 프로젝트명 `bpm-9910`과 db 별칭 `bpm9910-db`는 그대로다. 개발 스택은 백업 사이드카가 없다.
+>
 > **명령에 alias를 쓰지 않는다.** 예전 판은 `dc910`이라는 alias를 전제했는데, 셸을 새로 열거나 다른 사람이 이어받으면 조용히 깨진다. 아래 명령은 전부 그대로 복사해 쓸 수 있는 완전형이다. 공통 접두는 항상:
 >
 > ```bash
-> docker compose -p bpm-9910 --env-file .env.9910 <명령>
+> docker compose -p bpm-9910 <명령>
 > ```
 >
 > 매번 타이핑이 길면 alias 대신 **셸 변수**를 쓴다(같은 셸 안에서만 유효한 건 alias와 같지만, 문서의 명령을 변형하지 않아 붙여넣기가 안전하다):
 >
 > ```bash
-> DC910="docker compose -p bpm-9910 --env-file .env.9910"
+> DC910="docker compose -p bpm-9910"
 > $DC910 ps
 > ```
 
@@ -62,31 +64,21 @@ git diff <운영커밋>..<검증커밋> -- backend/app/db.py backend/app/models.
 
 ## 2. 사전 준비
 
-**최초 1회 항목은 [`setup-once.md`](setup-once.md)에 있다** — Keycloak `:9910` redirect URI/Web origins 등록(A2) · n8n 웹훅 2종(A4) · 서브넷 분리(A7). 특히 **A2를 안 하면 로그인 자체가 안 된다.**
+**최초 1회 항목은 [`setup-once.md`](setup-once.md)에 있다** — Keycloak `:9901` redirect URI/Web origins 등록(A2, 개발이 Keycloak 로그인일 때만) · n8n 웹훅 2종(A4) · 스택 분리(A7).
 
 회차마다 하는 것:
 
-- [ ] 서버에 dev 코드 체크아웃 — 운영 코드와 **다른 디렉터리**(기존 `~/bpm-dev` 재사용):
+- [ ] 검증할 코드를 `dev`에 push — GitLab `deploy-dev`가 테스트 통과 뒤 개발 스택에 배포한다(Job 로그 끝 `[deploy] done`).
+- [ ] 개발 `.env`(`/data/deployments/bpm-dev/.env`)에 이번 회차 신규 env를 넣는다:
   ```bash
-  cd ~/bpm-dev && git fetch && git checkout origin/dev
-  git log --oneline -3
-  ```
-- [ ] `.env.9910` 작성 — 운영 `.env` 복사 + 포트 변경 + 이번 회차 신규 env:
-  ```bash
-  cp /path/to/운영/.env .env.9910
-  # 수정: APP_PORT=9910
   # 검증 중에는 HR_SYNC_INTERVAL_HOURS=0 (스케줄러 OFF, 수동 sync로만 진행)
-  # db-viewer 조회용 별칭은 운영과 갈라야 한다: DBV_DB_ALIAS=bpm9910-db (db-viewer-readonly.md)
+  # APP_PORT=9901 · DBV_DB_ALIAS=bpm9910-db 는 이미 있다(배포 Job이 확인한다)
   ```
-  ⚠️ compose backend에는 `env_file:`이 없다 — 신규 키는 `docker-compose.yml`의 `environment:` 블록에 매핑돼 있어야 컨테이너에 닿는다.
-- [ ] 잔재 네트워크 정리:
-  ```bash
-  docker network rm bpm-9910_default 2>/dev/null
-  ```
+  ⚠️ compose backend에는 `env_file:`이 없다 — 신규 키는 `docker-compose.yml`의 `environment:` 블록에 매핑돼 있어야 컨테이너에 닿는다. `.env`를 고친 뒤에는 `dev` 파이프라인을 다시 돌린다(Run pipeline).
 
 ---
 
-## 3. DB 복사 (운영 9900 → 검증 9910)
+## 3. DB 복사 (운영 9900 → 개발 9901)
 
 ### 3-1. 운영 DB 덤프 (무중단, 읽기 전용)
 
@@ -100,37 +92,37 @@ ls -lh bpm-9900-*.dump   # 0바이트 아님 확인
 docker run --rm -i postgres:16-alpine pg_restore --list < bpm-9900-*.dump | head -15   # 아카이브 검증
 ```
 
-### 3-2. 검증 스택의 db만 먼저 기동
+### 3-2. 개발 스택의 쓰기 멈추기 (db는 둔다)
 
-**순서 중요** — backend가 빈 DB에 먼저 붙으면 최신 스키마로 테이블을 만들어 버려 복원이 충돌한다. 반드시 **db 기동 → 복원 → backend 기동**.
+개발 스택은 파이프라인으로 이미 떠 있다. 복원 중에 backend가 DB에 쓰지 않게 backend·frontend만 멈춘다. 순서는 **쓰기 멈춤 → 복원 → backend 기동**.
 
 ```bash
-cd ~/bpm-dev
-docker compose -p bpm-9910 --env-file .env.9910 up -d db
-docker compose -p bpm-9910 --env-file .env.9910 ps        # healthy 대기
+cd /data/deployments/bpm-dev
+docker compose -p bpm-9910 stop backend frontend
+docker compose -p bpm-9910 ps        # db healthy
 ```
 
 ### 3-3. 덤프 복원
 
 ```bash
-DEV_DB=$(docker compose -p bpm-9910 --env-file .env.9910 ps -q db)
+DEV_DB=$(docker compose -p bpm-9910 ps -q db)
 cat bpm-9900-*.dump | docker exec -i "$DEV_DB" pg_restore -U processmap -d processmap \
   --no-owner --clean --if-exists
 docker exec -i "$DEV_DB" psql -U processmap -d processmap -c "SELECT count(*) FROM process_maps;"
 ```
 
-### 3-4. 전체 스택 기동 = 마이그레이션 실행
+### 3-4. backend 기동 = 마이그레이션 실행
 
 ```bash
-docker compose -p bpm-9910 --env-file .env.9910 up -d --build     # 최초 수 분
-docker compose -p bpm-9910 --env-file .env.9910 logs backend | head -80
-curl -s http://localhost:9910/api/health                          # {"status":"ok"}
+docker compose -p bpm-9910 start backend frontend     # 또는 dev 파이프라인 Run(코드도 새로 바꿀 때)
+docker compose -p bpm-9910 logs backend | head -80
+curl -s http://localhost:9901/api/health                          # {"status":"ok"}
 ```
 
 **⚠️ 여기가 첫 관문이다 — backend가 실제로 떴는지부터 본다.**
 
 ```bash
-docker compose -p bpm-9910 --env-file .env.9910 ps        # backend가 restarting/exited면 아래 §9
+docker compose -p bpm-9910 ps        # backend가 restarting/exited면 아래 §9
 ```
 
 로그에서 확인할 것(각 1회, 멱등이라 재기동 시엔 안 나옴):
@@ -177,7 +169,7 @@ docker exec -i "$DEV_DB"  psql -U processmap -d processmap -c "$Q"
 스모크에 들어가기 전에 로그인부터 뚫는다. 실패 양상이 헷갈리기로 유명한 구간이다.
 
 ```bash
-curl -s http://localhost:9910/api/auth/mode; echo
+curl -s http://localhost:9901/api/auth/mode; echo
 ```
 
 기대: `{"mode":"keycloak","keycloakIssuer":"http://.../realms/ai-portal","keycloakClientId":"bpm-frontend"}`
@@ -185,8 +177,8 @@ curl -s http://localhost:9910/api/auth/mode; echo
 | 응답 | 원인 |
 |---|---|
 | 연결 실패 / 502 | backend가 안 떴다 → §9 |
-| `keycloakClientId`가 빈 문자열 | `.env.9910`에 `KEYCLOAK_CLIENT_ID` 누락. compose 기본값이 빈 문자열이라 **에러 없이 조용히** 빈 값이 들어간다 |
-| 정상 JSON인데 브라우저에서 리다이렉트 실패 | Keycloak에 `:9910` origin 미등록 → [`setup-once.md`](setup-once.md) A2 |
+| `keycloakClientId`가 빈 문자열 | 개발 `.env`에 `KEYCLOAK_CLIENT_ID` 누락. compose 기본값이 빈 문자열이라 **에러 없이 조용히** 빈 값이 들어간다 |
+| 정상 JSON인데 브라우저에서 리다이렉트 실패 | Keycloak에 `:9901` origin 미등록 → [`setup-once.md`](setup-once.md) A2 |
 | `"mode":"ldap"` | ID/PW 폼이 뜬다. `employees` 행이 없는 계정은 AD 비번이 맞아도 401 |
 
 > **"로그인 버튼이 무반응"은 인증 설정 문제가 아닐 수 있다.** 프론트의 인증 모드 조회는 fail-closed라, backend가 죽어 `/api/auth/mode`가 무응답이면 에러를 띄우지 않고 빈 issuer/client_id의 Keycloak 카드를 그린다 — 버튼이 죽은 것처럼 보인다. **인증을 뒤지기 전에 컨테이너 상태부터 확인**할 것(2026-08-31 실사고).
@@ -195,7 +187,7 @@ curl -s http://localhost:9910/api/auth/mode; echo
 
 ## 6. HR 웹훅 이행 리허설
 
-9910은 운영 DB 복사본이라 **실 HR sync를 돌려도 운영 무영향** — 이행 절차를 여기서 그대로 리허설하는 것이 이 검증의 핵심이다. sysadmin 계정으로 `http://<서버IP>:9910` 로그인 후 진행. 스케줄러는 `.env.9910`에서 `HR_SYNC_INTERVAL_HOURS=0`으로 꺼져 있어야 한다.
+개발 스택은 운영 DB 복사본이라 **실 HR sync를 돌려도 운영 무영향** — 이행 절차를 여기서 그대로 리허설하는 것이 이 검증의 핵심이다. sysadmin 계정으로 `http://<서버IP>:9901` 로그인 후 진행. 스케줄러는 개발 `.env`에서 `HR_SYNC_INTERVAL_HOURS=0`으로 꺼져 있어야 한다.
 
 ### 6-1. 드라이런 (DB 무변경)
 
@@ -212,7 +204,7 @@ curl -s http://localhost:9910/api/auth/mode; echo
 
 ### 6-2. 첫 수동 sync
 
-설정 → Employees 탭 → **Sync**. 503이면 `.env.9910`의 URL/토큰 확인.
+설정 → Employees 탭 → **Sync**. 503이면 개발 `.env`의 URL/토큰 확인.
 
 | 필드 | 기대 |
 |---|---|
@@ -284,33 +276,29 @@ docker exec -i "$DEV_DB" psql -U processmap -d processmap -c \
 
 ## 9. 트러블슈팅 — backend가 안 뜰 때
 
-`docker compose -p bpm-9910 --env-file .env.9910 logs backend | head -80`을 먼저 본다.
+`docker compose -p bpm-9910 logs backend | head -80`을 먼저 본다.
 
 | 로그 | 원인 |
 |---|---|
 | `SyntaxError` (import 단계) | **로컬 파이썬이 배포 런타임보다 높아 상위 문법이 섞여 들어간 경우.** 배포 이미지는 `python:3.11-slim`이다 — 로컬 3.12+에서 짠 PEP 695 제네릭(`def f[T]()`) 등이 여기서 죽는다. `backend/ruff.toml`의 `target-version = "py311"`이 린트에서 잡도록 걸어뒀으니, 재발 시 로컬에서 `ruff check app/ tests/` 먼저. (2026-08-31 실사고 — [`setup-once.md`](setup-once.md) 참조) |
-| `AUTH_MODE=ldap requires AUTH_JWT_SECRET to be set` | `.env.9910`에 서명키 누락. `openssl rand -hex 32` |
+| `AUTH_MODE=ldap requires AUTH_JWT_SECRET to be set` | 개발 `.env`에 서명키 누락. `openssl rand -hex 32` |
 | `column ... does not exist` | 신규 컬럼이 `db.py`의 `_ADDED_COLUMNS`에 등록되지 않았다 — 코드 수정 필요 |
 | `Pool overlaps with other one` | 서브넷 충돌 → [`setup-once.md`](setup-once.md) A7 |
-| db 연결 실패 | `docker compose -p bpm-9910 --env-file .env.9910 logs db`, healthcheck 통과 여부 |
+| db 연결 실패 | `docker compose -p bpm-9910 logs db`, healthcheck 통과 여부 |
 
 ---
 
 ## 10. 정리·롤백
 
-- **9910 스택 폐기**(복사본이므로 운영 무영향):
-  ```bash
-  docker compose -p bpm-9910 --env-file .env.9910 down -v      # -v: 복제 DB 볼륨까지 삭제
-  ```
-- **복원부터 재시도**: 위 `down -v` 후 §3-2부터.
+- **복원부터 재시도**: §3-2부터 다시(`pg_restore --clean`이 덮어쓴다). 볼륨을 지우는 `down -v`는 쓰지 않는다 — 지우면 다음 `deploy-dev`가 볼륨 가드로 멈추고, 새 빈 DB로 시작하려면 Run pipeline 변수 `BPM_ALLOW_NEW_DB=1`이 필요하다([`gitlab-runner.md`](gitlab-runner.md) 3절).
 - n8n `hr-position` 워크플로는 남겨둔다(운영 승격 때 그대로 사용). 비활성화만 원하면 Activate 토글 OFF.
 - 운영(9900)은 이 절차 동안 아무 변경이 없다.
 
 ---
 
-## 11. 운영(9900) 승격 — 9910 검증 통과 + main 머지 후
+## 11. 운영(9900) 승격 — 개발 검증 통과 + main 머지 후
 
-**dev를 직접 운영에 올리지 않는다** — 9910 검증 통과 → dev→main 머지·푸시 → 운영은 main으로. 직전 백업 덤프가 유일한 롤백 수단이니 반드시 먼저 뜬다.
+**dev를 직접 운영에 올리지 않는다** — 개발(9901) 검증 통과 → dev→main 머지·푸시 → 운영은 main으로. 직전 백업 덤프가 유일한 롤백 수단이니 반드시 먼저 뜬다.
 
 ```bash
 # 운영 디렉터리에서
@@ -318,14 +306,14 @@ PROD_DB=business-process-mgmt-db-1
 docker exec "$PROD_DB" pg_dump -U processmap -d processmap -Fc \
   > bpm-9900-before-upgrade-$(date +%Y%m%d).dump   # -t 금지
 
-# 운영 .env에 이번 회차 신규 키 추가(9910에서 확정한 값 그대로)
-git fetch && git checkout <9910에서 검증한 dev와 동일 내용의 main 커밋>
-docker compose up -d --build
-docker compose logs backend | head -80
+# 운영 .env(/data/deployments/bpm/.env)에 이번 회차 신규 키 추가(개발에서 확정한 값 그대로)
+# → GitLab main 파이프라인에서 deploy-production ▶ (gitlab-runner.md 4절)
+cd /data/deployments/bpm
+docker compose -p business-process-mgmt --profile backup logs backend | head -80
 curl -s http://localhost:9900/api/health
 curl -s http://localhost:9900/api/auth/mode; echo
 ```
 
 - §4 스키마 확인 → **§6 이행 절차를 운영에서 재수행**(드라이런으로 case 불일치 0 재확인 → 첫 수동 sync → §6-4 Orphaned refs 탭(ref-audit) 이관 → §7-2 노출 직책 확정) → `.env`의 `HR_SYNC_INTERVAL_HOURS=24` + backend 재기동으로 스케줄러 ON.
-- **롤백**: additive+완화 스키마라 코드만 되돌리면 된다(`git checkout <직전 main> && docker compose up -d --build`). 데이터까지 되돌릴 일이 생기면 백업 덤프로 §3-3 방식 복원.
+- **롤백**: additive+완화 스키마라 코드만 되돌리면 된다(직전 `main` 파이프라인의 `deploy-production` Retry, [`gitlab-runner.md`](gitlab-runner.md) 8절). 데이터까지 되돌릴 일이 생기면 백업 덤프로 §3-3 방식 복원.
 - 승격 후: 공지·매뉴얼 갱신 여부 판단(설정 → 콘텐츠).

@@ -7,10 +7,11 @@
 
 ## 배포 · DB ([`deploy/`](deploy/))
 - [`deploy/setup-once.md`](deploy/setup-once.md) — **초기 1회 셋업 모음**(스택 구축 1회 A절 · 릴리스 이후 1회 B절). 다른 배포 문서가 여기를 참조한다.
+- [`deploy/gitlab-runner.md`](deploy/gitlab-runner.md) — **사내 GitLab Runner 배포 파이프라인**(운영 9900 ▶·개발 9901 자동, 러너 등록·GitLab 설정·배포 폴더·내부 대역 → `FORWARDED_ALLOW_IPS`·손으로 띄운 스택에서 넘어가기·롤백·비상 수동 경로·트러블슈팅).
 - [`deploy/deploy.md`](deploy/deploy.md) — 서버 docker-compose 배포 절차(매 배포 반복분 — 포트·nginx 토폴로지·인증 모드·헬스체크·트러블슈팅·롤백).
 - [`deploy/backup.md`](deploy/backup.md) — DB 자동 백업 정책(db-backup 사이드카, 일간 04:00 KST·14일 보존)·복구 런북.
 - [`deploy/db-viewer-readonly.md`](deploy/db-viewer-readonly.md) — db-viewer(:6678) 읽기전용 조회 연결의 **서버 수작업분**(공유 브리지 `dbv-shared` 확인·`dbviewer_ro` 발급·소스 등록). compose 합류는 이미 반영돼 있다.
-- [`deploy/db-migration-9910.md`](deploy/db-migration-9910.md) — 운영 DB 복사 → 검증 스택(9910) 마이그레이션 절차.
+- [`deploy/db-migration-9910.md`](deploy/db-migration-9910.md) — 운영 DB 복사 → 개발 스택(9901, 옛 9910) 마이그레이션 절차.
 - [`deploy/kb-embedding.md`](deploy/kb-embedding.md) — 지식기반(P2) 임베딩 설정(`EMBED_*`)·게시본 백필 절차.
 
 ## QA · 검증 ([`qa/`](qa/))

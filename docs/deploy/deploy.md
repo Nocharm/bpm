@@ -2,6 +2,8 @@
 
 로컬에서 검증한 코드를 서버(사내 71번)로 옮겨 docker-compose로 올리는 절차. 파이프라인 전체는 `CLAUDE.md` Operations 참고.
 
+> **배포는 사내 GitLab 파이프라인이 한다 → [`gitlab-runner.md`](gitlab-runner.md).** 개발(9901)은 `dev` push마다 자동, 운영(9900)은 `main` 파이프라인에서 ▶. 이 문서는 그 Job이 전제하는 서버 조건(§0)·`.env` 값(§2)·배포 확인(§4)·앱 트러블슈팅(§5)을 다룬다. 서버에서 손으로 치는 `docker compose` 명령은 **배포 폴더에서 `-p <프로젝트>`를 붙여** 읽는다 — 운영 `/data/deployments/bpm`·`-p business-process-mgmt --profile backup`, 개발 `/data/deployments/bpm-dev`·`-p bpm-9910`([`gitlab-runner.md`](gitlab-runner.md) 9절).
+
 > **최초 1회 셋업은 [`setup-once.md`](setup-once.md)로 분리했다** — Keycloak 클라이언트 등록, AD/LDAP 인프라, n8n 웹훅, 시크릿 발급, 서브넷 분리, 릴리스별 1회 보정까지. 이 문서는 **매 배포마다 반복하는 절차**를 다룬다.
 
 ## 0. 전제조건
@@ -36,16 +38,12 @@ docker run --rm node:24.22.1-alpine node -v                                     
 
 여기서 기억할 두 가지만 다시 적어둔다 — 배포 때 실제로 밟는 지뢰다:
 
-- **URI 등록은 realm당 1회가 아니라 포트·도메인마다 1회다.** `redirect_uri`를 코드가 `window.location.origin`으로 만들기 때문에 운영 `:9900`과 검증 `:9910`이 서로 다른 origin이다. 새 포트로 스택을 열었는데 로그인이 안 되면 여기부터 본다.
+- **URI 등록은 realm당 1회가 아니라 포트·도메인마다 1회다.** `redirect_uri`를 코드가 `window.location.origin`으로 만들기 때문에 운영 `:9900`과 개발 `:9901`이 서로 다른 origin이다(개발이 임시 로그인이면 해당 없음). 새 포트로 스택을 열었는데 로그인이 안 되면 여기부터 본다.
 - **Web origins는 redirect URI와 별개 항목이다.** 빼먹으면 로그인 왕복은 되는데 토큰 교환이 CORS로 죽는다(`failed to fetch` / `No matching state found`).
 
 ## 2. `.env` 작성
 
-`.env`는 절대 커밋 금지. `.env.example` 참고.
-
-```bash
-cp .env.example .env
-```
+`.env`는 절대 커밋 금지. `.env.example` 참고. 스택마다 배포 폴더에 하나씩 둔다(운영 `/data/deployments/bpm/.env`, 개발 `/data/deployments/bpm-dev/.env`). 배포 Job이 거절하는 값은 [`gitlab-runner.md`](gitlab-runner.md) 3절.
 
 ```
 APP_PORT=9900
@@ -100,7 +98,7 @@ AI_ENDPOINTS=
 |------|------|-------------|
 | `keycloak` | 운영 기본. 사내 Keycloak(realm `ai-portal`) OIDC | "Keycloak으로 로그인" 버튼 |
 | `ldap` | 사내 AD 직접 bind 인증 + 설정 화면에서 발급한 로컬 계정(컨설턴트용) — Keycloak 인프라 없이도 운영 가능 | ID/PW 폼 |
-| `dev` | 로컬 우회(임시 유저 선택) — 서버 배포에서 사용 금지 | 유저 피커 |
+| `dev` | 로컬 우회(임시 유저 선택) — 운영 금지. 개발 스택(9901)은 `DEV_ENFORCE_PERMISSIONS=true`와 함께만(배포 Job 가드) | 유저 피커 |
 
 **`ldap` 모드 필수값:**
 - `AUTH_JWT_SECRET` — 앱이 자체 서명하는 세션 토큰(HS256)의 서명키. 비우면 **기동 자체가 실패**한다(`backend/app/main.py` — `AUTH_MODE=ldap requires AUTH_JWT_SECRET to be set`). 발급: `openssl rand -hex 32`.
@@ -119,9 +117,7 @@ AI_ENDPOINTS=
 
 ## 3. 배포
 
-```bash
-docker compose up -d --build
-```
+GitLab 파이프라인의 배포 Job이 `ci/deploy.sh`로 배포 폴더를 checkout으로 바꾸고 `docker compose -p <프로젝트> up -d --build` → proxy 재시작(운영은 db-backup 재생성) → 헬스체크까지 한다([`gitlab-runner.md`](gitlab-runner.md) 4절). 아래 "`up -d`로 반영"은 `.env`만 바꾸고 파이프라인을 다시 돌리는 것을 뜻한다(같은 문서 5절).
 
 - **배포 단위는 서비스 버전**(`vX.Y.Z` 태그, 맨 위 항목은 루트 `CHANGELOG.md`). 버전마다 배포 메모(사이드카 재생성 등)가 CHANGELOG에 있으니 배포 전에 읽는다. 버전 규칙은 `rules/common/git.md` "On Main Merge — 서비스 버전".
 
@@ -134,20 +130,24 @@ docker compose up -d --build
   - **컬럼 삭제·개명·테이블 제거는 자동 반영되지 않는다** — 구 컬럼이 DB에 남고, 그것이 `NOT NULL`이면 INSERT가 깨진다. 그런 변경은 배포 전에 직접 `DROP`하거나 nullable로 바꾼다.
 - 프룬 도입(2026-07-09) 후 첫 AD 전체 동기화는 스테일 ad 행을 대량 삭제할 수 있음(비활성·퇴사자). 삭제 행의 한글이름/한글부서도 함께 사라지므로, 동기화 전 한글이름 모달의 전체 목록 추출로 백업 권장.
 - **1회성 후처리는 [`setup-once.md`](setup-once.md) B절에 모아뒀다** — `ai_chat_logs` 드랍(B1) · KB 게시본 백필(B2) · 필드 승격 재임포트(B3) · HR 첫 sync와 고아 경로 이관(B4) · 노출 직책 확정(B5). 지난 릴리스라면 이미 끝났을 수 있으니 해당 항목만 골라 확인한다.
-- **매뉴얼·공지 초안은 저장소 파일이 원본이다**(v1.5.0) — compose가 `./docs/manual`·`./docs/notices`를 backend의 `/docs` 아래에 읽기 전용으로 붙인다. backend가 뜰 때와 매뉴얼 목록을 열 때 `docs/manual/*-ko|en.md`가 바뀌었으면 앱 매뉴얼 문서에 반영하고(화면 편집은 잠김), 공지 작성 창의 **파일에서 불러오기**가 `docs/notices/*.md`를 읽는다. 그래서 문서만 바뀐 배포도 `git pull`만으로 반영된다. 서버 체크아웃에 `docs/manual`이 없으면 backend 로그에 `manual sync: no manual files`가 남고 기존 문서는 그대로다.
-- **`scripts/db-backup.sh`를 바꾼 배포는 사이드카를 다시 만든다** — 스크립트는 바인드 마운트라 `up -d --build`가 db-backup을 재생성하지 않아 옛 루프가 계속 돈다: `docker compose up -d --force-recreate db-backup`. 2026-10-20 배포(Backup now 트리거가 `requests/`로 이동)가 해당한다.
+- **매뉴얼·공지 초안은 저장소 파일이 원본이다**(v1.5.0) — compose가 `./docs/manual`·`./docs/notices`를 backend의 `/docs` 아래에 읽기 전용으로 붙인다. backend가 뜰 때와 매뉴얼 목록을 열 때 `docs/manual/*-ko|en.md`가 바뀌었으면 앱 매뉴얼 문서에 반영하고(화면 편집은 잠김), 공지 작성 창의 **파일에서 불러오기**가 `docs/notices/*.md`를 읽는다. 그래서 문서만 바뀐 배포도 파이프라인 한 번으로 반영된다. 서버 체크아웃에 `docs/manual`이 없으면 backend 로그에 `manual sync: no manual files`가 남고 기존 문서는 그대로다.
+- **`scripts/db-backup.sh`를 바꾼 배포는 사이드카를 다시 만든다** — 스크립트는 바인드 마운트라 `up -d --build`가 db-backup을 재생성하지 않아 옛 루프가 계속 돈다. 배포 Job이 스크립트 변경을 감지해 `up -d --force-recreate db-backup`을 대신 친다(운영만, 사이드카는 profile `backup`이라 개발에는 없다).
 - **데모 데이터 시드**(`backend/scripts/reset_db.py`)는 빈 DB 전용 → [`setup-once.md`](setup-once.md) A8. ⚠️ `drop_all`이라 **운영에서 실행 금지**(postgres는 맵·직원이 있으면 스크립트가 스스로 멈춘다).
 - **db-viewer 읽기전용 조회**를 새 스택에 처음 붙일 때만 → [`db-viewer-readonly.md`](db-viewer-readonly.md)(계정 발급·소스 등록은 서버 수작업). 매 배포에 반복하지 않는다.
 
 ## 4. 헬스체크 + 인증/AD 검증
 
+배포 Job이 proxy 안에서 `/api/health`·`/api/auth/mode`(`.env`의 모드와 같은지)·`/`를 확인하고 끝난다. 서버에서 더 볼 때(운영 배포 폴더 기준, 개발은 `-p bpm-9910`·포트 9901·db-backup 없음):
+
 ```bash
-docker compose ps                                  # 5개 서비스 Up(db-backup 포함), db healthy
+cd /data/deployments/bpm
+DC='docker compose -p business-process-mgmt --profile backup'   # 셸 변수(이 셸에서만)
+$DC ps                                             # 5개 서비스 Up(db-backup 포함), db healthy
 curl -s http://localhost:9900/api/health           # {"status":"ok"} (인증 면제)
-docker compose logs --tail 3 db-backup             # "[db-backup] ... ok bpm-....dump" — 첫 덤프 확인 (backup.md §2)
+$DC logs --tail 3 db-backup                        # "[db-backup] ... ok bpm-....dump" — 첫 덤프 확인 (backup.md §2)
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:9900/   # 200
 # backend가 LDAP 설정을 받았는지
-docker compose exec backend python -c "from app.settings import settings; print('ldap_enabled=', settings.ldap_enabled, 'admins=', settings.admin_login_ids())"
+$DC exec backend python -c "from app.settings import settings; print('ldap_enabled=', settings.ldap_enabled, 'admins=', settings.admin_login_ids())"
 ```
 
 브라우저에서 상단 바 서비스 이름 옆 버전(`vX.Y.Z`)이 배포한 버전과 같은지 보고, `CHANGELOG.md` 해당 항목에 배포일을 적는다(같지 않으면 frontend 이미지가 다시 빌드되지 않은 것, §7).
@@ -155,6 +155,8 @@ docker compose exec backend python -c "from app.settings import settings; print(
 브라우저(`http://<서버>:9900`) 플로우: ① 미인증 → `/login` 리다이렉트 ② "Keycloak으로 로그인" → 메인 진입 ③ 유저명 클릭 → `SYSTEM_ADMIN_LOGIN_IDS` 계정이면 관리자 페이지 노출 ④ 관리자 페이지 → "AD 전체 동기화" → `scanned/upserted/excluded` 요약 ⑤ 5분 내 재클릭 → 429(throttled). **로그인 시 1인 동기화**: 각 사용자가 로그인하면 `/api/me`에서 본인 1명을 AD에서 upsert(전체 동기화 없이도 점진 충전).
 
 ## 5. 트러블슈팅
+
+아래 `docker compose`는 배포 폴더에서 `-p <프로젝트>`를 붙여 친다(머리말). 배포 Job 자체의 실패 메시지는 [`gitlab-runner.md`](gitlab-runner.md) 7절.
 
 **로그인이 안 되면 인증 설정보다 backend 생존을 먼저 본다.** 프론트의 인증 모드 조회(`GET /api/auth/mode`)는 fail-closed라, backend가 죽어 무응답이면 에러를 띄우지 않고 **빈 issuer/client_id의 Keycloak 카드**를 그린다 — 화면은 멀쩡한데 버튼만 죽은 것처럼 보인다. 순서대로:
 
@@ -194,7 +196,7 @@ curl -s http://localhost:9900/api/auth/mode; echo  # issuer·clientId가 채워�
 
 - `LDAP_BIND_CREDENTIALS`는 시크릿 — `.env`에만, git 금지. 서비스 계정은 읽기 전용 최소 권한.
 - 가능하면 LDAPS(636)/StartTLS로 평문 bind 회피.
-- `X-Dev-User` 헤더는 `AUTH_MODE=dev`(또는 구 `AUTH_ENABLED=false`로 유도된 dev)에서만 신뢰. 서버는 `keycloak`/`ldap`이라 무시(우회 불가).
+- `X-Dev-User` 헤더는 `AUTH_MODE=dev`(또는 구 `AUTH_ENABLED=false`로 유도된 dev)에서만 신뢰. 운영은 `keycloak`이라 무시(우회 불가, 배포 Job이 다른 모드를 거절). 개발 스택(9901)은 임시 로그인이라 헤더로 누구든 될 수 있다 — 사내망 개발용으로만 쓴다.
 - 관리자 엔드포인트(`/api/employees`, `/api/employees/sync`)는 백엔드 `require_admin`으로 서버측 보호(프론트 숨김에 의존 안 함).
 - **PKCE 비활성(`disablePKCE:true`)은 의도된 트레이드오프** — 사내망 평문 HTTP에서 `crypto.subtle`(secure context 전용)을 못 써 끈 것. auth code 가로채기 방어가 약해지나 사내망 한정으로 수용. **HTTPS 도메인 전환 시 PKCE(S256) 복구**(앱·Keycloak 둘 다 HTTPS여야 discovery mixed-content 회피).
 
@@ -215,10 +217,8 @@ curl -s http://localhost:9900/api/auth/mode; echo  # issuer·clientId가 채워�
 
 ## 8. 롤백
 
-```bash
-git checkout <이전-태그> && docker compose up -d --build   # 예: v1.0.0 (CHANGELOG.md)
-```
+이전 파이프라인의 배포 Job을 Retry한다 → [`gitlab-runner.md`](gitlab-runner.md) 8절. 배포 폴더에는 `.git`이 없어 `git checkout`이 통하지 않는다.
 
-데이터는 `pgdata` 볼륨에 유지. 완전 초기화는 `docker compose down -v`(볼륨 삭제 — 주의).
+데이터는 `<프로젝트>_pgdata` 볼륨에 유지된다. `docker compose down -v`는 볼륨을 지운다 — 운영·개발 모두 쓰지 않는다.
 
 > **샌드박스 한계:** CI 환경은 Docker Hub 무인증 풀 제한으로 `compose build`를 끝까지 검증 못 한다. `docker compose config` 정적 검증은 통과, 실제 빌드/기동은 서버에서 확인.

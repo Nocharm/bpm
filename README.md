@@ -28,7 +28,8 @@
 | `frontend/` | Next.js + TypeScript + @xyflow/react | 에디터 UI |
 | `backend/` | FastAPI + Python **3.11**(배포 이미지 기준) | 맵/버전/노드/엣지·승인 워크플로·권한 API |
 | `nginx/` | nginx | 리버스 프록시 — `/` → frontend, `/api` → backend |
-| `docker-compose.yml` | + PostgreSQL 16 | 서버 배포 (포트 **9900**) |
+| `docker-compose.yml` | + PostgreSQL 16 | 서버 배포 (운영 **9900** · 개발 **9901**) |
+| `ci/`, `.gitlab-ci.yml` | POSIX sh · GitLab CI | 사내 GitLab 파이프라인 — 테스트 3종 + 배포 Job(`ci/deploy.sh`) |
 
 ## 로컬 개발 (Docker 없이 네이티브)
 
@@ -96,16 +97,28 @@ npx tsc --noEmit -p tsconfig.json; npx vitest run
 업무 체계 드릴다운을 큰 트리로 실측하려면 **규모 시드**를 얹는다(멱등, 맵 없음 — L1 1개 아래 L5 2,000개): `python -m scripts.seed_framework_scale [--l5 N]` (bash: `.venv/bin/python -m scripts.seed_framework_scale` · PowerShell: `.venv\Scripts\python -m scripts.seed_framework_scale`).
 
 
-## 서버 배포 (docker-compose)
+## 서버 배포 (사내 GitLab 파이프라인)
+
+서버에서 손으로 `docker compose up`을 치지 않는다. 사내 GitLab에 push하면 서버의 배포 러너가 서버 Docker 데몬에서 `docker compose -p <프로젝트> up -d --build`를 돌린다(레지스트리·DinD 없음).
+
+| 스택 | 트리거 | 배포 폴더(`.env`만 사람이 둔다) | compose 프로젝트 | 접속 |
+|---|---|---|---|---|
+| 운영 | `main` 파이프라인에서 `deploy-production` ▶ | `/data/deployments/bpm` | `business-process-mgmt` | `http://<server-ip>:9900` |
+| 개발 | `dev` push마다 `deploy-dev` 자동 | `/data/deployments/bpm-dev` | `bpm-9910` | `http://<server-ip>:9901` |
 
 ```bash
-cp .env.example .env   # POSTGRES_PASSWORD, KEYCLOAK_* 등 수정
-docker compose up -d --build
-# 접속: http://<서버>:9900
+git push gitlab dev        # 개발: 테스트 통과 뒤 자동 배포
+git push gitlab main       # 운영: 테스트 통과 뒤 ▶
+sh ci/test-deploy.sh       # 배포 스크립트 로컬 검증(가짜 docker, 실제 docker 불필요)
 ```
 
-> 전체 절차(Keycloak 클라이언트 등록·헬스체크·롤백)는 **[`docs/deploy/deploy.md`](docs/deploy/deploy.md)** 참고.
+```powershell
+git push gitlab dev; git push gitlab main
+& "C:\Program Files\Git\bin\sh.exe" ci/test-deploy.sh   # POSIX sh가 필요하다 — Git for Windows의 sh
+```
+
+> 러너 등록·GitLab 설정·손으로 띄운 스택에서 넘어가기·롤백·비상 수동 경로는 **[`docs/deploy/gitlab-runner.md`](docs/deploy/gitlab-runner.md)**, 서버 조건·`.env`·헬스체크·앱 트러블슈팅은 **[`docs/deploy/deploy.md`](docs/deploy/deploy.md)**.
 > 배포 단위는 **서비스 버전**(`vX.Y.Z` 태그, 상단 바 서비스 이름 옆에 표시) — 버전별 범위·배포 메모는 **[`CHANGELOG.md`](CHANGELOG.md)**, main 머지마다 올린다.
-> DB는 `db-backup` 사이드카가 매일 04:00 KST 자동 덤프(기본 `./backups`, 14일 보존) — 정책·복구는 **[`docs/deploy/backup.md`](docs/deploy/backup.md)**.
+> 운영 DB는 `db-backup` 사이드카(compose profile `backup`, 운영 전용)가 매일 04:00 KST 자동 덤프(기본 `./backups`, 14일 보존) — 정책·복구는 **[`docs/deploy/backup.md`](docs/deploy/backup.md)**. 개발 스택은 백업하지 않는다.
 > 앱 매뉴얼은 저장소 `docs/manual`의 md가 원본이다. compose가 `docs/manual`·`docs/notices`를 backend에 읽기 전용으로 붙여, 배포하면 매뉴얼이 자동으로 맞춰지고 공지 작성 창에서 `docs/notices` 초안을 불러올 수 있다.
-> 서버의 엣지 nginx(443/80)와 충돌하지 않도록 앱은 9900에 노출한다. 줄바꿈은 `.gitattributes`로 LF 고정 — Windows PC를 경유해도 안전. 자세한 운영 제약은 `CLAUDE.md`의 Operations 섹션 참고.
+> 서버의 엣지 nginx(443/80)와 충돌하지 않도록 앱은 9900(개발 9901)에 노출한다. compose 내부 대역은 Docker 자동 할당이라 `FORWARDED_ALLOW_IPS`는 첫 배포 뒤 확인해 `.env`에 적는다. 줄바꿈은 `.gitattributes`로 LF 고정 — Windows PC를 경유해도 안전. 자세한 운영 제약은 `CLAUDE.md`의 Operations 섹션 참고.

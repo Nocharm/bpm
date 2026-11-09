@@ -101,6 +101,8 @@ def test_run_postgres_writes_trigger_file(client: TestClient, backup_dir, monkey
         assert SYSADMIN in fh.read()
 
 
+# root ignores directory modes, so the unwritable dir cannot be staged (GitLab CI runs tests as root).
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root can write into a 0555 directory")
 def test_run_postgres_reports_an_unwritable_request_dir(client: TestClient, backup_dir, monkeypatch) -> None:
     """서버에서 비root backend가 root 소유 백업 디렉터리에 트리거를 못 써 500이었다 (리뷰 2026-10-19 H-9)."""
     monkeypatch.setattr(
