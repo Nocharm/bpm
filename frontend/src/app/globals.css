@@ -711,11 +711,38 @@ button:not(:disabled):active {
   }
 }
 
-/* 맵 화면 Run 소개 말풍선(run-intro-bubble.tsx) — Run 버튼 아래에서 살짝 내려오며 뜨고, 남은 시간 막대가 오른쪽에서 줄어든다.
-   막대 길이·멈춤은 컴포넌트 inline style(타이머와 같은 값). 모션 축소에서는 둘 다 멈춘 모습이고 사라짐은 타이머가 맡는다. */
+/* 맵 화면 홍보 카드(Run 소개 말풍선 run-intro-bubble.tsx · AI 컨설턴트 온보딩 카드) — 화면이 자리 잡은 뒤 위에서 내려오며
+   살짝 튀어 시선을 잡는다(사용자 결정 2026-11-10: 열자마자 같이 떠 있지 않게). AI 카드는 CSS 지연으로 늦게 뜨고, Run 말풍선은
+   run-menu가 RUN_INTRO_DELAY_MS 뒤에 마운트해 그 다음에 따라 나온다. 남은 시간 막대는 오른쪽에서 줄어든다(길이·멈춤은
+   컴포넌트 inline style). 모션 축소에서는 바로 보이고 막대는 멈춘 모습, 사라짐은 타이머가 맡는다. */
+@keyframes promo-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
 .run-intro-in {
-  transform-origin: top right;
-  animation: dropdown-in 220ms var(--ease-overshoot);
+  transform-origin: top center;
+  animation: promo-card-in 450ms var(--ease-overshoot) both;
+}
+/* 지연 동안은 보이지 않으니 클릭도 받지 않는다(캔버스 오른쪽 위를 가리지 않게) */
+.consult-onboard-in {
+  transform-origin: top center;
+  animation:
+    promo-card-in 450ms var(--ease-overshoot) 600ms both,
+    promo-card-hold 600ms step-end both;
+}
+@keyframes promo-card-hold {
+  from {
+    pointer-events: none;
+  }
+  to {
+    pointer-events: auto;
+  }
 }
 .run-intro-timer {
   transform-origin: left center;
@@ -733,6 +760,7 @@ button:not(:disabled):active {
 }
 @media (prefers-reduced-motion: reduce) {
   .run-intro-in,
+  .consult-onboard-in,
   .run-intro-timer {
     animation: none;
   }

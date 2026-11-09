@@ -106,6 +106,10 @@ try {
   await gotoMap(page, published.id);
   await bubble(page).waitFor({ timeout: 8000 }).catch(() => {});
   check("bubble appears on the published version", await bubble(page).isVisible());
+  // 등장 순간은 투명하고 작게 시작한다(시선 끌기) — 다 내려온 뒤 자리를 잰다
+  const entranceOpacity = Number(await bubble(page).evaluate((el) => getComputedStyle(el).opacity));
+  await page.waitForTimeout(600);
+  check("bubble eases in after the map settles", entranceOpacity < 1 && Number(await bubble(page).evaluate((el) => getComputedStyle(el).opacity)) === 1, String(entranceOpacity));
   const text = (await bubble(page).textContent()) ?? "";
   const bodyBox = await bubble(page).locator("p").last().boundingBox();
   const shellBox = await bubble(page).boundingBox();
@@ -191,7 +195,7 @@ try {
     // 빈 새 맵이면 AI 컨설턴트 온보딩 카드도 뜬다 — Run 말풍선은 숨지 않고 그 카드 오른쪽에 좁게 한 줄로 놓인다
     const aiCard = noPubPage.locator('[data-id="consult-onboard"]');
     if (await aiCard.isVisible()) {
-      await noPubPage.waitForTimeout(400); // 등장 애니메이션(220ms)이 끝난 자리로 잰다
+      await noPubPage.waitForTimeout(600); // 등장 애니메이션(450ms)이 끝난 자리로 잰다
       const aiBox = await aiCard.boundingBox();
       const runBox = await bubble(noPubPage).boundingBox();
       const menuBox = await noPubPage.locator('[data-id="run-menu"]').boundingBox();
@@ -203,6 +207,13 @@ try {
       const compactText = (await bubble(noPubPage).textContent()) ?? "";
       check("narrow Run card folds body and notice into one sentence", compactText.includes("게시 후 단계를 체크하며 업무를 진행해 볼 수 있어요.") && (await bubble(noPubPage).locator("p").count()) === 2, compactText);
       check("Run bubble stays under the Run button", menuBox && runBox.x <= menuBox.x + menuBox.width / 2 && runBox.x + runBox.width >= menuBox.x + menuBox.width / 2);
+      check("the pair has the same height", Math.abs(runBox.height - aiBox.height) < 1, JSON.stringify({ run: runBox.height, ai: aiBox.height }));
+      // 같이 꺼진다는 표시 — AI 카드 아래 변에도 같은 남은 시간 막대가 줄어든다
+      const aiTimer = aiCard.locator('[data-id="run-intro-companion-timer"]');
+      const aiTimerScale = async () => aiTimer.evaluate((el) => getComputedStyle(el).scale);
+      const scaleA = await aiTimerScale();
+      await noPubPage.waitForTimeout(300);
+      check("the AI card shows a shrinking timer bar", (await aiTimer.count()) === 1 && scaleA !== (await aiTimerScale()), scaleA);
       await noPubPage.screenshot({ path: `${OUT}/run-intro-stacked.png`, clip: { x: 760, y: 0, width: 720, height: Math.max(runBox.y + runBox.height, aiBox.y + aiBox.height) + 30 } });
       // AI 카드에 올려도 멈추고, 떼면 둘이 같이 닫힌다(기록은 남기지 않음)
       await aiCard.hover();

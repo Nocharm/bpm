@@ -10084,10 +10084,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                   </div>
                 ) : null}
                 {showOnboard ? (
-                  // z-[1100]: RF 선택 노드(1000)·연결선(1001)이 z-40을 덮는다 — 플로팅 크롬 층으로
+                  // z-[1100]: RF 선택 노드(1000)·연결선(1001)이 z-40을 덮는다 — 플로팅 크롬 층으로.
+                  // consult-onboard-in: 맵이 자리 잡은 뒤 늦게 내려오며 뜬다(globals.css, Run 말풍선이 그 뒤를 따른다)
                   <div
                     ref={consultOnboardRef}
-                    className="absolute right-0 top-full z-[1100] mt-2 w-72 rounded-md border p-3 glass glass-dense"
+                    className="consult-onboard-in absolute right-0 top-full z-[1100] mt-2 w-72 rounded-md border p-3 glass glass-dense"
                     data-id="consult-onboard"
                   >
                     <div className="flex items-start gap-2">

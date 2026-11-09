@@ -5,8 +5,10 @@
 // [게시본으로 가기], 게시본 없는 맵은 안내 한 줄만(버튼 없음). 표시 조건은 lib/run-intro.
 // 빈 새 맵에서 AI 컨설턴트 온보딩 카드가 같이 떠 있으면 그 카드 오른쪽에 좁은 카드로 한 줄에 나란히 놓고(자리가 모자라면 아래로),
 // 그 카드에 마우스를 올려도 시간이 멈춘다(사용자 결정 2026-11-09: 숨기지 않고 함께, 닫힐 때는 같이 — 같이 닫는 일은 run-menu가 한다).
+// 나란히 놓이면 높이를 그 카드에 맞추고, 그 카드 아래 변에도 같은 남은 시간 막대를 단다(같이 꺼진다는 표시, 사용자 결정 2026-11-10).
 
 import { useEffect, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { ListChecks } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
@@ -24,7 +26,7 @@ interface RunIntroBubbleProps {
 
 // 함께 뜬 카드 옆에 놓을 때의 자리 — beside=같은 줄 오른쪽(좁은 카드), below=그 아래(기본 폭). 값은 Run 메뉴 기준 px
 type CompanionLayout =
-  | { kind: "beside"; left: number; width: number; tailLeft: number }
+  | { kind: "beside"; left: number; width: number; height: number; tailLeft: number }
   | { kind: "below"; top: number };
 
 // 카드 사이 간격(px)
@@ -43,6 +45,8 @@ export function RunIntroBubble({ mode, onAction, onDismiss, stackBelowRef }: Run
   const rootRef = useRef<HTMLDivElement>(null);
   // 함께 뜬 카드 기준 자리 — 재기 전(null)엔 숨겨 한 프레임도 겹쳐 보이지 않게
   const [companionLayout, setCompanionLayout] = useState<CompanionLayout | null>(null);
+  // 남은 시간 막대를 같이 달 함께 뜬 카드 — 렌더 중엔 ref를 읽을 수 없어 잴 때 함께 담는다
+  const [companionEl, setCompanionEl] = useState<HTMLElement | null>(null);
   const hasCompanion = stackBelowRef !== null;
   const isBeside = hasCompanion && companionLayout?.kind === "beside";
   // 좁은 카드는 본문과 게시본 안내를 한 문장으로 합쳐 밀도를 줄인다(사용자 결정 2026-11-09)
@@ -57,15 +61,22 @@ export function RunIntroBubble({ mode, onAction, onDismiss, stackBelowRef }: Run
     const anchor = rootRef.current?.offsetParent;
     if (!above || !anchor) return;
     const measure = () => {
-      const companion = above.getBoundingClientRect();
+      // 그 카드는 등장 애니메이션(transform) 중일 수 있어 getBoundingClientRect 대신 레이아웃 상자로 잰다
+      const companionBase = (above.offsetParent ?? document.body).getBoundingClientRect();
+      const companion = {
+        right: companionBase.left + above.offsetLeft + above.offsetWidth,
+        bottom: companionBase.top + above.offsetTop + above.offsetHeight,
+        height: above.offsetHeight,
+      };
       const menu = anchor.getBoundingClientRect();
       const besideLeft = companion.right + COMPANION_GAP;
       const width = Math.min(BESIDE_MAX_WIDTH, window.innerWidth - BESIDE_EDGE - besideLeft);
       setCompanionLayout(
         width >= BESIDE_MIN_WIDTH
-          ? { kind: "beside", left: besideLeft - menu.left, width, tailLeft: menu.left + menu.width / 2 - besideLeft }
+          ? { kind: "beside", left: besideLeft - menu.left, width, height: companion.height, tailLeft: menu.left + menu.width / 2 - besideLeft }
           : { kind: "below", top: companion.bottom - menu.top + COMPANION_GAP },
       );
+      setCompanionEl(above);
     };
     const observer = new ResizeObserver(measure);
     observer.observe(above);
@@ -92,6 +103,15 @@ export function RunIntroBubble({ mode, onAction, onDismiss, stackBelowRef }: Run
     };
   }, [isPaused, onDismiss]);
 
+  const renderTimer = (dataId: string) => (
+    <span
+      aria-hidden
+      data-id={dataId}
+      className="run-intro-timer pointer-events-none absolute inset-x-0 bottom-0 h-[2px] rounded-b-md bg-accent"
+      style={{ animationDuration: `${RUN_INTRO_SHOW_MS}ms`, animationPlayState: isPaused ? "paused" : "running" }}
+    />
+  );
+
   return (
     <div
       data-id="run-intro"
@@ -106,7 +126,7 @@ export function RunIntroBubble({ mode, onAction, onDismiss, stackBelowRef }: Run
         !hasCompanion || companionLayout === null
           ? undefined
           : companionLayout.kind === "beside"
-            ? { left: companionLayout.left, width: companionLayout.width }
+            ? { left: companionLayout.left, width: companionLayout.width, minHeight: companionLayout.height }
             : { top: companionLayout.top }
       }
       onPointerEnter={() => setIsPaused(true)}
@@ -154,13 +174,9 @@ export function RunIntroBubble({ mode, onAction, onDismiss, stackBelowRef }: Run
           </button>
         </div>
       )}
-      {/* 남은 시간 막대 — 타이머와 같은 길이로 줄고, 마우스를 올리면 같이 멈춘다 */}
-      <span
-        aria-hidden
-        data-id="run-intro-timer"
-        className="run-intro-timer absolute inset-x-0 bottom-0 h-[2px] rounded-b-md bg-accent"
-        style={{ animationDuration: `${RUN_INTRO_SHOW_MS}ms`, animationPlayState: isPaused ? "paused" : "running" }}
-      />
+      {/* 남은 시간 막대 — 타이머와 같은 길이로 줄고, 마우스를 올리면 같이 멈춘다. 함께 뜬 카드에도 같은 막대 */}
+      {renderTimer("run-intro-timer")}
+      {hasCompanion && companionEl !== null && createPortal(renderTimer("run-intro-companion-timer"), companionEl)}
     </div>
   );
 }
