@@ -97,7 +97,7 @@ AI_ENDPOINTS=
 | 모드 | 의미 | 로그인 화면 |
 |------|------|-------------|
 | `keycloak` | 운영 기본. 사내 Keycloak(realm `ai-portal`) OIDC | "Keycloak으로 로그인" 버튼 |
-| `ldap` | 사내 AD 직접 bind 인증 + 설정 화면에서 발급한 로컬 계정(컨설턴트용) — Keycloak 인프라 없이도 운영 가능 | ID/PW 폼 |
+| `ldap` | 사내 AD 직접 bind 인증 + 설정 화면에서 발급한 로컬 계정(컨설턴트용) — Keycloak 인프라 없이도 운영 가능. Keycloak 장애 때 운영 전환 절차는 [`gitlab-runner.md`](gitlab-runner.md) 5-1 | ID/PW 폼 |
 | `dev` | 로컬 우회(임시 유저 선택) — 운영 금지. 개발 스택(9901)은 `DEV_ENFORCE_PERMISSIONS=true`와 함께만(배포 Job 가드) | 유저 피커 |
 
 **`ldap` 모드 필수값:**
@@ -196,7 +196,7 @@ curl -s http://localhost:9900/api/auth/mode; echo  # issuer·clientId가 채워�
 
 - `LDAP_BIND_CREDENTIALS`는 시크릿 — `.env`에만, git 금지. 서비스 계정은 읽기 전용 최소 권한.
 - 가능하면 LDAPS(636)/StartTLS로 평문 bind 회피.
-- `X-Dev-User` 헤더는 `AUTH_MODE=dev`(또는 구 `AUTH_ENABLED=false`로 유도된 dev)에서만 신뢰. 운영은 `keycloak`이라 무시(우회 불가, 배포 Job이 다른 모드를 거절). 개발 스택(9901)은 임시 로그인이라 헤더로 누구든 될 수 있다 — 사내망 개발용으로만 쓴다.
+- `X-Dev-User` 헤더는 `AUTH_MODE=dev`(또는 구 `AUTH_ENABLED=false`로 유도된 dev)에서만 신뢰. 운영은 `keycloak`(장애 시 `ldap`)이라 무시(우회 불가, 배포 Job이 dev 모드를 거절). 개발 스택(9901)은 임시 로그인이라 헤더로 누구든 될 수 있다 — 사내망 개발용으로만 쓴다.
 - 관리자 엔드포인트(`/api/employees`, `/api/employees/sync`)는 백엔드 `require_admin`으로 서버측 보호(프론트 숨김에 의존 안 함).
 - **PKCE 비활성(`disablePKCE:true`)은 의도된 트레이드오프** — 사내망 평문 HTTP에서 `crypto.subtle`(secure context 전용)을 못 써 끈 것. auth code 가로채기 방어가 약해지나 사내망 한정으로 수용. **HTTPS 도메인 전환 시 PKCE(S256) 복구**(앱·Keycloak 둘 다 HTTPS여야 discovery mixed-content 회피).
 

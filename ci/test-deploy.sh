@@ -73,7 +73,11 @@ case "$1" in
     case "$1" in
       version) echo "2.99.0-fake"; exit 0 ;;
       config | restart) exit 0 ;;
-      up) if [ -f "$CTL/up-fail" ]; then echo "build failed" >&2; exit 1; fi; exit 0 ;;
+      up)
+        if [ -f "$CTL/up-fail" ]; then echo "build failed" >&2; exit 1; fi
+        # First deploy: the stack's network exists only once compose has brought it up.
+        if [ -f "$CTL/network-created-by-up" ]; then rm -f "$CTL/subnet-fail"; fi
+        exit 0 ;;
       ps) echo "NAME STATUS (fake ps)"; exit 0 ;;
       logs) echo "fake backend logs"; exit 0 ;;
       exec)
@@ -307,7 +311,7 @@ run_deploy
 check "dev: keycloak login is accepted" succeeded
 
 setup_case dev
-write_env "APP_PORT=9901" "DBV_DB_ALIAS=bpm9910-db" "AUTH_MODE=ldap"
+write_env "APP_PORT=9901" "DBV_DB_ALIAS=bpm9910-db" "AUTH_MODE=ldap" "FORWARDED_ALLOW_IPS=172.18.0.0/16"
 echo ldap > "$CTL/mode"
 run_deploy
 check "dev: ldap login with AUTH_JWT_SECRET is accepted" succeeded
@@ -368,7 +372,40 @@ touch "$CTL/no-volume"
 run_deploy BPM_ALLOW_NEW_DB=1
 check "production: BPM_ALLOW_NEW_DB=1 allows a new db volume" sh -c "[ $rc = 0 ] && grep -qF 'compose creates an empty one' '$OUT'"
 
-# --- FORWARDED_ALLOW_IPS check (warning only) ----------------------------------------
+# --- production ldap fallback (Keycloak down) -------------------------------------------
+setup_case production
+write_env "AUTH_MODE=ldap" "FORWARDED_ALLOW_IPS=172.18.0.0/16"
+echo ldap > "$CTL/mode"
+run_deploy
+check "production: ldap fallback with FORWARDED_ALLOW_IPS set is accepted" \
+  sh -c "[ $rc = 0 ] && grep -qF 'auth mode ldap, / 200' '$OUT' && grep -qF 'compose -p business-process-mgmt -f docker-compose.yml --profile backup up -d --build' '$CTL/calls.log'"
+check "production: ldap checks FORWARDED_ALLOW_IPS before compose" \
+  sh -c "awk '/FORWARDED_ALLOW_IPS covers/ && !c {c=NR} /synced commit/{s=NR} END{exit !(c && s && c < s)}' '$OUT'"
+
+setup_case production
+write_env "AUTH_MODE=ldap"
+echo ldap > "$CTL/mode"
+touch "$CTL/subnet-fail" "$CTL/network-created-by-up"
+run_deploy
+check "ldap first deploy: no network yet, so it deploys" sh -c "grep -qF 'does not exist yet (first deploy)' '$OUT' && grep -qF 'up -d --build' '$CTL/calls.log'"
+check "ldap first deploy: empty FORWARDED_ALLOW_IPS then fails the job" \
+  sh -c "[ $rc != 0 ] && grep -qF 'deployed, but ldap login is unsafe until fixed: .env FORWARDED_ALLOW_IPS is empty; the compose network is 172.18.0.0/16' '$OUT'"
+check "ldap first deploy: output has no secrets" has_no_secrets
+
+setup_case production
+write_env "AUTH_MODE=ldap" "FORWARDED_ALLOW_IPS=172.18.0.0/16"
+echo ldap > "$CTL/mode"
+touch "$CTL/subnet-fail" "$CTL/network-created-by-up"
+run_deploy
+check "ldap first deploy: matching FORWARDED_ALLOW_IPS passes" succeeded
+
+setup_case dev
+write_env "APP_PORT=9901" "DBV_DB_ALIAS=bpm9910-db" "AUTH_MODE=ldap" "FORWARDED_ALLOW_IPS=10.250.0.0/16"
+echo ldap > "$CTL/mode"
+run_deploy
+check "dev: ldap applies the same FORWARDED_ALLOW_IPS gate" sh -c "[ $rc != 0 ] && grep -qF 'ldap login needs' '$OUT' && ! grep -qF 'up -d' '$CTL/calls.log'"
+
+# --- FORWARDED_ALLOW_IPS check (warning only outside ldap) ------------------------------
 setup_case production
 write_env "AUTH_MODE=keycloak" "FORWARDED_ALLOW_IPS=172.18.0.0/16"
 run_deploy
@@ -422,15 +459,24 @@ expect_guard_failure "POSTGRES_PASSWORD placeholder" "POSTGRES_PASSWORD is empty
 
 setup_case production
 write_env "AUTH_MODE=dev" "DEV_ENFORCE_PERMISSIONS=true"
-expect_guard_failure "AUTH_MODE=dev" "production must be keycloak"
+expect_guard_failure "AUTH_MODE=dev" "production must be keycloak or ldap"
 
 setup_case production
 write_env "AUTH_MODE=ldap"
-expect_guard_failure "AUTH_MODE=ldap" "production must be keycloak"
+sed '/^AUTH_JWT_SECRET=/d' "$DEPLOY/.env" > "$CASE/env.tmp" && mv "$CASE/env.tmp" "$DEPLOY/.env"
+expect_guard_failure "ldap fallback without AUTH_JWT_SECRET" "without AUTH_JWT_SECRET"
+
+setup_case production
+write_env "AUTH_MODE=ldap"
+expect_guard_failure "ldap with FORWARDED_ALLOW_IPS empty (network exists)" "ldap login needs .env FORWARDED_ALLOW_IPS to include the compose network 172.18.0.0/16"
+
+setup_case production
+write_env "AUTH_MODE=ldap" "FORWARDED_ALLOW_IPS=10.250.0.0/16"
+expect_guard_failure "ldap with FORWARDED_ALLOW_IPS on another subnet" "ldap login needs .env FORWARDED_ALLOW_IPS"
 
 setup_case production
 write_env "AUTH_ENABLED=false"
-expect_guard_failure "AUTH_ENABLED=false resolves to dev" "auth mode 'dev'; production must be keycloak"
+expect_guard_failure "AUTH_ENABLED=false resolves to dev" "auth mode 'dev'; production must be keycloak or ldap"
 
 setup_case production
 write_env "AUTH_MODE=oidc"

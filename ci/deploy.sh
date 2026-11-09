@@ -160,8 +160,9 @@ check_auth_settings() {
   AUTH_MODE_EXPECTED="$(resolve_auth_mode)"
   [ "$AUTH_MODE_EXPECTED" != "invalid" ] \
     || fail ".env AUTH_MODE/AUTH_ENABLED is not a value the backend accepts (AUTH_MODE: keycloak, ldap or dev)."
-  if [ "$DEPLOY_ENV" = "production" ] && [ "$AUTH_MODE_EXPECTED" != "keycloak" ]; then
-    fail ".env resolves to auth mode '$AUTH_MODE_EXPECTED'; production must be keycloak (AUTH_MODE=keycloak)."
+  # ldap is production's fallback when Keycloak is down (AD login + local accounts); dev never.
+  if [ "$DEPLOY_ENV" = "production" ] && [ "$AUTH_MODE_EXPECTED" = "dev" ]; then
+    fail ".env resolves to auth mode 'dev'; production must be keycloak or ldap (AUTH_MODE=keycloak)."
   fi
   if [ "$AUTH_MODE_EXPECTED" = "dev" ] && ! is_truthy "$(read_env_value DEV_ENFORCE_PERMISSIONS)"; then
     fail ".env uses the dev login without DEV_ENFORCE_PERMISSIONS=true, which makes every user a sysadmin. Set it (and BPM_SYSADMINS)."
@@ -426,23 +427,58 @@ wait_until_healthy() {
   show_failure_and_exit "the app did not become healthy in time."
 }
 
-# The compose network's subnet is assigned by Docker, so FORWARDED_ALLOW_IPS can only be filled
-# in after the first deploy. A mismatch is a warning: the app runs, client IPs log as nginx's.
-check_forwarded_ips() {
-  if ! subnet="$(run_docker network inspect "${PROJECT}_default" -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}')"; then
-    log "WARNING: could not read the subnet of ${PROJECT}_default; check FORWARDED_ALLOW_IPS by hand (gitlab-runner.md 5)."
-    return 0
-  fi
-  subnet="${subnet% }"
-  allowed="$(read_env_value FORWARDED_ALLOW_IPS)"
-  if [ -z "$allowed" ]; then
-    log "WARNING: .env FORWARDED_ALLOW_IPS is empty; the compose network is $subnet. Write it to .env and run the pipeline again (gitlab-runner.md 5)."
-    return 0
-  fi
-  case ",$(printf '%s' "$allowed" | tr -d ' ')," in
-    *",$subnet,"*) log "FORWARDED_ALLOW_IPS covers the compose network $subnet" ;;
-    *) log "WARNING: .env FORWARDED_ALLOW_IPS does not include the compose network $subnet. Fix .env and run the pipeline again (gitlab-runner.md 5)." ;;
+# Subnet(s) of this stack's compose network, or nothing when it does not exist yet (first deploy).
+read_stack_subnet() {
+  subnet="$(run_docker network inspect "${PROJECT}_default" -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}' 2> /dev/null)" \
+    || return 1
+  printf '%s' "${subnet% }"
+}
+
+# Is SUBNET listed in .env FORWARDED_ALLOW_IPS (comma-separated, spaces ignored)?
+is_subnet_forwarded() {
+  allowed="$(read_env_value FORWARDED_ALLOW_IPS | tr -d ' ')"
+  case ",$allowed," in
+    *",$1,"*) return 0 ;;
   esac
+  return 1
+}
+
+# ldap login throttles per (login id, client IP). With FORWARDED_ALLOW_IPS wrong every client is
+# nginx's address, so anyone can lock any account out. Under ldap that stops the deploy before
+# compose; the network from the previous deploy tells the subnet. Other modes only warn (after up).
+check_forwarded_ips_before() {
+  [ "$AUTH_MODE_EXPECTED" = "ldap" ] || return 0
+  if ! subnet="$(read_stack_subnet)"; then
+    log "${PROJECT}_default does not exist yet (first deploy); FORWARDED_ALLOW_IPS is checked after up"
+    return 0
+  fi
+  is_subnet_forwarded "$subnet" \
+    || fail "ldap login needs .env FORWARDED_ALLOW_IPS to include the compose network $subnet (login throttling is per client IP). Set it and run again (gitlab-runner.md 5)."
+  log "FORWARDED_ALLOW_IPS covers the compose network $subnet"
+}
+
+# The compose network's subnet is assigned by Docker, so FORWARDED_ALLOW_IPS can only be filled
+# in after the first deploy. Under keycloak/dev a mismatch is a warning: client IPs log as nginx's.
+# Under ldap it fails the job (the app is already up) so the value gets fixed before anyone relies on it.
+check_forwarded_ips_after() {
+  if ! subnet="$(read_stack_subnet)"; then
+    report_forwarded_problem "could not read the subnet of ${PROJECT}_default; check FORWARDED_ALLOW_IPS by hand (gitlab-runner.md 5)."
+    return 0
+  fi
+  if is_subnet_forwarded "$subnet"; then
+    log "FORWARDED_ALLOW_IPS covers the compose network $subnet"
+  elif [ -z "$(read_env_value FORWARDED_ALLOW_IPS)" ]; then
+    report_forwarded_problem ".env FORWARDED_ALLOW_IPS is empty; the compose network is $subnet. Write it to .env and run the pipeline again (gitlab-runner.md 5)."
+  else
+    report_forwarded_problem ".env FORWARDED_ALLOW_IPS does not include the compose network $subnet. Fix .env and run the pipeline again (gitlab-runner.md 5)."
+  fi
+}
+
+report_forwarded_problem() {
+  if [ "$AUTH_MODE_EXPECTED" = "ldap" ]; then
+    fail "deployed, but ldap login is unsafe until fixed: $1"
+  fi
+  log "WARNING: $1"
 }
 
 main() {
@@ -452,6 +488,7 @@ main() {
   check_docker_daemon
   check_host_path
   check_prerequisites
+  check_forwarded_ips_before
 
   if [ -f "$DEPLOY_DIR/.deployed" ]; then is_first_deploy=0; else is_first_deploy=1; fi
   backup_script_before="$(checksum_of "$DEPLOY_DIR/scripts/db-backup.sh")"
@@ -474,7 +511,7 @@ main() {
   fi
 
   wait_until_healthy
-  check_forwarded_ips
+  check_forwarded_ips_after
   run_compose ps
   log "done"
 }

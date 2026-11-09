@@ -5,7 +5,7 @@
 
 ## 2026-11-10 — 사내 GitLab Runner 배포 파이프라인 + compose 대역 자동 할당 (브랜치 `ci/gitlab-runner`, 서버 미적용)
 
-- sop-archivist와 같은 방식(레지스트리·DinD 없이 배포 러너가 호스트 docker.sock으로 `compose up -d --build`, `env -i`, 가드 실패 시 무변경)을 두 스택에 붙였다: 운영 9900=`main` ▶, 개발 9901(9910에서 이동)=`dev` push 자동(사용자 결정). 배포 러너 하나에 두 배포 폴더를 같은 경로로 마운트하고 `dev`도 Protected로 둔다. 프로젝트명은 볼륨을 이어 쓰려고 `business-process-mgmt`·`bpm-9910` 그대로, 모든 compose 호출에 `-p`. 가드는 BPM 설정 기준: 운영 keycloak만, 개발 dev 로그인은 `DEV_ENFORCE_PERMISSIONS=true` 필수, 포트·별칭으로 뒤바뀐 `.env` 차단, 공유 네트워크 별칭 중복, 다른 폴더의 같은 프로젝트(손으로 띄운 옛 스택), 없는 `<프로젝트>_pgdata`.
+- sop-archivist와 같은 방식(레지스트리·DinD 없이 배포 러너가 호스트 docker.sock으로 `compose up -d --build`, `env -i`, 가드 실패 시 무변경)을 두 스택에 붙였다: 운영 9900=`main` ▶, 개발 9901(9910에서 이동)=`dev` push 자동(사용자 결정). 배포 러너 하나에 두 배포 폴더를 같은 경로로 마운트하고 `dev`도 Protected로 둔다. 프로젝트명은 볼륨을 이어 쓰려고 `business-process-mgmt`·`bpm-9910` 그대로, 모든 compose 호출에 `-p`. 가드는 BPM 설정 기준: 운영은 keycloak 또는 Keycloak 장애 대비 ldap(AD)만(사용자 결정, ldap이면 로그인 제한이 IP 단위라 `FORWARDED_ALLOW_IPS`가 실제 대역을 안 담으면 compose 전에 멈춤 — 보안 검토 반영), 개발 dev 로그인은 `DEV_ENFORCE_PERMISSIONS=true` 필수, 포트·별칭으로 뒤바뀐 `.env` 차단, 공유 네트워크 별칭 중복, 다른 폴더의 같은 프로젝트(손으로 띄운 옛 스택), 없는 `<프로젝트>_pgdata`.
 - 개발은 백업하지 않는다(사용자 결정) → db-backup을 compose profile `backup`으로, 운영 배포만 붙인다. compose `ipam` 고정(172.36/172.44)을 지우고 Docker 자동 할당(서버 데몬 풀 설정됨, 사용자 확인), `docker-compose.dev.yml` 삭제. `FORWARDED_ALLOW_IPS`는 첫 배포 뒤 기입하고 배포 Job이 실제 서브넷과 대조해 경고. 전환 절차·러너 등록·롤백은 `docs/deploy/gitlab-runner.md`. CI 이미지 실측으로 root에서 성립 안 하는 권한 테스트 1건 skip, frontend lint는 4GB 힙 필요.
 
 ## 2026-11-09 — v1.7.0 main 머지: 맵 화면 Run 소개 말풍선(버전별 안내) + ko 용어 "Run" 고정

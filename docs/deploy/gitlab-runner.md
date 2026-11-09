@@ -31,7 +31,7 @@ GitHub Nocharm/bpm (개발 원본)
 | compose 프로젝트 | `business-process-mgmt` | `bpm-9910` |
 | DB 볼륨 | `business-process-mgmt_pgdata` | `bpm-9910_pgdata` |
 | dbv-shared db 별칭 | `bpm-db` | `bpm9910-db` |
-| 로그인 | Keycloak(`AUTH_MODE=keycloak`만 통과) | 지금은 임시 로그인(`AUTH_MODE=dev` + `DEV_ENFORCE_PERMISSIONS=true`). keycloak·ldap도 통과 |
+| 로그인 | Keycloak. Keycloak 장애 때는 AD 로그인(`AUTH_MODE=ldap`)으로 돌린다(5-1). dev는 거절 | 지금은 임시 로그인(`AUTH_MODE=dev` + `DEV_ENFORCE_PERMISSIONS=true`). keycloak·ldap도 통과 |
 | 백업 사이드카 | 켬(compose profile `backup`) | 없음 |
 | GitLab environment · resource_group | `production` · `bpm-production` | `dev` · `bpm-dev` |
 
@@ -185,7 +185,7 @@ chmod 750 /data/deployments/bpm /data/deployments/bpm-dev
 
 | 대상 | 운영 | 개발 |
 |---|---|---|
-| 인증 | `AUTH_MODE`(비면 `AUTH_ENABLED`로 유도)가 keycloak이 아니면 거절 | keycloak·ldap·dev 통과. dev면 `DEV_ENFORCE_PERMISSIONS=true` 필수(없으면 전원 sysadmin), ldap이면 `AUTH_JWT_SECRET` 필수 |
+| 인증 | `AUTH_MODE`(비면 `AUTH_ENABLED`로 유도)가 keycloak·ldap만 통과(dev 거절). ldap이면 `AUTH_JWT_SECRET` 필수, **`FORWARDED_ALLOW_IPS`가 실제 대역을 담아야 함**(5절) | keycloak·ldap·dev 통과(ldap 조건은 운영과 같다). dev면 `DEV_ENFORCE_PERMISSIONS=true` 필수(없으면 전원 sysadmin), ldap이면 `AUTH_JWT_SECRET` 필수 |
 | `APP_PORT` | 비었거나 9900만 | 9900이 아닌 값 필수(9901) |
 | `DBV_DB_ALIAS` | 공유 네트워크에서 다른 프로젝트가 쓰는 별칭이면 거절 | 같은 검사 + 비었거나 `bpm-db`(운영 것)면 거절 |
 | 공통 | `POSTGRES_PASSWORD`가 비었거나 `change-me` · `COMPOSE_PROJECT_NAME`이 Job의 프로젝트와 다름 · `COMPOSE_FILE`/`COMPOSE_PROFILES`를 적음 · `BACKUP_DIR`이 `./backups`가 아닌 배포 폴더 안 경로 | 같음 |
@@ -216,7 +216,9 @@ chmod 750 /data/deployments/bpm /data/deployments/bpm-dev
 
 손으로 `docker compose up`을 치지 않는다. 코드가 같아 이미지는 캐시로 빌드되고, compose가 env가 바뀐 backend만 다시 만들며, 스크립트가 proxy를 재시작한다(nginx는 upstream 이름을 시작할 때 한 번만 풀어서, backend만 바뀌면 옛 주소로 `/api`가 502).
 
-**내부 대역.** compose default 네트워크 대역은 Docker가 자동으로 정한다(서버 데몬의 `default-address-pools`). backend(uvicorn)가 `X-Forwarded-For`를 믿을 대역이 이 서브넷이어야 로그인 기록·스로틀이 실제 클라이언트 주소를 본다. 비어 있으면 앱은 돌지만 주소가 nginx 것으로 찍힌다. 배포 Job은 매번 실제 서브넷과 `.env`를 대조해 어긋나면 `WARNING`을 남긴다(값은 출력하지 않고 서브넷만 보여 준다). 스택마다 따로 한다:
+**내부 대역.** compose default 네트워크 대역은 Docker가 자동으로 정한다(서버 데몬의 `default-address-pools`). backend(uvicorn)가 `X-Forwarded-For`를 믿을 대역이 이 서브넷이어야 로그인 기록·스로틀이 실제 클라이언트 주소를 본다. 비어 있으면 앱은 돌지만 주소가 nginx 것으로 찍힌다. 배포 Job은 매번 실제 서브넷과 `.env`를 대조해 어긋나면 `WARNING`을 남긴다(값은 출력하지 않고 서브넷만 보여 준다).
+
+**ldap 로그인일 때는 경고가 아니라 실패다.** ldap 로그인은 (계정, 클라이언트 IP) 단위로 시도 횟수를 막는데, 이 값이 틀리면 모든 사람이 nginx 주소 하나로 보여 누구든 남의 계정을 잠글 수 있다. 그래서 ldap이면 배포 Job이 지난 배포의 네트워크 대역으로 **compose에 가기 전에** 확인해 멈추고(아무것도 바꾸지 않음), 네트워크가 아직 없는 첫 배포는 띄운 뒤 확인해 Job을 실패로 끝낸다(앱은 떠 있다 — 값을 적고 다시 돌린다). 스택마다 따로 한다:
 
 ```bash
 docker network inspect business-process-mgmt_default -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}'   # 운영
@@ -227,6 +229,20 @@ docker network inspect bpm-9910_default -f '{{range .IPAM.Config}}{{.Subnet}}{{e
 
 - 자동 할당 대역은 그 네트워크가 지워졌다 다시 생길 때(`down` 뒤 `up`) 바뀔 수 있다. 배포 Job은 `down`을 하지 않으므로 평소에는 그대로다. 바뀌면 이 절을 다시 한다.
 - 서브넷은 오버라이드 파일로 바꾸지 못한다 — compose가 `ipam.config`를 교체하지 않고 누적 병합해 `Pool overlaps with other one`으로 실패한다(BPM 실측). 고정 대역이 다시 필요하면 `docker-compose.yml`의 `networks.default`를 직접 고친다.
+
+### 5-1. Keycloak 장애 → AD 로그인으로 돌리기 (운영)
+
+Keycloak이 멈춰 로그인이 안 될 때 운영을 AD 직접 로그인(+설정 화면에서 발급한 로컬 계정)으로 돌린다. `AUTH_*`는 backend 런타임 값이라 재빌드 없이 backend만 다시 뜬다.
+
+1. 운영 `.env`(`/data/deployments/bpm/.env`)에서 확인·수정한다:
+   - `FORWARDED_ALLOW_IPS`가 운영 서브넷을 담고 있는지(5절 명령). 비었거나 틀리면 배포가 멈춘다.
+   - `AUTH_JWT_SECRET`이 있는지. 없으면 만든다(`openssl rand -hex 32`). 비면 배포가 멈춘다.
+   - LDAP 4종(`LDAP_URL`·`LDAP_BIND_DN`·`LDAP_BIND_CREDENTIALS`·`LDAP_USER_SEARCH_BASE`)이 채워져 있는지. 비어 있으면 로컬 계정만 로그인된다.
+   - `AUTH_MODE=ldap`으로 바꾼다.
+2. **Run pipeline**(브랜치 `main`) → test 뒤 `deploy-production` ▶. Job 로그 끝이 `auth mode ldap, / 200`이면 된다.
+3. Keycloak이 돌아오면 `AUTH_MODE=keycloak`으로 되돌리고 같은 절차를 다시 한다. ldap 동안 발급된 앱 토큰은 만료(`AUTH_JWT_TTL_HOURS`, 기본 8시간) 전까지 유효하다. 바로 끊으려면 `AUTH_JWT_SECRET`도 바꾼다([`deploy.md`](deploy.md) §2.1).
+
+러너까지 죽어 파이프라인을 못 쓰면 9절의 손 경로로 같은 `.env`를 반영한다(가드가 돌지 않으니 위 1의 확인을 손으로 한다).
 
 ## 6. 손으로 띄운 스택에서 넘어가기 (1회, 데이터 보존이 최우선)
 
@@ -348,7 +364,9 @@ docker compose -p business-process-mgmt exec -T db psql -U processmap -d process
 | `... is the job checkout or inside it` / `job checkout is inside the deploy folder` | `BPM_DEPLOY_DIR`이 `/builds` 쪽을 가리킨다 |
 | `no .env in the deploy folder` | 3절·6-4대로 `.env`를 넣는다 |
 | `POSTGRES_PASSWORD is empty or the .env.example placeholder` | `.env`의 DB 비밀번호. 옛 스택에서 옮긴 값이어야 볼륨의 DB에 붙는다 |
-| `production must be keycloak` / `not a value the backend accepts` | 운영 `.env`에 `AUTH_MODE=keycloak`. 개발 `.env`를 운영 폴더에 넣지 않았는지 |
+| `production must be keycloak or ldap` / `not a value the backend accepts` | 운영 `.env`에 `AUTH_MODE=keycloak`(장애 시 `ldap`, 5-1). 개발 `.env`를 운영 폴더에 넣지 않았는지 |
+| `ldap login needs .env FORWARDED_ALLOW_IPS to include ...` | ldap 로그인인데 `FORWARDED_ALLOW_IPS`가 비었거나 다른 대역이다. compose 전에 멈췄으니 바뀐 것은 없다. 찍힌 서브넷을 `.env`에 적고 다시 돌린다(5절) |
+| `deployed, but ldap login is unsafe until fixed: ...` | ldap 첫 배포라 띄운 뒤에야 대역을 알았다. 앱은 떠 있다. 찍힌 서브넷을 `.env`에 적고 다시 돌린다 |
 | `without DEV_ENFORCE_PERMISSIONS=true` | 개발 `.env`가 임시 로그인인데 권한 분리가 꺼졌다. `DEV_ENFORCE_PERMISSIONS=true`와 `BPM_SYSADMINS` |
 | `without AUTH_JWT_SECRET` | ldap 로그인에는 서명키가 필요하다(`openssl rand -hex 32`) |
 | `APP_PORT is not 9900` / `the dev stack needs its own port` | 두 스택의 `.env`가 뒤바뀌었거나 포트를 안 적었다 |
@@ -364,7 +382,7 @@ docker compose -p business-process-mgmt exec -T db psql -U processmap -d process
 | `docker compose config rejected the deploy folder` | `.env` 문법이나 필수 값 문제. 출력은 비밀값이 펼쳐져 숨겼다 — 배포 폴더에서 `docker compose -p <프로젝트> config --quiet`로 오류 줄만 본다(`--quiet` 없이 돌리지 않는다) |
 | `docker compose up failed` | 바로 위 로그가 빌드·기동 오류다. [`deploy.md`](deploy.md) §5 표 |
 | `the app did not become healthy in time` / `/api/auth/mode reports a mode other than ...` | Job 로그 끝의 `ps`와 backend·proxy 로그 80줄. 더 보려면 배포 폴더에서 `docker compose -p <프로젝트> logs --tail 200 backend`. 큰 DB의 첫 기동이 5분을 넘기면 다시 돌린다(이미 뜬 것은 이어진다) |
-| `WARNING: .env FORWARDED_ALLOW_IPS ...` | 5절. 배포는 성공한 상태다 |
+| `WARNING: .env FORWARDED_ALLOW_IPS ...` | 5절. 배포는 성공한 상태다(keycloak·dev 모드. ldap이면 위 두 줄처럼 실패한다) |
 | 로컬에서 `sh ci/test-deploy.sh` 실패 | 배포 스크립트를 고쳤다면 테스트의 기대 문구도 같이 본다. busybox(`docker:27-cli`)·GNU·macOS 모두에서 돌아야 한다 |
 
 ## 8. 되돌리기(롤백)
