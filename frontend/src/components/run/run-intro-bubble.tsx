@@ -45,7 +45,9 @@ export function RunIntroBubble({ mode, onAction, onDismiss, stackBelowRef }: Run
   const [companionLayout, setCompanionLayout] = useState<CompanionLayout | null>(null);
   const hasCompanion = stackBelowRef !== null;
   const isBeside = hasCompanion && companionLayout?.kind === "beside";
-  const note = mode === "goPublished" ? t("run.menu.goPublishedHint") : mode === "noPublished" ? t("run.intro.noteNoPublished") : null;
+  // 좁은 카드는 본문과 게시본 안내를 한 문장으로 합쳐 밀도를 줄인다(사용자 결정 2026-11-09)
+  const body = !isBeside || mode === "start" ? t("run.intro.body") : mode === "goPublished" ? t("run.intro.compactGoPublished") : t("run.intro.compactNoPublished");
+  const note = isBeside ? null : mode === "goPublished" ? t("run.menu.goPublishedHint") : mode === "noPublished" ? t("run.intro.noteNoPublished") : null;
   const actionLabel = mode === "start" ? t("run.intro.start") : mode === "goPublished" ? t("run.menu.goPublished") : null;
 
   // 함께 뜬 카드의 크기·창 폭이 바뀌면 다시 잰다 — ResizeObserver 콜백이라 첫 관찰 때도 한 번 불린다.
@@ -132,9 +134,9 @@ export function RunIntroBubble({ mode, onAction, onDismiss, stackBelowRef }: Run
         )}
         <div className="min-w-0">
           <p className="text-caption-strong text-ink">{t("run.intro.title")}</p>
-          <p className={`mt-0.5 text-ink-secondary ${isBeside ? "text-fine" : "text-caption"}`}>{t("run.intro.body")}</p>
+          <p className={`mt-0.5 text-ink-secondary ${isBeside ? "text-fine" : "text-caption"}`}>{body}</p>
           {note !== null && (
-            <p data-id="run-intro-note" className={`mt-1.5 text-accent ${isBeside ? "text-fine font-semibold" : "text-caption-strong"}`}>
+            <p data-id="run-intro-note" className="mt-1.5 text-caption-strong text-accent">
               {note}
             </p>
           )}

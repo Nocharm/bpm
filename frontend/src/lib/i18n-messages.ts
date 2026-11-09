@@ -1029,6 +1029,8 @@ const en = {
   "run.intro.body": "Work through this map one step at a time, checking off each step.",
   "run.intro.start": "Start a run",
   "run.intro.noteNoPublished": "Runs can start once this map is published.",
+  "run.intro.compactNoPublished": "Once published, check off each step as you work.",
+  "run.intro.compactGoPublished": "On the published version, check off each step as you work.",
   "run.menu.resultDone": "Done",
   "run.menu.resultStopped": "Stopped",
   "run.list.title": "All runs",
@@ -4668,6 +4670,8 @@ const ko: Record<MessageKey, string> = {
   "run.intro.body": "이 맵의 단계를 하나씩 체크하며 업무를 진행해 볼 수 있어요.",
   "run.intro.start": "Run 시작하기",
   "run.intro.noteNoPublished": "게시본이 생기면 Run을 시작할 수 있어요.",
+  "run.intro.compactNoPublished": "게시 후 단계를 체크하며 업무를 진행해 볼 수 있어요.",
+  "run.intro.compactGoPublished": "게시본에서 단계를 체크하며 업무를 진행해 볼 수 있어요.",
   // 언어 무관 영어 고정 — 실행 동작·상태 이름(사용자 결정 2026-11-05)
   "run.menu.resultDone": "Done",
   "run.menu.resultStopped": "Stopped",

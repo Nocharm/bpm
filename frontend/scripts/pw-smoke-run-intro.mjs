@@ -200,6 +200,8 @@ try {
         aiBox && runBox && runBox.x >= aiBox.x + aiBox.width && Math.abs(runBox.y - aiBox.y) < 2 && runBox.x + runBox.width <= 1480,
         JSON.stringify({ aiBox, runBox }),
       );
+      const compactText = (await bubble(noPubPage).textContent()) ?? "";
+      check("narrow Run card folds body and notice into one sentence", compactText.includes("게시 후 단계를 체크하며 업무를 진행해 볼 수 있어요.") && (await bubble(noPubPage).locator("p").count()) === 2, compactText);
       check("Run bubble stays under the Run button", menuBox && runBox.x <= menuBox.x + menuBox.width / 2 && runBox.x + runBox.width >= menuBox.x + menuBox.width / 2);
       await noPubPage.screenshot({ path: `${OUT}/run-intro-stacked.png`, clip: { x: 760, y: 0, width: 720, height: Math.max(runBox.y + runBox.height, aiBox.y + aiBox.height) + 30 } });
       // AI 카드에 올려도 멈추고, 떼면 둘이 같이 닫힌다(기록은 남기지 않음)
@@ -216,6 +218,10 @@ try {
       await gotoMap(noPubPage, null, unpublished.id);
       await bubble(noPubPage).waitFor({ timeout: 8000 }).catch(() => {});
       check("both show again on the next visit", (await bubble(noPubPage).isVisible()) && (await aiCard.isVisible()));
+      // AI 카드를 본 뒤의 진입 — Run 카드는 혼자 기본 폭으로 뜬다
+      await noPubPage.evaluate((key) => window.localStorage.setItem(key, "1"), `bpm.consultOnboardSeen.${unpublished.id}`);
+      await gotoMap(noPubPage, null, unpublished.id);
+      await bubble(noPubPage).waitFor({ timeout: 8000 }).catch(() => {});
     }
     const noPubText = (await bubble(noPubPage).textContent()) ?? "";
     check(
