@@ -3,13 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
-## 2026-11-09 — Run 메뉴·소개 말풍선 버전별 안내(feat/run-intro-versions)
+## 2026-11-09 — v1.7.0 main 머지: 맵 화면 Run 소개 말풍선(버전별 안내) + ko 용어 "Run" 고정
 
-- 사용자 결정: 말풍선 닫힘 6초→3초 · Draft·결재 중·거절 버전에서 Run 버튼을 끄지 않고 새 Run 자리에 "게시본으로 가기"(편집 중이면 버전 전환 확인 창) · 게시본이 없는 맵은 버튼은 꺼진 채 말풍선에 "게시본이 생기면 Run을 시작할 수 있어요". 메뉴 모양은 `run-view.ts` `getRunMenuMode`(start·goPublished·noPublished·framework) 하나가 정하고 목적지는 `findRunnableVersionId`(게시본, 없으면 최근 지난 게시본). 빈 새 맵에서는 AI 컨설턴트 온보딩 카드와 겹쳐, 사용자 결정(둘 다 알림이라 숨기지 않음)대로 말풍선을 그 카드 오른쪽에 좁은 카드(약 157px, 아이콘 없음, 꼬리는 Run 버튼)로 한 줄에 나란히 두고(본문과 게시본 안내는 한 문장으로 합침, `stackBelowRef`, ResizeObserver로 위치, 140px 밑이면 아래로 쌓음) 둘을 같이 닫는다(카드는 이번 진입만 닫고 기록하지 않음, 어느 쪽 호버든 멈춤). 매뉴얼 3곳·user 슬라이드 2종·PDF 갱신.
-
-## 2026-11-08 — v1.7.0 main 머지: 맵 화면 Run 소개 말풍선 + ko 용어 "Run" 고정
-
-- Run을 시작해 본 적 없는 사람이 게시본 맵에 들어오면 Run 버튼 아래 유리 말풍선(`run-intro-bubble.tsx`)이 0.8초 뒤 떠서 6초 뒤 저절로 사라진다(호버 중 멈춤, 남은 시간 막대, [Run 시작하기]=새 Run 창, Run 메뉴를 열면 거둠). 사용자 결정: 클릭 없이 꺼지는 팝업 · Run을 해 볼 때까지 매 진입 · Run 버튼 바로 아래. 기록은 브라우저 `bpm.runIntroDone`(`lib/run-intro.ts`): Run을 만들면 남고, 이 맵에 내 Run 기록이 있으면(배포 전 사용자) 그 자리에서 남긴다. 본문은 건조한 단계 체크 안내(사용자 결정: 추상·꾸민 문구 기각). 스모크 `pw-smoke-run-intro.mjs`.
+- Run을 시작해 본 적 없는 사람이 맵에 들어오면 Run 버튼 아래 유리 말풍선(`run-intro-bubble.tsx`)이 0.8초 뒤 떠서 3초 뒤 저절로 사라진다(처음 6초, 길다는 피드백으로 단축)(호버 중 멈춤, 남은 시간 막대, [Run 시작하기]=새 Run 창, Run 메뉴를 열면 거둠). 사용자 결정: 클릭 없이 꺼지는 팝업 · Run을 해 볼 때까지 매 진입 · Run 버튼 바로 아래. 기록은 브라우저 `bpm.runIntroDone`(`lib/run-intro.ts`): Run을 만들면 남고, 이 맵에 내 Run 기록이 있으면(배포 전 사용자) 그 자리에서 남긴다. 본문은 건조한 단계 체크 안내(사용자 결정: 추상·꾸민 문구 기각). 스모크 `pw-smoke-run-intro.mjs`.
+- 같은 v1.7.0(배포 전 재태그, 사용자 결정 2026-11-09): Draft·결재 중·거절 버전에서 Run 버튼을 끄지 않고 새 Run 자리에 "게시본으로 가기"(편집 중이면 전환 확인 창), 게시본 없는 맵만 꺼짐+말풍선 안내. 메뉴 모양은 `run-view.ts` `getRunMenuMode`(start·goPublished·noPublished·framework), 목적지는 `findRunnableVersionId`. 빈 새 맵에서는 AI 컨설턴트 온보딩 카드도 알림이라 숨기지 않고(사용자 결정) Run 말풍선을 그 오른쪽 좁은 카드(약 157px, 한 문장, 꼬리는 Run 버튼, 140px 밑이면 아래로)로 나란히 두고 같이 닫는다(카드는 이번 진입만 닫힘·기록 안 함, 어느 쪽 호버든 멈춤).
 - ko 화면·매뉴얼의 Run 기능 "실행"을 영어 "Run"으로 고정(사용자 결정: Draft·Check out처럼, 앱 전체+매뉴얼. 실행취소·배치 실행 등 무관한 실행은 유지). 동사형은 "Run을 시작"으로 풀었다. ko 슬라이드 2종·PDF는 카피만 재생성(내장 캡처 속 버튼 글씨는 아직 "실행").
 
 ## 2026-11-05 — v1.6.0 main 머지: 홈 첫 실행 권유
