@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-11-10 — v1.7.1 공지 초안
+
+- 직전 게시 공지는 v1.5.0(사용자 확인). v1.5.1~v1.7.1에서 사용자에게 보이는 변경만 `docs/notices/2026-11-10-release.md`로 새로 썼다(사용자 지시: 새로 작성). 파이프라인 전환·AI 카드 깜빡임 핫픽스는 동작이 안 바뀌어 뺐다.
+
 ## 2026-11-10 — v1.7.1 개발·운영 배포 완료: GitLab 파이프라인 전환 끝
 
 - 두 스택 모두 파이프라인으로 첫 배포 성공(사용자 확인). CHANGELOG v1.7.0·v1.7.1에 배포일, `gitlab-runner.md` 확인 범위를 서버 확인분으로 갱신하고, 1회용 런북 `docs/deploy/pipeline-switch-runbook.md`는 계획대로 지웠다(절차 원본은 `gitlab-runner.md` 6절).
