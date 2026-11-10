@@ -84,9 +84,10 @@ BPM 전용 러너 컨테이너를 새로 띄운다. **다른 팀·sop-archivist�
 
 | 항목 | sop-archivist | BPM |
 |---|---|---|
-| 네트워크 | 전용 네트워크 | 전용 네트워크 **`bpm-ci-network`**(새로 만든다, 2-2) |
-| `clone_url` · `dns` · `tls-ca-file` | 없음 | 없음(넣지 않는다) |
-| 러너 버전 | 19.0.0 | 19.0.0(helper `x86_64-v19.0.0`) |
+| 네트워크 | 전용 네트워크, 러너 컨테이너와 Job 둘 다 | 전용 네트워크 **`bpm-ci-network`**, 러너 컨테이너(`--network`)와 Job(`--docker-network-mode`) 둘 다(새로 만든다, 2-2) |
+| `clone_url` · `dns` · `tls-ca-file` · `extra_hosts` | 없음 | 없음(넣지 않는다) |
+| 러너 이미지 | `gitlab/gitlab-runner:sop-archivist`(19.0.0) | 같은 이미지를 그대로 쓴다(helper `x86_64-v19.0.0`) |
+| 설정 폴더 | `/data/home_<계정>/gitlab-runners` 아래 | `/data/home_<계정>/gitlab-runners/bpm` |
 
 다시 읽어야 할 때(서버가 바뀌었거나 clone 단계가 실패할 때):
 
@@ -105,11 +106,11 @@ docker inspect <기존 러너> --format 'net={{.HostConfig.NetworkMode}} hosts={
 ```bash
 docker network create bpm-ci-network                                                 # 이미 있으면 "already exists", 그대로 쓴다
 docker network inspect bpm-ci-network -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}'  # 사내망과 안 겹치는지 본다
-docker run --rm --entrypoint gitlab-runner gitlab/gitlab-runner:alpine-v19.0.0 --version   # Version: 19.0.0
+docker run --rm --entrypoint gitlab-runner gitlab/gitlab-runner:sop-archivist --version   # Version: 19.0.0
 docker image inspect gitlab/gitlab-runner-helper:x86_64-v19.0.0 docker:27-cli python:3.11-slim node:24.22.1-alpine --format '{{.RepoTags}}'
 ```
 
-러너 이미지 태그 `gitlab/gitlab-runner:alpine-v19.0.0`은 sop-archivist 문서가 붙이게 한 이름이다. 없으면 `docker images | grep gitlab-runner`로 sop-archivist 러너가 쓰는 이미지를 찾아 그 이름으로 바꿔 친다. 넷 중 없는 이미지는 tar로 반입한다([`deploy.md`](deploy.md) §0).
+러너 이미지는 sop-archivist 러너가 쓰는 `gitlab/gitlab-runner:sop-archivist`(19.0.0)를 그대로 쓴다. 서버는 Docker Hub가 막혀 `alpine-v19.0.0` 같은 공식 태그를 받을 수 없다. 넷 중 없는 이미지는 tar로 반입한다([`deploy.md`](deploy.md) §0).
 
 ### 2-3. 러너 컨테이너
 
@@ -119,7 +120,7 @@ docker run -d --name gitlab-runner-bpm --restart unless-stopped \
   --network bpm-ci-network \
   -v /data/home_<계정>/gitlab-runners/bpm:/etc/gitlab-runner \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  gitlab/gitlab-runner:alpine-v19.0.0
+  gitlab/gitlab-runner:sop-archivist
 ```
 
 ### 2-4. 러너 두 개 등록
@@ -370,7 +371,7 @@ docker compose -p business-process-mgmt exec -T db psql -U processmap -d process
 | 증상 | 확인 |
 |---|---|
 | Job이 `pending`에서 멈춤 | 러너가 **Online**인지(Paused 아님), Job 태그와 러너 태그 철자(`bpm-test`·`bpm-deploy`). 배포 Job은 **Protected 러너**라 보호된 브랜치에서만 잡힌다 — `main`·`dev`가 둘 다 Protected branches에 있는지(1절). 러너 로그: `docker logs --tail 50 gitlab-runner-bpm` |
-| clone 단계 실패(`Could not resolve host`, `SSL certificate problem`) | sop-archivist 러너는 `clone_url`·`dns`·`tls-ca-file` 없이 된다(2-1). 그래도 실패하면 2-1의 명령으로 기존 러너를 다시 읽어 `network_mode`·`extra_hosts`까지 맞춘다. 고친 뒤 `docker exec gitlab-runner-bpm gitlab-runner verify` |
+| clone 단계 실패(`Could not resolve host`, `SSL certificate problem`) | sop-archivist 러너는 `clone_url`·`dns`·`tls-ca-file`·`extra_hosts` 없이 된다(2-1). 그래도 실패하면 2-1의 명령으로 sop-archivist 러너를 다시 읽어 달라진 값을 맞춘다. 고친 뒤 `docker exec gitlab-runner-bpm gitlab-runner verify` |
 | `image ... not present locally` / `pull_policy ([never])` | 서버에 없는 이미지는 받지 않는다. amd64 tar로 반입한다([`deploy.md`](deploy.md) §0). helper 이미지도 같다(러너 버전과 같은 태그) |
 | `frontend-test`가 `JavaScript heap out of memory`로 죽음 | eslint가 node 기본 힙(컨테이너에서 약 2.2GB)을 넘는다. Job의 `NODE_OPTIONS=--max-old-space-size=4096`이 빠졌거나 서버 메모리가 모자란다(lint 한 번에 수 GB) |
 | `backend-test`의 pip, `frontend-test`의 npm 접속 실패 | 테스트 Job 컨테이너가 PyPI·npm 레지스트리에 닿지 않는다. 같은 서버에서 이미지 빌드(`pip install`·`npm ci`)가 되는지와 2-1의 네트워크 설정을 본다 |

@@ -57,7 +57,7 @@ git push gitlab v1.7.0 --force         # GitLab에 옛 v1.7.0 태그가 있으�
 
 ## 2단계 서버 1회 준비
 
-서비스는 멈추지 않는다. sop-archivist 러너 컨테이너는 건드리지 않는다. BPM 러너는 실측한 sop-archivist 러너 설정을 따른다(2026-11-10): 전용 네트워크, `clone_url`·`dns`·`tls-ca-file` 없음, 러너 19.0.0.
+서비스는 멈추지 않는다. sop-archivist 러너 컨테이너는 건드리지 않는다. BPM 러너는 실측한 sop-archivist 러너 설정을 따른다(2026-11-10): 러너 컨테이너와 Job 둘 다 전용 네트워크, `clone_url`·`dns`·`tls-ca-file`·`extra_hosts` 없음, 이미지 `gitlab/gitlab-runner:sop-archivist`(19.0.0).
 
 ### 2-1. 전제 확인
 
@@ -67,7 +67,7 @@ docker network inspect dbv-shared -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 
 docker images --format '{{.Repository}}:{{.Tag}}' | grep -E 'node:24.22.1-alpine|python:3.11-slim|nginx:1.27-alpine|postgres:16-alpine|docker:27-cli|gitlab-runner'
 ```
 
-베이스 이미지 중 없는 것은 연결된 PC에서 amd64 tar로 반입한다([`deploy.md`](deploy.md) §0). 러너 이미지는 `gitlab/gitlab-runner:alpine-v19.0.0`, helper는 `gitlab/gitlab-runner-helper:x86_64-v19.0.0`이 보여야 한다(러너 이름이 다르면 sop-archivist 러너가 쓰는 이미지 이름으로 바꿔 친다).
+베이스 이미지 중 없는 것은 연결된 PC에서 amd64 tar로 반입한다([`deploy.md`](deploy.md) §0). 러너 이미지는 sop-archivist 러너와 같은 `gitlab/gitlab-runner:sop-archivist`(19.0.0, Docker Hub가 막혀 공식 태그는 없다), helper는 `gitlab/gitlab-runner-helper:x86_64-v19.0.0`이 보여야 한다.
 
 ### 2-2. 배포 폴더 두 개
 
@@ -95,7 +95,7 @@ docker run -d --name gitlab-runner-bpm --restart unless-stopped \
   --network bpm-ci-network \
   -v /data/home_<계정>/gitlab-runners/bpm:/etc/gitlab-runner \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  gitlab/gitlab-runner:alpine-v19.0.0
+  gitlab/gitlab-runner:sop-archivist
 
 GITLAB_URL='<gitlab-url>'
 DEPLOY_ROOT=/data/home_<계정>/deployments      # 1단계 CI 변수 BPM_DEPLOY_ROOT와 같은 값
@@ -128,7 +128,7 @@ docker exec gitlab-runner-bpm gitlab-runner verify
 - [ ] `grep` 결과: `concurrent = 2`, 러너마다 `network_mode = "bpm-ci-network"`·`pull_policy = ["never"]`·`helper_image`.
 - [ ] GitLab Settings → CI/CD → Runners에서 두 러너가 **Online**.
 - 등록이 토큰을 물으며 실패하면 그때만 `--token "$CI_SERVER_TOKEN"`을 더한다.
-- clone 단계가 `Could not resolve host`·`SSL certificate problem`으로 죽으면 sop-archivist 러너의 `extra_hosts`를 확인한다([`gitlab-runner.md`](gitlab-runner.md) 2-1).
+- clone 단계가 `Could not resolve host`·`SSL certificate problem`으로 죽으면 sop-archivist 러너 설정을 다시 읽어 비교한다([`gitlab-runner.md`](gitlab-runner.md) 2-1. 실측 때 `extra_hosts`는 없었다).
 
 ## 3단계 개발(9901) 전환
 
