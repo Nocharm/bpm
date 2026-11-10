@@ -114,10 +114,10 @@ docker image inspect gitlab/gitlab-runner-helper:x86_64-v19.0.0 docker:27-cli py
 ### 2-3. 러너 컨테이너
 
 ```bash
-sudo mkdir -p /data/gitlab-runners/bpm     # sudo가 없으면 홈 아래 폴더
+mkdir -p /data/home_<계정>/gitlab-runners/bpm     # sop-archivist 러너 설정과 같은 상위 폴더(본인 홈, sudo 불필요)
 docker run -d --name gitlab-runner-bpm --restart unless-stopped \
   --network bpm-ci-network \
-  -v /data/gitlab-runners/bpm:/etc/gitlab-runner \
+  -v /data/home_<계정>/gitlab-runners/bpm:/etc/gitlab-runner \
   -v /var/run/docker.sock:/var/run/docker.sock \
   gitlab/gitlab-runner:alpine-v19.0.0
 ```

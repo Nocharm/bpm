@@ -90,10 +90,10 @@ docker network inspect bpm-ci-network -f '{{range .IPAM.Config}}{{.Subnet}}{{end
 ### 2-4. 러너 컨테이너와 등록
 
 ```bash
-sudo mkdir -p /data/gitlab-runners/bpm
+mkdir -p /data/home_<계정>/gitlab-runners/bpm     # sop-archivist 러너 설정과 같은 상위 폴더(본인 홈, sudo 불필요)
 docker run -d --name gitlab-runner-bpm --restart unless-stopped \
   --network bpm-ci-network \
-  -v /data/gitlab-runners/bpm:/etc/gitlab-runner \
+  -v /data/home_<계정>/gitlab-runners/bpm:/etc/gitlab-runner \
   -v /var/run/docker.sock:/var/run/docker.sock \
   gitlab/gitlab-runner:alpine-v19.0.0
 
