@@ -208,12 +208,26 @@ try {
       check("narrow Run card folds body and notice into one sentence", compactText.includes("게시 후 단계를 체크하며 업무를 진행해 볼 수 있어요.") && (await bubble(noPubPage).locator("p").count()) === 2, compactText);
       check("Run bubble stays under the Run button", menuBox && runBox.x <= menuBox.x + menuBox.width / 2 && runBox.x + runBox.width >= menuBox.x + menuBox.width / 2);
       check("the pair has the same height", Math.abs(runBox.height - aiBox.height) < 1, JSON.stringify({ run: runBox.height, ai: aiBox.height }));
-      // 같이 꺼진다는 표시 — AI 카드 아래 변에도 같은 남은 시간 막대가 줄어든다
-      const aiTimer = aiCard.locator('[data-id="run-intro-companion-timer"]');
+      // 같이 꺼진다는 표시 — AI 카드 아래 변에도 같은 남은 시간 막대가 줄어든다. 막대는 카드 밖에서 겹쳐 그린다
+      // (유리 카드 안에 끼워 넣으면 말풍선이 뜰 때 카드가 꺼졌다 켜졌다, 2026-11-10)
+      const aiTimer = noPubPage.locator('[data-id="run-intro-companion-timer"]');
       const aiTimerScale = async () => aiTimer.evaluate((el) => getComputedStyle(el).scale);
+      await aiTimer.waitFor({ timeout: 3000 }).catch(() => {});
       const scaleA = await aiTimerScale();
       await noPubPage.waitForTimeout(300);
       check("the AI card shows a shrinking timer bar", (await aiTimer.count()) === 1 && scaleA !== (await aiTimerScale()), scaleA);
+      const runTimerScale = await bubble(noPubPage).locator('[data-id="run-intro-timer"]').evaluate((el) => getComputedStyle(el).scale);
+      const aiTimerNow = await aiTimerScale();
+      check("both timer bars show the same time left", Math.abs(Number(runTimerScale.split(" ")[0]) - Number(aiTimerNow.split(" ")[0])) < 0.05, `${runTimerScale} / ${aiTimerNow}`);
+      check("the Run bubble adds nothing inside the AI card", (await aiCard.locator('[data-id^="run-intro"]').count()) === 0);
+      // 막대는 줄어드는 중(scaleX)이라 화면 상자 대신 레이아웃 폭으로 잰다
+      const aiTimerBox = await aiTimer.boundingBox();
+      const aiTimerWidth = await aiTimer.evaluate((el) => el.offsetWidth);
+      check(
+        "the AI timer bar lies on the AI card's bottom edge",
+        aiTimerBox && Math.abs(aiTimerBox.y + aiTimerBox.height - (aiBox.y + aiBox.height - 1)) < 1.5 && Math.abs(aiTimerBox.x - (aiBox.x + 1)) < 1.5 && Math.abs(aiTimerWidth - (aiBox.width - 2)) < 1.5,
+        JSON.stringify({ aiTimerBox, aiTimerWidth, aiBox }),
+      );
       await noPubPage.screenshot({ path: `${OUT}/run-intro-stacked.png`, clip: { x: 760, y: 0, width: 720, height: Math.max(runBox.y + runBox.height, aiBox.y + aiBox.height) + 30 } });
       // AI 카드에 올려도 멈추고, 떼면 둘이 같이 닫힌다(기록은 남기지 않음)
       await aiCard.hover();
