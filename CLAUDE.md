@@ -80,8 +80,8 @@ node scripts\build-component-catalog.mjs --check
 
 ```bash
 # 서버 배포 = 사내 GitLab 파이프라인 (docs/deploy/gitlab-runner.md) — 서버에서 손으로 up 하지 않는다
-git push gitlab dev    # 개발 :9901 — 테스트 통과 뒤 deploy-dev 자동 (배포 폴더 /data/deployments/bpm-dev, -p bpm-9910)
-git push gitlab main   # 운영 :9900 — 테스트 통과 뒤 deploy-production ▶ (배포 폴더 /data/deployments/bpm, -p business-process-mgmt)
+git push gitlab dev    # 개발 :9901 — 테스트 통과 뒤 deploy-dev 자동 (배포 폴더 /data/home_<계정>/deployments/bpm-dev, -p bpm-9910)
+git push gitlab main   # 운영 :9900 — 테스트 통과 뒤 deploy-production ▶ (배포 폴더 /data/home_<계정>/deployments/bpm, -p business-process-mgmt)
 sh ci/test-deploy.sh   # 배포 스크립트(ci/deploy.sh) 검증 — 가짜 docker, busybox·GNU·macOS 공통
 ```
 

@@ -132,6 +132,9 @@ check_deploy_dir() {
     DEPLOY_DIR="${DEPLOY_DIR%/}"
   done
   case "$DEPLOY_DIR" in
+    *'$'*) fail "BPM_DEPLOY_DIR holds an unexpanded variable. Set the CI/CD variable BPM_DEPLOY_ROOT (gitlab-runner.md 1)." ;;
+  esac
+  case "$DEPLOY_DIR" in
     /) fail "deploy folder is '/'. Set BPM_DEPLOY_DIR to a dedicated folder such as /data/deployments/bpm." ;;
     /*) ;;
     *) fail "deploy folder must be an absolute path (BPM_DEPLOY_DIR is relative)." ;;
@@ -141,7 +144,7 @@ check_deploy_dir() {
   esac
   case "${DEPLOY_DIR#/}" in
     */*) ;;
-    *) fail "deploy folder must be at least two levels deep (for example /data/deployments/bpm)." ;;
+    *) fail "deploy folder must be at least two levels deep (for example /data/deployments/bpm). Is the CI/CD variable BPM_DEPLOY_ROOT set?" ;;
   esac
   [ -d "$DEPLOY_DIR" ] || fail "deploy folder does not exist inside the job. Check the runner's --docker-volumes mount (gitlab-runner.md 2)."
 

@@ -4,7 +4,7 @@
 
 회차마다 반복하는 절차다 — §1의 "이번 회차" 표만 갱신해서 재사용한다. 스택을 처음 세울 때만 하는 준비(Keycloak URI 등록·n8n 워크플로·서브넷 분리)는 [`setup-once.md`](setup-once.md)로 분리했다.
 
-> **2026-11 파이프라인 전환 뒤 읽는 법** ([`gitlab-runner.md`](gitlab-runner.md)): 개발 스택은 `dev` push마다 GitLab의 `deploy-dev`가 배포 폴더 `/data/deployments/bpm-dev`에 배포하고, 포트는 9901이다. 서버에서 dev 코드를 체크아웃하거나 `up -d --build`를 손으로 치지 않는다. env 파일은 그 폴더의 `.env` 하나라(옛 `.env.9910`) `--env-file`이 없다. 프로젝트명 `bpm-9910`과 db 별칭 `bpm9910-db`는 그대로다. 개발 스택은 백업 사이드카가 없다.
+> **2026-11 파이프라인 전환 뒤 읽는 법** ([`gitlab-runner.md`](gitlab-runner.md)): 개발 스택은 `dev` push마다 GitLab의 `deploy-dev`가 배포 폴더 `/data/home_<계정>/deployments/bpm-dev`에 배포하고, 포트는 9901이다. 서버에서 dev 코드를 체크아웃하거나 `up -d --build`를 손으로 치지 않는다. env 파일은 그 폴더의 `.env` 하나라(옛 `.env.9910`) `--env-file`이 없다. 프로젝트명 `bpm-9910`과 db 별칭 `bpm9910-db`는 그대로다. 개발 스택은 백업 사이드카가 없다.
 >
 > **명령에 alias를 쓰지 않는다.** 예전 판은 `dc910`이라는 alias를 전제했는데, 셸을 새로 열거나 다른 사람이 이어받으면 조용히 깨진다. 아래 명령은 전부 그대로 복사해 쓸 수 있는 완전형이다. 공통 접두는 항상:
 >
@@ -69,7 +69,7 @@ git diff <운영커밋>..<검증커밋> -- backend/app/db.py backend/app/models.
 회차마다 하는 것:
 
 - [ ] 검증할 코드를 `dev`에 push — GitLab `deploy-dev`가 테스트 통과 뒤 개발 스택에 배포한다(Job 로그 끝 `[deploy] done`).
-- [ ] 개발 `.env`(`/data/deployments/bpm-dev/.env`)에 이번 회차 신규 env를 넣는다:
+- [ ] 개발 `.env`(`/data/home_<계정>/deployments/bpm-dev/.env`)에 이번 회차 신규 env를 넣는다:
   ```bash
   # 검증 중에는 HR_SYNC_INTERVAL_HOURS=0 (스케줄러 OFF, 수동 sync로만 진행)
   # APP_PORT=9901 · DBV_DB_ALIAS=bpm9910-db 는 이미 있다(배포 Job이 확인한다)
@@ -97,7 +97,7 @@ docker run --rm -i postgres:16-alpine pg_restore --list < bpm-9900-*.dump | head
 개발 스택은 파이프라인으로 이미 떠 있다. 복원 중에 backend가 DB에 쓰지 않게 backend·frontend만 멈춘다. 순서는 **쓰기 멈춤 → 복원 → backend 기동**.
 
 ```bash
-cd /data/deployments/bpm-dev
+cd /data/home_<계정>/deployments/bpm-dev
 docker compose -p bpm-9910 stop backend frontend
 docker compose -p bpm-9910 ps        # db healthy
 ```
@@ -306,9 +306,9 @@ PROD_DB=business-process-mgmt-db-1
 docker exec "$PROD_DB" pg_dump -U processmap -d processmap -Fc \
   > bpm-9900-before-upgrade-$(date +%Y%m%d).dump   # -t 금지
 
-# 운영 .env(/data/deployments/bpm/.env)에 이번 회차 신규 키 추가(개발에서 확정한 값 그대로)
+# 운영 .env(/data/home_<계정>/deployments/bpm/.env)에 이번 회차 신규 키 추가(개발에서 확정한 값 그대로)
 # → GitLab main 파이프라인에서 deploy-production ▶ (gitlab-runner.md 4절)
-cd /data/deployments/bpm
+cd /data/home_<계정>/deployments/bpm
 docker compose -p business-process-mgmt --profile backup logs backend | head -80
 curl -s http://localhost:9900/api/health
 curl -s http://localhost:9900/api/auth/mode; echo

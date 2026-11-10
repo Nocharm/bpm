@@ -73,7 +73,7 @@ docker inspect -f '{{range .Mounts}}{{.Type}} {{.Name}} -> {{.Destination}}{{"\n
 지금은 배포 파이프라인이 이 합류를 담은 compose로 매번 배포한다([`gitlab-runner.md`](gitlab-runner.md)). 손으로 반영할 때는 배포 폴더에서(개발은 `-p bpm-9910`):
 
 ```bash
-cd /data/deployments/bpm
+cd /data/home_<계정>/deployments/bpm
 docker compose -p business-process-mgmt config | grep -n -A2 aliases   # bpm-db(개발이면 bpm9910-db)로 보간됐는지
 docker compose -p business-process-mgmt up -d db                       # db만 in-place 재생성 (수 초)
 docker compose -p business-process-mgmt restart backend                # 풀에 남은 구 DB 연결 정리
@@ -83,7 +83,7 @@ docker compose -p business-process-mgmt restart backend                # 풀에 
 - backend 재시작 이유: `create_async_engine`에 `pool_pre_ping`이 없어 db 재생성 직후 풀의 구 연결로
   한두 요청이 실패할 수 있다. 조용한 시간대에 하고 재시작으로 깔끔히 끊는다. db-backup은 psql 단발
   호출이라 불필요.
-- 개발 스택은 `/data/deployments/bpm-dev`에서 `docker compose -p bpm-9910 …`(스택 분리 규칙:
+- 개발 스택은 `/data/home_<계정>/deployments/bpm-dev`에서 `docker compose -p bpm-9910 …`(스택 분리 규칙:
   [`setup-once.md`](setup-once.md) A7), 그 `.env`에 `DBV_DB_ALIAS=bpm9910-db`. 배포 Job이 별칭 중복을 거절한다.
 
 ✅ 통과 기준:

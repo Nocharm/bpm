@@ -2,7 +2,7 @@
 
 로컬에서 검증한 코드를 서버(사내 71번)로 옮겨 docker-compose로 올리는 절차. 파이프라인 전체는 `CLAUDE.md` Operations 참고.
 
-> **배포는 사내 GitLab 파이프라인이 한다 → [`gitlab-runner.md`](gitlab-runner.md).** 개발(9901)은 `dev` push마다 자동, 운영(9900)은 `main` 파이프라인에서 ▶. 이 문서는 그 Job이 전제하는 서버 조건(§0)·`.env` 값(§2)·배포 확인(§4)·앱 트러블슈팅(§5)을 다룬다. 서버에서 손으로 치는 `docker compose` 명령은 **배포 폴더에서 `-p <프로젝트>`를 붙여** 읽는다 — 운영 `/data/deployments/bpm`·`-p business-process-mgmt --profile backup`, 개발 `/data/deployments/bpm-dev`·`-p bpm-9910`([`gitlab-runner.md`](gitlab-runner.md) 9절).
+> **배포는 사내 GitLab 파이프라인이 한다 → [`gitlab-runner.md`](gitlab-runner.md).** 개발(9901)은 `dev` push마다 자동, 운영(9900)은 `main` 파이프라인에서 ▶. 이 문서는 그 Job이 전제하는 서버 조건(§0)·`.env` 값(§2)·배포 확인(§4)·앱 트러블슈팅(§5)을 다룬다. 서버에서 손으로 치는 `docker compose` 명령은 **배포 폴더에서 `-p <프로젝트>`를 붙여** 읽는다 — 운영 `/data/home_<계정>/deployments/bpm`·`-p business-process-mgmt --profile backup`, 개발 `/data/home_<계정>/deployments/bpm-dev`·`-p bpm-9910`([`gitlab-runner.md`](gitlab-runner.md) 9절).
 
 > **최초 1회 셋업은 [`setup-once.md`](setup-once.md)로 분리했다** — Keycloak 클라이언트 등록, AD/LDAP 인프라, n8n 웹훅, 시크릿 발급, 서브넷 분리, 릴리스별 1회 보정까지. 이 문서는 **매 배포마다 반복하는 절차**를 다룬다.
 
@@ -43,7 +43,7 @@ docker run --rm node:24.22.1-alpine node -v                                     
 
 ## 2. `.env` 작성
 
-`.env`는 절대 커밋 금지. `.env.example` 참고. 스택마다 배포 폴더에 하나씩 둔다(운영 `/data/deployments/bpm/.env`, 개발 `/data/deployments/bpm-dev/.env`). 배포 Job이 거절하는 값은 [`gitlab-runner.md`](gitlab-runner.md) 3절.
+`.env`는 절대 커밋 금지. `.env.example` 참고. 스택마다 배포 폴더에 하나씩 둔다(운영 `/data/home_<계정>/deployments/bpm/.env`, 개발 `/data/home_<계정>/deployments/bpm-dev/.env`). 배포 Job이 거절하는 값은 [`gitlab-runner.md`](gitlab-runner.md) 3절.
 
 ```
 APP_PORT=9900
@@ -140,7 +140,7 @@ GitLab 파이프라인의 배포 Job이 `ci/deploy.sh`로 배포 폴더를 check
 배포 Job이 proxy 안에서 `/api/health`·`/api/auth/mode`(`.env`의 모드와 같은지)·`/`를 확인하고 끝난다. 서버에서 더 볼 때(운영 배포 폴더 기준, 개발은 `-p bpm-9910`·포트 9901·db-backup 없음):
 
 ```bash
-cd /data/deployments/bpm
+cd /data/home_<계정>/deployments/bpm
 DC='docker compose -p business-process-mgmt --profile backup'   # 셸 변수(이 셸에서만)
 $DC ps                                             # 5개 서비스 Up(db-backup 포함), db healthy
 curl -s http://localhost:9900/api/health           # {"status":"ok"} (인증 면제)

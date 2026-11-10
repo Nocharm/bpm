@@ -557,6 +557,15 @@ setup_case production
 DEPLOY_ARG="$CASE/data/deployments/../deployments/bpm"
 expect_guard_failure "deploy folder with .." "must not contain"
 
+# .gitlab-ci.yml builds BPM_DEPLOY_DIR from the project CI/CD variable BPM_DEPLOY_ROOT.
+setup_case production
+DEPLOY_ARG='$BPM_DEPLOY_ROOT/bpm'
+expect_guard_failure "BPM_DEPLOY_ROOT left unexpanded" "Set the CI/CD variable BPM_DEPLOY_ROOT"
+
+setup_case dev
+DEPLOY_ARG="/bpm-dev"
+expect_guard_failure "BPM_DEPLOY_ROOT expanded to empty" "Is the CI/CD variable BPM_DEPLOY_ROOT set?"
+
 setup_case production
 touch "$CTL/daemon-down"
 expect_guard_failure "Docker daemon unreachable" "cannot reach the Docker daemon"

@@ -90,15 +90,18 @@ deploy-script-test:
   script:
     - sh ci/deploy.sh
 
-# The stack is chosen here, not by CI/CD variables: a project-level BPM_* variable would apply to
+# The stack is chosen here, not by CI/CD variables: a project-level BPM_DEPLOY_DIR would apply to
 # both jobs. ci/deploy.sh also refuses a .env, project or folder that belongs to the other stack.
+# BPM_DEPLOY_ROOT is the one project CI/CD variable: the server folder that holds both deploy
+# folders. It names a personal home folder, so it lives in GitLab, not in this public file.
+# Unset, the path collapses to /bpm or /bpm-dev and ci/deploy.sh stops before touching anything.
 deploy-dev:
   extends: .deploy
   rules:
     - if: $CI_COMMIT_BRANCH == "dev"
   variables:
     BPM_DEPLOY_ENV: dev
-    BPM_DEPLOY_DIR: /data/deployments/bpm-dev
+    BPM_DEPLOY_DIR: $BPM_DEPLOY_ROOT/bpm-dev
     # Kept from the hand-run 9910 stack so its volume bpm-9910_pgdata carries over.
     BPM_COMPOSE_PROJECT: bpm-9910
   resource_group: bpm-dev
@@ -115,7 +118,7 @@ deploy-production:
       allow_failure: false
   variables:
     BPM_DEPLOY_ENV: production
-    BPM_DEPLOY_DIR: /data/deployments/bpm
+    BPM_DEPLOY_DIR: $BPM_DEPLOY_ROOT/bpm
     # The name the hand-run stack already uses, so business-process-mgmt_pgdata carries over.
     BPM_COMPOSE_PROJECT: business-process-mgmt
   resource_group: bpm-production

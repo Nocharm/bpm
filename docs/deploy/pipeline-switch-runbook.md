@@ -44,7 +44,8 @@ git push gitlab v1.7.0 --force         # GitLab에 옛 v1.7.0 태그가 있으�
 - [ ] **Settings → General → Visibility**: Private. **Settings → CI/CD → General pipelines**: Public pipelines 끔.
 - [ ] **Settings → CI/CD → Auto DevOps**: 켜져 있으면 끔.
 - [ ] **Settings → CI/CD → General pipelines**: Prevent outdated deployment jobs 켬, Allow job retries for rollback deployments 켬.
-- [ ] **CI/CD 변수는 만들지 않는다.** 특히 `BPM_DEPLOY_DIR`·`BPM_COMPOSE_PROJECT`·`BPM_DEPLOY_ENV`를 만들면 두 배포 Job에 같은 값이 덮인다. 비밀값은 서버 `.env`에만 둔다.
+- [ ] **Settings → CI/CD → Variables**: `BPM_DEPLOY_ROOT` = `/data/home_<계정>/deployments` **하나만** 만든다(sop-archivist의 `SOP_DEPLOY_DIR`과 같은 관례, 사람 계정이 든 경로라 저장소에 안 적는다). Visibility Visible, **Protect variable 켬**. 배포 폴더는 이 값 + `/bpm`·`/bpm-dev`다.
+- [ ] 그 밖의 CI/CD 변수는 만들지 않는다. 특히 `BPM_DEPLOY_DIR`·`BPM_COMPOSE_PROJECT`·`BPM_DEPLOY_ENV`를 만들면 두 배포 Job에 같은 값이 덮인다. 비밀값은 서버 `.env`에만 둔다.
 - [ ] **Settings → CI/CD → Runners → New project runner**를 두 번 만든다. 토큰(`glrt-…`)은 한 번만 보이니 2단계 등록에 바로 쓴다.
 
 | 항목 | 테스트 러너 | 배포 러너 |
@@ -56,7 +57,7 @@ git push gitlab v1.7.0 --force         # GitLab에 옛 v1.7.0 태그가 있으�
 
 ## 2단계 서버 1회 준비
 
-서비스는 멈추지 않는다. sop-archivist 러너 컨테이너는 읽기만 하고 건드리지 않는다.
+서비스는 멈추지 않는다. sop-archivist 러너 컨테이너는 건드리지 않는다. BPM 러너는 실측한 sop-archivist 러너 설정을 따른다(2026-11-10): 전용 네트워크, `clone_url`·`dns`·`tls-ca-file` 없음, 러너 19.0.0.
 
 ### 2-1. 전제 확인
 
@@ -66,27 +67,24 @@ docker network inspect dbv-shared -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 
 docker images --format '{{.Repository}}:{{.Tag}}' | grep -E 'node:24.22.1-alpine|python:3.11-slim|nginx:1.27-alpine|postgres:16-alpine|docker:27-cli|gitlab-runner'
 ```
 
-베이스 이미지 중 없는 것은 연결된 PC에서 amd64 tar로 반입한다([`deploy.md`](deploy.md) §0).
+베이스 이미지 중 없는 것은 연결된 PC에서 amd64 tar로 반입한다([`deploy.md`](deploy.md) §0). 러너 이미지는 `gitlab/gitlab-runner:alpine-v19.0.0`, helper는 `gitlab/gitlab-runner-helper:x86_64-v19.0.0`이 보여야 한다(러너 이름이 다르면 sop-archivist 러너가 쓰는 이미지 이름으로 바꿔 친다).
 
 ### 2-2. 배포 폴더 두 개
 
-러너 등록 전에 만든다. 없는 폴더를 마운트하면 데몬이 빈 root 폴더를 만든다.
+sop-archivist 배포 폴더(`/data/home_<계정>/deployments/sop-archivist`) 옆에 만든다. 러너 등록 전에 만든다(없는 폴더를 마운트하면 데몬이 빈 root 폴더를 만든다). 본인 홈이라 sudo가 필요 없다.
 
 ```bash
-sudo mkdir -p /data/deployments/bpm /data/deployments/bpm-dev
-sudo chown "$USER": /data/deployments/bpm /data/deployments/bpm-dev
-chmod 750 /data/deployments/bpm /data/deployments/bpm-dev
+mkdir -p /data/home_<계정>/deployments/bpm /data/home_<계정>/deployments/bpm-dev
+chmod 750 /data/home_<계정>/deployments/bpm /data/home_<계정>/deployments/bpm-dev
 ```
 
-### 2-3. 기존 러너 설정 읽기 (키 이름만)
+### 2-3. 전용 네트워크 `bpm-ci-network`
 
-`config.toml`을 통째로 출력하지 않는다(토큰이 있다).
+러너 컨테이너와 Job 컨테이너가 함께 쓴다. 대역은 데몬 풀이 자동으로 준다(`--subnet` 없이).
 
 ```bash
-docker ps --format '{{.Names}}\t{{.Image}}' | grep -i runner
-docker exec <기존 러너> grep -E '^\s*(clone_url|network_mode|extra_hosts|dns|tls-ca-file|helper_image|pull_policy)\s*=' /etc/gitlab-runner/config.toml
-docker inspect <기존 러너> --format 'net={{.HostConfig.NetworkMode}} hosts={{.HostConfig.ExtraHosts}} dns={{.HostConfig.Dns}}'
-docker run --rm --entrypoint gitlab-runner <러너 이미지> --version     # helper 태그를 이 버전에 맞춘다
+docker network create bpm-ci-network
+docker network inspect bpm-ci-network -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}'   # 사내망과 안 겹치는지
 ```
 
 ### 2-4. 러너 컨테이너와 등록
@@ -94,16 +92,18 @@ docker run --rm --entrypoint gitlab-runner <러너 이미지> --version     # he
 ```bash
 sudo mkdir -p /data/gitlab-runners/bpm
 docker run -d --name gitlab-runner-bpm --restart unless-stopped \
+  --network bpm-ci-network \
   -v /data/gitlab-runners/bpm:/etc/gitlab-runner \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  <러너 이미지>          # 2-3에서 --network·--add-host·--dns·CA 마운트가 나왔으면 같이
+  gitlab/gitlab-runner:alpine-v19.0.0
 
 GITLAB_URL='<gitlab-url>'
+DEPLOY_ROOT=/data/home_<계정>/deployments      # 1단계 CI 변수 BPM_DEPLOY_ROOT와 같은 값
 COMMON="--non-interactive --url $GITLAB_URL --executor docker \
+  --docker-network-mode bpm-ci-network \
   --docker-pull-policy never \
   --docker-helper-image gitlab/gitlab-runner-helper:x86_64-v19.0.0 \
   --limit 1"
-# 2-3에서 값이 나온 키만 더한다: --clone-url · --docker-network-mode · --docker-extra-hosts · --docker-dns · --tls-ca-file
 
 # 테스트 러너 (bpm-test 토큰을 붙여넣고 Enter, 화면에 안 보인다)
 read -rs CI_SERVER_TOKEN && export CI_SERVER_TOKEN
@@ -111,21 +111,24 @@ docker exec -e CI_SERVER_TOKEN gitlab-runner-bpm gitlab-runner register $COMMON 
   --name bpm-test --docker-image python:3.11-slim
 unset CI_SERVER_TOKEN
 
-# 배포 러너 (bpm-deploy 토큰) — 소켓 + 배포 폴더 두 개를 양쪽 같은 경로로
+# 배포 러너 (bpm-deploy 토큰) — 소켓 + BPM 배포 폴더 두 개만, 양쪽 같은 경로로(루트 전체를 마운트하지 않는다)
 read -rs CI_SERVER_TOKEN && export CI_SERVER_TOKEN
 docker exec -e CI_SERVER_TOKEN gitlab-runner-bpm gitlab-runner register $COMMON \
   --name bpm-deploy --docker-image docker:27-cli \
   --docker-volumes /var/run/docker.sock:/var/run/docker.sock \
-  --docker-volumes /data/deployments/bpm:/data/deployments/bpm:rw \
-  --docker-volumes /data/deployments/bpm-dev:/data/deployments/bpm-dev:rw
+  --docker-volumes "$DEPLOY_ROOT/bpm:$DEPLOY_ROOT/bpm:rw" \
+  --docker-volumes "$DEPLOY_ROOT/bpm-dev:$DEPLOY_ROOT/bpm-dev:rw"
 unset CI_SERVER_TOKEN
 
 docker exec gitlab-runner-bpm sed -i 's/^concurrent = .*/concurrent = 2/' /etc/gitlab-runner/config.toml
+docker exec gitlab-runner-bpm grep -E '^\s*(concurrent|network_mode|pull_policy|helper_image)\s*=' /etc/gitlab-runner/config.toml
 docker exec gitlab-runner-bpm gitlab-runner verify
 ```
 
+- [ ] `grep` 결과: `concurrent = 2`, 러너마다 `network_mode = "bpm-ci-network"`·`pull_policy = ["never"]`·`helper_image`.
 - [ ] GitLab Settings → CI/CD → Runners에서 두 러너가 **Online**.
 - 등록이 토큰을 물으며 실패하면 그때만 `--token "$CI_SERVER_TOKEN"`을 더한다.
+- clone 단계가 `Could not resolve host`·`SSL certificate problem`으로 죽으면 sop-archivist 러너의 `extra_hosts`를 확인한다([`gitlab-runner.md`](gitlab-runner.md) 2-1).
 
 ## 3단계 개발(9901) 전환
 
@@ -166,9 +169,9 @@ docker network ls | grep bpm-9910_default        # 비어 있어야 한다
 ### 3-4. `.env` 옮기기
 
 ```bash
-cp <옛 개발 폴더>/.env.9910 /data/deployments/bpm-dev/.env
-chmod 600 /data/deployments/bpm-dev/.env
-vi /data/deployments/bpm-dev/.env
+cp <옛 개발 폴더>/.env.9910 /data/home_<계정>/deployments/bpm-dev/.env
+chmod 600 /data/home_<계정>/deployments/bpm-dev/.env
+vi /data/home_<계정>/deployments/bpm-dev/.env
 ```
 
 편집기에서 고칠 것(화면에 `cat`으로 띄우지 않는다):
@@ -199,7 +202,7 @@ GitLab Build → Pipelines에서 test 3개 뒤 `deploy-dev`가 자동으로 돈�
 
 ```bash
 docker network inspect bpm-9910_default -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
-vi /data/deployments/bpm-dev/.env       # FORWARDED_ALLOW_IPS=<위 서브넷>
+vi /data/home_<계정>/deployments/bpm-dev/.env       # FORWARDED_ALLOW_IPS=<위 서브넷>
 ```
 
 GitLab **Run pipeline**(브랜치 `dev`) → `deploy-dev`가 다시 돈다. 로그에 `FORWARDED_ALLOW_IPS covers the compose network …`가 나오면 개발 전환 끝.
@@ -234,10 +237,10 @@ docker volume ls | grep business-process-mgmt_pgdata     # 그대로 있어야 �
 ### 4-4. `.env`와 백업 옮기기
 
 ```bash
-cp <옛 운영 폴더>/.env /data/deployments/bpm/.env
-chmod 600 /data/deployments/bpm/.env
-sudo mv <옛 운영 폴더>/backups /data/deployments/bpm/backups   # BACKUP_DIR=./backups일 때만. 절대 경로면 옮기지 않는다
-vi /data/deployments/bpm/.env
+cp <옛 운영 폴더>/.env /data/home_<계정>/deployments/bpm/.env
+chmod 600 /data/home_<계정>/deployments/bpm/.env
+sudo mv <옛 운영 폴더>/backups /data/home_<계정>/deployments/bpm/backups   # BACKUP_DIR=./backups일 때만. 절대 경로면 옮기지 않는다
+vi /data/home_<계정>/deployments/bpm/.env
 ```
 
 - [ ] `AUTH_MODE=keycloak`(비어 있으면 적는다)
@@ -259,7 +262,7 @@ GitLab Build → Pipelines → **Run pipeline**(브랜치 `main`), 또는 PC에�
 
 ```bash
 docker network inspect business-process-mgmt_default -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
-vi /data/deployments/bpm/.env           # FORWARDED_ALLOW_IPS=<위 서브넷>
+vi /data/home_<계정>/deployments/bpm/.env           # FORWARDED_ALLOW_IPS=<위 서브넷>
 ```
 
 Run pipeline(`main`) → `deploy-production` ▶. `FORWARDED_ALLOW_IPS covers the compose network …`가 나오면 끝. 이 값이 맞아야 나중에 Keycloak 장애로 AD 로그인(`AUTH_MODE=ldap`)으로 돌릴 때 배포가 막히지 않는다([`gitlab-runner.md`](gitlab-runner.md) 5-1).
@@ -269,11 +272,11 @@ Run pipeline(`main`) → `deploy-production` ▶. `FORWARDED_ALLOW_IPS covers th
 아래가 모두 맞으면 전환 끝이다. 서버 명령은 항상 배포 폴더에서 `-p`를 붙인다.
 
 ```bash
-cd /data/deployments/bpm-dev && docker compose -p bpm-9910 ps                          # 4개 Up(db-backup 없음)
-cd /data/deployments/bpm && docker compose -p business-process-mgmt --profile backup ps   # 5개 Up
+cd /data/home_<계정>/deployments/bpm-dev && docker compose -p bpm-9910 ps                          # 4개 Up(db-backup 없음)
+cd /data/home_<계정>/deployments/bpm && docker compose -p business-process-mgmt --profile backup ps   # 5개 Up
 docker compose -p business-process-mgmt --profile backup logs --tail 3 db-backup         # "ok bpm-….dump"
 docker compose -p business-process-mgmt exec -T db psql -U processmap -d processmap -tc 'SELECT count(*) FROM process_maps;'   # 4-2 값과 같음
-cat /data/deployments/bpm/.deployed                                                      # 배포된 커밋·버전
+cat /data/home_<계정>/deployments/bpm/.deployed                                                      # 배포된 커밋·버전
 ```
 
 - [ ] 개발 `http://<server-ip>:9901` 로그인, 맵 목록이 전과 같다
@@ -291,6 +294,7 @@ cat /data/deployments/bpm/.deployed                                             
 | Job 로그 | 뜻과 조치 |
 | --- | --- |
 | Job이 `pending`에서 멈춤 | 러너 Online·태그 철자 확인. 배포 Job이면 `main`·`dev`가 Protected branches에 있는지 |
+| `two levels deep ... BPM_DEPLOY_ROOT set?` / `unexpanded variable` | 1단계 CI 변수 `BPM_DEPLOY_ROOT`가 없거나 이름이 틀렸다 |
 | `has containers started from <폴더>` | 옛 스택이 아직 떠 있다. 3-3/4-3의 `down`(-v 없이)을 한다 |
 | `db volume …_pgdata does not exist` | 프로젝트 이름이 실제와 다르다. `BPM_ALLOW_NEW_DB=1`로 우회하지 말고 3-1로 돌아간다 |
 | `POSTGRES_PASSWORD is empty or … placeholder` | `.env`를 옛 폴더에서 그대로 옮겨야 볼륨의 DB에 붙는다 |

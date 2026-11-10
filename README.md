@@ -103,8 +103,8 @@ npx tsc --noEmit -p tsconfig.json; npx vitest run
 
 | 스택 | 트리거 | 배포 폴더(`.env`만 사람이 둔다) | compose 프로젝트 | 접속 |
 |---|---|---|---|---|
-| 운영 | `main` 파이프라인에서 `deploy-production` ▶ | `/data/deployments/bpm` | `business-process-mgmt` | `http://<server-ip>:9900` |
-| 개발 | `dev` push마다 `deploy-dev` 자동 | `/data/deployments/bpm-dev` | `bpm-9910` | `http://<server-ip>:9901` |
+| 운영 | `main` 파이프라인에서 `deploy-production` ▶ | `/data/home_<계정>/deployments/bpm` | `business-process-mgmt` | `http://<server-ip>:9900` |
+| 개발 | `dev` push마다 `deploy-dev` 자동 | `/data/home_<계정>/deployments/bpm-dev` | `bpm-9910` | `http://<server-ip>:9901` |
 
 ```bash
 git push gitlab dev        # 개발: 테스트 통과 뒤 자동 배포

@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-11-10 — 파이프라인 전환 2단계 중 보정: 배포 루트·러너 네트워크를 sop-archivist 관례로
+
+- 배포 폴더를 같은 서버 sop-archivist처럼 본인 홈 `/data/home_<계정>/deployments/{bpm,bpm-dev}`로(사용자 지시). 실경로는 사람 계정이 들어 공개 저장소에 안 적고 GitLab CI 변수 `BPM_DEPLOY_ROOT` 하나에 둔다(sop의 `SOP_DEPLOY_DIR`과 같은 관례, Job 변수가 `$BPM_DEPLOY_ROOT/bpm`). 빠지거나 안 펼쳐지면 `ci/deploy.sh`가 멈춘다(테스트 2건 추가). 러너는 실측한 sop 설정대로 전용 네트워크 `bpm-ci-network`(러너·Job 공용), `clone_url`·`dns`·`tls-ca-file` 없음, 19.0.0.
+
 ## 2026-11-10 — v1.7.0(재태그)에 합침: 사내 GitLab Runner 배포 파이프라인 + compose 대역 자동 할당 (서버 전환 전)
 
 - sop-archivist와 같은 방식(레지스트리·DinD 없이 배포 러너가 호스트 docker.sock으로 `compose up -d --build`, `env -i`, 가드 실패 시 무변경)을 두 스택에 붙였다: 운영 9900=`main` ▶, 개발 9901(9910에서 이동)=`dev` push 자동(사용자 결정). 배포 러너 하나에 두 배포 폴더를 같은 경로로 마운트하고 `dev`도 Protected로 둔다. 프로젝트명은 볼륨을 이어 쓰려고 `business-process-mgmt`·`bpm-9910` 그대로, 모든 compose 호출에 `-p`. 가드는 BPM 설정 기준: 운영은 keycloak 또는 Keycloak 장애 대비 ldap(AD)만(사용자 결정, ldap이면 로그인 제한이 IP 단위라 `FORWARDED_ALLOW_IPS`가 실제 대역을 안 담으면 compose 전에 멈춤 — 보안 검토 반영), 개발 dev 로그인은 `DEV_ENFORCE_PERMISSIONS=true` 필수, 포트·별칭으로 뒤바뀐 `.env` 차단, 공유 네트워크 별칭 중복, 다른 폴더의 같은 프로젝트(손으로 띄운 옛 스택), 없는 `<프로젝트>_pgdata`.

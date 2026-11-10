@@ -8,7 +8,7 @@
 > 아래 명령은 운영 배포 폴더에서 셸 변수 하나를 정한 뒤 친다:
 >
 > ```bash
-> cd /data/deployments/bpm
+> cd /data/home_<계정>/deployments/bpm
 > DC='docker compose -p business-process-mgmt --profile backup'
 > ```
 
@@ -70,7 +70,7 @@ backend `/backups`로 마운트(+`BACKUP_DIR=/backups` env). API는 `/api/admin/
 들어 있어 복원 뒤에도 유지된다.
 
 ```bash
-cd /data/deployments/bpm
+cd /data/home_<계정>/deployments/bpm
 DUMP=backups/bpm-YYYYMMDD-HHMMSS.dump    # backups/ 목록에서 고른다
 PGU=${POSTGRES_USER:-processmap}; PGD=${POSTGRES_DB:-processmap}
 $DC stop backend frontend     # 쓰기 중단 (db는 유지, 그동안 앱은 502)

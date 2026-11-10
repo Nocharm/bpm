@@ -11,7 +11,7 @@
 
 > 매 배포에 반복하는 것(GitLab 파이프라인 → 배포 Job → 헬스체크)은 1회성이 아니다. [`gitlab-runner.md`](gitlab-runner.md) 4절.
 >
-> 아래 서버 명령의 `docker compose`는 그 스택의 배포 폴더에서 `-p <프로젝트>`를 붙여 읽는다 — 운영 `/data/deployments/bpm`·`-p business-process-mgmt --profile backup`, 개발 `/data/deployments/bpm-dev`·`-p bpm-9910`.
+> 아래 서버 명령의 `docker compose`는 그 스택의 배포 폴더에서 `-p <프로젝트>`를 붙여 읽는다 — 운영 `/data/home_<계정>/deployments/bpm`·`-p business-process-mgmt --profile backup`, 개발 `/data/home_<계정>/deployments/bpm-dev`·`-p bpm-9910`.
 
 ---
 
@@ -78,7 +78,7 @@ curl -s -X POST http://<n8n-host>:5678/webhook/hr-dept \
 
 ### A5. `.env` 작성 + 시크릿 발급 (스택당 1회)
 
-스택마다 배포 폴더에 `.env` 하나다(운영 `/data/deployments/bpm/.env`, 개발 `/data/deployments/bpm-dev/.env` — 파일 이름은 둘 다 `.env`):
+스택마다 배포 폴더에 `.env` 하나다(운영 `/data/home_<계정>/deployments/bpm/.env`, 개발 `/data/home_<계정>/deployments/bpm-dev/.env` — 파일 이름은 둘 다 `.env`):
 
 ```bash
 cp .env.example .env          # PC에서 채운 뒤 scp로 배포 폴더에 넣는다
@@ -100,7 +100,7 @@ openssl rand -hex 32          # AUTH_JWT_SECRET — AUTH_MODE=ldap이면 필수(
 `.env`의 `BACKUP_DIR`(기본 `./backups`, 배포 폴더 기준)·`BACKUP_RETENTION_DAYS`(기본 14)만 정하면 사이드카가 알아서 만든다. 첫 기동 직후 오늘자 덤프가 없으면 즉시 1회 덤프하므로, 배포 후 한 번 확인:
 
 ```bash
-cd /data/deployments/bpm
+cd /data/home_<계정>/deployments/bpm
 docker compose -p business-process-mgmt --profile backup logs --tail 5 db-backup   # "[db-backup] ... ok bpm-....dump (크기)"
 ```
 
@@ -110,7 +110,7 @@ docker compose -p business-process-mgmt --profile backup logs --tail 5 db-backup
 
 | 항목 | 운영 | 개발 |
 |---|---|---|
-| 배포 폴더(`.gitlab-ci.yml` `BPM_DEPLOY_DIR`) | `/data/deployments/bpm` | `/data/deployments/bpm-dev` |
+| 배포 폴더(`.gitlab-ci.yml` `BPM_DEPLOY_DIR` = CI 변수 `BPM_DEPLOY_ROOT` + `/bpm`·`/bpm-dev`) | `/data/home_<계정>/deployments/bpm` | `/data/home_<계정>/deployments/bpm-dev` |
 | 프로젝트명(`BPM_COMPOSE_PROJECT`) | `business-process-mgmt` | `bpm-9910`(옛 9910 스택의 볼륨을 이어 쓰려고 이름 유지) |
 | `.env`의 `APP_PORT` | 9900(또는 비움) | 9901 |
 | `.env`의 `DBV_DB_ALIAS` | `bpm-db`(또는 비움) | `bpm9910-db` |
