@@ -261,7 +261,7 @@ Keycloak이 멈춰 로그인이 안 될 때 운영을 AD 직접 로그인(+설�
 
 ## 6. 손으로 띄운 스택에서 넘어가기 (1회, 데이터 보존이 최우선)
 
-> 그대로 따라 치는 체크리스트판: [`pipeline-switch-runbook.md`](pipeline-switch-runbook.md).
+> 2026-11-10 개발·운영 모두 이 절차로 전환을 마쳤다(v1.7.1). 따라 친 1회용 체크리스트(`pipeline-switch-runbook.md`)는 지웠고 git 이력에 있다. 새 서버로 옮길 때 다시 참고한다.
 
 지금 운영(9900)과 개발(9910)은 사람이 서버 폴더에서 `docker compose`로 띄웠고, compose 네트워크는 고정 대역(운영 172.36, 개발 172.44)이다. 파이프라인으로 넘어가면서 대역도 자동 할당으로 바뀐다. **이미 있는 네트워크의 대역은 compose가 바꾸지 않으므로** 스택마다 한 번만 사람이 `down`을 한다. 파이프라인은 `down`을 하지 않는다.
 
@@ -437,4 +437,5 @@ curl -s http://localhost:9901/api/health
 ## 확인 범위
 
 - 로컬에서 확인한 것: `ci/test-deploy.sh`(두 스택 케이스, busybox `docker:27-cli`·GNU(Debian)·macOS sh·dash), 핵심 가드를 하나씩 빼 본 변이 시험(모두 테스트가 잡음), `.gitlab-ci.yml` YAML 파싱, `docker compose config`(profile 유무에 따른 서비스 목록), CI의 테스트 명령을 Job과 같은 이미지에서(backend `python:3.11-slim` root 실행 — root에서는 성립하지 않는 권한 테스트 1건을 건너뛰게 고침, frontend `node:24.22.1-alpine` — lint가 기본 힙에서 죽어 `NODE_OPTIONS`를 넣음).
-- **GitLab·서버에서만 확인되는 것(미검증)**: `BPM_DEPLOY_ROOT` CI 변수가 Job 변수 `BPM_DEPLOY_DIR` 안에서 펼쳐지는지(빠지거나 안 펼쳐지면 가드가 멈추는 것은 로컬 시험으로 확인), `bpm-ci-network`의 Job 컨테이너에서 clone이 되는지, 러너 등록과 `CI_SERVER_TOKEN` 전달, 실제 파이프라인 실행과 `dev` Protected 브랜치에서 배포 러너가 잡히는지, helper 이미지에 `pull_policy = never`가 적용되는지, Prevent outdated·rollback Retry, 서버 데몬에서의 동기화·빌드·헬스체크, `docker inspect`의 `Aliases`/`DNSNames`로 본 별칭 검사(Docker 26), compose `working_dir` 라벨이 배포 폴더 경로로 찍히는지, 자동 할당 대역이 사내망과 겹치지 않는지, 6절 전환 전체, Windows Git Bash에서의 `sh ci/test-deploy.sh`. 첫 배포에서 이 문서의 절차를 고치면 함께 갱신한다.
+- **서버에서 확인한 것(2026-11-10 개발·운영 첫 배포 성공, 사용자 확인)**: 러너 등록, `BPM_DEPLOY_ROOT` CI 변수가 Job 변수 `BPM_DEPLOY_DIR` 안에서 펼쳐짐, `bpm-ci-network`의 Job 컨테이너 clone, `pull_policy = never`로 서버 이미지만 씀, `dev` Protected 브랜치에서 배포 러너가 잡힘, 서버 데몬에서의 동기화·빌드·헬스체크, 6절 전환(옛 스택 `down` → 볼륨 이어 쓰기).
+- **아직 확인 안 된 것**: Prevent outdated·rollback Retry(8절), Keycloak → AD(ldap) 실제 전환(5-1), 별칭 검사·다른 폴더 거절 가드가 실제로 걸리는 경우(정상 통과만 봤다), Windows Git Bash에서의 `sh ci/test-deploy.sh`. 첫 배포에서 이 문서의 절차를 고치면 함께 갱신한다.

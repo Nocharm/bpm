@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-11-10 — v1.7.1 개발·운영 배포 완료: GitLab 파이프라인 전환 끝
+
+- 두 스택 모두 파이프라인으로 첫 배포 성공(사용자 확인). CHANGELOG v1.7.0·v1.7.1에 배포일, `gitlab-runner.md` 확인 범위를 서버 확인분으로 갱신하고, 1회용 런북 `docs/deploy/pipeline-switch-runbook.md`는 계획대로 지웠다(절차 원본은 `gitlab-runner.md` 6절).
+
 ## 2026-11-10 — v1.7.1 핫픽스: Run 소개가 뜰 때 AI 컨설턴트 카드 깜빡임
 
 - 개발 서버에서 Run 말풍선이 뜨는 순간 AI 카드가 꺼졌다 켜졌다. 그때 AI 카드에 생기는 변화는 남은 시간 막대를 포털로 카드 안(유리 backdrop-filter)에 끼워 넣는 것 하나뿐이라, 막대를 카드 밖 형제로 아래 변에 겹쳐 그리게 바꿨다(카드 등장이 끝난 뒤 표시, 시간은 말풍선 막대에 맞춤). 로컬 Chrome에서는 프레임 단위로 찍어도 재현되지 않아 개발 서버에서 다시 확인이 필요하다. 스모크에 "AI 카드 안에 아무것도 넣지 않음"·막대 위치·남은 시간 일치 검사 추가.
