@@ -21,6 +21,7 @@ import {
   getRunMenuMode,
   getRunTouchedAfterTitle,
   getRunWatermarkFontSize,
+  getRunWatermarkText,
   humanizeRunError,
   isRunSubProgressError,
   splitRunNodeKey,
@@ -357,6 +358,18 @@ function makeApiError(status: number, detail: string): ApiError {
   return new ApiError(`API POST /runs/7/actions failed: ${status}`, status, JSON.stringify({ detail }));
 }
 
+describe("getRunWatermarkText", () => {
+  it("keeps names up to 20 characters as they are", () => {
+    expect(getRunWatermarkText("11월 1차 배포 · v2.4.1")).toBe("11월 1차 배포 · v2.4.1");
+  });
+
+  it("cuts longer names to the first 20 characters with an ellipsis", () => {
+    const text = getRunWatermarkText("2026년 11월 4차 · LOT 2611-0073 · 글로벌 원료의약품 공급사 신규 등록");
+    expect(text).toBe("2026년 11월 4차 · LOT 2…");
+    expect([...text]).toHaveLength(21);
+  });
+});
+
 describe("getRunWatermarkFontSize", () => {
   it("keeps short names at the published watermark size", () => {
     expect(getRunWatermarkFontSize("LOT 7")).toBe(120);
@@ -365,6 +378,11 @@ describe("getRunWatermarkFontSize", () => {
   it("shrinks long names so they fit one line, Korean counted wider", () => {
     expect(getRunWatermarkFontSize("11월 1차 입고 · LOT 2611-07")).toBe(71);
     expect(getRunWatermarkFontSize("원자재 입고 검사 11월 1차")).toBeLessThan(getRunWatermarkFontSize("raw intake LOT 11 1st"));
+  });
+
+  it("shrinks further on a narrow canvas but never grows past the base span", () => {
+    expect(getRunWatermarkFontSize("11월 1차 입고 · LOT 2611-07", 700)).toBe(45);
+    expect(getRunWatermarkFontSize("11월 1차 입고 · LOT 2611-07", 2000)).toBe(71);
   });
 
   it("never goes below the floor", () => {

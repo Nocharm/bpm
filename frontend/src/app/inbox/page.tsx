@@ -716,15 +716,15 @@ export default function InboxPage() {
                           else void openNotification(n);
                         }}
                         className={
-                          "flex w-full cursor-pointer flex-col gap-1.5 rounded-xs border border-hairline px-3 py-2.5 text-left " +
+                          "group flex w-full cursor-pointer flex-col gap-1 rounded-xs border border-hairline px-3 py-2 text-left " +
                           (n.id === selectedId
                             ? "border-l-2 border-l-accent bg-accent-tint"
                             : "bg-surface hover:bg-surface-alt")
                         }
                       >
                         {/* 선택 표시(선택모드, 시각 전용 — 토글은 카드 클릭) · 유형 아이콘(좌) · 읽음(우) */}
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center gap-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex min-w-0 items-center gap-1.5">
                             {selectMode &&
                               (selectedIds.has(n.id) ? (
                                 <CheckSquare size={14} strokeWidth={1.5} className="text-accent" />
@@ -736,15 +736,31 @@ export default function InboxPage() {
                             <span className="text-fine text-ink-tertiary">{view.label}</span>
                             {isRunNotificationInTrash(n) && <RunTrashChip dataId={`inbox-notif-trash-${n.id}`} />}
                           </span>
-                          {n.read ? (
-                            <span className="text-fine text-ink-tertiary">{t("notices.read")}</span>
-                          ) : (
-                            <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
-                          )}
+                          {/* 시간·삭제를 머리 줄로 올려 카드 높이를 줄인다. 삭제는 올리거나 포커스했을 때만 보인다 */}
+                          <span className="flex shrink-0 items-center gap-2">
+                            <button
+                              type="button"
+                              aria-label={t("notif.delete")}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void deleteOne(n.id);
+                              }}
+                              className="text-ink-tertiary opacity-0 hover:text-error focus-visible:opacity-100 group-hover:opacity-100"
+                            >
+                              <Trash2 size={13} strokeWidth={1.5} />
+                            </button>
+                            <TimePills iso={n.created_at} nowMs={nowMs} />
+                            {n.read ? (
+                              <span className="text-fine text-ink-tertiary">{t("notices.read")}</span>
+                            ) : (
+                              <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
+                            )}
+                          </span>
                         </div>
                         <span
+                          title={view.title}
                           className={
-                            "line-clamp-1 text-caption " +
+                            "line-clamp-2 text-caption [overflow-wrap:anywhere] " +
                             (n.read ? "text-ink-tertiary" : "font-semibold text-ink")
                           }
                         >
@@ -760,20 +776,6 @@ export default function InboxPage() {
                             {view.body}
                           </span>
                         )}
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            aria-label={t("notif.delete")}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void deleteOne(n.id);
-                            }}
-                            className="text-ink-tertiary hover:text-error"
-                          >
-                            <Trash2 size={13} strokeWidth={1.5} />
-                          </button>
-                          <TimePills iso={n.created_at} nowMs={nowMs} />
-                        </div>
                       </div>
                       {/* < split(980px) — 카드 아래 인라인 아코디언 (맵 탭과 동일 패턴) */}
                       <div

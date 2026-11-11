@@ -120,16 +120,16 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
             <Power size={16} strokeWidth={1.5} />
           </span>
           <div className="min-w-0 flex-1">
-            <div className="text-caption-strong text-ink">AI access</div>
+            <div className="text-caption-strong text-ink">{t("aiAccess.title")}</div>
             <div className="text-fine text-ink-tertiary">
-              Turn off while the AI server is down - blocks chat and consultant for everyone, no redeploy.
+              {t("aiAccess.description")}
             </div>
           </div>
           <button
             type="button"
             role="switch"
             aria-checked={!appSettings?.ai_access_disabled}
-            aria-label="AI access"
+            aria-label={t("aiAccess.title")}
             disabled={busy || !appSettings}
             onClick={() => void toggleAiAccess()}
             className={

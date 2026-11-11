@@ -266,6 +266,7 @@ export function InspectorPanel({
         {tab === "properties" && selectionKind === null && (
           <PropertiesEmpty
             readOnly={readOnly}
+            isRunMode={isRunMode}
             onAddNode={onAddNode}
             onOpenLibrary={onOpenLibrary}
             onAutoArrange={onAutoArrange}
@@ -327,6 +328,7 @@ export function InspectorPanel({
 
 function PropertiesEmpty({
   readOnly,
+  isRunMode = false,
   onAddNode,
   onOpenLibrary,
   onAutoArrange,
@@ -358,7 +360,10 @@ function PropertiesEmpty({
         )}
         <span className="max-w-full truncate text-body-strong text-ink">{mapName || t("inspector.noSelection")}</span>
         {versionControl}
-        <span className="text-caption text-ink-tertiary">{t("inspector.emptyHint")}</span>
+        {/* 고칠 수 없는 화면(게시본·Run)에서 편집·노드 추가를 안내하지 않는다 */}
+        <span className="text-caption text-ink-tertiary">
+          {t(isRunMode ? "inspector.emptyHintRun" : readOnly ? "inspector.emptyHintReadOnly" : "inspector.emptyHint")}
+        </span>
       </div>
 
       {!readOnly && (

@@ -187,12 +187,23 @@ const RUN_WATERMARK_MAX_PX = 120;
 const RUN_WATERMARK_MIN_PX = 44;
 const RUN_WATERMARK_SPAN_PX = 1100; // 기울인 한 줄이 차지할 너비 기준 — 보통 캔버스 폭(1,100~1,300px)
 
-/** 실행 이름 워터마크 글자 크기 — 넓은 글자(한글·한자) 1, 나머지 0.6 폭으로 세어 기준 너비에 맞춘다. */
-export function getRunWatermarkFontSize(name: string): number {
+/** 워터마크에 싣는 이름 글자 수 상한 — 넘으면 앞부분에 말줄임. 전체 이름은 위 Run 막대에 있다. */
+export const RUN_WATERMARK_MAX_CHARS = 20;
+
+/** 워터마크 문구 — 긴 이름은 앞 20자만(하한 글자 크기로도 한 줄에 못 들어가 조각나 노드를 덮던 문제). */
+export function getRunWatermarkText(name: string): string {
+  const chars = [...name.trim()];
+  if (chars.length <= RUN_WATERMARK_MAX_CHARS) return chars.join("");
+  return `${chars.slice(0, RUN_WATERMARK_MAX_CHARS).join("").trimEnd()}…`;
+}
+
+/** 실행 이름 워터마크 글자 크기 — 넓은 글자(한글·한자) 1, 나머지 0.6 폭으로 세어 기준 너비에 맞춘다.
+ * spanPx는 실제 캔버스 폭(양쪽 패널이 열리면 기준 너비보다 좁다) — 기준 너비를 넘겨 키우지는 않는다. */
+export function getRunWatermarkFontSize(name: string, spanPx: number = RUN_WATERMARK_SPAN_PX): number {
   let ems = 0;
   for (const ch of name) ems += /[\u1100-\u11ff\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]/.test(ch) ? 1 : 0.6;
   if (ems === 0) return RUN_WATERMARK_MAX_PX;
-  return Math.round(Math.min(RUN_WATERMARK_MAX_PX, Math.max(RUN_WATERMARK_MIN_PX, RUN_WATERMARK_SPAN_PX / ems)));
+  return Math.round(Math.min(RUN_WATERMARK_MAX_PX, Math.max(RUN_WATERMARK_MIN_PX, Math.min(spanPx, RUN_WATERMARK_SPAN_PX) / ems)));
 }
 
 /** 갈래 버튼에 올리거나 포커스한 동안의 미리보기 — 같은 노드의 갈래 연결선 키 전부와 그중 지금 가리키는 것(노드 키 꼴). */

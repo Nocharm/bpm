@@ -17,6 +17,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
+  useNodesInitialized,
   useNodesState,
   useReactFlow,
   useStore,
@@ -106,6 +107,7 @@ import { FlowConflictModal } from "@/components/flow-conflict-modal";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { EditorToolbar } from "@/components/editor-toolbar";
 import { NodeSearch } from "@/components/node-search";
+import { ClampedBlock } from "@/components/clamped-block";
 import { InspectorPanel } from "@/components/inspector-panel";
 import { SubprocessRegistrationCta } from "@/components/subprocess-registration-cta";
 import { SubprocessVersionPicker } from "@/components/subprocess-version-picker";
@@ -328,6 +330,7 @@ import { autoLayoutFlow, autoLayoutSubsetFlow, type FlowDir, inferFlowDir } from
 import { buildFlowHandleStyle } from "@/lib/flow-handle-style";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
+import { pickReadableViewport } from "@/lib/initial-view";
 import {
   applyIoImport,
   buildIoIndex,
@@ -382,6 +385,7 @@ import {
   buildRunView,
   findRunnableVersionId,
   getRunWatermarkFontSize,
+  getRunWatermarkText,
   splitRunNodeKey,
   splitRunScopeGraphs,
   type RunBranchPreview,
@@ -8099,6 +8103,38 @@ function MapEditor({ mapId }: { mapId: number }) {
   const yTweenInitRef = useRef(false);
   // 성장 반영 후 1회 재-fit — 초기 fitView는 측정 전(성장 전) 좌표 기준이라 밀린 하단 노드가
   // 뷰 밖일 수 있다(V라운드 관찰 1). 마운트 직후 창(1.5s) 안에서만 — 이후 사용자 펼침엔 카메라 불가침.
+  // 첫 화면 배율(lib/initial-view) — 전체 맞춤이 글자를 못 읽을 만큼 작으면 시작 노드 쪽을 읽기 배율로 연다.
+  // L5 캔버스는 전체를 한눈에 보는 화면이라 제외. 선택된 노드가 있으면(검색 점프·딥링크 포커스) 그 카메라를 건드리지 않는다.
+  // 반환값: 읽기 배율로 옮겼으면 true(호출부가 전체 맞춤을 건너뛴다).
+  const frameInitialView = useCallback(
+    (duration: number): boolean => {
+      if (isFrameworkMap) return false;
+      const all = reactFlow.getNodes();
+      if (all.length === 0 || all.some((node) => node.selected)) return false;
+      const anchorNode =
+        all.find((node) => node.data.nodeType === "start") ??
+        all.reduce((left, node) => (node.position.x < left.position.x ? node : left));
+      const { width, height } = storeApi.getState();
+      const view = pickReadableViewport(
+        reactFlow.getNodesBounds(all),
+        reactFlow.getNodesBounds([anchorNode]),
+        width,
+        height,
+      );
+      if (!view) return false;
+      void reactFlow.setViewport(view, { duration });
+      return true;
+    },
+    [isFrameworkMap, reactFlow, storeApi],
+  );
+  // RF의 fitView prop(첫 측정 직후 전체 맞춤) 바로 뒤에 한 번만 판정한다 — 버전 전환은 카메라를 유지한다.
+  const nodesInitialized = useNodesInitialized();
+  const didInitialFrameRef = useRef(false);
+  useEffect(() => {
+    if (!nodesInitialized || didInitialFrameRef.current) return;
+    didInitialFrameRef.current = true;
+    frameInitialView(0);
+  }, [nodesInitialized, frameInitialView]);
   const mountAtRef = useRef(0);
   useEffect(() => {
     mountAtRef.current = performance.now();
@@ -8115,10 +8151,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     // 성장 커밋 기준 80ms 디바운스로 1회 발사.
     const timer = window.setTimeout(() => {
       didGrowthFitRef.current = true;
-      void reactFlow.fitView({ padding: 0.1, duration: 300 });
+      if (!frameInitialView(300)) {
+        void reactFlow.fitView({ padding: 0.1, duration: 300 });
+      }
     }, 80);
     return () => window.clearTimeout(timer);
-  }, [yOffsets, reactFlow]);
+  }, [yOffsets, reactFlow, frameInitialView]);
   useEffect(() => {
     const from = renderYOffsetsRef.current;
     const to = yOffsets;
@@ -11032,16 +11070,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                         ) : runMode && runSession ? (
                           <span
                             data-id="editor-run-watermark"
-                            className={`-rotate-[18deg] select-none whitespace-nowrap font-semibold tracking-wide opacity-[0.14] ${
+                            className={`-rotate-[18deg] select-none whitespace-nowrap font-semibold tracking-normal opacity-[0.14] ${
                               currentVersion?.status === "expired" ? "text-ink-tertiary" : "text-accent"
                             }`}
-                            style={{ fontSize: getRunWatermarkFontSize(runSession.detail.name) }}
+                            // 기울인 한 줄이 캔버스 폭 안에 들어가게 — 양쪽 패널이 열린 폭 기준
+                            style={{ fontSize: getRunWatermarkFontSize(getRunWatermarkText(runSession.detail.name), paneWidth * 0.9) }}
                           >
-                            {runSession.detail.name}
+                            {getRunWatermarkText(runSession.detail.name)}
                           </span>
                         ) : (
                           <span
-                            className={`-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold tracking-widest opacity-[0.14] ${
+                            className={`-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold tracking-wide opacity-[0.14] ${
                               // 차콜 캔버스에선 accent/회색이 묻힘 — 밝은색으로 동일한 은은함 유지.
                               // text-canvas(#f6f6f8) — 다크 셸이 --color-surface를 뒤집어도 라이트로 남는 토큰
                               index === 0 && l5Charcoal
@@ -11561,9 +11600,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                           subprocess는 링크맵 설명(베이스)+이 맵 추가분을 줄바꿈 합성해 표시. */}
                       <div className="group/desc relative">
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("field.description")}</label>
-                        <div
-                          data-id="inspector-description"
-                          className={`min-h-[2rem] whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-tertiary ${
+                        {/* 긴 설명은 5줄에서 접는다 — 펼친 채면 아래 속성 묶음이 화면 밖으로 밀린다. 노드가 바뀌면 다시 접힌다 */}
+                        <ClampedBlock
+                          key={selectedNode.id}
+                          dataId="inspector-description"
+                          moreLabel={t("io.showMore")}
+                          lessLabel={t("io.showLess")}
+                          className={`min-h-[2rem] whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-tertiary [overflow-wrap:anywhere] ${
                             readOnly ? "" : "cursor-text transition-colors hover:bg-surface-pearl"
                           }`}
                           onDoubleClick={() => {
@@ -11578,7 +11621,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 selectedNode.data.description,
                               )
                             : selectedNode.data.description) || t("summary.none")}
-                        </div>
+                        </ClampedBlock>
                         {!readOnly && (
                           <button
                             type="button"

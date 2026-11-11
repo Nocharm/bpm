@@ -14,6 +14,7 @@ import {
   type KbDocument,
 } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
+import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
 const ACCEPT = ".pdf,.docx,.pptx,.xlsx,.txt,.md";
@@ -23,6 +24,7 @@ const OUTLINE_BTN =
   "text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-50";
 
 export function KbManagePanel({ onToast }: { onToast: (message: string) => void }) {
+  const { t } = useI18n();
   const [docs, setDocs] = useState<KbDocument[]>([]);
   const [busy, setBusy] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<KbDocument | null>(null);
@@ -52,11 +54,11 @@ export function KbManagePanel({ onToast }: { onToast: (message: string) => void 
       await refresh();
       onToast(
         doc.status === "parsed"
-          ? "Document uploaded - indexing runs in the background."
-          : "Uploaded, but the file could not be parsed.",
+          ? t("kb.toastUploaded")
+          : t("kb.toastParseFailed"),
       );
     } catch (err) {
-      onToast(getApiErrorDetail(err) || "Upload failed.");
+      onToast(getApiErrorDetail(err) || t("kb.toastUploadFailed"));
     } finally {
       setBusy(false);
     }
@@ -67,9 +69,9 @@ export function KbManagePanel({ onToast }: { onToast: (message: string) => void 
     try {
       await deleteKbDocument(pendingDelete.id);
       await refresh();
-      onToast("Document deleted.");
+      onToast(t("kb.toastDeleted"));
     } catch (err) {
-      onToast(getApiErrorDetail(err) || "Delete failed.");
+      onToast(getApiErrorDetail(err) || t("kb.toastDeleteFailed"));
     } finally {
       setPendingDelete(null);
     }
@@ -79,15 +81,14 @@ export function KbManagePanel({ onToast }: { onToast: (message: string) => void 
     <section className="flex flex-col gap-3" data-id="kb-manage-panel">
       <header className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
-          <h2 className="text-body-strong text-ink">Knowledge base library</h2>
+          <h2 className="text-body-strong text-ink">{t("kb.title")}</h2>
           <p className="text-caption text-ink-muted">
-            Organization documents the AI consultant can cite during interviews. Supported: pdf,
-            docx, pptx, xlsx, txt, md (max 20MB).
+            {t("kb.description")}
           </p>
         </div>
         <button className={OUTLINE_BTN} onClick={() => void refresh()} data-id="kb-refresh">
           <RefreshCw size={16} strokeWidth={1.5} />
-          Refresh
+          {t("kb.refresh")}
         </button>
         <button
           className={OUTLINE_BTN}
@@ -96,7 +97,7 @@ export function KbManagePanel({ onToast }: { onToast: (message: string) => void 
           data-id="kb-upload"
         >
           <FileUp size={16} strokeWidth={1.5} />
-          {busy ? "Uploading…" : "Upload"}
+          {busy ? t("kb.uploading") : t("kb.upload")}
         </button>
         <input
           ref={fileRef}
@@ -109,7 +110,7 @@ export function KbManagePanel({ onToast }: { onToast: (message: string) => void 
       </header>
       {docs.length === 0 ? (
         <p className="rounded-sm border border-hairline bg-surface-alt px-3 py-4 text-caption text-ink-muted">
-          No documents yet - upload SOPs or guides to ground the AI consultant.
+          {t("kb.empty")}
         </p>
       ) : (
         <ul className="divide-y divide-hairline rounded-sm border border-hairline">
@@ -132,15 +133,15 @@ export function KbManagePanel({ onToast }: { onToast: (message: string) => void 
                 }
               >
                 {doc.status === "failed"
-                  ? "Parse failed"
+                  ? t("kb.statusFailed")
                   : doc.chunk_count > 0
-                    ? `Indexed (${doc.chunk_count})`
-                    : "Indexing…"}
+                    ? t("kb.statusIndexed", { n: doc.chunk_count })
+                    : t("kb.statusIndexing")}
               </span>
               <button
                 className="shrink-0 rounded-xs p-1 text-ink-muted hover:text-error"
                 onClick={() => setPendingDelete(doc)}
-                title="Delete"
+                title={t("kb.delete")}
                 data-id="kb-doc-delete"
               >
                 <Trash2 size={16} strokeWidth={1.5} />
@@ -151,10 +152,10 @@ export function KbManagePanel({ onToast }: { onToast: (message: string) => void 
       )}
       {pendingDelete ? (
         <ConfirmDialog
-          title="Delete this document?"
-          message={`'${pendingDelete.filename}' will be removed from the knowledge base along with its search index.`}
-          confirmLabel="Delete"
-          cancelLabel="Cancel"
+          title={t("kb.deleteTitle")}
+          message={t("kb.deleteMessage", { name: pendingDelete.filename })}
+          confirmLabel={t("kb.delete")}
+          cancelLabel={t("common.cancel")}
           danger
           onConfirm={() => {
             void handleDelete();

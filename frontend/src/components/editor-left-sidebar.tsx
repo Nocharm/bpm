@@ -460,12 +460,16 @@ export function EditorLeftSidebar({
           {outline.map((item, index) => {
             const Icon = TYPE_ICONS[item.nodeType];
             const newBlock = index > 0 && item.blockIndex !== outline[index - 1].blockIndex;
+            const rowLabel =
+              item.nodeType === "start" || item.nodeType === "end"
+                ? terminalDisplayLabel(item.nodeType, item.label)
+                : item.label || t("sidebar.untitled");
             return (
               <Fragment key={item.id}>
                 {newBlock && <li role="separator" className="my-1 border-t border-divider" />}
                 <li
                   ref={item.id === selectedId ? selectedRowRef : null}
-                  className={`group flex items-center ${
+                  className={`group flex items-start ${
                     item.hierarchy ? "border-l-2 border-accent-tint-border" : ""
                   }`}
                   style={{ paddingLeft: item.depth * 12 }}
@@ -474,7 +478,7 @@ export function EditorLeftSidebar({
                     <button
                       type="button"
                       onClick={() => onToggleExpand(item.id)}
-                      className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                      className="mt-[5px] rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
                       aria-label={item.expanded ? t("sidebar.collapseNode") : t("sidebar.expandNode")}
                     >
                       {item.expanded ? (
@@ -540,7 +544,9 @@ export function EditorLeftSidebar({
                         setEditingId(item.id);
                       }}
                       onContextMenu={(event) => onRowContextMenu(event, item.id)}
-                      className={`flex min-w-0 flex-1 items-center gap-2 rounded-sm px-1.5 py-1 text-caption hover:bg-surface-alt ${
+                      // 잘린 제목은 올리면 전체가 보인다. 고른 행만 두 줄로 펴 목록 높이가 흔들리지 않게 한다.
+                      title={rowLabel}
+                      className={`flex min-w-0 flex-1 items-start gap-2 rounded-sm px-1.5 py-1 text-left text-caption hover:bg-surface-alt ${
                         item.id === selectedId
                           ? "bg-accent-tint text-accent"
                           : item.hierarchy
@@ -548,11 +554,15 @@ export function EditorLeftSidebar({
                             : "text-ink-secondary"
                       }`}
                     >
-                      <Icon size={13} strokeWidth={1.5} />
-                      <span className="truncate">
-                        {item.nodeType === "start" || item.nodeType === "end"
-                          ? terminalDisplayLabel(item.nodeType, item.label)
-                          : item.label || t("sidebar.untitled")}
+                      {/* 아이콘은 첫 줄 글자 높이(20px)에 맞춰 세로 가운데 — 두 줄일 때도 첫 줄 옆에 머문다 */}
+                      <span
+                        className={`flex h-5 shrink-0 items-center ${item.id === selectedId ? "" : "text-ink-tertiary"}`}
+                        aria-hidden
+                      >
+                        <Icon size={13} strokeWidth={1.5} />
+                      </span>
+                      <span className={item.id === selectedId ? "line-clamp-2 [overflow-wrap:anywhere]" : "truncate"}>
+                        {rowLabel}
                       </span>
                     </button>
                   )}

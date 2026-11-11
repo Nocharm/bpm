@@ -204,15 +204,15 @@ export function EmployeeTable() {
       <TableCard>
         <thead>
           <tr className={ADMIN_HEAD_ROW}>
-            <th className={ADMIN_TH}>loginId</th>
-            <th className={ADMIN_TH}>name</th>
-            <th className={ADMIN_TH}>korean name</th>
-            <th className={ADMIN_TH}>korean dept</th>
-            <th className={ADMIN_TH}>title</th>
-            <th className={ADMIN_TH}>department</th>
-            <th className={ADMIN_TH}>role</th>
-            <th className={ADMIN_TH}>status</th>
-            <th className={ADMIN_TH}>source</th>
+            <th className={ADMIN_TH}>{t("admin.emp.colLoginId")}</th>
+            <th className={ADMIN_TH}>{t("admin.emp.colName")}</th>
+            <th className={ADMIN_TH}>{t("admin.emp.colKoreanName")}</th>
+            <th className={ADMIN_TH}>{t("admin.emp.colKoreanDept")}</th>
+            <th className={ADMIN_TH}>{t("admin.emp.colTitle")}</th>
+            <th className={ADMIN_TH}>{t("admin.emp.colDepartment")}</th>
+            <th className={ADMIN_TH}>{t("admin.emp.colRole")}</th>
+            <th className={ADMIN_TH}>{t("admin.emp.colStatus")}</th>
+            <th className={ADMIN_TH}>{t("admin.emp.colSource")}</th>
           </tr>
         </thead>
         <tbody>

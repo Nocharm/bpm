@@ -37,6 +37,7 @@ import {
   stageIndex,
 } from "@/lib/interview";
 import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n-messages";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ATTACH_EVENT, InterviewPanel } from "@/components/interview/interview-panel";
 import { DrawConfirmDialog } from "@/components/interview/draw-confirm-dialog";
@@ -58,7 +59,7 @@ export default function ConsultPage() {
   const params = useParams<{ mapId: string }>();
   const mapId = Number(params.mapId);
   const router = useRouter();
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
 
   const [interview, setInterview] = useState<InterviewState | null>(null);
   const [mapName, setMapName] = useState("");
@@ -66,7 +67,8 @@ export default function ConsultPage() {
   const [error, setError] = useState<string | null>(null);
   // 낙관적 사용자 메시지 — 서버 응답 전에 먼저 표시(실패 시 유지 → Retry로 재전송)
   const [pending, setPending] = useState<string | null>(null);
-  const [fatal, setFatal] = useState<string | null>(null); // 403/503 등 진입 불가
+  // 403/503 등 진입 불가 — 고정 사유는 번역 키로, 서버가 준 사유는 원문으로 들고 그릴 때 번역한다(효과가 언어에 묶이지 않게)
+  const [fatal, setFatal] = useState<{ key: MessageKey } | { text: string } | null>(null);
   const [chatWidth, setChatWidth] = useState(readChatWidth);
   const lastTurnRef = useRef<{ type: "answer" | "choice" | "skip"; content?: string; choice_id?: string } | null>(null);
   // 그리기 이벤트(동기) — 진행 중엔 캔버스 오버레이 + 채팅 잠금 (speed redesign §4)
@@ -144,7 +146,7 @@ export default function ConsultPage() {
       try {
         const me = await getMe();
         if (!me.ai_enabled) {
-          if (!cancelled) setFatal("AI is disabled on this server.");
+          if (!cancelled) setFatal({ key: "consult.fatalAiDisabled" });
           return;
         }
         const detail = await getMap(mapId);
@@ -155,7 +157,7 @@ export default function ConsultPage() {
         const draft = detail.versions.find((v) => v.id === fromQuery)
           ?? detail.versions.find((v) => v.status === "draft");
         if (!draft) {
-          setFatal("No editable draft version.");
+          setFatal({ key: "consult.fatalNoDraft" });
           return;
         }
         const state = await createOrResumeInterview(mapId, draft.id, lang);
@@ -163,11 +165,12 @@ export default function ConsultPage() {
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError && (err.status === 403 || err.status === 404)) {
-          setFatal("You don't have permission to consult on this map.");
+          setFatal({ key: "consult.fatalNoPermission" });
         } else if (err instanceof ApiError && err.status === 503) {
-          setFatal("AI is disabled on this server.");
+          setFatal({ key: "consult.fatalAiDisabled" });
         } else {
-          setFatal(getApiErrorDetail(err) || "Failed to start the interview.");
+          const detail = getApiErrorDetail(err);
+          setFatal(detail ? { text: detail } : { key: "consult.fatalStartFailed" });
         }
       }
     })();
@@ -489,9 +492,9 @@ export default function ConsultPage() {
   if (fatal) {
     return (
       <ConfirmDialog
-        title="Cannot open consultant"
-        message={fatal}
-        confirmLabel="Back to map"
+        title={t("consult.fatalTitle")}
+        message={"key" in fatal ? t(fatal.key) : fatal.text}
+        confirmLabel={t("consult.fatalBack")}
         onConfirm={() => router.replace(`/maps/${mapId}`)}
         onClose={() => router.replace(`/maps/${mapId}`)}
       />

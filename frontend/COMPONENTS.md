@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 335개 · 2026-11-08 기준
+총 336개 · 2026-11-11 기준
 
 ## components/
 
@@ -30,6 +30,7 @@
 | `change-summary-section.tsx` | `ChangeSummaryDisclosure`, `ChangeSummarySection` | 기준 버전 대비 변경 요약 | `app/maps/[mapId]/page.tsx`, `components/framework-confirm-section.tsx` |
 | `check-input.tsx` | `CheckInput` | 앱 공통 체크박스 | `app/maps/[mapId]/compare/page.tsx`, `components/admin/employee-table.tsx`, `components/admin/local-account-table.tsx`, `components/admin/notification-purge-modal.tsx`, `components/export-column-picker.tsx`, `components/feedback-notes-flyout.tsx`, `components/framework-confirm-section.tsx`, `components/framework-interview/questionnaire-form.tsx`, `components/library-dept-flyout.tsx`, `components/notices/notice-edit-modal.tsx`, `components/permissions/create-map-dialog.tsx`, `components/process-library-panel.tsx`, `components/ref-audit/ref-detail-lines.tsx`, `components/run/run-list-modal.tsx` |
 | `checkout-panel.tsx` | `CheckoutPanel` | 점유권 탭 | `components/approval-panel.tsx` |
+| `clamped-block.tsx` | `ClampedBlock` | 긴 글을 몇 줄에서 접고 "더 보기"로 펴는 읽기 전용 블록 | `app/maps/[mapId]/page.tsx` |
 | `clip-body.tsx` | `ClipBody`, `ClipToggle` | 고정 높이 클립 본문 | `components/maps/map-detail-description.tsx`, `components/maps/map-notes-section.tsx` |
 | `comment-section.tsx` | `CommentSection` | 노드 코멘트 스레드 | `app/maps/[mapId]/page.tsx` |
 | `compare-ai-summary.tsx` | `CompareAiSummary` | 비교 화면 AI 보고서 탭 본문 | `app/maps/[mapId]/compare/page.tsx` |

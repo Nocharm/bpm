@@ -63,9 +63,11 @@ function SkeletonNoticeCard() {
   );
 }
 
-// 내용 첫 줄 미리보기 — 첫 비어있지 않은 줄에서 마크다운 마커 제거 후 앞부분만
+// 내용 미리보기 — 제목 줄(#)을 건너뛴 첫 문장에서 마크다운 마커 제거 후 앞부분만.
+// 제목 줄만 있는 글은 그 제목을 쓴다("변경 사항" 같은 머리글만 보이던 문제).
 function bodyPreview(md: string): string {
-  const firstLine = md.split("\n").map((line) => line.trim()).find((line) => line.length > 0) ?? "";
+  const lines = md.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
+  const firstLine = lines.find((line) => !line.startsWith("#") && !/^[|\-:\s]+$/.test(line)) ?? lines[0] ?? "";
   return firstLine
     .replace(/[#>*_`~[\]()-]/g, " ")
     .replace(/\s+/g, " ")
@@ -179,7 +181,7 @@ export default function NoticesPage() {
                       openNotice(n.id);
                     }}
                     className={
-                      "flex w-full flex-col gap-1.5 rounded-xs border border-hairline px-3 py-2.5 text-left " +
+                      "flex w-full flex-col gap-1 rounded-xs border border-hairline px-3 py-2 text-left " +
                       (n.id === selectedId
                         ? "border-l-2 border-l-accent bg-accent-tint"
                         : "bg-surface hover:bg-surface-alt")
@@ -200,7 +202,7 @@ export default function NoticesPage() {
                         <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
                       )}
                     </div>
-                    <span className="truncate text-caption font-semibold text-ink">{n.title}</span>
+                    <span title={n.title} className="line-clamp-2 text-caption font-semibold text-ink [overflow-wrap:anywhere]">{n.title}</span>
                     <span className="truncate text-fine text-ink-tertiary">
                       {bodyPreview(n.body_md)}
                     </span>
