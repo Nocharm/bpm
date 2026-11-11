@@ -12,6 +12,7 @@
 - 제목용 폰트 굵기 조정(사용자 결정: 600은 꼭 필요할 때만): 600은 21px 제목·큰 숫자, 페이지 제목(h1), 서비스 이름·로그인 제목(`display-strong`)에만. 나머지 17px 강조는 Paperlogy 400(Regular 한 종 추가).
 - 디자인 규칙에 이번 검토의 교훈을 적었다(`rules/frontend/design.md` 3절 굵기 600의 두 역할·작은 제목 Paperlogy 400 결정(미구현), 8절 긴 글·많은 데이터).
 - 화면 다듬기 2차, 작은 제목: 14px 제목 전용 클래스 `text-caption-title`(Paperlogy 400)을 만들고 제목인 자리만 옮겼다(카드 제목·패널 머리글·창 제목·호버 카드 이름, 약 80곳. 홈→에디터→맵 설정→알림·매뉴얼→설정→비교 순 커밋). 상태 신호(선택 탭·안 읽음·건수·배지·버튼)와 표·캔버스 노드는 Pretendard 600 그대로. 목록 행 이름·입력 라벨·12px 소제목은 사용자 확인 뒤.
+- Paperlogy OFL 원문을 배포처(Freesentation/paperlogy) 그대로 `frontend/public/fonts/Paperlogy-OFL.txt`에 실었다(표기: Copyright 2024 The PAPERLOGY Authors).
 
 ## 2026-11-10 — v1.7.1 공지 초안
 
