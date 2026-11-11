@@ -99,7 +99,7 @@ export function SpFieldPopover({
       >
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <div className="text-caption-strong text-ink">{title}</div>
+            <div className="text-caption-title text-ink">{title}</div>
             {hint && <p className="mt-0.5 text-fine text-ink-tertiary">{hint}</p>}
           </div>
           <button

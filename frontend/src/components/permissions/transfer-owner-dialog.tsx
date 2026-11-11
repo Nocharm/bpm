@@ -46,7 +46,7 @@ export function TransferOwnerDialog({ mapId, targetId, targetName, onToast, onCl
       className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/30 backdrop-blur-sm"
     >
       <div data-id="transfer-owner-dialog" className="w-80 rounded-md border p-4 glass glass-dense">
-        <p className="mb-2 flex items-center gap-2 text-caption-strong text-ink">
+        <p className="mb-2 flex items-center gap-2 text-caption-title text-ink">
           <Crown size={16} strokeWidth={1.5} className="text-error" />
           {t("perm.transferConfirmTitle")}
         </p>

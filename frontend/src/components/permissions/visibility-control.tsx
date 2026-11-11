@@ -93,7 +93,7 @@ export function VisibilityControl({ mapId, visibility, isOwner, onToast }: Visib
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <p className="text-caption-strong text-ink">{t("perm.visibilityTitle")}</p>
+        <p className="text-caption-title text-ink">{t("perm.visibilityTitle")}</p>
         <p className="mt-0.5 text-fine text-ink-tertiary">{t("perm.visibilityHint")}</p>
       </div>
 

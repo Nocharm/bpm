@@ -96,7 +96,7 @@ export function AddCollaborator({
 
   return (
     <div className="mt-3 flex flex-col gap-2 border-t border-hairline pt-3">
-      <p className="text-caption-strong text-ink">{t("perm.addCollaborator")}</p>
+      <p className="text-caption-title text-ink">{t("perm.addCollaborator")}</p>
 
       {/* 클릭(또는 Enter) 시 역할 팝오버를 띄우고, 팝오버에서 Viewer/Editor 선택 시 추가 (R2 QA 피드백) */}
       <div ref={pickerWrapRef}>

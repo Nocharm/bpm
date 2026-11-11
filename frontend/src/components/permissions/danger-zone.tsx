@@ -121,7 +121,7 @@ export function DangerZone({ mapId, currentUserId, owningDepartment, onToast }: 
       <div className="flex flex-col gap-4">
         {/* ── 소유권 이전 / Ownership transfer ── */}
         <div data-id="danger-transfer-card" className="rounded-md border border-hairline p-3">
-          <p className="mb-1 flex items-center gap-1.5 text-caption-strong text-ink">
+          <p className="mb-1 flex items-center gap-1.5 text-caption-title text-ink">
             <Crown size={14} strokeWidth={1.5} className="text-ink-tertiary" />
             {t("perm.transferTitle")}
           </p>
@@ -153,7 +153,7 @@ export function DangerZone({ mapId, currentUserId, owningDepartment, onToast }: 
 
         {/* ── 맵 삭제 / Map delete ── */}
         <div data-id="danger-delete-card" className="rounded-md border border-error p-3">
-          <p className="mb-1 flex items-center gap-1.5 text-caption-strong text-error">
+          <p className="mb-1 flex items-center gap-1.5 text-caption-title text-error">
             <AlertTriangle size={14} strokeWidth={1.5} />
             {t("perm.deleteTitle")}
           </p>

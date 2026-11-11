@@ -125,7 +125,7 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <p className="text-caption-strong text-ink">{t("perm.approversTitle")}</p>
+        <p className="text-caption-title text-ink">{t("perm.approversTitle")}</p>
         <p className="mt-0.5 text-fine text-ink-tertiary">{t("perm.approversHint")}</p>
       </div>
 
@@ -200,7 +200,7 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
       {/* 결재자 추가 — 소유자 + 승인 진행 중 아닐 때만 / Add form: owner and not under approval. */}
       {canEdit && (
         <div data-id="approvers-add-form" className="mt-2 flex flex-col gap-2 border-t border-hairline pt-3">
-          <p className="text-caption-strong text-ink">{t("perm.approversAdd")}</p>
+          <p className="text-caption-title text-ink">{t("perm.approversAdd")}</p>
           <PrincipalPicker
             users={pickerUsers}
             departments={[]}

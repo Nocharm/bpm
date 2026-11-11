@@ -347,7 +347,7 @@ export default function SettingsPage() {
             className="absolute bottom-14 left-3 w-72 rounded-md border p-3 glass glass-dense"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="mb-2 text-caption-strong text-ink">{t("perm.devSwitcher")}</p>
+            <p className="mb-2 text-caption-title text-ink">{t("perm.devSwitcher")}</p>
             <div className="flex flex-col gap-1">
               {LOCAL_USERS.map((user) => (
                 <button

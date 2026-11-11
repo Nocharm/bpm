@@ -343,7 +343,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-caption-strong text-ink">{designated ? "Designated" : t("perm.sp.notDesignated")}</span>
+              <span className="text-caption-title text-ink">{designated ? "Designated" : t("perm.sp.notDesignated")}</span>
               {designated && publishedVersion && (
                 <span className="rounded-full bg-accent-tint px-2 py-0.5 text-fine text-accent">
                   {t("perm.sp.publishedBasis", { v: formatVersionMarker(publishedVersion, detail.versions) })}
