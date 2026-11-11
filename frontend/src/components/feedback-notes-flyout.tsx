@@ -169,7 +169,7 @@ export function FeedbackNotesFlyout({
 
       <div className="flex-1 overflow-y-auto px-3 py-2">
         {/* 내용 — 어떤 피드백의 노트인지 문맥 */}
-        <p className="mb-2 whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-fine text-ink-secondary">
+        <p className="mb-2 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-sm bg-surface-alt px-2 py-1.5 text-fine text-ink-secondary">
           {feedbackBody}
         </p>
         {notes === null ? (
@@ -270,7 +270,7 @@ export function FeedbackNotesFlyout({
                       </div>
                     </div>
                   ) : (
-                    <p className="whitespace-pre-wrap text-caption text-ink">{note.body}</p>
+                    <p className="whitespace-pre-wrap [overflow-wrap:anywhere] text-caption text-ink">{note.body}</p>
                   )}
                   {/* 수정 이력 — 직전 본문 스냅샷(오래된 것부터) */}
                   {historyFor === note.id && (
@@ -284,7 +284,7 @@ export function FeedbackNotesFlyout({
                         revisions.map((rev) => (
                           <li key={rev.id} className="flex flex-col gap-0.5">
                             <TimePills iso={rev.created_at} nowMs={nowMs} />
-                            <p className="whitespace-pre-wrap text-fine text-ink-tertiary line-through">
+                            <p className="whitespace-pre-wrap [overflow-wrap:anywhere] text-fine text-ink-tertiary line-through">
                               {rev.body}
                             </p>
                           </li>

@@ -227,7 +227,7 @@ export function FeedbackDetailModal({
                 </div>
               </div>
             ) : (
-              <p className="whitespace-pre-wrap text-caption text-ink">{feedback.body}</p>
+              <p className="whitespace-pre-wrap [overflow-wrap:anywhere] text-caption text-ink">{feedback.body}</p>
             )}
           </section>
 
@@ -259,7 +259,7 @@ export function FeedbackDetailModal({
                 </div>
               </div>
             ) : feedback.reply ? (
-              <p className="whitespace-pre-wrap rounded-sm bg-surface-alt px-3 py-2 text-caption text-ink">
+              <p className="whitespace-pre-wrap [overflow-wrap:anywhere] rounded-sm bg-surface-alt px-3 py-2 text-caption text-ink">
                 {feedback.reply}
               </p>
             ) : (
