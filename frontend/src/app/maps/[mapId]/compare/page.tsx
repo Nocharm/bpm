@@ -2247,7 +2247,7 @@ function ComparePane({
           {/* Compare View 워터마크 — 읽기전용 인지(에디터 read-only 워터마크 재활용, dot-grid 대체).
               z-[4]로 노드(z-2) 위에 덮되 opacity .14로 투과 — 에디터 워터마크와 동일. */}
           <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
-            <span className="-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold tracking-widest text-accent opacity-[0.14]">
+            <span className="-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold tracking-wide text-accent opacity-[0.14]">
               {t("compare.watermark")}
             </span>
           </div>
@@ -2814,7 +2814,7 @@ function ComparePane({
                   className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center overflow-hidden"
                   data-id="compare-inspector-watermark"
                 >
-                  <span className="-rotate-[18deg] select-none whitespace-nowrap text-[44px] font-semibold tracking-widest text-ink opacity-[0.08]">
+                  <span className="-rotate-[18deg] select-none whitespace-nowrap text-[44px] font-semibold tracking-wide text-ink opacity-[0.08]">
                     {statusMark}
                   </span>
                 </div>

@@ -16,6 +16,7 @@ BPM 프론트엔드 시각 언어 — Whimsical 파생 토큰 시스템(`fronten
 ## 3. 타입
 - Pretendard. 본문 17px(`text-body`), 굵기 사다리 **300/400/600**(500 금지). 유일한 예외: 홈 트리 조상 강조 이름(`globals.css` `[data-tree-name]` 호버 경로)은 500 — 600은 12px 행에서 과하다는 사용자 결정(2026-09-10).
 - 시맨틱 스케일: `text-tagline`/`text-body-strong`/`text-body`/`text-caption`/`text-caption-strong`/`text-fine`.
+- **제목용 폰트 Paperlogy SemiBold(600 한 종, `--font-display`)** — `text-body-strong`·`text-tagline`에 전역으로 붙는다(`globals.css`): 서비스 이름·페이지 제목·카드 이름·구역 제목·창 제목·큰 숫자. 본문·캡션·버튼·표·캔버스 노드는 Pretendard 그대로. 워터마크(120px)는 폭이 좁은 Pretendard를 쓴다(사용자 결정 2026-11-12). 새 강조 글자는 이 두 클래스로 쓰고 `font-family`를 직접 지정하지 않는다.
 
 ## 4. 모션
 - 이징 `ease-spring`/`ease-overshoot`/`ease-smooth`/`ease-glide`(처음·끝이 느린 대칭 곡선 — 되튐 없이 늘고 주는 형태 변화), duration은 `duration-150/350/450/700`. 인터랙션(hover/entrance)에만.
