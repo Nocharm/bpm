@@ -260,10 +260,10 @@ export function CompareAiSummary({
         {/* 1. 개정 요지 — 변경 종류가 아니라 의도별 절 */}
         {sections.length > 0 && (
           <section data-id="compare-ai-purpose" className="flex flex-col gap-2">
-            <h4 className="text-caption-strong text-ink">{t("compare.aiPurpose")}</h4>
+            <h4 className="text-caption-title text-ink">{t("compare.aiPurpose")}</h4>
             {sections.map((section, i) => (
               <div key={i} data-id={`compare-ai-section-${i}`} className="flex flex-col gap-1 pl-1">
-                <div className="break-keep text-caption-strong text-ink-secondary">
+                <div className="break-keep text-caption-title text-ink-secondary">
                   {i + 1}. {section.heading}
                 </div>
                 <div className="pl-1">
@@ -286,7 +286,7 @@ export function CompareAiSummary({
         {/* 2. 흐름·통제 영향 — 전체 그래프·합계·입출력 근거 */}
         {impacts.length > 0 && (
           <section data-id="compare-ai-impacts" className="flex flex-col gap-1">
-            <h4 className="text-caption-strong text-ink">{t("compare.aiImpacts")}</h4>
+            <h4 className="text-caption-title text-ink">{t("compare.aiImpacts")}</h4>
             <PointList
               points={impacts}
               idPrefix="compare-ai-impact"
@@ -299,7 +299,7 @@ export function CompareAiSummary({
 
         {/* 3. 코멘트 대비 미언급 변경 — 제출 코멘트가 없으면 대조 불가 안내 */}
         <section data-id="compare-ai-unmentioned" className="flex flex-col gap-1">
-          <h4 className="text-caption-strong text-ink">{t("compare.aiUnmentioned")}</h4>
+          <h4 className="text-caption-title text-ink">{t("compare.aiUnmentioned")}</h4>
           {!hasSubmitNote ? (
             <p data-id="compare-ai-unmentioned-none" className="pl-1 text-fine text-ink-tertiary">
               {t("compare.aiUnmentionedNoNote")}
@@ -322,7 +322,7 @@ export function CompareAiSummary({
         {/* 4. 결재 전 확인 질문 — 제출자에게 되물을 것 */}
         {questions.length > 0 && (
           <section data-id="compare-ai-questions" className="flex flex-col gap-1">
-            <h4 className="text-caption-strong text-ink">{t("compare.aiQuestions")}</h4>
+            <h4 className="text-caption-title text-ink">{t("compare.aiQuestions")}</h4>
             <ul className="flex flex-col gap-1">
               {questions.map((q, i) => (
                 <li key={i} className="flex items-start gap-1.5 break-keep text-caption text-ink">

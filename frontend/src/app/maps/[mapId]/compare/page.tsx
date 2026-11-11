@@ -2967,7 +2967,7 @@ function ComparePane({
                   if (rows.length === 0 && changedOnly) return null;
                   return (
                     <div className="flex flex-col gap-2 border-t border-hairline pt-3" data-id="compare-inspector-io">
-                      <div className="text-caption font-semibold text-ink-secondary">
+                      <div className="text-caption-title text-ink-secondary">
                         {t("inspector.details")}
                       </div>
                       {rows.length === 0 && (
