@@ -188,7 +188,7 @@ export function RunIntroBubble({ mode, onAction, onDismiss, stackBelowRef }: Run
             </span>
           )}
           <div className="min-w-0">
-            <p className="text-caption-strong text-ink">{t("run.intro.title")}</p>
+            <p className="text-caption-title text-ink">{t("run.intro.title")}</p>
             <p className={`mt-0.5 text-ink-secondary ${isBeside ? "text-fine" : "text-caption"}`}>{body}</p>
             {note !== null && (
               <p data-id="run-intro-note" className="mt-1.5 text-caption-strong text-accent">

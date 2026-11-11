@@ -110,7 +110,7 @@ export function FrameworkConnectDialog({
               <Link2 size={15} strokeWidth={1.5} />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="text-caption-strong font-semibold">{t("framework.connectTitle")}</div>
+              <div className="text-caption-title">{t("framework.connectTitle")}</div>
               <div className="truncate text-fine text-ink-tertiary">{nodeTitle}</div>
             </div>
             <button

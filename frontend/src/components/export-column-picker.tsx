@@ -166,7 +166,7 @@ export function ExportColumnPicker({ kind, defs, selected, onChange, showLabel =
                 onChange={() => onChange(toggleExportColumnGroup(defs, selected, group))}
               />
               <GroupIcon size={14} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
-              <span className="text-caption-strong text-ink">{label}</span>
+              <span className="text-caption-title text-ink">{label}</span>
               <span data-id={`export-columns-${kind}-group-${group}-count`} className="text-fine text-ink-tertiary">
                 {onCount}/{members.length}
               </span>

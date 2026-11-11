@@ -784,7 +784,7 @@ export function GroupBulkModal({
             </div>
 
             {/* 그룹 이름 */}
-            <p className="mb-1 text-caption-strong text-ink-secondary">{t("bulk.groupName")}</p>
+            <p className="mb-1 text-caption-title text-ink-secondary">{t("bulk.groupName")}</p>
             <input
               className="mb-3 w-full rounded-sm border border-hairline px-2 py-1 text-caption"
               defaultValue={groupLabel}
@@ -805,7 +805,7 @@ export function GroupBulkModal({
               }}
               onMouseLeave={() => setShowColors(false)}
             >
-              <p className="flex cursor-default items-center justify-between text-caption-strong text-ink-secondary">
+              <p className="flex cursor-default items-center justify-between text-caption-title text-ink-secondary">
                 {t("bulk.color")}
                 <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
               </p>
@@ -835,7 +835,7 @@ export function GroupBulkModal({
             </div>
 
             {/* 속성 일괄 */}
-            <p className="mb-1 mt-3 border-t border-hairline pt-3 text-caption-strong text-ink-secondary">
+            <p className="mb-1 mt-3 border-t border-hairline pt-3 text-caption-title text-ink-secondary">
               {t("bulk.attribute")}
             </p>
             <div className="flex flex-col gap-2">

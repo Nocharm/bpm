@@ -155,7 +155,7 @@ export function ChoiceWindow({
         title={onFocus ? "Enlarge this option" : undefined}
       >
         <div className="flex items-center justify-between gap-2">
-          <div className="truncate text-caption-strong text-ink">{option.title}</div>
+          <div className="truncate text-caption-title text-ink">{option.title}</div>
           <div className="flex shrink-0 items-center gap-1.5">
             {option.lint && option.lint.length > 0 ? (
               <span

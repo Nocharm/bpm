@@ -442,7 +442,7 @@ export function EditorLeftSidebar({
 
       {/* 닫기 버튼은 에디터 헤더 좌상단으로 이동 — 여기선 라벨만 / collapse moved to header */}
       <div className="mb-1 px-1">
-        <span className="text-caption-strong text-ink">{t("sidebar.outline")}</span>
+        <span className="text-caption-title text-ink">{t("sidebar.outline")}</span>
       </div>
 
       {searchSlot}

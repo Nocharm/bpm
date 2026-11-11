@@ -190,7 +190,7 @@ function MenuList({
           // 대상 이름 헤더 — caption과 달리 대소문자를 보존한다(맵 이름은 고유명사)
           <div
             key={`title-${index}`}
-            className="flex items-center gap-1.5 px-3 pb-1 pt-0.5 text-caption-strong text-ink"
+            className="flex items-center gap-1.5 px-3 pb-1 pt-0.5 text-caption-title text-ink"
           >
             {item.icon && <item.icon size={14} strokeWidth={1.5} className="shrink-0 text-accent" />}
             <span className="min-w-0 truncate">{item.title}</span>

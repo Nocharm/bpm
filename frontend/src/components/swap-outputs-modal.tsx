@@ -283,7 +283,7 @@ export function SwapOutputsModal({
 
   const renderColumn = (side: "left" | "right", data: SwapSide) => (
     <div className="min-w-0">
-      <div className="mb-1.5 flex h-6 items-center gap-1.5 px-1 text-caption font-semibold text-ink">
+      <div className="mb-1.5 flex h-6 items-center gap-1.5 px-1 text-caption-title text-ink">
         <span className="truncate" title={data.nodeLabel}>
           {data.nodeLabel}
         </span>

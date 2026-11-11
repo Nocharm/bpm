@@ -603,7 +603,7 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
             </span>
           )}
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className={`min-w-0 truncate text-caption-strong ${isRemoved ? "text-ink-tertiary line-through" : card.name.trim() ? "text-ink" : "text-ink-muted"}`} data-id={`fw-consult-plan-title-${flatIndex}`}>
+            <span className={`min-w-0 truncate text-caption-title ${isRemoved ? "text-ink-tertiary line-through" : card.name.trim() ? "text-ink" : "text-ink-muted"}`} data-id={`fw-consult-plan-title-${flatIndex}`}>
               {card.name.trim() || t("fwConsult.cardNameEmpty")}
             </span>
             {isRemoved && (
@@ -849,7 +849,7 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
       {/* 드래그 고스트 — 포인터를 따라오는 타일 사본(원본은 제자리에서 흐려진다) */}
       {drag && dragCard && (
         <div className="pointer-events-none fixed z-[1200] w-[200px] rounded-md border border-accent bg-surface px-2.5 py-2 opacity-90 shadow-lg" style={{ left: drag.x, top: drag.y }} data-id="fw-consult-plan-ghost">
-          <div className="truncate text-caption-strong text-ink">{dragCard.name.trim() || t("fwConsult.cardNameEmpty")}</div>
+          <div className="truncate text-caption-title text-ink">{dragCard.name.trim() || t("fwConsult.cardNameEmpty")}</div>
           {(dragCard.owner_role || dragCard.department) && <div className="truncate text-fine text-ink-secondary">{[dragCard.owner_role, dragCard.department].filter(Boolean).join(" · ")}</div>}
         </div>
       )}

@@ -47,7 +47,7 @@ export function RefUserCard({ card, onOpen }: RefUserCardProps) {
           </span>
         </span>
       </span>
-      <span className="line-clamp-2 text-caption-strong text-ink [overflow-wrap:anywhere]">{card.label}</span>
+      <span className="line-clamp-2 text-caption-title text-ink [overflow-wrap:anywhere]">{card.label}</span>
       {view.subKey ? (
         <span className="max-w-full truncate text-[11.5px] text-ink-tertiary">{t(view.subKey)}</span>
       ) : (

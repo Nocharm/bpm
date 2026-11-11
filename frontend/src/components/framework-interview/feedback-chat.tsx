@@ -46,7 +46,7 @@ export function FeedbackChat({ log, scope, taskPk, busy, draft, onDraftChange, o
 
   return (
     <div className={`flex flex-col gap-2 ${fill ? "h-full min-h-0 p-3" : ""}`} data-id="fw-feedback-chat">
-      {!fill && <div className="text-caption-strong text-ink">{t("fwConsult.feedbackTitle")}</div>}
+      {!fill && <div className="text-caption-title text-ink">{t("fwConsult.feedbackTitle")}</div>}
       <div className={`flex flex-col gap-1.5 ${fill ? "min-h-0 flex-1 overflow-y-auto" : ""}`}>
         {entries.length === 0 && <div className="text-fine text-ink-tertiary">{t("fwConsult.feedbackEmpty")}</div>}
         {entries.map((entry, i) => (

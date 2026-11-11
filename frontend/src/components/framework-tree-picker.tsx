@@ -407,7 +407,7 @@ export function FrameworkTreePicker({
     >
       {!hideHeader && (
         <div className="flex items-center justify-between border-b border-hairline px-3 py-2">
-          <div className="flex items-center gap-1.5 text-caption font-semibold text-ink">
+          <div className="flex items-center gap-1.5 text-caption-title text-ink">
             <Network size={14} strokeWidth={1.5} />
             {t("framework.pickerTitle")}
           </div>

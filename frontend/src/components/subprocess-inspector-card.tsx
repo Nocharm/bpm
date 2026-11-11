@@ -466,7 +466,7 @@ export function SubprocessInspectorCard({
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm bg-accent-tint text-accent">
             <Workflow size={14} strokeWidth={1.5} />
           </span>
-          <span className="truncate text-caption-strong text-ink">{t("inspector.spTitle")}</span>
+          <span className="truncate text-caption-title text-ink">{t("inspector.spTitle")}</span>
           {/* 연결 절차 안내 — 호버 툴팁(제목 옆) */}
           <span onClick={(e) => e.stopPropagation()}>
             {/* 안내 툴팁 — 문장 대신 아이콘+키워드 행, 보완 설명은 회색 보조 텍스트 (사용자 결정 2026-08-20) */}

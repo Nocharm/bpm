@@ -240,7 +240,7 @@ export function FrameworkBrowseModal({
       >
         <div className="flex items-center gap-2 border-b border-hairline px-4 py-2.5">
           <FolderTree size={15} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-          <span className="min-w-0 flex-1 truncate text-caption-strong font-semibold">
+          <span className="min-w-0 flex-1 truncate text-caption-title">
             {t("framework.browseTitle")}
           </span>
           <button

@@ -69,7 +69,7 @@ export function CsvImportTab({
 
       {warnings.length > 0 && (
         <div className="flex flex-col gap-1">
-          <span className="text-caption-strong text-ink">{t("csvImport.warningsTitle", { n: warnings.length })}</span>
+          <span className="text-caption-title text-ink">{t("csvImport.warningsTitle", { n: warnings.length })}</span>
           <ul className="scroll-soft flex max-h-32 flex-col gap-0.5">
             {warnings.map((warn) => (
               <li key={`${warn.line}-${warn.message}`} className="text-fine text-ink-tertiary">
@@ -85,7 +85,7 @@ export function CsvImportTab({
       ) : (
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-0.5">
-            <span className="text-caption-strong text-ink">{t("csvImport.removedTitle", { n: removedCount })}</span>
+            <span className="text-caption-title text-ink">{t("csvImport.removedTitle", { n: removedCount })}</span>
             <span className="text-fine text-ink-tertiary">{t("csvImport.removedHint")}</span>
           </div>
           <ul className="scroll-soft flex max-h-40 flex-col gap-1">

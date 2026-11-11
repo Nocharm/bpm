@@ -53,7 +53,7 @@ export function L5NodeInfoPanel({ info }: { info: L5NodeInfo | null }) {
       // 숨겨 정확히 한쪽만 보인다. 태그보다 옅게(80%+blur) + edge-row-in 재사용한 짧은 fade/slide 진입.
       className="motion-safe:animate-[edge-row-in_150ms_var(--ease-smooth)] pointer-events-none absolute right-2.5 top-2.5 z-20 flex w-72 flex-col gap-1 rounded-md border p-3 glass glass-dense"
     >
-      <div className="flex items-center gap-1.5 text-caption-strong text-ink">
+      <div className="flex items-center gap-1.5 text-caption-title text-ink">
         <Info size={14} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
         <span className="truncate">{info.name}</span>
       </div>

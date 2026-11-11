@@ -31,7 +31,7 @@ export function ExternalL6Modal({ tileName, linkageCategoryId, linkedMapIds, onP
             <ExternalLink size={15} strokeWidth={1.5} />
           </span>
           <div className="min-w-0 flex-1">
-            <div className="text-caption-strong font-semibold">{t("fwConsult.switchExternalTitle")}</div>
+            <div className="text-caption-title">{t("fwConsult.switchExternalTitle")}</div>
             <div className="truncate text-fine text-ink-tertiary">{tileName}</div>
           </div>
           <button type="button" data-id="fw-consult-external-modal-close" onClick={onClose} aria-label={t("summary.close")} className="rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt">

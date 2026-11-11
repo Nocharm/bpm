@@ -117,7 +117,7 @@ export function PngPrintPanel({ frame, options, chromePt, splitSource, onChange 
   return (
     <div data-id="png-export-print-panel" className="flex flex-col gap-3 px-4 py-3">
       <div className="flex items-center justify-between">
-        <span className="text-caption font-semibold text-ink">{t("pngExport.printTitle")}</span>
+        <span className="text-caption-title text-ink">{t("pngExport.printTitle")}</span>
         <div className="inline-flex items-center rounded-sm border border-hairline bg-surface-alt p-0.5 text-fine">
           {PAPER_ORIENTATIONS.map((paper) => (
             <button

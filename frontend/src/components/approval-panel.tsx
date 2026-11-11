@@ -250,7 +250,7 @@ export function ApprovalPanel({
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="text-caption-strong text-ink">{t("approval.approversTitle")}</span>
+            <span className="text-caption-title text-ink">{t("approval.approversTitle")}</span>
             {approvers.length > 0 && (
               <span
                 className={`rounded-full border px-1.5 py-0.5 text-fine ${

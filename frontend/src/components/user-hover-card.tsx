@@ -129,7 +129,7 @@ export function UserHoverCard({
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-tint text-fine text-accent">
                 {name.charAt(0).toUpperCase()}
               </span>
-              <span className="truncate text-caption-strong text-ink">{name}</span>
+              <span className="truncate text-caption-title text-ink">{name}</span>
             </span>
             {/* 아이디 · 직급 · 부서 레벨(리프→루트) 필 */}
             <span className="flex flex-col items-start gap-1">

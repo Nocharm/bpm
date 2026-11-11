@@ -10134,7 +10134,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         <Headset size={16} strokeWidth={1.5} />
                       </span>
                       <div className="min-w-0">
-                        <div className="text-caption-strong text-ink">{t("consultOnboard.title")}</div>
+                        <div className="text-caption-title text-ink">{t("consultOnboard.title")}</div>
                         {/* break-keep — 한국어가 어절 중간에서 끊기지 않게 */}
                         <p className="mt-0.5 break-keep text-fine text-ink-secondary">{t("consultOnboard.body")}</p>
                       </div>
@@ -11419,7 +11419,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       />
                     ) : (
                       <div className="flex items-center gap-1">
-                        <span className="truncate text-caption-strong text-ink">
+                        <span className="truncate text-caption-title text-ink">
                           {aiTitle || t("ai.title")}
                         </span>
                         <IconTip label={t("ai.renameTitle")} align="left">
@@ -11529,7 +11529,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     // R5a NEW 노드 속성 폼 — 제목/유형(읽기전용)/색상/BPM 속성 카드 (목업 inspector-properties-node).
                     // 설명·end/subprocess 특수필드는 비교기간 OLD에 유지(후속 이관). 핸들러 재사용.
                     <div className="flex flex-col gap-3">
-                      <h2 className="text-caption-strong text-ink-secondary">{t("editor.nodeEdit")}</h2>
+                      <h2 className="text-caption-title text-ink-secondary">{t("editor.nodeEdit")}</h2>
                       {/* subprocess 노드 — 연결 맵 배너(이름·열기·지정/추종 상태) + 연결 버전 선택을 맨 위로.
                           아래 카드들은 일반 노드와 같은 모양이라 SP라는 표시가 패널에 없었다 (사용자 결정 2026-10-21) */}
                       {selectedNode.data.nodeType === "subprocess" && (
@@ -12013,7 +12013,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     // R5a NEW 엣지 속성 폼 — 소스→타겟·분기 라벨(Yes/No/기타)·라벨·연결 스타일·삭제 (목업 inspector-properties-edge).
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center justify-between">
-                        <h2 className="flex items-center gap-1.5 text-caption-strong text-ink-secondary">
+                        <h2 className="flex items-center gap-1.5 text-caption-title text-ink-secondary">
                           <span className="flex h-6 w-6 items-center justify-center rounded-sm bg-accent-tint text-accent">
                             <ArrowRight size={14} strokeWidth={1.5} />
                           </span>
@@ -12159,7 +12159,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     // 펼침 자식 엣지 — 읽기전용 속성(소스→타겟·라벨) + 안내 (2026-09-02)
                     <div className="flex flex-col gap-3" data-id="inspector-child-edge">
                       <div className="flex items-center justify-between">
-                        <h2 className="flex items-center gap-1.5 text-caption-strong text-ink-secondary">
+                        <h2 className="flex items-center gap-1.5 text-caption-title text-ink-secondary">
                           <span className="flex h-6 w-6 items-center justify-center rounded-sm bg-accent-tint text-accent">
                             <ArrowRight size={14} strokeWidth={1.5} />
                           </span>
@@ -12197,7 +12197,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     // 파생 엣지(게이트웨이·접힘 SP 표시 끝) — 이해를 돕기 위한 안내만 (2026-09-02)
                     <div className="flex flex-col gap-3" data-id="inspector-guide-edge">
                       <div className="flex items-center justify-between">
-                        <h2 className="flex items-center gap-1.5 text-caption-strong text-ink-secondary">
+                        <h2 className="flex items-center gap-1.5 text-caption-title text-ink-secondary">
                           <span className="flex h-6 w-6 items-center justify-center rounded-sm bg-accent-tint text-accent">
                             <ArrowRight size={14} strokeWidth={1.5} />
                           </span>

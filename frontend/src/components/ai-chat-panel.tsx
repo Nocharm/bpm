@@ -761,7 +761,7 @@ export function AiChatPanel({
               </button>
               {/* 호버 툴팁 — 기능 이름 + 짧은 설명 */}
               <div className="pointer-events-none absolute bottom-full left-0 z-10 mb-1.5 hidden w-44 rounded-sm border border-hairline bg-surface p-2 shadow-lg group-hover:block">
-                <div className="text-caption-strong text-ink">{t(chip.key)}</div>
+                <div className="text-caption-title text-ink">{t(chip.key)}</div>
                 <div className="mt-0.5 text-fine leading-snug text-ink-tertiary">
                   {t(chip.descKey)}
                 </div>

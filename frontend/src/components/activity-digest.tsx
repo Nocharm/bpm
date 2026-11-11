@@ -18,7 +18,7 @@ export function ActivityDigest({ title, stats, unreadCount, hint, children }: Ac
   const withoutCount = stats.filter((s) => s.count === 0);
   return (
     <div data-id="activity-digest" className="flex h-full flex-col gap-4 p-6">
-      <div className="text-caption-strong text-ink">{title}</div>
+      <div className="text-caption-title text-ink">{title}</div>
       {/* 건수가 있는 종류만 칩으로, 0건은 한 줄로 묶는다 — 이름과 숫자가 패널 양 끝으로 벌어져 비어 보이던 문제 */}
       {withCount.length > 0 && (
         <ul className="flex flex-wrap gap-1.5">

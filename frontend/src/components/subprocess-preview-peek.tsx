@@ -440,7 +440,7 @@ export function SubprocessPreviewPeek({
           버튼(추가/이동)은 우측 액션 레일로 내렸다 (사용자 요청 2026-09-03) */}
       <div className="flex items-center justify-between gap-3 border-b border-hairline px-3 py-2">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="flex min-w-0 items-center gap-1.5 text-caption font-semibold text-ink">
+          <span className="flex min-w-0 items-center gap-1.5 text-caption-title text-ink">
             <Network size={14} strokeWidth={1.5} className="shrink-0 text-ink/50" />
             <span className="truncate">{name}</span>
           </span>

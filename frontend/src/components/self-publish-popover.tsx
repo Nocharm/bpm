@@ -56,7 +56,7 @@ export function SelfPublishPopover({
         style={{ position: "fixed", left, top }}
         onClick={(event) => event.stopPropagation()}
       >
-        <p className="flex items-center gap-1.5 text-caption-strong text-ink">
+        <p className="flex items-center gap-1.5 text-caption-title text-ink">
           <Upload size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
           {t("approval.selfPublishTitle")}
         </p>

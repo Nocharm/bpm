@@ -43,7 +43,7 @@ function PersonCardContent({ userId }: { userId: string }) {
     <>
       {/* 이름 — 주 언어 타이틀 + 보조 언어 이름 */}
       <p className="flex items-baseline gap-1.5">
-        <span className="min-w-0 truncate text-caption-strong text-ink">{primaryName}</span>
+        <span className="min-w-0 truncate text-caption-title text-ink">{primaryName}</span>
         {secondaryName && (
           <span className="min-w-0 truncate text-fine text-ink-tertiary">{secondaryName}</span>
         )}

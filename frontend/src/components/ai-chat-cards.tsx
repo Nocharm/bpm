@@ -31,7 +31,7 @@ export function AnalysisCard({
   const { t } = useI18n();
   return (
     <div data-id="ai-analysis-card" className="mt-2 flex flex-col gap-2">
-      <span className="flex items-center gap-1.5 px-0.5 text-caption-strong text-ink">
+      <span className="flex items-center gap-1.5 px-0.5 text-caption-title text-ink">
         <Search size={14} strokeWidth={1.5} className="text-accent" />
         {t("ai.analysisTitle")}
         <span className="rounded-full bg-surface-alt px-1.5 text-fine text-ink-tertiary">
@@ -136,7 +136,7 @@ export function WalkthroughCard({
       className="mt-2 overflow-hidden rounded-sm border border-hairline bg-surface shadow-sm"
     >
       <div className="flex items-center justify-between border-b border-hairline bg-surface-alt px-2.5 py-1.5">
-        <span className="flex items-center gap-1.5 text-caption-strong text-ink">
+        <span className="flex items-center gap-1.5 text-caption-title text-ink">
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-tint text-accent">
             <Route size={13} strokeWidth={1.5} />
           </span>
@@ -239,7 +239,7 @@ export function ProposalSummaryCard({
       className="mt-2 overflow-hidden rounded-sm border border-hairline bg-surface shadow-sm"
     >
       <div className="flex items-center justify-between border-b border-hairline bg-surface-alt px-2.5 py-1.5">
-        <span className="flex items-center gap-1.5 text-caption-strong text-ink">
+        <span className="flex items-center gap-1.5 text-caption-title text-ink">
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-tint text-accent">
             <Sparkles size={13} strokeWidth={1.5} />
           </span>

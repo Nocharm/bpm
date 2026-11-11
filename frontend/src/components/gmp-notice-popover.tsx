@@ -77,7 +77,7 @@ export function GmpNoticePopover({
         }}
       >
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-caption-strong text-ink">
+          <div className="flex items-center gap-1.5 text-caption-title text-ink">
             <ShieldCheck size={14} strokeWidth={1.5} className="text-accent" />
             {t("gmpNotice.title")}
           </div>
