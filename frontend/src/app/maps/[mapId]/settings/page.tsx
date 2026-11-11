@@ -36,6 +36,7 @@ import { VersionsPublishPanel } from "@/components/permissions/versions-publish-
 import { PendingApprovalsPanel } from "@/components/permissions/pending-approvals-panel";
 import { CheckoutRequestsPanel } from "@/components/map-settings/checkout-requests-panel";
 import { genId } from "@/lib/id";
+import { pickActiveSection } from "@/lib/section-spy";
 import { formatVersionMarker } from "@/lib/version-name";
 
 // ── 탭 정의 / Tab definitions ────────────────────────────────────
@@ -143,6 +144,8 @@ export default function SettingsPage() {
   // 활성 섹션(좌측 내비 하이라이트) — 탭 전환 없이 단일 스크롤 페이지 앵커 스크롤 (ST).
   const [activeSection, setActiveSection] = useState<TabId>("details");
   const mainRef = useRef<HTMLDivElement>(null);
+  // 내비 클릭 스크롤 중 판정 잠금 타이머 id(없으면 null).
+  const navLockRef = useRef<number | null>(null);
 
   // 토스트 상태 / Toast state.
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -233,29 +236,61 @@ export default function SettingsPage() {
   );
   const sectionKey = visibleTabs.map((tab) => tab.id).join(",");
 
-  // 스크롤 위치로 활성 섹션 추적 — 좌측 내비 하이라이트 (ST). IO 콜백 setState라 set-state-in-effect 비해당.
+  // 스크롤 위치로 활성 섹션 추적 — 좌측 내비 하이라이트 (ST). 판정은 lib/section-spy(판정 선을 지난 마지막 구역, 맨 아래면 마지막 구역).
+  // 내비 클릭으로 시작한 부드러운 스크롤 동안은 판정을 잠가, 누른 항목의 강조가 지나가는 구역으로 튀지 않게 한다.
   useEffect(() => {
     const root = mainRef.current;
     if (!root) {
       return;
     }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const top = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-        if (top) {
-          setActiveSection(top.target.id.replace("sec-", "") as TabId);
-        }
-      },
-      { root, rootMargin: "0px 0px -65% 0px", threshold: 0 },
-    );
-    sectionKey.split(",").forEach((id) => {
-      const el = document.getElementById(`sec-${id}`);
-      if (el) observer.observe(el);
-    });
-    return () => observer.disconnect();
+    let frame = 0;
+    const updateActive = () => {
+      frame = 0;
+      if (navLockRef.current !== null) {
+        // 스크롤이 이어지는 동안 잠금 연장 — 150ms 동안 조용하면 스크롤이 끝난 것으로 본다.
+        window.clearTimeout(navLockRef.current);
+        navLockRef.current = window.setTimeout(() => {
+          navLockRef.current = null;
+        }, 150);
+        return;
+      }
+      const rootTop = root.getBoundingClientRect().top;
+      const sections = sectionKey.split(",").flatMap((id) => {
+        const el = document.getElementById(`sec-${id}`);
+        return el ? [{ id, top: el.getBoundingClientRect().top - rootTop }] : [];
+      });
+      const isAtBottom = root.scrollTop + root.clientHeight >= root.scrollHeight - 2;
+      const next = pickActiveSection(sections, isAtBottom && root.scrollTop > 0);
+      if (next) {
+        setActiveSection(next as TabId);
+      }
+    };
+    const handleScroll = () => {
+      if (frame === 0) {
+        frame = window.requestAnimationFrame(updateActive);
+      }
+    };
+    root.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      root.removeEventListener("scroll", handleScroll);
+      if (frame !== 0) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
   }, [sectionKey]);
+
+  // 내비 클릭: 누른 항목을 바로 강조하고 그 구역으로 스크롤한다.
+  function handleNavClick(id: TabId) {
+    setActiveSection(id);
+    if (navLockRef.current !== null) {
+      window.clearTimeout(navLockRef.current);
+    }
+    // 스크롤이 필요 없는 위치(이미 그 자리)면 scroll 이벤트가 없어 이 타이머가 잠금을 푼다.
+    navLockRef.current = window.setTimeout(() => {
+      navLockRef.current = null;
+    }, 150);
+    document.getElementById(`sec-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   // ── Dev 유저 전환 핸들러 / Dev user switch handler ────────────────
 
@@ -347,7 +382,7 @@ export default function SettingsPage() {
             <ArrowLeft size={16} strokeWidth={1.5} />
             {t("perm.backToEditor")}
           </Link>
-          <h1 className="truncate px-1 text-body-strong text-ink" title={mapName}>
+          <h1 className="line-clamp-2 break-words px-1 text-body-strong text-ink" title={mapName}>
             {mapName}
           </h1>
           <p className="px-1 pb-2 text-fine uppercase tracking-wide text-ink-tertiary">
@@ -367,11 +402,7 @@ export default function SettingsPage() {
                     ? "text-error hover:bg-error/5"
                     : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
               }`}
-              onClick={() =>
-                document
-                  .getElementById(`sec-${tab.id}`)
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
-              }
+              onClick={() => handleNavClick(tab.id)}
             >
               <tab.icon size={15} strokeWidth={1.5} className="shrink-0" />
               {tab.id === "collaborators" && isFramework ? t("perm.tabFrameworkAccess") : t(tab.labelKey)}

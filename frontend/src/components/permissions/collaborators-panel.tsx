@@ -76,7 +76,8 @@ interface CollaboratorsPanelProps {
 
 // 행 그리드 — 아바타 · 이름 · 소속 · 부여 · 역할(+태그) · 제거. 역할 열은 내용 폭(태그가 붙으면 늘어난다)이라
 // 행마다 독립 grid면 태그 길이에 따라 소속·부여 열이 어긋난다 → 목록이 열을 소유하고 행은 subgrid로 공유.
-const LIST_GRID = "grid grid-cols-[28px_minmax(0,1fr)_150px_112px_auto_24px] gap-x-2.5 gap-y-0.5";
+// 부여 열은 내용 폭(상한 220px) — 고정 112px일 땐 "부여자 · 월-일"의 날짜가 잘렸고 이름 열은 남았다.
+const LIST_GRID = "grid grid-cols-[28px_minmax(0,1fr)_150px_fit-content(220px)_auto_24px] gap-x-2.5 gap-y-0.5";
 const ROW_GRID = "col-span-full grid grid-cols-subgrid items-center";
 
 // 표시명 해석 — 실 디렉터리/그룹 우선, 없으면 principalId 폴백 /
