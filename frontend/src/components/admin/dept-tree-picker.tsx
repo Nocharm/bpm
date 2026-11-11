@@ -53,7 +53,7 @@ export function DeptTreePicker({
     >
       <div className="flex max-h-[72vh] w-[30rem] flex-col gap-3 rounded-md border border-hairline bg-surface p-4 shadow-lg">
         <div className="flex items-center justify-between">
-          <p className="text-caption-strong text-ink">{title}</p>
+          <p className="text-caption-title text-ink">{title}</p>
           <button
             type="button"
             data-id="dept-tree-picker-close"

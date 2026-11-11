@@ -136,10 +136,10 @@ export function RunSettingsPanel({ onToast }: RunSettingsPanelProps) {
           <div className="min-w-0 text-fine text-ink-tertiary">{t("run.admin.rangeHint")}</div>
         </div>
 
-        <div className="mt-3 text-caption-strong text-ink">{t("run.admin.daysTitle")}</div>
+        <div className="mt-3 text-caption-title text-ink">{t("run.admin.daysTitle")}</div>
         <div className="mt-2 grid grid-cols-1 gap-2">{renderRows(DAY_ROWS)}</div>
 
-        <div className="mt-4 text-caption-strong text-ink">{t("run.admin.capsTitle")}</div>
+        <div className="mt-4 text-caption-title text-ink">{t("run.admin.capsTitle")}</div>
         <div className="mt-2 grid grid-cols-1 gap-2">{renderRows(CAP_ROWS)}</div>
 
         {problemKey ? (

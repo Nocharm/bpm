@@ -235,7 +235,7 @@ export function TableViewer() {
       {selected && (
         <div className="overflow-hidden rounded-md border border-hairline bg-surface">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline bg-surface-alt px-4 py-2.5">
-            <span className="text-caption-strong text-ink">{selected}</span>
+            <span className="text-caption-title text-ink">{selected}</span>
             <div className="flex items-center gap-3">
               <input
                 type="text"

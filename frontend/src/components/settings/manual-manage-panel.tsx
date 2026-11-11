@@ -133,7 +133,7 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
       {/* 문서 목록 — 제목(자동 추출)·언어·수정 정보. 클릭=편집, 휴지통=삭제 */}
       <div data-id="manual-docs-list" className="flex flex-col gap-1 rounded-sm border border-hairline p-2">
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-caption-strong text-ink">{t("manual.manage.docs")}</span>
+          <span className="text-caption-title text-ink">{t("manual.manage.docs")}</span>
           <button type="button" className={OUTLINE_BTN} onClick={startNew}>
             <FilePlus2 size={14} strokeWidth={1.5} />
             {t("manual.manage.newDoc")}

@@ -152,7 +152,7 @@ export function BatchRunsPanel() {
             >
               <div className="flex items-center gap-2">
                 <Icon size={16} strokeWidth={1.5} className="text-ink-tertiary" />
-                <h3 className="text-caption-strong text-ink">{t(labelKey)}</h3>
+                <h3 className="text-caption-title text-ink">{t(labelKey)}</h3>
                 {id === "db_backup" && (
                   <button
                     type="button"

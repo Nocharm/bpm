@@ -120,7 +120,7 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
             <Power size={16} strokeWidth={1.5} />
           </span>
           <div className="min-w-0 flex-1">
-            <div className="text-caption-strong text-ink">{t("aiAccess.title")}</div>
+            <div className="text-caption-title text-ink">{t("aiAccess.title")}</div>
             <div className="text-fine text-ink-tertiary">
               {t("aiAccess.description")}
             </div>
@@ -159,7 +159,7 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
             <Database size={16} strokeWidth={1.5} />
           </span>
           <div className="min-w-0">
-            <div className="text-caption-strong text-ink">{t("aiLog.limitsTitle")}</div>
+            <div className="text-caption-title text-ink">{t("aiLog.limitsTitle")}</div>
             <div className="text-fine text-ink-tertiary">{t("aiLog.limitsDesc")}</div>
           </div>
         </div>
@@ -210,7 +210,7 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
 
       {/* 기능 팁 관리 — 이전 기록 로딩 중 채팅에 노출되는 FAQ성 팁 (한 줄당 1개) */}
       <div className="mt-8">
-        <h3 className="flex items-center gap-1.5 text-caption-strong text-ink">
+        <h3 className="flex items-center gap-1.5 text-caption-title text-ink">
           <Lightbulb size={15} strokeWidth={1.5} className="text-accent" />
           {t("aiLog.tipsTitle")}
         </h3>

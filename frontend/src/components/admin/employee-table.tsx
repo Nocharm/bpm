@@ -82,7 +82,7 @@ function ExposedPositionsCard() {
       className="flex flex-col gap-2 rounded-md border border-hairline bg-surface-alt p-4"
       data-id="exposed-positions-card"
     >
-      <p className="text-caption-strong text-ink">{t("admin.exposedPositionsTitle")}</p>
+      <p className="text-caption-title text-ink">{t("admin.exposedPositionsTitle")}</p>
       <p className="text-fine text-ink-tertiary">{t("admin.exposedPositionsHint")}</p>
       {settings !== null &&
         (positions.length === 0 ? (

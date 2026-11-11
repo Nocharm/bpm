@@ -41,7 +41,7 @@ export function ReportSection({
     <section data-id={dataId} className="flex flex-col overflow-hidden rounded-md border border-hairline bg-surface">
       <header className="flex items-center gap-2 border-b border-divider bg-surface-alt px-2.5 py-1.5">
         {Icon && <Icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
-        <span className="shrink-0 text-caption-strong text-ink">{title}</span>
+        <span className="shrink-0 text-caption-title text-ink">{title}</span>
         {pills}
         <InfoTip text={tip} dataId={`${dataId}-info`} />
       </header>
