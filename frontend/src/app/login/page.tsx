@@ -144,7 +144,7 @@ export default function LoginPage() {
           >
             <Workflow size={28} strokeWidth={1.5} className="text-accent" />
           </div>
-          <p className="mb-1 text-body-strong text-ink">{t("login.title")}</p>
+          <p className="mb-1 text-body-strong display-strong text-ink">{t("login.title")}</p>
           <p className="mb-4 text-caption text-ink-muted">{t("login.subtitle")}</p>
 
           {mode === "keycloak" && (

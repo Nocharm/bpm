@@ -83,7 +83,7 @@ function NavMeasureRow({
     <>
       <div className="flex items-center gap-4">
         <span className="flex items-baseline gap-1.5">
-          <span className="text-body-strong text-ink">{t("app.name")}</span>
+          <span className="text-body-strong display-strong text-ink">{t("app.name")}</span>
           {APP_VERSION !== "" && <span className="text-fine text-ink-tertiary">v{APP_VERSION}</span>}
         </span>
         <div className="inline-flex gap-1 rounded-sm bg-surface-alt p-1 text-fine">
@@ -266,7 +266,7 @@ export function TopNav() {
           {/* 홈 로고 = 새로고침 의미 — 저장된 홈 검색·필터를 비우고 전체 리로드(SPA 아님) */}
           <Link
             href="/"
-            className="text-body-strong text-ink"
+            className="text-body-strong display-strong text-ink"
             onClick={(e) => {
               e.preventDefault();
               try {

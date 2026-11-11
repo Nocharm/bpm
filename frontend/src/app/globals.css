@@ -8,7 +8,13 @@
   src: url("/fonts/PretendardVariable.woff2") format("woff2-variations");
 }
 
-/* Paperlogy SemiBold — 제목·강조용(SIL OFL, 한글 11,172자 포함 160KB). 굵기는 600 한 종만 싣는다 */
+/* Paperlogy — 제목·강조용(SIL OFL, 한글 11,172자 포함, 굵기마다 160KB). 400·600 두 종만 싣는다 */
+@font-face {
+  font-family: "Paperlogy";
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Paperlogy-4Regular.woff2") format("woff2");
+}
 @font-face {
   font-family: "Paperlogy";
   font-weight: 600;
@@ -164,11 +170,20 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* 강조 글자(17px 굵은 글자·21px 제목)는 제목용 폰트로 — 서비스 이름·페이지 제목·카드 이름·구역 제목·창 제목·큰 숫자.
-   워터마크(120px)는 폭이 좁은 본문 폰트를 그대로 쓴다(사용자 결정 2026-11-12). 캔버스 노드는 이 클래스를 쓰지 않는다. */
+/* 강조 글자는 제목용 폰트로. 굵기 600은 화면의 머리에만 쓴다(사용자 결정 2026-11-12):
+   21px 제목·큰 숫자(text-tagline), 페이지 제목(h1), 서비스 이름·로그인 제목(display-strong).
+   나머지 17px 강조(카드 이름·구역 제목·창 제목·프로필 이름)는 400 — 크기와 폰트로 구분한다.
+   워터마크(120px)는 폭이 좁은 본문 폰트를 그대로 쓴다. 캔버스 노드는 이 클래스를 쓰지 않는다. */
 .text-body-strong,
 .text-tagline {
   font-family: var(--font-display);
+}
+.text-body-strong {
+  font-weight: 400;
+}
+h1.text-body-strong,
+.text-body-strong.display-strong {
+  font-weight: 600;
 }
 
 /* L5 새벽 조감도 캔버스 — 위 깊은 남색 → 아래 차콜로 흐르는 하늘(뷰포트 고정, 팬 무관).
