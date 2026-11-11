@@ -3,18 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
-## 2026-11-12 — 전 화면 검토(워스트·중간 데이터) 개선과 제목용 폰트
+## 2026-11-12 — 전 화면 검토 개선·제목용 폰트·설정 탭 머리글 (v1.8.0, main 머지)
 
-- 제목용 폰트 Paperlogy SemiBold(160KB, 600 한 종): `text-body-strong`·`text-tagline`에 전역 적용(사용자 결정: 넓게). 워터마크는 Pretendard 유지에 자간만 줄임(사용자 결정). OFL 원문 파일은 저작권 표기 확인 뒤 추가 필요, Windows 렌더 미확인.
-- 에디터·알림·설정 9건: 첫 배율(전체 맞춤이 60% 미만이면 시작 노드 쪽 70~100%, `lib/initial-view`, L5 제외·사용자 결정), 아웃라인 고른 행 두 줄+전체 제목 툴팁, 알림·공지 카드 압축, Run 워터마크 앞 20자+캔버스 폭 맞춤, 인스펙터 설명 5줄 접기(`ClampedBlock`), 읽기 전용·Run 빈 상태 문구 분리, 요약 패널 0건 묶기, 지식기반·AI 사용·직원 표 머리·컨설턴트 진입 불가 창 번역 키. 맵 카드 이름(4번)은 사용자 결정으로 제외, 설정 탭 머리글·폭 통일(13번)은 다음 세션.
-- 피드백 상세·노트: 띄어쓰기 없는 긴 문자열(URL·식별자)이 창 밖으로 잘려 `[overflow-wrap:anywhere]`.
-- 맵 설정: 왼쪽 내비 강조가 누른 항목과 달랐다(위 35% 띠만 보던 IntersectionObserver). 판정을 `lib/section-spy`(판정 선을 지난 마지막 구역, 맨 아래면 마지막 구역)로 바꾸고 클릭 스크롤 동안 잠근다. 맵 이름 두 줄, 협업자 부여 열은 내용 폭.
-- 제목용 폰트 굵기 조정(사용자 결정: 600은 꼭 필요할 때만): 600은 21px 제목·큰 숫자, 페이지 제목(h1), 서비스 이름·로그인 제목(`display-strong`)에만. 나머지 17px 강조는 Paperlogy 400(Regular 한 종 추가).
-- 디자인 규칙에 이번 검토의 교훈을 적었다(`rules/frontend/design.md` 3절 굵기 600의 두 역할·작은 제목 Paperlogy 400 결정(미구현), 8절 긴 글·많은 데이터).
-- 화면 다듬기 2차, 작은 제목: 14px 제목 전용 클래스 `text-caption-title`(Paperlogy 400)을 만들고 제목인 자리만 옮겼다(카드 제목·패널 머리글·창 제목·호버 카드 이름, 약 80곳. 홈→에디터→맵 설정→알림·매뉴얼→설정→비교 순 커밋). 상태 신호(선택 탭·안 읽음·건수·배지·버튼)와 표·캔버스 노드는 Pretendard 600 그대로. 목록 행 이름·입력 라벨·12px 소제목은 사용자 확인 뒤.
-- Paperlogy OFL 원문을 배포처(Freesentation/paperlogy) 그대로 `frontend/public/fonts/Paperlogy-OFL.txt`에 실었다(표기: Copyright 2024 The PAPERLOGY Authors).
-- 설정 탭 머리글·폭 통일(검토 13번): 공용 `SettingsTabHeader`(제목·한 줄 설명·오른쪽 동작)를 탭 15개가 쓴다. 부서·승인 큐·매뉴얼에 머리가 생겼고, 폭은 전체(표·목록)와 576px(AI 챗·Run·배치 작업) 두 가지. 유저 그룹은 전체 폭, 휴지통은 머리 하나 아래 맵·그룹 두 구역. 고아 참조·대시보드 제외.
-- 로컬 계정 표 머리(loginId·createdBy 등)를 번역 키로, 홈 업무 체계 상세의 카테고리 이름(20px Pretendard 600)을 `text-tagline font-normal`(Paperlogy 400)로. 사용자 결정: 목록 행 이름·입력 라벨·12px 소제목은 Pretendard 600 유지.
+- 워스트·중간 데이터로 전 화면을 돌려 낸 13건 중 12건 반영(4번 홈 맵 카드 이름은 사용자 결정으로 제외): 에디터 첫 배율(`lib/initial-view`), 아웃라인 두 줄, 알림·공지 카드 압축, Run 워터마크 폭 맞춤, 설명 5줄 접기(`ClampedBlock`), 빈 상태 문구, 긴 문자열 줄바꿈, 맵 설정 내비 강조(`lib/section-spy`), 번역 키 누락. 교훈은 `rules/frontend/design.md` 8절.
+- 제목용 폰트 Paperlogy(400·600, OFL 원문 동봉): 600은 화면 머리에만(사용자 결정: 꼭 필요할 때만), 17px 강조와 14px 작은 제목(`text-caption-title`, 약 80곳)은 400. 상태 신호·목록 행 이름·입력 라벨·12px 소제목은 Pretendard 600 유지(미리보기로 확인하고 결정). 워터마크는 Pretendard에 자간만 줄임.
+- 설정 탭 머리글·폭 통일(13번): 공용 `SettingsTabHeader`, 폭은 전체와 576px 두 가지, 로컬 계정 표 머리 번역 키.
+- 남은 일: 슬라이드 덱 캡처 갱신(사용자 결정: 나중에), Windows 렌더·권한 강제 일반 사용자·LDAP 로컬 계정 탭 확인.
 
 ## 2026-11-10 — v1.7.1 공지 초안
 
