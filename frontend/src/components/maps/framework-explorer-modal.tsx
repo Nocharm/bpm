@@ -643,7 +643,7 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
           onMouseDown={startPanelDrag}
         >
           <div className="flex items-center gap-3">
-          <span className="shrink-0 text-caption-strong text-ink">{t("framework.explorer.title")}</span>
+          <span className="shrink-0 text-caption-title text-ink">{t("framework.explorer.title")}</span>
           <div data-id="framework-explorer-mode" className="ml-auto flex w-48 shrink-0 items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5">
             {(["tree", "diagram"] as const).map((m) => (
               <button

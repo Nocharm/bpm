@@ -140,6 +140,10 @@
   --text-caption-strong: 14px;
   --text-caption-strong--line-height: 1.29;
   --text-caption-strong--font-weight: 600;
+  /* 작은 제목(카드 제목·패널 머리글) — 제목용 폰트 400. 상태 신호(탭·배지·건수·버튼)는 caption-strong */
+  --text-caption-title: 14px;
+  --text-caption-title--line-height: 1.29;
+  --text-caption-title--font-weight: 400;
   --text-fine: 12px;
   --text-fine--line-height: 1;
   --text-fine--font-weight: 400;
@@ -175,6 +179,7 @@ body {
    나머지 17px 강조(카드 이름·구역 제목·창 제목·프로필 이름)는 400 — 크기와 폰트로 구분한다.
    워터마크(120px)는 폭이 좁은 본문 폰트를 그대로 쓴다. 캔버스 노드는 이 클래스를 쓰지 않는다. */
 .text-body-strong,
+.text-caption-title,
 .text-tagline {
   font-family: var(--font-display);
 }

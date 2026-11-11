@@ -95,7 +95,7 @@ export function DashboardSection({ dataId, icon, title, count, countHot, aside, 
         className={`flex shrink-0 items-center gap-2 px-3 pb-2 pt-2.5 ${showToggle ? "cursor-pointer select-none" : ""}`}
       >
         {/* 제목은 한 줄 고정(shrink-0) — 헤더가 붐비면 우측 슬롯(부서 필·더보기 라벨)이 말줄임으로 양보한다 */}
-        <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-caption-strong text-ink">
+        <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-caption-title text-ink">
           <span className="text-ink-tertiary">{icon}</span>
           {title}
         </span>

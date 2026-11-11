@@ -433,7 +433,7 @@ export function MapCard({
             }`}
             style={{ left: modalPos.left, top: modalPos.top }}
           >
-            <p className="mb-2 truncate text-caption-strong text-ink">{map.name}</p>
+            <p className="mb-2 truncate text-caption-title text-ink">{map.name}</p>
             {/* 가시성 / visibility */}
             <div className="mb-2 flex items-center gap-2 text-ink-secondary">
               {map.visibility === "public" ? (

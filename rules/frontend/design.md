@@ -15,10 +15,10 @@ BPM 프론트엔드 시각 언어 — Whimsical 파생 토큰 시스템(`fronten
 
 ## 3. 타입
 - Pretendard. 본문 17px(`text-body`), 굵기 사다리 **300/400/600**(500 금지). 유일한 예외: 홈 트리 조상 강조 이름(`globals.css` `[data-tree-name]` 호버 경로)은 500 — 600은 12px 행에서 과하다는 사용자 결정(2026-09-10).
-- 시맨틱 스케일: `text-tagline`/`text-body-strong`/`text-body`/`text-caption`/`text-caption-strong`/`text-fine`.
+- 시맨틱 스케일: `text-tagline`/`text-body-strong`/`text-body`/`text-caption`/`text-caption-strong`/`text-caption-title`/`text-fine`.
 - **제목용 폰트 Paperlogy(400·600 두 종, `--font-display`)** — `text-body-strong`·`text-tagline`에 전역으로 붙는다(`globals.css`). **600은 화면의 머리에만**: 21px 제목·큰 숫자(`text-tagline`), 페이지 제목(`h1`), 서비스 이름·로그인 제목(`display-strong`). 나머지 17px 강조(카드 이름·구역 제목·창 제목·프로필 이름)는 400이고 크기와 폰트로 구분한다(사용자 결정 2026-11-12: 600은 꼭 필요할 때만). 본문·캡션·버튼·표·캔버스 노드는 Pretendard 그대로, 워터마크(120px)도 폭이 좁은 Pretendard. 새 강조 글자는 이 클래스로 쓰고 `font-family`를 직접 지정하지 않는다.
 - **굵기 600은 두 역할에만** (사용자 결정 2026-11-12: 600은 꼭 필요할 때만) — ① 화면의 머리(위 Paperlogy 600 자리), ② 상태·강조 신호(선택된 탭, 안 읽음, 건수, 배지, 버튼 — Pretendard 600). 상태를 굵기로 알리는 글자를 본문보다 가늘게(300) 만들면 선택된 쪽이 약해 보이고, 색 바탕 위 흰 글자는 획이 묻힌다(미리보기로 확인하고 기각).
-- **작은 제목(카드 제목·패널 머리글, 14px)은 Paperlogy 400으로 옮긴다** — 결정만 됐고 아직 `text-caption-strong`/`font-semibold`(Pretendard 600)로 남아 있다. 전용 클래스를 만들어 제목인 자리만 하나씩 옮긴다(자동 판정은 Draft 칩·언어 전환 글자까지 잡는다). 새 작은 제목은 600으로 쓰지 않는다.
+- **작은 제목(카드 제목·패널 머리글, 14px)은 `text-caption-title`(Paperlogy 400)** — 무언가를 묶는 머리(카드·패널·창·팝오버 제목, 구역 머리글, 호버 카드 이름)에 쓴다. `text-caption-strong`(Pretendard 600)은 상태·강조 신호(선택 탭, 안 읽음, 건수, 배지, 버튼)와 값에만 남긴다. 제목인지는 자리마다 사람이 정한다(자동 판정은 Draft 칩·언어 전환 글자까지 잡는다). 새 작은 제목은 600으로 쓰지 않는다.
 - **폰트 후보는 실제 화면에 입혀서 고른다** — Paperlogy는 Pretendard보다 영문이 약 9% 넓고 한글은 거의 같다. 같은 600이어도 획이 굵어 보여 반복되는 글자(카드 이름)는 한 단계 낮춰야 했다. 120px 워터마크처럼 큰 글자에는 폭이 넓어 맞지 않는다.
 
 ## 4. 모션

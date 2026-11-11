@@ -68,7 +68,7 @@ export function MapCardWarningsModal({ mapId, mapName, warnings, onClose }: MapC
                 )}
               </span>
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-caption-strong text-ink">
+                <span className="text-caption-title text-ink">
                   {w.kind === "owning_missing"
                     ? t("home.warnings.owningTitle")
                     : t("home.warnings.staleTitle", { n: w.count })}

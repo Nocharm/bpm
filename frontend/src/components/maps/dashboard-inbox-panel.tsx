@@ -399,7 +399,7 @@ function ColumnBar({ title, pills, menu }: { title: string; pills: ReactNode; me
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline px-2.5 py-1.5">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="text-caption-strong text-ink">{title}</span>
+        <span className="text-caption-title text-ink">{title}</span>
         {pills}
       </div>
       {menu}

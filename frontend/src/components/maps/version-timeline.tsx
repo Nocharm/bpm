@@ -225,7 +225,7 @@ export function VersionTimeline({
                       strokeWidth={1.5}
                       className={`shrink-0 text-ink-tertiary transition-transform duration-150 ${groupOpen ? "rotate-90" : ""}`}
                     />
-                    <span className="text-caption-strong text-ink">{t("home.verMajorGroup", { n: major })}</span>
+                    <span className="text-caption-title text-ink">{t("home.verMajorGroup", { n: major })}</span>
                     <span className="rounded-full border border-hairline bg-surface-alt px-1.5 text-fine text-ink-secondary">
                       {members.length}
                     </span>

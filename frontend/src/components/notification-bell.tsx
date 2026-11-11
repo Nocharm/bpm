@@ -120,7 +120,7 @@ export function NotificationBell() {
 
       {open && (
         <div className="absolute right-0 top-7 z-[1300] w-96 rounded-md p-2 border glass glass-dense">
-          <p className="px-1 pb-1 text-caption-strong text-ink">{t("notif.title")}</p>
+          <p className="px-1 pb-1 text-caption-title text-ink">{t("notif.title")}</p>
           {items.length === 0 ? (
             <p className="px-1 py-2 text-fine text-ink-tertiary">{t("notif.empty")}</p>
           ) : (

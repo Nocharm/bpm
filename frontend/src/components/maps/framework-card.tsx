@@ -58,7 +58,7 @@ export function FrameworkCard({ categories, crumb, onOpenLinkage, onBrowse }: Fr
             <div key={c.category_id} data-id={`home-framework-cat-${c.category_id}`} className="group grid grid-cols-[auto_1fr_auto] items-center gap-2.5 border-t border-divider px-3 py-2 transition-colors duration-150 hover:bg-surface-pearl">
               <span className={`grid h-[26px] w-[26px] place-items-center rounded-[6px] text-[11px] font-semibold ${getLevelPillClass(c.level)}`}>L{c.level}</span>
               <div className="min-w-0">
-                <div className="truncate text-caption-strong text-ink">{c.name}</div>
+                <div className="truncate text-caption-title text-ink">{c.name}</div>
                 <div className="mt-0.5 flex gap-2.5 text-fine text-ink-tertiary">
                   <span>
                     L5 <b className="font-semibold text-ink tabular-nums">{c.l5_count}</b>
