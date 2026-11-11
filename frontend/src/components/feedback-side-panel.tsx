@@ -189,7 +189,7 @@ export function FeedbackSidePanel({
           {/* 내 최근 피드백 — 클릭 시 상세 모달로 이동 + 패널 닫기 */}
           {recent.length > 0 && (
             <div className="flex flex-col gap-1.5 border-t border-hairline pt-3">
-              <span className="text-caption-strong text-ink-secondary">
+              <span className="text-caption-title text-ink-secondary">
                 {t("feedback.yourRecent")}
               </span>
               <ul className="flex flex-col gap-1.5">

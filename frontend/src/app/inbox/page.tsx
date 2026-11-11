@@ -1366,7 +1366,7 @@ function ApprovalDetail({
       {/* 승인자 현황 — 버전 승인만(✓승인/○대기/✗반려) */}
       {isVersion && approvers.length > 0 && (
         <div className="mt-4">
-          <span className="text-caption-strong text-ink-secondary">
+          <span className="text-caption-title text-ink-secondary">
             {t("inbox.approverStatus")}
           </span>
           <ul className="mt-2 flex flex-col gap-1.5">
