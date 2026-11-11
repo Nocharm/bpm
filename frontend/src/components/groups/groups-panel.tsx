@@ -31,6 +31,7 @@ import { deriveDeptKoreanKeywords } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { genId } from "@/lib/id";
 import type { Department, User as MockUser } from "@/lib/mock/permissions-types";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 // 그룹 상태 pill — Group.status는 pending/active/rejected /
 // Group status pill: pending / active / rejected.
@@ -287,23 +288,23 @@ export function GroupsPanel() {
   const managerCandidates = pickerUsers.filter((u) => memberUserIds.has(u.id));
 
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {/* 헤더 / Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Users size={16} strokeWidth={1.5} className="text-ink-tertiary" />
-          <p className="text-body-strong text-ink">{t("perm.group.pageTitle")}</p>
-        </div>
-        <button
-          type="button"
-          className="rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus"
-          onClick={openDialog}
-        >
-          {t("perm.group.createBtn")}
-        </button>
-      </div>
+      <SettingsTabHeader
+        title={t("perm.group.pageTitle")}
+        description={t("settings.head.groupsDesc")}
+        actions={
+          <button
+            type="button"
+            className="rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus"
+            onClick={openDialog}
+          >
+            {t("perm.group.createBtn")}
+          </button>
+        }
+      />
 
       {/* 상단 안내 — 목적 + 신청→승인→사용 SVG 가이드 / header guide */}
       <GroupsGuide />

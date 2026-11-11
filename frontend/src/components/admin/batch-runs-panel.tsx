@@ -20,6 +20,7 @@ import { humanizeApiError } from "@/lib/api-errors";
 import { formatKst } from "@/lib/datetime";
 import { downloadBlob } from "@/lib/download-blob";
 import { useI18n } from "@/lib/i18n";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 const JOBS = [
   { id: "db_backup", labelKey: "batch.job.db_backup", icon: DatabaseBackup },
@@ -122,9 +123,8 @@ export function BatchRunsPanel() {
   );
 
   return (
-    <div data-id="batch-runs-panel" className="max-w-2xl">
-      <h2 className="text-body-strong text-ink">{t("batch.tab")}</h2>
-      <p className="mt-1 text-caption text-ink-tertiary">{t("batch.desc")}</p>
+    <div data-id="batch-runs-panel" className="max-w-xl">
+      <SettingsTabHeader title={t("batch.tab")} description={t("batch.desc")} />
       {failed && (
         <p data-id="batch-runs-error" className="mt-4 text-caption text-error">
           {t("batch.loadFailed")}

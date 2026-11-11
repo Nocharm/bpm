@@ -63,10 +63,7 @@ export function DeletedGroupsPanel({ onToast }: { onToast: (msg: string, tone?: 
 
   return (
     <div className="flex flex-col gap-3">
-      <div>
-        <h2 className="text-body-strong text-ink">{t("trash.groups")}</h2>
-        <p className="mt-0.5 text-fine text-ink-tertiary">{t("trash.groupsHint")}</p>
-      </div>
+      <h3 className="text-caption-title text-ink">{t("trash.groups")}</h3>
       {groups === null ? (
         <p className="text-caption text-ink-tertiary">…</p>
       ) : groups.length === 0 ? (

@@ -14,6 +14,7 @@ import { MarkdownView } from "@/components/markdown-view";
 import { Pagination } from "@/components/pagination";
 import { Tooltip } from "@/components/tooltip";
 import { NoticeEditModal } from "@/components/notices/notice-edit-modal";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 const PAGE_SIZE = 20;
 
@@ -110,14 +111,11 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-body-strong text-ink">{t("noticeAdmin.title")}</h2>
-          <p className="text-caption text-ink-tertiary">
-            {t("noticeAdmin.summary", { total: notices.length, active: live })}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <SettingsTabHeader
+        title={t("noticeAdmin.title")}
+        description={t("noticeAdmin.summary", { total: notices.length, active: live })}
+        actions={
+          <>
           <ExportCsvButton
             dataId="notices-export-csv"
             nameParts={["bpm-notices"]}
@@ -132,8 +130,9 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
             <Plus size={16} strokeWidth={1.5} />
             {t("noticeAdmin.new")}
           </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="overflow-x-auto rounded-md border border-hairline">
         <table className="w-full table-fixed border-collapse text-caption">

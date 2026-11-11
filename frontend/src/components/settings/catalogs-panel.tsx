@@ -14,6 +14,7 @@ import { mergeCatalogEntries, normalizeAliases, parseCatalogCsv } from "@/lib/ca
 import { invalidateCatalogs, OTHER_SYSTEM } from "@/lib/catalogs";
 import { CsvParseError, decodeCsvBuffer } from "@/lib/csv-import";
 import { useI18n } from "@/lib/i18n";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 interface Lists {
   assignee_roles: CatalogEntry[];
@@ -418,11 +419,8 @@ export function CatalogsPanel({ isSysadmin, onToast }: CatalogsPanelProps) {
   const rolesCount = draftCounts.roles ?? lists.assignee_roles.length;
   const systemsCount = draftCounts.systems ?? lists.systems.length;
   return (
-    <div className="flex max-w-6xl flex-col gap-4" data-id="catalogs-panel">
-      <div>
-        <h2 className="text-body-strong text-ink">{t("catalog.tab")}</h2>
-        <p className="text-caption text-ink-tertiary">{isSysadmin ? t("catalog.pageHint") : t("catalog.readOnly")}</p>
-      </div>
+    <div className="flex flex-col gap-4" data-id="catalogs-panel">
+      <SettingsTabHeader title={t("catalog.tab")} description={isSysadmin ? t("catalog.pageHint") : t("catalog.readOnly")} />
       <div className="flex items-center gap-4 border-b border-hairline">
         <button
           type="button"

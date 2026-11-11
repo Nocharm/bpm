@@ -8,6 +8,7 @@ import { getAppSettings, putAppSettings, type AppSettings } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 interface AiChatSettingsPanelProps {
   onToast?: (message: string, tone?: "error") => void;
@@ -105,8 +106,7 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
 
   return (
     <div className="max-w-xl">
-      <h2 className="text-body-strong text-ink">{t("aiLog.title")}</h2>
-      <p className="mt-1 text-caption text-ink-secondary">{t("aiLog.desc")}</p>
+      <SettingsTabHeader title={t("aiLog.title")} description={t("aiLog.desc")} />
 
       {/* AI 접근 — 서버 점검 시 런타임 차단. me.ai_enabled를 통해 전 화면이 즉시 반영 */}
       <div className="mt-4 rounded-md border border-hairline p-4" data-id="ai-access-card">

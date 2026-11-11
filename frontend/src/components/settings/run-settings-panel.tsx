@@ -9,6 +9,7 @@ import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { validateRunLimits, type RunLimitsDraft } from "@/lib/run-view";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 interface RunSettingsPanelProps {
   onToast?: (message: string, tone?: "error") => void;
@@ -125,8 +126,7 @@ export function RunSettingsPanel({ onToast }: RunSettingsPanelProps) {
 
   return (
     <div className="max-w-xl" data-id="run-settings-panel">
-      <h2 className="text-body-strong text-ink">{t("run.admin.title")}</h2>
-      <p className="mt-1 text-caption text-ink-secondary">{t("run.admin.desc")}</p>
+      <SettingsTabHeader title={t("run.admin.title")} description={t("run.admin.desc")} />
 
       <div className="mt-4 rounded-md border border-hairline p-4">
         <div className="flex items-center gap-3">

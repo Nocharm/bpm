@@ -24,6 +24,7 @@ import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { HtmlView } from "@/components/html-view";
 import { MarkdownView } from "@/components/markdown-view";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 type Format = ManualDoc["format"];
 
@@ -130,15 +131,19 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
 
   return (
     <div className="flex h-full flex-col gap-4">
-      {/* 문서 목록 — 제목(자동 추출)·언어·수정 정보. 클릭=편집, 휴지통=삭제 */}
-      <div data-id="manual-docs-list" className="flex flex-col gap-1 rounded-sm border border-hairline p-2">
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-caption-title text-ink">{t("manual.manage.docs")}</span>
+      <SettingsTabHeader
+        title={t("manual.manage.tab")}
+        description={t("settings.head.manualDesc")}
+        actions={
           <button type="button" className={OUTLINE_BTN} onClick={startNew}>
             <FilePlus2 size={14} strokeWidth={1.5} />
             {t("manual.manage.newDoc")}
           </button>
-        </div>
+        }
+      />
+      {/* 문서 목록 — 제목(자동 추출)·언어·수정 정보. 클릭=편집, 휴지통=삭제 */}
+      <div data-id="manual-docs-list" className="flex flex-col gap-1 rounded-sm border border-hairline p-2">
+        <span className="mb-1 text-caption-title text-ink">{t("manual.manage.docs")}</span>
         {docs.length === 0 ? (
           <p className="px-1 py-2 text-caption text-ink-tertiary">{t("manual.manage.noDocs")}</p>
         ) : (
@@ -203,9 +208,9 @@ export function ManualManagePanel({ onToast }: { onToast: (message: string) => v
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div>
-            <h2 className="text-body-strong text-ink">
+            <h3 className="text-caption-title text-ink">
               {editingId === null ? t("manual.manage.newDoc") : t("manual.manage.title")}
-            </h2>
+            </h3>
             <p className="text-fine text-ink-tertiary">{t("manual.manage.titleAuto")}</p>
           </div>
 

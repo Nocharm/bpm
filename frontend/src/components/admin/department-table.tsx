@@ -20,6 +20,7 @@ import { formatRosterName, getDeptMembers } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, TableCard } from "./admin-table";
 import { ExportCsvButton } from "./export-csv-button";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 const PILL =
   "inline-flex items-center gap-1 rounded-full border border-hairline px-2 py-0.5 text-fine text-ink-secondary";
@@ -195,14 +196,18 @@ export function DepartmentTable() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex justify-end">
-        <ExportCsvButton
-          dataId="departments-export-csv"
-          nameParts={["bpm-departments"]}
-          getRows={getExportRows}
-          disabled={rows.length === 0}
-        />
-      </div>
+      <SettingsTabHeader
+        title={t("perm.sysadmin.tabDepts")}
+        description={t("settings.head.deptsDesc")}
+        actions={
+          <ExportCsvButton
+            dataId="departments-export-csv"
+            nameParts={["bpm-departments"]}
+            getRows={getExportRows}
+            disabled={rows.length === 0}
+          />
+        }
+      />
 
       <div className="max-h-[60vh] overflow-y-auto" data-id="dept-table-scroll">
         <TableCard>

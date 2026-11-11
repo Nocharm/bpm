@@ -23,6 +23,7 @@ import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
 import { NotificationPurgeModal } from "./notification-purge-modal";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 const PAGE_SIZE = 50; // 무한 스크롤 1회 로드 행수 / rows per scroll-load
 const FILTER_DEBOUNCE_MS = 300;
@@ -202,7 +203,7 @@ export function TableViewer() {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-body-strong text-ink">{t("db.tablesTab")}</p>
+      <SettingsTabHeader title={t("db.tablesTab")} description={t("settings.head.tablesDesc")} />
 
       {/* 테이블 선택 pill — 아이콘 + 이름 + 행수 / table selector pills */}
       <div className="flex flex-wrap gap-2">

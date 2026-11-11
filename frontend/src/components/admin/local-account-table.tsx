@@ -22,6 +22,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SkeletonRows } from "@/components/permissions/loading-skeleton";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, RolePill, TableCard } from "./admin-table";
 import { CheckInput } from "@/components/check-input";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 const INPUT_CLASS =
   "rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink outline-none focus:border-accent";
@@ -162,10 +163,7 @@ export function LocalAccountTable({ onToast }: LocalAccountTableProps) {
 
   return (
     <div className="flex flex-col gap-3" data-id="local-account-table">
-      <div>
-        <p className="text-body-strong text-ink">{t("localAccount.tab")}</p>
-        <p className="text-fine text-ink-tertiary">{t("localAccount.hint")}</p>
-      </div>
+      <SettingsTabHeader title={t("localAccount.tab")} description={t("localAccount.hint")} />
 
       {/* 생성 폼 */}
       <div className="flex flex-col gap-2 rounded-md border border-hairline bg-surface-alt p-4">
@@ -241,14 +239,14 @@ export function LocalAccountTable({ onToast }: LocalAccountTableProps) {
         <TableCard>
           <thead>
             <tr className={ADMIN_HEAD_ROW}>
-              <th className={ADMIN_TH}>loginId</th>
-              <th className={ADMIN_TH}>name</th>
-              <th className={ADMIN_TH}>department</th>
-              <th className={ADMIN_TH}>role</th>
-              <th className={ADMIN_TH}>sysadmin</th>
-              <th className={ADMIN_TH}>status</th>
-              <th className={ADMIN_TH}>createdBy</th>
-              <th className={ADMIN_TH}>updatedAt</th>
+              <th className={ADMIN_TH}>{t("admin.emp.colLoginId")}</th>
+              <th className={ADMIN_TH}>{t("admin.emp.colName")}</th>
+              <th className={ADMIN_TH}>{t("admin.emp.colDepartment")}</th>
+              <th className={ADMIN_TH}>{t("admin.emp.colRole")}</th>
+              <th className={ADMIN_TH}>{t("localAccount.sysadmin")}</th>
+              <th className={ADMIN_TH}>{t("admin.emp.colStatus")}</th>
+              <th className={ADMIN_TH}>{t("localAccount.colCreatedBy")}</th>
+              <th className={ADMIN_TH}>{t("localAccount.colUpdatedAt")}</th>
               <th className={ADMIN_TH} />
             </tr>
           </thead>

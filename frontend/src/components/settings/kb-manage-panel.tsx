@@ -16,6 +16,7 @@ import {
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 const ACCEPT = ".pdf,.docx,.pptx,.xlsx,.txt,.md";
 
@@ -79,13 +80,11 @@ export function KbManagePanel({ onToast }: { onToast: (message: string) => void 
 
   return (
     <section className="flex flex-col gap-3" data-id="kb-manage-panel">
-      <header className="flex items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-body-strong text-ink">{t("kb.title")}</h2>
-          <p className="text-caption text-ink-muted">
-            {t("kb.description")}
-          </p>
-        </div>
+      <SettingsTabHeader
+        title={t("kb.title")}
+        description={t("kb.description")}
+        actions={
+          <>
         <button className={OUTLINE_BTN} onClick={() => void refresh()} data-id="kb-refresh">
           <RefreshCw size={16} strokeWidth={1.5} />
           {t("kb.refresh")}
@@ -99,6 +98,9 @@ export function KbManagePanel({ onToast }: { onToast: (message: string) => void 
           <FileUp size={16} strokeWidth={1.5} />
           {busy ? t("kb.uploading") : t("kb.upload")}
         </button>
+          </>
+        }
+      />
         <input
           ref={fileRef}
           type="file"
@@ -107,7 +109,6 @@ export function KbManagePanel({ onToast }: { onToast: (message: string) => void 
           onChange={(event) => void handleFile(event)}
           data-id="kb-file-input"
         />
-      </header>
       {docs.length === 0 ? (
         <p className="rounded-sm border border-hairline bg-surface-alt px-3 py-4 text-caption text-ink-muted">
           {t("kb.empty")}

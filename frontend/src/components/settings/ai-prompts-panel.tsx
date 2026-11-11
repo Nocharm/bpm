@@ -12,6 +12,7 @@ import { getAiPromptLabel } from "@/lib/ai-prompt-keys";
 import { getAiPrompts, putAiPrompt, resetAiPrompt, type AiPromptItem } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 const OUTLINE_BTN =
   "flex items-center gap-1.5 rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt";
@@ -101,10 +102,7 @@ export function AiPromptsPanel({ onToast }: AiPromptsPanelProps) {
 
   return (
     <div className="flex h-full flex-col gap-4" data-id="ai-prompts-panel">
-      <div>
-        <h2 className="text-body-strong text-ink">{t("aiPrompts.title")}</h2>
-        <p className="pt-1 text-caption text-ink-tertiary">{t("aiPrompts.desc")}</p>
-      </div>
+      <SettingsTabHeader title={t("aiPrompts.title")} description={t("aiPrompts.desc")} />
 
       {/* JSON 계약 파손 경고 — 오편집 시 AI 기능 오동작 안내 */}
       <div className="flex items-center gap-2 rounded-sm border border-hairline bg-surface-alt px-3 py-2 text-caption text-ink-secondary">

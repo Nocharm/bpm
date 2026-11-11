@@ -337,7 +337,7 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
   }
 
   return (
-    <div className="flex max-w-4xl flex-col gap-2">
+    <div className="flex flex-col gap-2">
       {visible.map((item) => {
         const expanded = expandedKeys.has(item.key);
         const deciding = decidingKeys.has(item.key);

@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 336개 · 2026-11-11 기준
+총 337개 · 2026-11-11 기준
 
 ## components/
 
@@ -401,6 +401,7 @@
 | `kb-manage-panel.tsx` | `KbManagePanel` | 설정 · 지식기반 라이브러리(P2) | `app/settings/page.tsx` |
 | `manual-manage-panel.tsx` | `ManualManagePanel` | 설정 · 매뉴얼 편집·게시 | `app/settings/page.tsx` |
 | `run-settings-panel.tsx` | `RunSettingsPanel` | 실행 체크(Run) 숫자 설정(sysadmin) | `app/settings/page.tsx` |
+| `settings-tab-header.tsx` | `SettingsTabHeader` | 설정 탭 머리글 한 벌(제목 · 한 줄 설명 · 오른쪽 동작) | `app/settings/page.tsx`, `components/admin/batch-runs-panel.tsx`, `components/admin/department-table.tsx`, `components/admin/employee-table.tsx`, `components/admin/framework-panel.tsx`, `components/admin/local-account-table.tsx`, `components/admin/table-viewer.tsx`, `components/groups/groups-panel.tsx`, `components/notices/notices-manage-panel.tsx`, `components/settings/ai-chat-settings-panel.tsx`, `components/settings/ai-prompts-panel.tsx`, `components/settings/catalogs-panel.tsx`, `components/settings/kb-manage-panel.tsx`, `components/settings/manual-manage-panel.tsx`, `components/settings/run-settings-panel.tsx` |
 
 ## components/version/
 

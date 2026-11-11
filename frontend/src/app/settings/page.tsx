@@ -32,6 +32,7 @@ import { FrameworkPanel } from "@/components/admin/framework-panel";
 import { CatalogsPanel } from "@/components/settings/catalogs-panel";
 import { KbManagePanel } from "@/components/settings/kb-manage-panel";
 import { ManualManagePanel } from "@/components/settings/manual-manage-panel";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 import { DashboardPanel } from "@/components/settings/dashboard-panel";
 import { RefAuditPage } from "@/components/ref-audit/ref-audit-page";
 
@@ -312,16 +313,19 @@ export default function SettingsPage() {
             <RunSettingsPanel onToast={(message) => showToast({ id: genId(), message })} />
           )}
           {current === "employees" && <EmployeeTable />}
-          {current === "queue" &&
-            user &&
-            (user.isSysadmin ? (
-              <ApprovalQueue onToast={showToast} onCountChange={setQueueCount} />
-            ) : (
-              // 개인별 승인 모음은 추후 구현 — 현재 큐 API는 sysadmin 전용이라 일반 유저엔 안내만.
-              <p className="py-16 text-center text-caption text-ink-tertiary">
-                {t("admin.approvalsComingSoon")}
-              </p>
-            ))}
+          {current === "queue" && user && (
+            <div className="flex flex-col gap-4">
+              <SettingsTabHeader title={t("perm.sysadmin.tabQueue")} description={t("settings.head.queueDesc")} />
+              {user.isSysadmin ? (
+                <ApprovalQueue onToast={showToast} onCountChange={setQueueCount} />
+              ) : (
+                // 개인별 승인 모음은 추후 구현 — 현재 큐 API는 sysadmin 전용이라 일반 유저엔 안내만.
+                <p className="py-16 text-center text-caption text-ink-tertiary">
+                  {t("admin.approvalsComingSoon")}
+                </p>
+              )}
+            </div>
+          )}
           {current === "depts" && <DepartmentTable />}
           {current === "catalogs" && (
             <CatalogsPanel
@@ -342,7 +346,8 @@ export default function SettingsPage() {
           {current === "tables" && <TableViewer />}
           {current === "batch" && <BatchRunsPanel />}
           {current === "trash" && (
-            <div className="flex flex-col gap-8">
+            <div className="flex flex-col gap-6">
+              <SettingsTabHeader title={t("trash.tab")} description={t("trash.desc")} />
               <DeletedMapsPanel
                 isSysadmin={user?.isSysadmin ?? false}
                 onToast={(message) => showToast({ id: genId(), message })}

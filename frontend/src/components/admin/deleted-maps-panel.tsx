@@ -82,10 +82,7 @@ export function DeletedMapsPanel({
 
   return (
     <div className="flex flex-col gap-3">
-      <div>
-        <h2 className="text-body-strong text-ink">{t("trash.tab")}</h2>
-        <p className="mt-0.5 text-fine text-ink-tertiary">{t("trash.hint")}</p>
-      </div>
+      <h3 className="text-caption-title text-ink">{t("trash.maps")}</h3>
       {maps === null ? (
         <p className="text-caption text-ink-tertiary">…</p>
       ) : maps.length === 0 ? (

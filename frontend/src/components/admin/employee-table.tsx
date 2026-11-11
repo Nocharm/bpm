@@ -21,6 +21,7 @@ import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, RolePill, TableCard } from "./admin-table";
 import { ExportCsvButton } from "./export-csv-button";
 import { CheckInput } from "@/components/check-input";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 /** 노출 직책 카드 — EDW distinct 직책(available_positions) 중 부서장 표기로 쓸 항목(exposed_positions) 체크·저장.
  *  exposed에는 있는데 available엔 없는 항목(수집 전 기본값 4종)도 목록에 얹어 체크 유지. */
@@ -173,9 +174,11 @@ export function EmployeeTable() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <p className="text-body-strong text-ink">{t("admin.title")}</p>
-        <div className="flex items-center gap-2">
+      <SettingsTabHeader
+        title={t("admin.title")}
+        description={t("settings.head.employeesDesc")}
+        actions={
+          <>
           <ExportCsvButton
             dataId="employees-export-csv"
             nameParts={["bpm-employees"]}
@@ -197,8 +200,9 @@ export function EmployeeTable() {
               t("admin.sync")
             )}
           </button>
-        </div>
-      </div>
+          </>
+        }
+      />
       {msg && <p className="text-fine text-ink-tertiary">{msg}</p>}
       <ExposedPositionsCard />
       <TableCard>

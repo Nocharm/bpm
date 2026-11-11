@@ -88,6 +88,7 @@ import { Tooltip } from "@/components/tooltip";
 import { filterByQuery } from "@/lib/search";
 import { getTreeIndentStyle, TREE_INDENT_PADDING_CLASS } from "@/lib/tree-indent";
 import { useSectionMotion } from "@/lib/use-closing-keys";
+import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
 const MAX_CATEGORY_LEVEL = 5; // backend MAX_CATEGORY_LEVEL과 동기 — 이 미만 레벨에서만 자식 추가 허용
 
@@ -753,13 +754,12 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
 
   return (
     <div className="flex flex-col gap-4" data-id="framework-panel">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-body-strong text-ink">{t("framework.adminTab")}</h2>
-          <p className="pt-1 text-caption text-ink-tertiary">{t("framework.adminReimportHint")}</p>
-        </div>
-        {/* 루트 카테고리 생성은 sysadmin 전용 — 위임 스코프는 자기 서브트리 밖에 새 루트를 못 만든다 */}
-        {!scopeRootIds && (
+      <SettingsTabHeader
+        title={t("framework.adminTab")}
+        description={t("framework.adminReimportHint")}
+        actions={
+          // 루트 카테고리 생성은 sysadmin 전용 — 위임 스코프는 자기 서브트리 밖에 새 루트를 못 만든다
+          !scopeRootIds && (
           <button
             type="button"
             data-id="framework-admin-add-root"
@@ -769,8 +769,9 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             <Plus size={14} strokeWidth={1.5} />
             {t("framework.adminAddRoot")}
           </button>
-        )}
-      </div>
+          )
+        }
+      />
 
       {/* 뷰 토글 — Manage(트리+임포트) ↔ Status(배치 현황판). 홈 home-view-toggle과 동일 스타일 */}
       <div
