@@ -92,7 +92,7 @@ DECK = {
                 ]},
                 {"title": "지식기반(Knowledge base)", "shot": True, "pts": [
                     ("용도", "AI 컨설턴트(인터뷰)가 인용할 조직 문서 라이브러리. SOP · 가이드 업로드."),
-                    ("형식", "pdf · docx · pptx · xlsx · txt · md, 파일당 최대 20MB."),
+                    ("형식", "pdf · docx · pptx · xlsx · xlsm · csv · txt · md, 파일당 최대 20MB."),
                     ("전제", "<code>AI_ENABLED</code>와 임베딩 서버 <code>EMBED_URL</code>이 모두 설정된 경우에만 동작."),
                 ]},
                 {"title": "AI 챗 설정 · AI 프롬프트", "shot": True, "pts": [

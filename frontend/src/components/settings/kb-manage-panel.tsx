@@ -18,7 +18,7 @@ import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SettingsTabHeader } from "@/components/settings/settings-tab-header";
 
-const ACCEPT = ".pdf,.docx,.pptx,.xlsx,.txt,.md";
+const ACCEPT = ".pdf,.docx,.pptx,.xlsx,.xlsm,.csv,.txt,.md";
 
 const OUTLINE_BTN =
   "inline-flex items-center gap-1.5 rounded-sm border border-hairline px-2.5 py-1.5 " +

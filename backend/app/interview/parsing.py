@@ -1,9 +1,9 @@
-"""첨부 문서 파싱 — PDF/DOCX/PPTX/XLSX/TXT/MD → 텍스트, 컨텍스트 예산 클리핑 (design 2026-07-23)."""
+"""첨부 문서 파싱 — PDF/DOCX/PPTX/XLSX/XLSM/CSV/TXT/MD → 텍스트, 컨텍스트 예산 클리핑 (design 2026-07-23)."""
 
 import io
 from pathlib import PurePosixPath
 
-ALLOWED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".txt", ".md"}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".xlsm", ".csv", ".txt", ".md"}
 MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # 업로드 상한 20MB
 
 
@@ -51,6 +51,7 @@ def _parse_pptx(data: bytes) -> str:
 
 
 def _parse_xlsx(data: bytes) -> str:
+    """xlsx·xlsm 공용 — 매크로(VBA)는 읽지 않고 셀 값만 꺼낸다."""
     from openpyxl import load_workbook
 
     wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
@@ -82,8 +83,10 @@ def parse_attachment(filename: str, data: bytes) -> str:
             return _parse_docx(data)
         if ext == ".pptx":
             return _parse_pptx(data)
-        if ext == ".xlsx":
+        if ext in (".xlsx", ".xlsm"):
             return _parse_xlsx(data)
+        if ext == ".csv":
+            return _parse_text(data).removeprefix("﻿")  # Excel이 저장한 UTF-8 CSV의 BOM
         return _parse_text(data)
     except ParseError:
         raise

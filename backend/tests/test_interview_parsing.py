@@ -1,6 +1,7 @@
-"""첨부 파싱 — docx/pptx/xlsx 실물 왕복, txt 인코딩 폴백, 예산 클리핑."""
+"""첨부 파싱 — docx/pptx/xlsx/xlsm 실물 왕복, csv·txt 인코딩 폴백, 예산 클리핑."""
 
 import io
+import zipfile
 
 import pytest
 from docx import Document
@@ -81,6 +82,29 @@ def test_parse_xlsx_extracts_cells_tab_separated() -> None:
     assert "접수\t구매팀" in text
 
 
+def test_parse_xlsm_reads_macro_enabled_workbook() -> None:
+    # openpyxl은 xlsm을 직접 못 만들어, 통합 문서 콘텐츠 타입만 매크로 사용으로 바꿔 실물과 같게 한다
+    source = zipfile.ZipFile(io.BytesIO(_xlsx_bytes([["단계", "담당"], ["접수", "구매팀"]])))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as target:
+        for item in source.infolist():
+            body = source.read(item.filename)
+            if item.filename == "[Content_Types].xml":
+                assert b"spreadsheetml.sheet.main+xml" in body
+                body = body.replace(
+                    b"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+                    b"application/vnd.ms-excel.sheet.macroEnabled.main+xml",
+                )
+            target.writestr(item, body)
+    text = parse_attachment("macro.XLSM", buf.getvalue())
+    assert "접수\t구매팀" in text
+
+
+def test_parse_csv_utf8_bom_and_cp949() -> None:
+    assert parse_attachment("a.csv", "﻿단계,담당\n접수,구매팀".encode("utf-8")) == "단계,담당\n접수,구매팀"
+    assert parse_attachment("b.csv", "단계,담당".encode("cp949")) == "단계,담당"
+
+
 def test_parse_txt_utf8_and_cp949() -> None:
     assert parse_attachment("a.txt", "한글 메모".encode("utf-8")) == "한글 메모"
     assert parse_attachment("b.txt", "한글 메모".encode("cp949")) == "한글 메모"
@@ -97,7 +121,7 @@ def test_parse_corrupt_docx_raises_parse_error() -> None:
 
 
 def test_allowed_extensions() -> None:
-    assert ALLOWED_EXTENSIONS == {".pdf", ".docx", ".pptx", ".xlsx", ".txt", ".md"}
+    assert ALLOWED_EXTENSIONS == {".pdf", ".docx", ".pptx", ".xlsx", ".xlsm", ".csv", ".txt", ".md"}
 
 
 def test_clip_to_budget_headers_and_even_cut() -> None:

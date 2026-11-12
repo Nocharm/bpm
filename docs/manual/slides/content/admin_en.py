@@ -92,7 +92,7 @@ DECK = {
                 ]},
                 {"title": "Knowledge base", "shot": True, "pts": [
                     ("Purpose", "Org documents the AI consultant cites in interviews. Upload SOPs and guides."),
-                    ("Formats", "pdf · docx · pptx · xlsx · txt · md, up to 20 MB per file."),
+                    ("Formats", "pdf · docx · pptx · xlsx · xlsm · csv · txt · md, up to 20 MB per file."),
                     ("Prerequisite", "Works only with both <code>AI_ENABLED</code> and the embedding server <code>EMBED_URL</code> set."),
                 ]},
                 {"title": "AI chat settings · AI prompts", "shot": True, "pts": [
