@@ -45,3 +45,7 @@ dist/
 
 # Playwright 캡처 산출물(스모크·매뉴얼 캡처, frontend/scripts 기준 ../.shots) — 저장소 밖
 .shots/
+
+# 로컬에서만 쓰는 에이전트 스킬(설치본·잠금 파일) — 개인 도구라 저장소에 두지 않는다
+.agents/
+skills-lock.json

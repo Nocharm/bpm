@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-11-12 — 로컬 에이전트 스킬 폴더 ignore
+
+- `.agents/`·`skills-lock.json`은 개인 PC에서만 쓰는 스킬 설치본이라 `.gitignore`에 올렸다.
+
 ## 2026-11-12 — 인터뷰 JSON 0.5 확장: L5 판단·끝 노드(`relations.nodes`)·To-Be 작업본(`rows[].tobe`) (브랜치 `feat/interview-relations-nodes-tobe`)
 
 - PI 리디자인 데이터(L5 3,998·L6 20,671)를 잃지 않고 받기 위한 선택 키 2건. 새 키가 없는 파일·AI 캠페인·에디터·그래프 저장·버전 워크플로는 그대로다(기존 임포트 테스트 전부 무수정 통과).
