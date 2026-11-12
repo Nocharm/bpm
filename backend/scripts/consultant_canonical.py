@@ -66,6 +66,8 @@ class CanonicalNode(BaseModel):
     color: str = Field(default="", max_length=20)
     # 병행 갈래(branch+gateway=parallel)의 출발 — 임포터가 Node.parallel_outputs로 출구를 병렬로 켠다 (출력 규칙 2026-10-01)
     parallel: bool = False
+    # 노드 역할 — To-Be 활동의 actor=ai만 싣는다("AI Agent"). As-Is 활동은 늘 비고 재전달이 직전 값을 승계한다
+    assignee_role: str = Field(default="", max_length=100)
 
 
 class CanonicalEdge(BaseModel):
@@ -81,6 +83,14 @@ class CanonicalEdge(BaseModel):
 class CanonicalLink(BaseModel):
     to_map: str
     after_node: str | None = None
+
+
+class CanonicalTobe(BaseModel):
+    """To-Be 작업본(rows[].tobe) — 게시본 위 진행 중 버전에 싣는 재설계 그래프. 어댑터가 As-Is와 같은 규칙으로 만든다."""
+
+    label: str = Field(min_length=1, max_length=100)  # MapVersion.label은 String(100)
+    nodes: list[CanonicalNode] = []
+    edges: list[CanonicalEdge] = []
 
 
 class CanonicalMap(BaseModel):
@@ -112,6 +122,8 @@ class CanonicalMap(BaseModel):
     nodes: list[CanonicalNode] = []
     edges: list[CanonicalEdge] = []
     links: list[CanonicalLink] = []
+    # To-Be 작업본 — As-Is 변경 감지(_graph_signature·fields_changed) 밖, 임포터가 게시 뒤 trailing draft에 싣는다
+    tobe: CanonicalTobe | None = None
 
     @model_validator(mode="after")
     def _check_graph_refs(self) -> "CanonicalMap":

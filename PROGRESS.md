@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-11-12 — 인터뷰 JSON 0.5 확장: L5 판단·끝 노드(`relations.nodes`)·To-Be 작업본(`rows[].tobe`) (브랜치 `feat/interview-relations-nodes-tobe`)
+
+- PI 리디자인 데이터(L5 3,998·L6 20,671)를 잃지 않고 받기 위한 선택 키 2건. 새 키가 없는 파일·AI 캠페인·에디터·그래프 저장·버전 워크플로는 그대로다(기존 임포트 테스트 전부 무수정 통과).
+- `relations.nodes`: 선언 판단은 자동 분기 노드 없이 그 노드에서 바로 갈라지고, 계보 키 `linkage_node_lineage`(L5 코드 + `__node__`+id)로 재전달 무중복. 끝 이름은 저장 검증(유니크) 때문에 겹치면 번호, 대표 끝은 저장 규칙과 같게 캔버스에 끝이 없을 때만 선언 순서 첫 끝. 배치는 기존 `layout_flow`에 노드만 더 실어 `consultant_layout`은 고치지 않았다(연계 캔버스는 시작 노드가 없어 큰길 계산이 원래 비어 있다).
+- `rows[].tobe`: 게시 뒤 손대지 않은 trailing draft만 To-Be로 바꾼다(`_land_tobe`). 스펙에 없던 결정 두 가지 — 같은 To-Be 재전달은 경고 없이 넘어가고(수천 건 경고 방지), 진행 중 버전이 아예 없으면 To-Be draft를 새로 만든다. 노드 계보는 재전달 규칙(`_match_prior_lineage`)으로 게시본에 맞춰 비교 화면이 짝을 짓는다. `actor=ai` 역할 "AI Agent"는 `commit_role`이 목록에 없으면 자유값 그대로 둔다.
+- 프런트는 외부 AI 프롬프트 한 줄(`relations.nodes`, tobe는 싣지 않음)과 임포트 리포트 L5 미리보기(`buildL5PreviewGraph`)만.
+
 ## 2026-11-12 — AI 첨부 형식에 xlsm·csv 추가 (v1.9.0, main 머지)
 
 - 첨부 허용 목록이 한 상수(`parsing.ALLOWED_EXTENSIONS`)라 AI 컨설턴트 인터뷰·L5 캠페인 첨부·지식기반 업로드 세 곳이 함께 넓어진다. xlsm은 xlsx 파서로 셀 값만 읽고(매크로는 읽지 않음), csv는 텍스트로 읽되 Excel이 붙이는 BOM을 뗀다(UTF-8 실패 시 cp949). 슬라이드 덱 html은 다음 덱 갱신 때 반영.

@@ -19,6 +19,7 @@
 | `l5.label` | 미사용 — 카테고리 이름은 `framework.categories`가 진실 |
 | `relations.entry` | L5 스코프 노트(kind=`entry`, title=`Entry (triggerType)`) + 진입 L6를 연계 캔버스 **첫 자리**로 |
 | `relations.edges[]` | **L5 연계 캔버스 엣지**(SP 노드 사이). `label`+`condition`이 엣지 라벨, `quote`는 L5 노트 |
+| `relations.nodes[]` (0.5 선택, 2026-11-12) | **L5 연계 캔버스의 판단·끝 노드** — `kind`=`decision`\|`end`, `label`=제목, 계보키 `make_node_id(홈L5, "__node__"+id)`(재전달 무중복). 엣지 끝점이 `id`로 가리키고, 선언 판단의 출구는 자동 분기 노드 없이 그 노드에서 바로 나간다. 끝은 캔버스에 끝이 없었을 때 선언 순서 첫 노드가 대표 끝. 엣지가 가리키지 않는 선언은 만들지 않는다. 계약: `docs/samples/interview-json-0.5.md` §2-4 |
 | `rows[]` | 맵 1건씩 — `consultant_code=taskId`, `name=l6`, `category=l5.nodeCode` |
 | `tasks[]` | `taskId` 조인으로 `exceptions`·`note`만 소비 (아래 §3) |
 | `sideNotes[]` | `map_notes` — `unitId` 매칭 시 그 맵, null이면 L5 스코프. `kind` 그대로 |
@@ -41,6 +42,7 @@
 | `department` | `sp_department`(항상, **조직 트리에 착지한 경로의 리프명**) + 신규 맵 `owning_department`(트림된 전체 경로). 기존 맵: 해석 결과가 현재 owning과 다르면 governance 차이 행 — 체크 시 교체 |
 | `actions[]` | 노드 (아래) |
 | `relations.edges[]` | 맵 엣지 (아래 §2) |
+| `tobe` (0.5 선택, 임포트 전용, 2026-11-12) | **To-Be 작업본** — 게시본 위 진행 중 버전(Draft)의 그래프 전체 + 버전 라벨(`tobe.label`). `tobe.actions[]`는 `actions[]`와 같은 착지에 `actor`만 더한다(`ai` → 노드 `assignee_role="AI Agent"`(역할 목록 커밋)·색 violet `#9183c0`, `human` → 역할·부서 빈 값). `tobe.relations`는 `relations`와 같은 규칙(생략 = seq 순 연결). 손대지 않은 Draft일 때만 쓰고(`to-be draft written`), 아니면 warning `to-be skipped - draft in use`. As-Is 변경 감지 밖. 계약: 같은 문서 §2-5 |
 
 ### rows[].fields
 
@@ -102,6 +104,8 @@
 | IO 링크(`output_ids`·`input_links`) | 아웃풋 줄과 인풋 줄이 **완전일치 + 흐름 순방향**이면 자동 연결. 후보 여럿이면 최근접 상류. 항목 id는 전달 좌표에서 파생한 결정적 값. 재전달은 직전 게시본의 사용자 링크를 먼저 승계(§4)한 뒤 빈 줄만 자동 연결한다 |
 | SP 끝점 핸들 | L6 맵 연계 노드: 출구 `__primary__`, 들어오는 문은 배치가 고른 변(좌=`in`, 그 외 `in:<side>`, 에디터 자동 정렬과 동치 — `subprocess_in_handle`). L5 연계 캔버스: 출구 `__primary__`·들어오는 문 `in` 고정, 분기 노드는 변 id(`s-*`/`t-left`). 보조 끝 키는 전달물로 만들 수 없다 |
 | 편집용 draft | 게시 직후 게시본을 복제한 draft 1건(점유권자 없음). 이미 draft가 있으면 만들지 않음. 재전달 때 **점유권자 없고 편집 가능한 전 필드(좌표·핸들·url·역할·파라미터·GMP·폼·플래그·링크·버전 고정·병렬 출구·그룹)가 게시본과 같으면** 그 draft를 새 게시 버전으로 재사용한다 |
+| To-Be Draft (`rows[].tobe`) | 위 편집용 draft가 손대지 않은 상태면 그 그래프를 To-Be로 바꾸고 라벨을 `tobe.label`로 바꾼다(진행 중 버전이 없으면 새로 만든다). To-Be가 깔린 draft는 게시본과 달라 재전달이 재사용하지 않으므로, As-Is가 바뀌면 새 게시본만 생기고 To-Be draft는 남는다. 같은 To-Be 재전달은 무동작, 다른 To-Be 재전달은 덮지 않고 warning. 노드 계보는 게시본에 재전달 규칙(같은 제목 → 같은 자리·같은 유형)으로 맞춘다 |
+| L5 판단·끝 노드 (`relations.nodes`) | 새 캔버스는 L6·분기 노드와 함께 자동정렬(선언 판단도 출구를 위→아래→옆으로 벌림, `kind: loop` 엣지는 랭크에서 제외). 보강은 아래 격자에 추가만. 끝 이름이 캔버스에서 겹치면 번호를 붙인다(저장 검증이 유니크를 요구) |
 
 ---
 
@@ -185,6 +189,8 @@ error가 1건이라도 있으면 **그 파일은 통째로 스킵**되고 다른
 - `schema_version`이 `0.4`/`0.5`로 시작하지 않음
 - `framework.categories` 누락/구조 위반(중복 code·부모 미존재·레벨 불일치) — 홈 체인 기준. 외부 계보의 부모 미존재는 경고 후 제외(0.5)
 - (0.5) `externalTasks`가 리스트가 아님 · 항목이 객체가 아님 · `refId` 누락/중복/`rows[].taskId`와 충돌 · `l5` 또는 `l5.nodeCode` 누락
+- (0.5) `relations.nodes`가 리스트가 아님 · 항목이 객체가 아님 · `id` 누락/중복/`rows[].taskId`·`externalTasks[].refId`와 충돌 · `kind`가 `decision`·`end`가 아님
+- (0.5) `rows[].tobe`가 객체가 아님 · `tobe.actions` 누락/배열 아님(빈 To-Be는 `[]`로 명시) · `tobe.actions[].seq` 중복
 - `l5.nodeCode`가 `framework.categories`에 없음
 - `rows`가 리스트가 아님
 - row의 `taskId` 누락 / 파일 내 중복 / **파일 간 중복**

@@ -1045,3 +1045,254 @@ def test_plain_fanout_branch_node_folds_back_through_the_real_import(client: Tes
     out_of_first = sorted((label_of[e["dst"]], e["kind"]) for e in row["relations"]["edges"]
                           if label_of[e["src"]] == "작업지시 확인")
     assert out_of_first == [("양식 준비", "seq"), ("표준기 선정", "seq")]
+
+
+# ── relations.nodes — L5 캔버스의 이름 있는 판단·끝 노드 ──
+
+def _declared_nodes_doc(l5_code: str) -> dict:
+    """시작 직후 판단(D0)·판단 연달음(D1→D2)·끝 2개·되돌아가기(D2→a)를 한 캔버스에 담는다."""
+    p = l5_code.lower()
+    doc = _ext_delivery(l5_code, [f"{p}-a", f"{p}-b", f"{p}-c"])
+    doc["relations"] = {
+        "nodes": [
+            {"id": "D0", "kind": "decision", "label": "착수 여부"},
+            {"id": "D1", "kind": "decision", "label": "산출물 도출 지연 여부"},
+            {"id": "D2", "kind": "decision", "label": "재검토 여부"},
+            {"id": "END1", "kind": "end", "label": "산출물 고객사 전달 완료"},
+            {"id": "END2", "kind": "end", "label": "중단"},
+        ],
+        "edges": [
+            {"src": "D0", "dst": f"{p}-a", "kind": "branch", "label": "예"},
+            {"src": "D0", "dst": "END2", "kind": "branch", "label": "아니오"},
+            {"src": f"{p}-a", "dst": "D1", "kind": "seq"},
+            {"src": "D1", "dst": "D2", "kind": "branch", "label": "예"},
+            {"src": "D1", "dst": f"{p}-b", "kind": "branch", "label": "아니오"},
+            {"src": "D2", "dst": f"{p}-c", "kind": "branch", "label": "아니오"},
+            {"src": "D2", "dst": f"{p}-a", "kind": "loop", "label": "예"},
+            {"src": f"{p}-b", "dst": "END1", "kind": "seq"},
+            {"src": f"{p}-c", "dst": "END1", "kind": "seq"},
+        ],
+    }
+    return doc
+
+
+def test_linkage_declared_decisions_and_ends_land_by_name(client: TestClient) -> None:
+    from app.schemas import NodeIn
+    from app.subprocess import DEFAULT_TARGET_HANDLE, validate_framework_canvas
+
+    doc = _declared_nodes_doc("DN01")
+    assert _post(client, _files(doc), apply=True).status_code == 200
+    nodes, edges = _linkage_graph("DN01")
+    by_id = {n.id: n for n in nodes}
+    decisions = sorted(n.title for n in nodes if n.node_type == "decision")
+    # 판단 이름 보존 + 선언 판단 뒤에 자동 ◇("… 결과")가 끼지 않는다
+    assert decisions == ["산출물 도출 지연 여부", "재검토 여부", "착수 여부"]
+    ends = [n for n in nodes if n.node_type == "end"]
+    assert sorted(n.title for n in ends) == ["산출물 고객사 전달 완료", "중단"]
+    # 대표 끝 = 저장 규칙과 같은 첫 끝(sort_order 최소) 하나
+    assert [n.title for n in ends if n.is_primary_end] == ["산출물 고객사 전달 완료"]
+    assert len(nodes) == 3 + 3 + 2 and len(edges) == 9
+    pairs = {(by_id[e.source_node_id].title, by_id[e.target_node_id].title) for e in edges}
+    assert ("산출물 도출 지연 여부", "재검토 여부") in pairs       # 판단 → 판단
+    assert not any(dst == "착수 여부" for _, dst in pairs)          # 시작 직후 판단 — 들어오는 연결 없음
+    for e in edges:
+        src, dst = by_id[e.source_node_id], by_id[e.target_node_id]
+        if src.node_type == "decision":
+            assert (e.source_handle or "").startswith("s-")
+        if dst.node_type != "subprocess":
+            assert e.target_handle == DEFAULT_TARGET_HANDLE
+    # 되돌아가기(loop)는 랭크에서 빠진다 — 판단이 되돌아가는 대상보다 오른쪽
+    loop_src = next(n for n in nodes if n.title == "재검토 여부")
+    loop_dst = next(n for n in nodes if n.title == "dn01-a 활동")
+    assert loop_src.pos_x > loop_dst.pos_x
+    # 저장 검증을 그대로 통과한다(끝 이름 유니크·대표 1개)
+    validate_framework_canvas([NodeIn.model_validate(n, from_attributes=True) for n in nodes])
+
+    # 재전달 — 중복 없음, 사람이 고친 이름·위치는 그대로
+    canvas_draft = _draft_id(client, _canvas_map_id(client, "DN01"))
+
+    async def _rename() -> None:
+        from sqlalchemy import select
+
+        from app.db import SessionLocal
+        from app.models import Node
+
+        async with SessionLocal() as session:
+            node = await session.scalar(select(Node).where(
+                Node.version_id == canvas_draft, Node.title == "재검토 여부"))
+            node.title, node.pos_x = "사람이 고친 이름", 9999.0
+            await session.commit()
+
+    _run(_rename())
+    assert _post(client, _files(doc), apply=True).status_code == 200
+    nodes2, edges2 = _linkage_graph("DN01")
+    assert len(nodes2) == 8 and len(edges2) == 9
+    renamed = next(n for n in nodes2 if n.title == "사람이 고친 이름")
+    assert renamed.pos_x == 9999.0
+
+
+def test_linkage_plain_fanout_still_gets_auto_branch_next_to_declared_nodes(client: TestClient) -> None:
+    doc = _ext_delivery("DN02", ["dn02-a", "dn02-b", "dn02-c"])
+    doc["relations"] = {
+        "nodes": [{"id": "D1", "kind": "decision"}, {"id": "E1", "kind": "end"}, {"id": "E2", "kind": "end"}],
+        "edges": [
+            {"src": "dn02-a", "dst": "D1", "kind": "seq"},
+            {"src": "D1", "dst": "dn02-b", "kind": "branch", "label": "예"},
+            {"src": "D1", "dst": "E1", "kind": "branch", "label": "아니오"},
+            # 선언 노드 없는 팬아웃 — 지금처럼 자동 ◇
+            {"src": "dn02-b", "dst": "dn02-c", "kind": "branch", "label": "통과"},
+            {"src": "dn02-b", "dst": "E2", "kind": "branch", "label": "반려"},
+        ],
+    }
+    resp = _post(client, _files(doc), apply=True)
+    assert resp.status_code == 200
+    issues = [i["message"] for f in resp.json()["files"] for i in f["issues"]]
+    assert any("decision 'D1' has no label" in m for m in issues)
+    nodes, edges = _linkage_graph("DN02")
+    assert sorted(n.title for n in nodes if n.node_type == "decision") == ["dn02-a 활동 결과", "dn02-b 활동 결과"]
+    # 이름 없는 끝 둘 — 끝 이름은 유니크해야 저장되므로 둘째에 번호
+    assert sorted(n.title for n in nodes if n.node_type == "end") == ["", "End 2"]
+    assert any("renamed to 'End 2'" in r["detail"] for r in resp.json()["rows"])
+    assert len(edges) == 6  # 5 + (dn02-b → 자동 ◇)
+
+
+# ── rows[].tobe — 게시본(As-Is) 위 To-Be 작업본 ──
+
+def _tobe_doc(l5_code: str) -> dict:
+    p = l5_code.lower()
+    doc = _ext_delivery(l5_code, [f"{p}-a", f"{p}-b"])
+    doc["rows"][0]["tobe"] = {
+        "label": "To-Be · A 보조",
+        "actions": [
+            {"seq": 1, "label": "일정 모니터링 Agent", "name": "상세", "kind": "action", "actor": "ai"},
+            {"seq": 2, "label": "지연 여부 최종 판단", "name": "원문", "kind": "action", "actor": "human"},
+        ],
+    }
+    doc["rows"][1]["tobe"] = {"label": "To-Be · 삭제", "actions": []}
+    return doc
+
+
+def _versions(code: str) -> list:
+    """맵의 버전 전부(id 순) — 각 버전에 nodes/edges를 실어 돌려준다."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.db import SessionLocal
+    from app.models import MapVersion
+
+    map_id = _map_row(code).id
+
+    async def _load():
+        async with SessionLocal() as session:
+            return list((await session.scalars(
+                select(MapVersion).where(MapVersion.map_id == map_id)
+                .options(selectinload(MapVersion.nodes), selectinload(MapVersion.edges))
+                .order_by(MapVersion.id))).all())
+
+    return _run(_load())
+
+
+def _in_progress(code: str) -> list:
+    return [v for v in _versions(code) if v.status not in ("published", "expired")]
+
+
+def _row_details(resp, code: str) -> list[tuple[str, str]]:
+    return [(r["action"], r["detail"]) for r in resp.json()["rows"] if r["code"] == code]
+
+
+def test_tobe_lands_on_the_untouched_trailing_draft(client: TestClient) -> None:
+    from app.schemas import NodeIn
+    from app.subprocess import validate_process
+
+    doc = _tobe_doc("TB01")
+    # dry-run — 리포트엔 뜨고 아무것도 남지 않는다
+    dry = _post(client, _files(doc))
+    assert dry.status_code == 200
+    assert ("tobe", "to-be draft written") in _row_details(dry, "tb01-a")
+    assert _map_row("tb01-a") is None
+
+    resp = _post(client, _files(doc), apply=True)
+    assert ("tobe", "to-be draft written") in _row_details(resp, "tb01-a")
+    versions = _versions("tb01-a")
+    assert [(v.status, v.label) for v in versions] == [("published", "IV web"), ("draft", "To-Be · A 보조")]
+    published, draft = versions
+    assert draft.checked_out_by is None
+    assert [n.title for n in sorted(published.nodes, key=lambda n: n.sort_order)] == ["Start", "단일 활동", ""]
+    acts = {n.title: n for n in draft.nodes}
+    assert set(acts) == {"Start", "일정 모니터링 Agent", "지연 여부 최종 판단", ""}
+    # actor 착지 — ai는 역할 "AI Agent"(카탈로그에 없으면 자유값 그대로)+violet, human은 비움
+    assert (acts["일정 모니터링 Agent"].assignee_role, acts["일정 모니터링 Agent"].color) == ("AI Agent", "#9183c0")
+    assert not acts["지연 여부 최종 판단"].assignee_role and not acts["지연 여부 최종 판단"].department
+    assert len(draft.edges) == 3  # Start → 1 → 2 → End
+    # 시작·끝은 게시본과 같은 계보 — 비교 화면이 짝을 짓는다
+    roots = {(n.node_type, n.source_node_id) for n in published.nodes if n.node_type in ("start", "end")}
+    assert roots == {(n.node_type, n.source_node_id) for n in draft.nodes if n.node_type in ("start", "end")}
+
+    # 빈 To-Be(삭제 재설계) — 시작→끝만, L6 저장 검증 통과
+    empty = _versions("tb01-b")[-1]
+    assert (empty.status, empty.label) == ("draft", "To-Be · 삭제")
+    assert sorted(n.node_type for n in empty.nodes) == ["end", "start"] and len(empty.edges) == 1
+    validate_process([NodeIn.model_validate(n, from_attributes=True) for n in empty.nodes])
+
+    # 같은 파일 재전달 — 조용히 그대로(경고·새 버전 없음)
+    again = _post(client, _files(doc), apply=True)
+    assert [d for d in _row_details(again, "tb01-a") if "to-be" in d[1]] == [], _row_details(again, "tb01-a")
+    assert ("unchanged", "") in _row_details(again, "tb01-a")
+    assert [v.id for v in _versions("tb01-a")] == [published.id, draft.id]
+
+
+def test_tobe_only_change_keeps_the_existing_tobe_draft_and_warns(client: TestClient) -> None:
+    doc = _tobe_doc("TB02")
+    assert _post(client, _files(doc), apply=True).status_code == 200
+    doc["rows"][0]["tobe"]["actions"][0]["label"] = "이름을 바꾼 Agent"
+    resp = _post(client, _files(doc), apply=True)
+    assert ("warning", "to-be skipped - draft in use") in _row_details(resp, "tb02-a")
+    assert ("unchanged", "") in _row_details(resp, "tb02-a")  # tobe는 As-Is 변경 감지 밖
+    versions = _versions("tb02-a")
+    assert len(versions) == 2
+    assert "일정 모니터링 Agent" in {n.title for n in versions[-1].nodes}
+
+
+def test_as_is_change_publishes_a_new_version_and_keeps_the_tobe_draft(client: TestClient) -> None:
+    doc = _tobe_doc("TB03")
+    assert _post(client, _files(doc), apply=True).status_code == 200
+    tobe_draft = _versions("tb03-a")[-1]
+    doc["rows"][0]["actions"][0]["label"] = "바뀐 As-Is 활동"
+    resp = _post(client, _files(doc), apply=True)
+    assert ("updated", "graph") in _row_details(resp, "tb03-a")
+    versions = _versions("tb03-a")
+    by_status = {v.status: v for v in versions}
+    assert sorted(v.status for v in versions) == ["draft", "expired", "published"]
+    assert "바뀐 As-Is 활동" in {n.title for n in by_status["published"].nodes}
+    # To-Be draft는 재사용되지 않고 그대로 남는다 — 진행 중 버전은 여전히 1개
+    assert by_status["draft"].id == tobe_draft.id and by_status["draft"].label == "To-Be · A 보조"
+    assert "일정 모니터링 Agent" in {n.title for n in by_status["draft"].nodes}
+    assert len(_in_progress("tb03-a")) == 1
+
+
+def test_tobe_is_skipped_when_the_draft_is_in_use(client: TestClient) -> None:
+    doc = _tobe_doc("TB04")
+    tobe_a = doc["rows"][0].pop("tobe")
+    tobe_b = doc["rows"][1].pop("tobe")
+    assert _post(client, _files(doc), apply=True).status_code == 200
+    draft_a, draft_b = _versions("tb04-a")[-1], _versions("tb04-b")[-1]
+
+    async def _touch() -> None:
+        from sqlalchemy import select
+
+        from app.db import SessionLocal
+        from app.models import MapVersion, Node
+
+        async with SessionLocal() as session:
+            (await session.get(MapVersion, draft_a.id)).checked_out_by = "someone"  # 점유
+            node = await session.scalar(select(Node).where(Node.version_id == draft_b.id, Node.node_type == "start"))
+            node.pos_x = (node.pos_x or 0) + 40  # 점유 없이 좌표만 고친 draft
+            await session.commit()
+
+    _run(_touch())
+    doc["rows"][0]["tobe"], doc["rows"][1]["tobe"] = tobe_a, tobe_b
+    resp = _post(client, _files(doc), apply=True)
+    for code, draft in (("tb04-a", draft_a), ("tb04-b", draft_b)):
+        assert ("warning", "to-be skipped - draft in use") in _row_details(resp, code)
+        progress = _in_progress(code)
+        assert [(v.id, v.label) for v in progress] == [(draft.id, "IV web")]  # 하나 더 만들지 않는다

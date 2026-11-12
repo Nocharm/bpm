@@ -122,6 +122,9 @@ export function buildInterviewJsonPromptText(target?: InterviewPromptTarget): st
     "[최상위 relations, L6 사이의 흐름]",
     "- entry.taskId는 처음 시작하는 L6. triggerType은 manual, timer, message, condition.",
     "- edges의 src/dst는 rows의 taskId. 다른 L5의 L6를 가리키려면 externalTasks에 refId, l5.nodeCode, l6를 선언하고 그 refId를 쓰세요.",
+    // relations.nodes — 어댑터 _LINKAGE_NODE_KEYS(id·kind·label). 선택 키라 골격에는 싣지 않는다
+    // 중괄호를 쓰지 않는다 — 붙여 넣는 쪽(과 테스트)이 첫 중괄호부터를 골격 JSON으로 읽는다
+    "- L6 사이에 이름 있는 판단이나 끝이 있으면 relations.nodes 배열에 선언하세요. 원소의 키는 id, kind(decision 또는 end), label(노드 이름)이고, edges의 src/dst에 그 id를 씁니다. id는 taskId, refId와 겹치면 안 되고, 끝에서 나가는 연결은 적지 않습니다. 없으면 nodes를 생략하세요.",
     "",
     "[골격, 값만 바꿔 채우세요]",
     JSON.stringify(buildSkeleton(target), null, 2),

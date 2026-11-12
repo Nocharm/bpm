@@ -74,6 +74,15 @@ describe("external AI prompt for interview JSON 0.5", () => {
     expect(actionKeys.sort()).toEqual(adapterActionKeys.filter((key) => !omittedFromSkeleton.includes(key)).sort());
   });
 
+  it("explains relations.nodes for named decisions and ends, and never mentions the import-only tobe key", () => {
+    const text = buildInterviewJsonPromptText();
+    const ruleLine = text.split("\n").find((line) => line.includes("relations.nodes")) ?? "";
+    for (const part of ["id, kind(decision 또는 end), label", "taskId, refId와 겹치면 안 되고"]) expect(ruleLine).toContain(part);
+    expect(ruleLine).not.toContain("—");
+    expect(text).not.toContain("tobe");
+    expect(text).not.toContain("actor");
+  });
+
   it("works without a target", () => {
     expect(buildInterviewJsonPromptText()).toContain("nodeCode");
   });

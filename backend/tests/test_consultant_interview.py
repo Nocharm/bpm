@@ -809,3 +809,165 @@ def test_category_admins_are_normalized_and_ignored_on_external_lineage() -> Non
     assert by_code["19-01"].admins == ["facility.lead"]
     assert by_code["19-01-02-01-01"].admins == []
     assert any("admins ignored - external lineage" in i.message for i in res.issues)
+
+
+# ── relations.nodes(L5 판단·끝 선언) · rows[].tobe(To-Be 작업본) — 0.5 선택 키 ──
+
+def _two_row_doc() -> dict:
+    data = _interview()
+    data["rows"].append({
+        "taskId": "task-second-0002", "unitId": "unit-second-0002", "l6": "교정 수행",
+        "owner": None, "ownerRole": None, "approvers": [], "department": None,
+        "fields": {}, "actions": [_action(1, "수행")], "relations": {"edges": []},
+    })
+    data["relations"] = {"edges": []}
+    return data
+
+
+def _messages(res, severity: str) -> list[str]:
+    return [i.message for i in res.issues if i.severity == severity]
+
+
+def test_declared_linkage_nodes_resolve_as_edge_endpoints() -> None:
+    data = _two_row_doc()
+    data["relations"] = {
+        "nodes": [
+            {"id": "D1", "kind": "decision", "label": "지연 여부"},
+            {"id": "END1", "kind": "end", "label": "전달 완료"},
+            {"id": "UNUSED", "kind": "end", "label": "안 쓰임"},
+        ],
+        "edges": [
+            _edge("task-prep-0001", "D1"),
+            _edge("D1", "task-second-0002", kind="branch", label="예"),
+            _edge("D1", "END1", kind="branch", label="아니오"),
+            _edge("task-second-0002", "END1"),
+            _edge("END1", "task-prep-0001"),  # 끝에서 나가는 연결 — 제외
+            _edge("D1", "D1"),                # 선언 노드 자기 연결 — 제외
+        ],
+    }
+    res = convert_interview(data)
+    assert not res.has_error(), _messages(res, "error")
+    linkage = res.linkage
+    assert [(n.id, n.kind, n.label) for n in linkage.nodes.values()] == [
+        ("D1", "decision", "지연 여부"), ("END1", "end", "전달 완료")]
+    assert [(e.source, e.target) for e in linkage.edges] == [
+        ("task-prep-0001", "D1"), ("D1", "task-second-0002"), ("D1", "END1"), ("task-second-0002", "END1")]
+    # 선언 노드는 외부 L6가 아니다 — 플레이스홀더로 새지 않는다
+    assert not linkage.external_refs and not any(e.external for e in linkage.edges)
+    warnings = _messages(res, "warning")
+    assert any("'UNUSED' not referenced" in m for m in warnings)
+    assert any("edge leaves end node 'END1'" in m for m in warnings)
+    assert any("self edge on declared node 'D1'" in m for m in warnings)
+
+
+def test_declared_linkage_node_validation_errors() -> None:
+    data = _two_row_doc()
+    data["externalTasks"] = [{"refId": "EXT1", "l5": {"nodeCode": "19-01-06-01-02"}, "l6": "외부"}]
+    data["relations"] = {
+        "nodes": [
+            {"id": "task-prep-0001", "kind": "decision", "label": "taskId 충돌"},
+            {"id": "EXT1", "kind": "decision", "label": "refId 충돌"},
+            {"id": "D1", "kind": "decision", "label": "첫째"},
+            {"id": "D1", "kind": "end", "label": "중복"},
+            {"id": "S1", "kind": "start", "label": "시작은 불가"},
+            {"kind": "end"},
+        ],
+        "edges": [_edge("task-prep-0001", "EXT1")],
+    }
+    errors = _messages(convert_interview(data), "error")
+    assert any("collides with rows[].taskId" in m for m in errors)
+    assert any("collides with externalTasks[].refId" in m for m in errors)
+    assert any("duplicate node id 'D1'" in m for m in errors)
+    assert any("node kind 'start' is not decision|end" in m for m in errors)
+    assert any("id missing" in m for m in errors)
+
+
+def test_declared_decision_without_label_falls_back_to_auto_name() -> None:
+    data = _two_row_doc()
+    data["relations"] = {
+        "nodes": [{"id": "D1", "kind": "decision"}, {"id": "D0", "kind": "decision", "label": ""}],
+        "edges": [
+            _edge("D0", "task-prep-0001"),          # 시작 직후 판단 — 선행 L6 없음
+            _edge("task-prep-0001", "D1"),
+            _edge("D1", "task-second-0002"),
+            _edge("D1", "ghost-task"),               # 미지 참조 — 기존 ③(미선언 외부)으로
+        ],
+    }
+    res = convert_interview(data)
+    assert not res.has_error()
+    assert res.linkage.nodes["D1"].label == "교정 준비 결과"
+    assert res.linkage.nodes["D0"].label == "D0"
+    assert sum("has no label" in m for m in _messages(res, "warning")) == 2
+    assert list(res.linkage.external_refs) == ["ghost-task"]
+    assert res.linkage.external_refs["ghost-task"].declared is False
+
+
+def test_files_without_new_keys_convert_the_same() -> None:
+    res = convert_interview(_interview())
+    assert res.linkage.nodes == {}
+    assert all(m.tobe is None for m in res.maps)
+    assert all(n.assignee_role == "" for m in res.maps for n in m.nodes)
+
+
+def test_tobe_actions_carry_actor_and_default_to_a_seq_chain() -> None:
+    from scripts.consultant_interview import TOBE_AI_COLOR, TOBE_AI_ROLE
+
+    data = _interview()
+    data["rows"][0]["tobe"] = {
+        "label": "To-Be · A 보조",
+        "actions": [
+            _action(2, "지연 여부 최종 판단", actor="human"),
+            _action(1, "일정 모니터링 Agent", actor="ai"),
+            _action(3, "결과 통보", actor="robot"),
+        ],
+    }
+    res = convert_interview(data)
+    assert not res.has_error(), _messages(res, "error")
+    tobe = res.maps[0].tobe
+    assert tobe.label == "To-Be · A 보조"
+    assert [(n.name, n.assignee_role, n.color) for n in tobe.nodes] == [
+        ("일정 모니터링 Agent", TOBE_AI_ROLE, TOBE_AI_COLOR),
+        ("지연 여부 최종 판단", "", ""),
+        ("결과 통보", "", ""),
+    ]
+    assert [(e.source, e.target) for e in tobe.edges] == [("a01", "a02"), ("a02", "a03")]
+    warnings = [(i.path, i.message) for i in res.issues if i.severity == "warning" and ".tobe" in i.path]
+    # relations 생략은 정상(경고 없음) — 모르는 actor만 알린다
+    assert len(warnings) == 1 and "unknown actor 'robot'" in warnings[0][1]
+
+
+def test_tobe_relations_use_the_same_flow_rules_as_as_is() -> None:
+    data = _interview()
+    data["rows"][0]["tobe"] = {
+        "label": "To-Be",
+        "actions": [_action(1, "접수"), _action(2, "검토"), _action(3, "보완")],
+        "relations": {"edges": [
+            _edge(1, 2), _edge(2, 3, kind="branch", gateway="exclusive", label="보완 필요"),
+            _edge(3, 2, kind="loop"),
+        ]},
+    }
+    tobe = convert_interview(data).maps[0].tobe
+    assert next(n for n in tobe.nodes if n.code == "a02").type == "decision"  # 택일 분기 승격
+    assert ("a03", "a02", "loop") in [(e.source, e.target, e.kind) for e in tobe.edges]
+
+
+def test_tobe_validation() -> None:
+    data = _interview()
+    data["rows"][0]["tobe"] = {"label": "x" * 120, "actions": []}
+    res = convert_interview(data)
+    assert not res.has_error()
+    assert len(res.maps[0].tobe.label) == 100 and res.maps[0].tobe.nodes == []
+    assert any("label truncated to 100" in m for m in _messages(res, "warning"))
+
+    data["rows"][0]["tobe"] = {"label": "To-Be"}  # actions 누락 — 빈 To-Be(삭제)와 구분해 error
+    assert any("tobe.actions missing" in m for m in _messages(convert_interview(data), "error"))
+    data["rows"][0]["tobe"] = "nope"
+    assert any("tobe is not an object" in m for m in _messages(convert_interview(data), "error"))
+
+
+def test_actor_is_only_valid_inside_tobe() -> None:
+    data = _interview()
+    data["rows"][0]["actions"][0]["actor"] = "ai"
+    res = convert_interview(data)
+    assert any("unknown key 'actor'" in m for m in _messages(res, "warning"))
+    assert res.maps[0].nodes[0].assignee_role == "" and res.maps[0].nodes[0].color == ""

@@ -294,6 +294,34 @@ describe("buildL5PreviewGraph", () => {
     expect(titleOf("ghost-code")).toBe("ghost-code"); // 미선언 끝점은 코드 그대로
   });
 
+  it("places declared decisions and ends as their own nodes without an auto branch", () => {
+    const graph = buildL5PreviewGraph({
+      rows: rows(["t1", "준비"], ["t2", "수행"]),
+      relations: {
+        nodes: [
+          { id: "D1", kind: "decision", label: "지연 여부" },
+          { id: "END1", kind: "end", label: "전달 완료" },
+        ],
+        edges: [
+          { src: "t1", dst: "D1" },
+          { src: "D1", dst: "t2", kind: "branch", label: "예" },
+          { src: "D1", dst: "END1", kind: "branch", label: "아니오" },
+          { src: "t2", dst: "END1" },
+          { src: "END1", dst: "t1" }, // 끝에서 나가는 연결은 버린다
+        ],
+      },
+    });
+
+    const typeOf = (id: string) => graph?.nodes.find((n) => n.id === id)?.node_type;
+    expect(typeOf("D1")).toBe("decision");
+    expect(graph?.nodes.find((n) => n.id === "D1")?.title).toBe("지연 여부");
+    expect(typeOf("END1")).toBe("end");
+    expect(graph?.nodes.find((n) => n.id === "END1")?.title).toBe("전달 완료");
+    // 선언 판단에서 바로 갈라지고("… 결과" 분기 노드 없음), 선언 끝이 있어 미리보기용 End는 세우지 않는다
+    expect(graph?.nodes.map((n) => n.id)).toEqual(["__start__", "t1", "t2", "D1", "END1"]);
+    expect(pairsOf(graph!)).toEqual(["t1>D1", "t2>END1", "D1>t2", "D1>END1", "__start__>t1"]);
+  });
+
   it("inserts a branch node before an exclusive fan-out but not a parallel one", () => {
     const fanout = buildL5PreviewGraph({
       rows: rows(["t1", "준비"], ["t2", "수행"], ["t3", "보고"]),

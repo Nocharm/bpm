@@ -62,11 +62,77 @@
 - **`rows[].keep: true`** — AI 캠페인 조립기가 "유지" 카드에만 다는 내부 표시. 임포터는 그 맵의 그래프·지정값·거버넌스를 쓰지 않고 `unchanged (kept)`로 보고한다. 없는 맵에 달면 그 행은 error로 빠진다. 외부 AI 프롬프트에는 싣지 않는다.
 - **기존 체계 보호.** 파일이 이미 있는 분류를 다른 상위 아래로 옮기거나(`framework.categories[].parent` 불일치) 다른 L5 소속 맵의 taskId를 `rows`에 담으면 그 파일 전체가 error로 빠진다. 분류 이름만 다르면 warning과 함께 파일의 이름이 적용된다.
 
+## 2-4. L5 판단·끝 노드 — `relations.nodes[]` (선택, 2026-11-12)
+
+최상위 `relations`에 이름 있는 판단(◇)과 끝 노드를 선언하고, 엣지가 그 `id`를 끝점으로 가리킨다. 없으면 종전과 같다.
+
+```jsonc
+"relations": {
+  "entry": { "taskId": "...", "label": "..." },
+  "nodes": [
+    { "id": "D1",   "kind": "decision", "label": "산출물 도출 지연 여부" },
+    { "id": "END1", "kind": "end",      "label": "산출물 고객사 전달 완료" }
+  ],
+  "edges": [
+    { "src": "task-01", "dst": "D1", "kind": "seq" },
+    { "src": "D1", "dst": "task-02", "kind": "branch", "label": "예" },
+    { "src": "D1", "dst": "END1", "kind": "branch", "label": "아니오" }
+  ]
+}
+```
+
+| 규칙 | 내용 |
+|---|---|
+| `id` | 필수. 파일 안 유일하고 `rows[].taskId`·`externalTasks[].refId`와 겹치면 안 된다(error). 재전달 때 **같은 id를 유지**해야 같은 노드로 본다(계보 키가 L5 코드 + id에서 나온다) |
+| `kind` | `decision` 또는 `end`만(그 외 error). 시작 노드는 연계 캔버스에 둘 수 없다 |
+| `label` | 노드 이름(200자). 판단의 이름이 비면 warning과 함께 자동 이름(`{선행 L6 이름} 결과`, 선행 L6가 없으면 id)을 쓴다. 끝은 비워도 된다 |
+| 선언 판단의 출구 | 그 노드에서 바로 나간다. 자동 분기 노드를 또 끼우지 않고, 병렬 표시도 하지 않는다(판단은 택일) |
+| 허용 | 들어오는 연결이 없는 판단(시작 바로 뒤 판단), 판단 → 판단 |
+| 제외(warning) | 끝 노드에서 나가는 연결, 선언 노드의 자기 연결, 엣지가 가리키지 않는 선언 |
+| 선언 노드 없는 팬아웃 | 한 L6에서 갈래가 둘 이상 나가면 지금처럼 `{L6 이름} 결과` 분기 노드를 자동으로 세운다 |
+| 끝 이름 | 캔버스 안에서 유니크해야 저장된다. 겹치면 뒤 노드에 번호를 붙이고 warning(`end node '…' renamed to '… 2'`) |
+| 대표 끝 | 저장 규칙 그대로다. 캔버스에 끝이 없었으면 **선언 순서 첫 끝**이 대표, 이미 끝이 있으면 건드리지 않는다 |
+| 재전달 | 추가만. 이미 있는 노드의 이름·위치는 바꾸지 않는다 |
+| `kind: loop` 엣지 | 되돌아가는 연결로 보고 배치 순서(랭크)에서 뺀다 |
+
+`relations.entry.taskId`는 여전히 rows만 가리킨다. 이 키는 최상위 `relations` 전용이다(`rows[].relations`에 쓰면 모르는 키 warning).
+
+## 2-5. To-Be 작업본 — `rows[].tobe` (선택, **임포트 전용**, 2026-11-12)
+
+같은 L6 맵에서 As-Is는 게시본, To-Be는 그 위 진행 중 버전(Draft)이 된다. 비교 화면의 버전 선택으로 둘을 나란히 보고, 결재·게시하면 To-Be를 채택한 것이 된다. 외부 AI 프롬프트와 AI 캠페인은 이 키를 내보내지 않는다.
+
+```jsonc
+"rows": [{
+  "taskId": "...", "l6": "...", "actions": [ ... ],
+  "tobe": {
+    "label": "To-Be · A 보조",          // 버전 라벨, 100자 이하(넘으면 잘림 + warning)
+    "actions": [                          // rows[].actions와 같은 스키마 + actor
+      { "seq": 1, "label": "일정 모니터링 Agent", "name": "<상세>", "kind": "action", "actor": "ai" },
+      { "seq": 2, "label": "지연 여부 최종 판단", "name": "<원문>", "kind": "action", "actor": "human" }
+    ],
+    "relations": { "edges": [ ... ] }     // rows[].relations와 같은 스키마. 생략하면 seq 순 일렬 연결
+  }
+}]
+```
+
+| 규칙 | 내용 |
+|---|---|
+| `actions` | 필수(누락·배열 아님은 error). 빈 배열 `[]`은 시작 → 끝만 있는 그래프(업무 삭제 재설계) |
+| `actor` | `ai` 또는 `human`(생략 = human, 모르는 값은 warning 후 human). **tobe 안에서만 유효**하다. `ai`는 노드 역할 `AI Agent`(역할 목록에 있으면 정식 표기, 없으면 그대로 저장) + 보라(violet) 색, `human`은 역할·부서를 비운다 |
+| 그래프 | As-Is와 같은 규칙으로 만든다(택일 분기 승격·자동 분기 노드·출력 규칙·자동 배치) |
+| 착지 | 그 행의 As-Is 처리(게시 + 편집용 Draft)가 끝난 뒤, Draft가 **손대지 않은 상태**(점유자 없음 + 게시본과 전 필드 동일)일 때만 그래프와 라벨을 To-Be로 바꾼다. 리포트 `to-be draft written`. 진행 중 버전이 없으면 새로 만든다 |
+| 건너뜀 | 누가 쓰는 Draft·결재 중 버전이 있으면 건드리지 않고 warning `to-be skipped - draft in use`. 진행 중 버전을 하나 더 만들지 않는다 |
+| 재전달 | 같은 To-Be가 이미 깔려 있으면 조용히 넘어간다. **tobe만 바뀐 재전달은 기존 To-Be Draft를 덮지 않고** 같은 warning을 낸다(바꾸려면 Draft를 지우거나 화면에서 고친다). As-Is가 바뀌면 새 게시본이 되고 To-Be Draft는 그대로 남는다 |
+| 변경 감지 | tobe는 As-Is 변경 감지(`unchanged`/`updated`)에 들어가지 않는다 |
+| 제약 | To-Be가 있는 맵은 그동안 As-Is용 새 Draft를 열 수 없다(맵당 진행 중 버전 1개) |
+| 비교 짝짓기 | To-Be 활동은 게시본 활동과 재전달 규칙(같은 `label` 먼저, 다음 같은 자리·같은 유형)으로 짝을 지어 비교 화면에 변경·추가·삭제로 보인다 |
+| 그 밖 | `keep: true` 행의 tobe는 무시(warning). tobe 엣지의 `quote`는 노트로 싣지 않는다 |
+
 ## 3. 엣지 끝점 해석
 
-`relations.edges[].src|dst`는 **① `rows[].taskId` → ② `externalTasks[].refId` → ③ 둘 다 아님** 순으로 해석한다.
+`relations.edges[].src|dst`는 **① `rows[].taskId` → ② `externalTasks[].refId` → ②′ `relations.nodes[].id` → ③ 어느 것도 아님** 순으로 해석한다. ①과 ②′는 이 L5 캔버스의 노드다.
 
-- ①+① 홈 L6 사이 엣지(0.4와 동일) · ①+② 외부 엣지(선언) · ①+③ **외부 엣지(미선언)** — 그 문자열을 "실 taskId를 아는 외부 L6"로 보고 플레이스홀더로 두되 경고를 낸다(가급적 ②로 선언할 것) · ②/③+②/③ 제외(이 L5의 캔버스 것이 아님).
+- ①+① 홈 L6 사이 엣지(0.4와 동일) · ①/②′+②′ 선언 판단·끝과의 엣지 · ①/②′+② 외부 엣지(선언) · ①/②′+③ **외부 엣지(미선언)** — 그 문자열을 "실 taskId를 아는 외부 L6"로 보고 플레이스홀더로 두되 경고를 낸다(가급적 ②로 선언할 것) · ②/③+②/③ 제외(이 L5의 캔버스 것이 아님).
 - `relations.entry.taskId`는 rows만. 외부에서 들어오는 시작은 `ext → 첫 L6` 엣지로 표현한다.
 
 ### 출구당 연결 1개 (2026-10-01)
@@ -90,6 +156,9 @@
 | `externalTasks[i].l5` | — | `nodeCode`가 파일 categories에 없음(기존 체계로 해석) |
 | `externalTasks[i].l6` | — | 200자 초과 절단 |
 | `framework.categories[]` 외부 항목 | — | 부모가 파일에 없음(제외, 기존 체계로 해석) |
+| `relations.nodes` | 리스트가 아님 | — |
+| `relations.nodes[i]` | 객체 아님 · `id` 누락/중복/`taskId`·`refId` 충돌 · `kind`가 decision·end가 아님 | 미지 키 · 엣지에서 참조되지 않음(무시) · 판단 `label` 누락(자동 이름) · 200자 초과 절단 |
+| `rows[i].tobe` | 객체 아님 · `actions` 누락/배열 아님 · 활동 `seq` 중복 | 미지 키 · `label` 누락(`To-Be`)/100자 초과 절단 · 모르는 `actor` · keep 행 |
 
 ## 6. BPM 처리 요약
 

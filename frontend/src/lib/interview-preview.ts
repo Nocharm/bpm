@@ -269,7 +269,21 @@ const L5_FANOUT_MIN = 2;
 interface L5Node {
   code: string;
   name: string;
-  type: "subprocess" | "decision";
+  type: "subprocess" | "decision" | "end";
+}
+
+/** relations.nodes[] → id별 선언 판단·끝 노드(백엔드 _parse_linkage_nodes의 표시용 근사 — 검증은 어댑터 몫). */
+function readDeclaredNodes(raw: unknown): Map<string, L5Node> {
+  const out = new Map<string, L5Node>();
+  if (!Array.isArray(raw)) return out;
+  for (const item of raw) {
+    const node = asRecord(item);
+    const id = node ? asText(node.id) : "";
+    const kind = node ? asText(node.kind) : "";
+    if (!node || !id || out.has(id) || (kind !== "decision" && kind !== "end")) continue;
+    out.set(id, { code: id, name: asText(node.label) || (kind === "decision" ? id : ""), type: kind });
+  }
+  return out;
 }
 
 /** externalTasks[] → refId별 표시 제목. 미선언 끝점은 호출부가 코드 자체를 제목으로 쓴다 (spec 2026-09-07 §6.3). */
@@ -303,7 +317,10 @@ export function buildL5PreviewGraph(file: unknown): VersionGraph | null {
   if (byCode.size === 0) return null;
   const externalTitles = readExternalTitles(rec.externalTasks);
 
-  // 엣지 수집 — 끝점이 rows에 없으면 외부 L6 노드로 세운다(선언 제목 또는 원문 코드)
+  const declaredNodes = readDeclaredNodes(asRecord(rec.relations)?.nodes);
+  const rowCodes = new Set(byCode.keys());
+
+  // 엣지 수집 — 끝점이 rows에 없으면 선언 판단·끝 노드, 그것도 아니면 외부 L6 노드로 세운다(선언 제목 또는 원문 코드)
   const rawEdges = asRecord(rec.relations)?.edges;
   const edges: PreviewEdge[] = [];
   const gatewayOf = new Map<string, string>();
@@ -311,7 +328,7 @@ export function buildL5PreviewGraph(file: unknown): VersionGraph | null {
   const ensure = (code: string): L5Node => {
     const known = byCode.get(code);
     if (known) return known;
-    const made: L5Node = { code, name: externalTitles.get(code) ?? code, type: "subprocess" };
+    const made: L5Node = declaredNodes.get(code) ?? { code, name: externalTitles.get(code) ?? code, type: "subprocess" };
     byCode.set(code, made);
     return made;
   };
@@ -320,6 +337,9 @@ export function buildL5PreviewGraph(file: unknown): VersionGraph | null {
     const from = edge ? asText(edge.src) : "";
     const to = edge ? asText(edge.dst) : "";
     if (!edge || !from || !to) continue;
+    // 끝에서 나가는 연결·선언 노드의 자기 연결은 어댑터가 버린다
+    const fromDeclared = rowCodes.has(from) ? undefined : declaredNodes.get(from);
+    if (fromDeclared && (fromDeclared.type === "end" || from === to)) continue;
     const pair = `${from}>${to}`;
     if (seen.has(pair)) continue;
     seen.add(pair);
@@ -350,7 +370,8 @@ export function buildL5PreviewGraph(file: unknown): VersionGraph | null {
   for (const node of ordered) {
     const outs = outgoing.get(node.code) ?? [];
     const allParallel = outs.length > 0 && outs.every((e) => gatewayOf.get(`${e.from}>${e.to}`) === "parallel");
-    if (outs.length < L5_FANOUT_MIN || allParallel) {
+    // 선언 판단은 이미 분기 노드 — 자동 분기 노드를 또 세우지 않는다
+    if (outs.length < L5_FANOUT_MIN || allParallel || node.type === "decision") {
       flow.push(...outs);
       continue;
     }
@@ -378,13 +399,16 @@ export function buildL5PreviewGraph(file: unknown): VersionGraph | null {
   const hasOut = new Set(flow.map((e) => e.from));
   const full: PreviewEdge[] = [...flow];
   const heads = withBranches.filter((node) => !hasIn.has(node.code));
-  const tails = withBranches.filter((node) => !hasOut.has(node.code));
+  // 선언 끝 노드는 그 자체가 끝이다 — 미리보기용 End로 잇지 않고, 다른 꼬리가 없으면 미리보기 End도 세우지 않는다
+  const hasDeclaredEnd = withBranches.some((node) => node.type === "end");
+  const tails = withBranches.filter((node) => !hasOut.has(node.code) && node.type !== "end");
+  const endSources = tails.length > 0 || hasDeclaredEnd ? tails : withBranches.slice(-1);
   for (const node of heads.length > 0 ? heads : withBranches.slice(0, 1)) full.push({ from: PREVIEW_START_ID, to: node.code, label: "", kind: "seq" });
-  for (const node of tails.length > 0 ? tails : withBranches.slice(-1)) full.push({ from: node.code, to: PREVIEW_END_ID, label: "", kind: "seq" });
+  for (const node of endSources) full.push({ from: node.code, to: PREVIEW_END_ID, label: "", kind: "seq" });
   const nodes: FlatNode[] = [
     makeFlatNode(PREVIEW_START_ID, "Start", "start", "", 0),
     ...withBranches.map((node, i) => makeFlatNode(node.code, node.name, node.type, "", i + 1)),
-    makeFlatNode(PREVIEW_END_ID, "", "end", "", withBranches.length + 1),
+    ...(endSources.length > 0 ? [makeFlatNode(PREVIEW_END_ID, "", "end", "", withBranches.length + 1)] : []),
   ];
   return {
     nodes,

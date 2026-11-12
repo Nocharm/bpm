@@ -21,6 +21,7 @@ from scripts.consultant_canonical import (
     CanonicalError,
     CanonicalMap,
     CanonicalNode,
+    CanonicalTobe,
     parse_categories,
 )
 
@@ -33,8 +34,15 @@ _TOP_KEYS = {
 # 외부 AI 프롬프트에는 싣지 않는다(시스템 리뷰 P0-3)
 _ROW_KEYS = {
     "taskId", "unitId", "l6", "owner", "ownerRole", "approvers",
-    "department", "fields", "actions", "relations", "keep",
+    "department", "fields", "actions", "relations", "keep", "tobe",
 }
+# To-Be 작업본(임포트 전용 선택 키) — 게시본(As-Is) 위 진행 중 버전에 싣는 재설계 흐름. AI 캠페인·외부 프롬프트는 내보내지 않는다
+_TOBE_KEYS = {"label", "actions", "relations"}
+_KNOWN_ACTORS = {"ai", "human"}
+# actor=ai 활동의 착지 — 역할은 카탈로그 커밋(commit_role)을 거치고, 색은 에디터 COLOR_PRESETS의 violet과 수동 동기
+TOBE_AI_ROLE = "AI Agent"
+TOBE_AI_COLOR = "#9183c0"
+TOBE_LABEL_MAX = 100  # MapVersion.label은 String(100)
 # done_criteria/done_criterial 이중 수용 — 손타이핑 전달 스펙의 표기 모호(실파일 대조 전)
 _FIELD_KEYS = {
     "start_condition", "input_data", "output_data", "done_criteria", "done_criterial",
@@ -55,6 +63,10 @@ _EXCEPTION_KEYS = {"name", "rule", "evidence"}
 _KNOWN_KINDS = {"action", "handoff", "decision"}
 # 0.4 흐름 그래프 — L5(rows 사이)와 L6(actions 사이)가 같은 엣지 스키마를 쓴다
 _RELATIONS_KEYS = {"entry", "edges"}
+# 최상위(L5) relations만 — 이름 있는 판단·끝 노드 선언(선택 키). 엣지 끝점이 id로 가리킨다
+_L5_RELATIONS_KEYS = _RELATIONS_KEYS | {"nodes"}
+_LINKAGE_NODE_KEYS = {"id", "kind", "label"}
+_KNOWN_LINKAGE_NODE_KINDS = {"decision", "end"}
 _ENTRY_KEYS = {"taskId", "triggerType", "label", "quote"}
 _EDGE_KEYS = {"src", "dst", "kind", "gateway", "condition", "label", "quote"}
 _KNOWN_EDGE_KINDS = {"seq", "branch", "loop", "bypass"}
@@ -150,6 +162,15 @@ class InterviewLinkageEdge:
 
 
 @dataclass
+class InterviewLinkageNode:
+    """L5 연계 캔버스에 직접 놓는 판단·끝 노드 — relations.nodes[] 선언. 엣지 끝점이 id로 가리킨다."""
+
+    id: str
+    kind: str  # "decision" | "end"
+    label: str = ""
+
+
+@dataclass
 class InterviewLinkage:
     """L6 사이 흐름 — L5 연계 캔버스 시드/보강 원료 (design 2026-09-01 §3).
 
@@ -163,6 +184,8 @@ class InterviewLinkage:
     params: dict[str, tuple[str, str]] = field(default_factory=dict)
     # code → ExternalRef, 엣지에 처음 등장한 순서. 선언 ref와 미선언 코드가 함께 들어간다 (spec 2026-09-07 §5)
     external_refs: dict[str, ExternalRef] = field(default_factory=dict)
+    # id → 선언 판단·끝 노드, 선언 순서. 엣지가 가리키지 않은 선언은 싣지 않는다
+    nodes: dict[str, InterviewLinkageNode] = field(default_factory=dict)
 
 
 @dataclass
@@ -300,9 +323,12 @@ def _flow_note_text(kind: str, gateway: str, condition: str, quote: str) -> str:
 
 
 def _build_nodes(
-    actions: list, path: str, issues: list[AdapterIssue]
+    actions: list, path: str, issues: list[AdapterIssue], *, tobe: bool = False
 ) -> tuple[list[CanonicalNode], dict[int, CanonicalNode]]:
-    """actions[] → 노드 + seq 색인. 0.4에서 seq는 relations 참조키라 중복이면 파일 error."""
+    """actions[] → 노드 + seq 색인. 0.4에서 seq는 relations 참조키라 중복이면 파일 error.
+
+    tobe=True(rows[].tobe.actions)면 actor 키를 받는다 — ai는 역할 "AI Agent"+violet, human은 역할을 비운다.
+    """
     nodes: list[CanonicalNode] = []
     by_seq: dict[int, CanonicalNode] = {}
     for j, action in enumerate(actions):
@@ -310,7 +336,12 @@ def _build_nodes(
         if not isinstance(action, dict):
             issues.append(AdapterIssue("error", apath, "action is not an object (액션 형식이 잘못돼 제외됨)"))
             continue
-        _warn_unknown_keys(action, _ACTION_KEYS, apath, issues)
+        _warn_unknown_keys(action, _ACTION_KEYS | {"actor"} if tobe else _ACTION_KEYS, apath, issues)
+        actor = _clean(action.get("actor")) if tobe else ""
+        if actor and actor not in _KNOWN_ACTORS:
+            issues.append(AdapterIssue(
+                "warning", apath, f"unknown actor {actor!r} - treated as human (알 수 없는 수행 주체 - 사람으로 처리)"))
+            actor = ""
         seq_raw = action.get("seq")
         seq = seq_raw if isinstance(seq_raw, int) and not isinstance(seq_raw, bool) else None
         if seq is None:
@@ -363,7 +394,11 @@ def _build_nodes(
                 _clean(action.get("system")), 200, apath, "system_fallback", issues
             ),
             description=format_node_description(action),
-            color=EXCEPTION_VARIANT_COLOR if variant == "exception" else "",
+            color=(
+                TOBE_AI_COLOR if actor == "ai"
+                else EXCEPTION_VARIANT_COLOR if variant == "exception" else ""
+            ),
+            assignee_role=TOBE_AI_ROLE if actor == "ai" else "",
         )
         by_seq[seq] = node
         nodes.append(node)
@@ -565,6 +600,86 @@ def _build_flow_edges(
     return edges, notes, loop_nodes
 
 
+def _insert_branch_nodes(nodes: list[CanonicalNode], branch_nodes: list[tuple[str, CanonicalNode]]) -> None:
+    """합성 분기 노드를 앵커(자기 반복·팬아웃 노드) 바로 뒤에 끼운다 — 레이아웃 폴백 순서 보존. 제자리 변형."""
+    for anchor_code, branch_node in branch_nodes:
+        idx = next((i for i, n in enumerate(nodes) if n.code == anchor_code), len(nodes) - 1)
+        nodes.insert(idx + 1, branch_node)
+
+
+def _build_tobe(raw: object, path: str, issues: list[AdapterIssue]) -> CanonicalTobe | None:
+    """rows[].tobe → To-Be 작업본 원료. 없으면 None.
+
+    actions는 rows[].actions와 같은 스키마 + actor. 빈 배열은 "활동 없음(삭제 재설계)"이라는 뜻이 있어
+    누락·형식 오류와 구분한다 — 누락은 error. relations를 생략하면 경고 없이 seq 순 일렬 연결.
+    엣지 quote는 노트로 싣지 않는다(노트는 As-Is 맵 스코프).
+    """
+    if raw is None:
+        return None
+    tpath = f"{path}.tobe"
+    if not isinstance(raw, dict):
+        issues.append(AdapterIssue("error", tpath, "tobe is not an object (To-Be 형식 오류)"))
+        return None
+    _warn_unknown_keys(raw, _TOBE_KEYS, tpath, issues)
+    actions = raw.get("actions")
+    if not isinstance(actions, list):
+        issues.append(AdapterIssue(
+            "error", tpath, "tobe.actions missing or not a list - use [] for an empty To-Be (To-Be 활동 목록 누락 - 비우려면 빈 배열)"))
+        return None
+    label = _clean(raw.get("label"))
+    if not label:
+        label = "To-Be"
+        issues.append(AdapterIssue("warning", tpath, f"label missing - fallback {label!r} (버전 라벨 누락 - 기본 라벨 사용)"))
+    label = _truncate(label, TOBE_LABEL_MAX, tpath, "label", issues)
+    nodes, by_seq = _build_nodes(actions, tpath, issues, tobe=True)
+    if raw.get("relations") is None:
+        edges: list[CanonicalEdge] = _seq_chain(by_seq)
+    else:
+        edges, _, branch_nodes = _build_flow_edges(raw.get("relations"), by_seq, tpath, issues)
+        _insert_branch_nodes(nodes, branch_nodes)
+    return CanonicalTobe(label=label, nodes=nodes, edges=edges)
+
+
+def _parse_linkage_nodes(
+    raw: object, row_codes: set[str], ref_ids: set[str], issues: list[AdapterIssue]
+) -> dict[str, InterviewLinkageNode]:
+    """relations.nodes[] → id별 선언 판단·끝 노드. error: id 누락/중복/taskId·refId 충돌, kind가 decision|end 아님."""
+    declared: dict[str, InterviewLinkageNode] = {}
+    if raw is None:
+        return declared
+    if not isinstance(raw, list):
+        issues.append(AdapterIssue("error", "relations.nodes", "nodes is not a list (노드 목록 형식 오류)"))
+        return declared
+    for i, item in enumerate(raw):
+        path = f"relations.nodes[{i}]"
+        if not isinstance(item, dict):
+            issues.append(AdapterIssue("error", path, "node is not an object (노드 형식 오류)"))
+            continue
+        _warn_unknown_keys(item, _LINKAGE_NODE_KEYS, path, issues)
+        node_id = _clean(item.get("id"))
+        if not node_id:
+            issues.append(AdapterIssue("error", path, "id missing (노드 id 없음)"))
+            continue
+        if node_id in declared:
+            issues.append(AdapterIssue("error", path, f"duplicate node id {node_id!r} (노드 id 중복)"))
+            continue
+        if node_id in row_codes:
+            issues.append(AdapterIssue("error", path, f"node id {node_id!r} collides with rows[].taskId (행 taskId와 충돌)"))
+            continue
+        if node_id in ref_ids:
+            issues.append(AdapterIssue(
+                "error", path, f"node id {node_id!r} collides with externalTasks[].refId (외부 업무 refId와 충돌)"))
+            continue
+        kind = _clean(item.get("kind"))
+        if kind not in _KNOWN_LINKAGE_NODE_KINDS:
+            issues.append(AdapterIssue(
+                "error", path, f"node kind {kind!r} is not decision|end (노드 유형은 decision 또는 end만 가능)"))
+            continue
+        declared[node_id] = InterviewLinkageNode(
+            id=node_id, kind=kind, label=_truncate(_clean(item.get("label")), 200, path, "label", issues))
+    return declared
+
+
 def _parse_external_tasks(
     raw: object,
     row_codes: set[str],
@@ -637,7 +752,10 @@ def _build_linkage(
     if not isinstance(relations, dict):
         issues.append(AdapterIssue("warning", "relations", "relations is not an object - ignored (연결 정보 형식 오류 - 무시됨)"))
         return linkage, notes
-    _warn_unknown_keys(relations, _RELATIONS_KEYS, "relations", issues)
+    _warn_unknown_keys(relations, _L5_RELATIONS_KEYS, "relations", issues)
+    # 끝점 해석 순서: rows.taskId → externalTasks.refId → relations.nodes.id → 미선언 외부(원문 코드)
+    declared_nodes = _parse_linkage_nodes(relations.get("nodes"), set(row_names), set(declared), issues)
+    local = set(row_names) | set(declared_nodes)  # 이 L5 캔버스 소속 끝점 — 그 밖은 외부 L6
 
     entry = relations.get("entry")
     if entry is not None and not isinstance(entry, dict):
@@ -669,6 +787,7 @@ def _build_linkage(
         issues.append(AdapterIssue("warning", "relations.edges", "edges is not a list - ignored (연결 목록 형식 오류 - 무시됨)"))
         raw_edges = None
     seen: set[tuple[str, str]] = set()
+    referenced_nodes: set[str] = set()
     for k, raw in enumerate(raw_edges or []):
         epath = f"relations.edges[{k}]"
         if not isinstance(raw, dict):
@@ -682,11 +801,21 @@ def _build_linkage(
             issues.append(AdapterIssue(
                 "warning", epath, "edge missing src/dst - dropped (연결 시작/끝 taskId 없음 - 제외됨)"))
             continue
-        src_known, dst_known = src in row_names, dst in row_names
+        src_known, dst_known = src in local, dst in local
         if not src_known and not dst_known:
             issues.append(AdapterIssue(
                 "warning", epath, f"edge references unknown taskId {src!r}→{dst!r} - dropped (존재하지 않는 taskId를 가리켜 제외됨)"))
             continue
+        src_decl = declared_nodes.get(src)
+        if src_decl is not None and src_decl.kind == "end":
+            issues.append(AdapterIssue(
+                "warning", epath, f"edge leaves end node {src!r} - dropped (끝 노드에서 나가는 연결 - 제외됨)"))
+            continue
+        if src_decl is not None and src == dst:
+            issues.append(AdapterIssue(
+                "warning", epath, f"self edge on declared node {src!r} - dropped (선언 노드의 자기 연결 - 제외됨)"))
+            continue
+        referenced_nodes.update(end_id for end_id in (src, dst) if end_id in declared_nodes)
         external = not (src_known and dst_known)
         if external:
             ext = dst if src_known else src
@@ -734,7 +863,11 @@ def _build_linkage(
         quote = _clean(raw.get("quote"))
         if quote:
             # 외부 끝점은 rows에 없다 — 이름 힌트(없으면 코드)로 제목을 만든다(예전엔 KeyError로 dry-run이 죽었다)
-            names = {**row_names, **{c: (r.name or c) for c, r in linkage.external_refs.items()}}
+            names = {
+                **row_names,
+                **{c: (r.name or c) for c, r in linkage.external_refs.items()},
+                **{c: (n.label or c) for c, n in declared_nodes.items()},
+            }
             notes.append(InterviewNote(
                 kind="flow",
                 title=f"{names[src]} → {names[dst]}"[:300],
@@ -746,6 +879,22 @@ def _build_linkage(
             issues.append(AdapterIssue(
                 "warning", "externalTasks",
                 f"refId {ref_id!r} not referenced by any edge - ignored (엣지에서 참조되지 않은 외부 업무 - 무시됨)"))
+    # 선언 순서를 지킨다 — 캔버스 sort_order가 되고, 끝이 여럿이면 첫 끝이 대표가 된다
+    linkage.nodes = {nid: node for nid, node in declared_nodes.items() if nid in referenced_nodes}
+    for node_id in declared_nodes:
+        if node_id not in linkage.nodes:
+            issues.append(AdapterIssue(
+                "warning", "relations.nodes",
+                f"node {node_id!r} not referenced by any edge - ignored (엣지에서 참조되지 않은 노드 - 무시됨)"))
+    # 이름 없는 판단 — 기존 자동 이름("{선행 L6} 결과")으로 폴백. 선행 L6가 없으면(시작 직후 판단) id를 쓴다
+    for node in linkage.nodes.values():
+        if node.kind != "decision" or node.label:
+            continue
+        feeder = next((e.source for e in linkage.edges if e.target == node.id and e.source in row_names), None)
+        node.label = f"{row_names[feeder]} {FANOUT_BRANCH_SUFFIX}"[:200] if feeder else node.id[:200]
+        issues.append(AdapterIssue(
+            "warning", "relations.nodes",
+            f"decision {node.id!r} has no label - fallback {node.label!r} (판단 이름 누락 - 자동 이름 사용)"))
     return linkage, notes
 
 
@@ -902,10 +1051,11 @@ def convert_interview(raw: object) -> AdapterResult:
             issues.append(AdapterIssue("warning", path, "no actions - map will only have Start/End (액션이 없어 Start/End만 생성)"))
         nodes, by_seq = _build_nodes(actions, path, issues)
         edges, flow_notes, loop_nodes = _build_flow_edges(row.get("relations"), by_seq, path, issues)
-        for anchor_code, branch_node in loop_nodes:
-            # 합성 분기 노드는 앵커(자기 반복 노드) 바로 뒤에 — 레이아웃 폴백 순서 보존
-            idx = next((i for i, n in enumerate(nodes) if n.code == anchor_code), len(nodes) - 1)
-            nodes.insert(idx + 1, branch_node)
+        _insert_branch_nodes(nodes, loop_nodes)
+        tobe = _build_tobe(row.get("tobe"), path, issues)
+        if tobe is not None and row.get("keep") is True:
+            issues.append(AdapterIssue("warning", f"{path}.tobe", "tobe ignored - keep row (유지 행의 To-Be는 무시됨)"))
+            tobe = None
 
         params: dict[str, str] = {
             "input": _join_multi(fields.get("input_data")),
@@ -963,6 +1113,7 @@ def convert_interview(raw: object) -> AdapterResult:
                 params=params,
                 nodes=nodes,
                 edges=edges,
+                tobe=tobe,
             ))
         except (ValidationError, ValueError) as exc:
             issues.append(AdapterIssue("error", path, f"canonical validation failed: {exc} (변환 결과 검증 실패)"))

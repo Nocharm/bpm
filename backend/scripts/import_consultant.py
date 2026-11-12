@@ -27,7 +27,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.app_settings import OTHER_SYSTEM, commit_system, get_systems
+from app.app_settings import OTHER_SYSTEM, commit_role, commit_system, get_assignee_roles, get_systems
 from app.clock import now as now_kst
 from app.duration import normalize_duration
 from app.lineage import external_lineage_key, external_ref_lineage_key, make_node_id, normalize_task_name
@@ -370,10 +370,13 @@ def _match_prior_lineage(nodes: list[Node], prior_nodes: list[Node], map_code: s
 def build_graph_rows(
     cmap: CanonicalMap,
     link_targets: dict[str, tuple[int, CanonicalParams]],
+    *,
+    connect_empty: bool = False,
 ) -> tuple[list[Node], list[Edge], list[str]]:
     """canonical 맵 1건 → Node/Edge ORM 행(version_id는 호출자가 채움) + 경고.
 
     IO 자동 연결은 하지 않는다 — 호출자가 직전 게시본 승계(`_inherit_prior_fields`) 뒤에 `link_matching_io`를 돈다.
+    connect_empty=True(To-Be 작업본)면 활동이 없을 때 시작→끝을 잇는다 — As-Is 빈 행은 종전대로 잇지 않는다.
     """
     warnings: list[str] = []
     ordered = sorted(cmap.nodes, key=lambda n: (n.seq, n.code))
@@ -399,6 +402,8 @@ def build_graph_rows(
         flow.append((start, code, "", "seq"))
     for code in tails:
         flow.append((code, end, "", "seq"))
+    if connect_empty and not l7_codes:
+        flow.append((start, end, "", "seq"))
 
     # 연계 노드 — after_node 뒤(생략 시 최대 seq 노드 뒤) 병렬 분기, End 배선 불변 (design §4)
     link_rows: list[tuple[str, str, int, CanonicalParams]] = []  # (가상코드, 부착원점, map_id, params)
@@ -464,6 +469,8 @@ def build_graph_rows(
             department=cn.department, assignee=cn.assignee, system=cn.system,
             input=cn.input, output=cn.output, output_forms=cn.output_forms,
             system_fallback=cn.system_fallback,
+            # To-Be의 actor=ai만 값이 온다 — As-Is는 종전처럼 미설정(None)으로 두고 승계가 채운다
+            assignee_role=cn.assignee_role or None,
             pos_x=x, pos_y=y, sort_order=i,
             parallel_outputs=_parallel_outputs(cn.code),
         ))
@@ -875,6 +882,10 @@ def _normalize_systems(
             raw = node.system
             node.system, node.system_fallback = commit_system(raw, systems, node.system_fallback)
             _report_system_change(report, cmap.code, raw, node.system, seen)
+        for node in (cmap.tobe.nodes if cmap.tobe is not None else []):
+            raw = node.system
+            node.system, node.system_fallback = commit_system(raw, systems, node.system_fallback)
+            _report_system_change(report, cmap.code, raw, node.system, seen)
 
 
 def _normalize_params(cmap: CanonicalMap, report: ImportReport) -> CanonicalParams:
@@ -1078,6 +1089,89 @@ async def _ensure_trailing_draft(
     await clone_graph(session, source, draft.id)
     record_version_event(session, draft.id, "created", actor)
     return True
+
+
+def _tobe_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
+    """To-Be 전달 필드 서명 — `_graph_signature` + 노드 역할(actor=ai 착지). 이미 깔린 To-Be와 같은지 볼 때만 쓴다."""
+    return (
+        _graph_signature(nodes, edges),
+        sorted((n.source_node_id or n.id, n.assignee_role or "") for n in nodes),
+    )
+
+
+async def _land_tobe(
+    session: AsyncSession,
+    found_map: ProcessMap,
+    cmap: CanonicalMap,
+    *,
+    roles: list[dict[str, object]],
+    actor: str,
+    report: ImportReport,
+) -> None:
+    """To-Be 작업본을 게시본 위 진행 중 버전에 싣는다 — As-Is 처리(게시 + trailing draft)가 끝난 뒤 호출.
+
+    맵당 진행 중 버전은 1개다. 손대지 않은 draft(점유자 없음 + 게시본과 전 필드 동일)만 To-Be로 바꾸고,
+    그 밖(사람이 쓰는 draft·결재 중·이미 다른 To-Be)은 건드리지 않고 경고한다. 진행 중 버전이 없으면 새로 깐다.
+    To-Be가 깔린 draft는 게시본과 달라 다음 재전달의 `_take_reusable_draft`가 재사용하지 않는다(As-Is가 바뀌어도 남는다).
+    계보는 As-Is 재전달과 같은 규칙(`_match_prior_lineage`: 같은 제목 → 같은 자리)으로 게시본에 맞춰 비교 화면이 짝을 짓는다.
+    """
+    tobe = cmap.tobe
+    published = await _latest_published(session, found_map.id)
+    if tobe is None or published is None:
+        return
+    pub_nodes = list((await session.scalars(select(Node).where(Node.version_id == published.id))).all())
+    pub_edges = list((await session.scalars(select(Edge).where(Edge.version_id == published.id))).all())
+    pub_groups = list((await session.scalars(select(Group).where(Group.version_id == published.id))).all())
+
+    for node in tobe.nodes:
+        node.assignee_role = commit_role(node.assignee_role, roles) if node.assignee_role else ""
+    nodes, edges, warnings = build_graph_rows(
+        cmap.model_copy(update={"nodes": tobe.nodes, "edges": tobe.edges, "links": []}), {}, connect_empty=True)
+    for w in warnings:
+        report.add(cmap.code, "warning", w)
+    _match_prior_lineage(nodes, pub_nodes, cmap.code)
+    link_matching_io(nodes, edges, cmap.code)
+
+    in_progress = list((await session.scalars(
+        select(MapVersion)
+        .where(MapVersion.map_id == found_map.id, MapVersion.status.in_(workflow.IN_PROGRESS_STATUSES))
+        .options(
+            selectinload(MapVersion.nodes),
+            selectinload(MapVersion.edges),
+            selectinload(MapVersion.groups),
+        )
+        .order_by(MapVersion.id.desc())
+        .execution_options(populate_existing=True)
+    )).all())
+    if not in_progress:
+        draft = MapVersion(map_id=found_map.id, label=tobe.label, status="draft")
+        session.add(draft)
+        await session.flush()
+        record_version_event(session, draft.id, "created", actor)
+    else:
+        draft = in_progress[0]
+        current_nodes, current_edges = list(draft.nodes), list(draft.edges)
+        untouched = (
+            len(in_progress) == 1
+            and draft.status == workflow.DRAFT
+            and draft.checked_out_by is None
+            and _draft_untouched_signature(current_nodes, current_edges, list(draft.groups))
+            == _draft_untouched_signature(pub_nodes, pub_edges, pub_groups)
+        )
+        if not untouched:
+            # 이미 같은 To-Be가 깔려 있으면 조용히 넘어간다 — 무변경 재전달마다 경고가 쌓이지 않게
+            if draft.label != tobe.label or _tobe_signature(current_nodes, current_edges) != _tobe_signature(nodes, edges):
+                report.add(cmap.code, "warning", "to-be skipped - draft in use")
+            return
+        await session.execute(delete(Edge).where(Edge.version_id == draft.id))
+        await session.execute(delete(Node).where(Node.version_id == draft.id))
+        await session.execute(delete(Group).where(Group.version_id == draft.id))
+        session.expire(draft, ["nodes", "edges", "groups"])
+        draft.label = tobe.label
+    for row in (*nodes, *edges):
+        row.version_id = draft.id
+        session.add(row)
+    report.add(cmap.code, "tobe", "to-be draft written")
 
 
 async def _review_governance(
@@ -1365,6 +1459,8 @@ async def import_delivery(
     delivery_codes = {m.code for m in maps}
     # 시스템 카탈로그 정규화 — 에디터 commitSystem과 같은 규칙을 전달분에 적용(dry-run·apply 공통)
     _normalize_systems(maps, await get_systems(session), report)
+    # To-Be actor=ai 역할("AI Agent") 커밋용 — To-Be가 하나도 없으면 읽지 않는다
+    roles = await get_assignee_roles(session) if any(m.tobe is not None for m in maps) else []
 
     # owner/approver/admin 유령(직원 미등재) 감지용 — 조회는 한 번만. 승인 정족수는 안 막힌다(load_active_approvers가
     # 미등재를 이미 걸러냄) — 관측용 경고.
@@ -1679,6 +1775,10 @@ async def import_delivery(
             if await _ensure_trailing_draft(session, found_map.id, version, actor, label):
                 report.drafts += 1
 
+        # To-Be 작업본 — As-Is 변경 감지 밖이라 As-Is가 그대로여도 착지를 본다
+        if cmap.tobe is not None:
+            await _land_tobe(session, found_map, cmap, roles=roles, actor=actor, report=report)
+
         if is_new:
             report.add(
                 cmap.code, "created",
@@ -1863,8 +1963,17 @@ def _linkage_param(value: str) -> str:
     return text if text and NUMERIC_RE.fullmatch(text) else ""
 
 
+def linkage_node_lineage(category_code: str, node_id: str) -> str:
+    """선언 판단·끝 노드(relations.nodes)의 계보 키 — 결정적이라 재전달이 같은 노드를 다시 찾는다.
+
+    자동 분기 노드 키(`__branch__{L6}`)와 겹치지 않게 접두를 따로 둔다.
+    """
+    return make_node_id(category_code, f"__node__{node_id}")
+
+
 def expand_linkage_branches(
-    edges: list["InterviewLinkageEdge"], present: set[str]
+    edges: list["InterviewLinkageEdge"], present: set[str],
+    declared_decisions: frozenset[str] | set[str] = frozenset(),
 ) -> tuple[list[tuple[str, str, str, str | None]], dict[str, str], set[tuple[str, str]]]:
     """분기 팬아웃 앞에 분기 노드를 끼운다 — B→{A,C} ⇒ B→◇, ◇→A, ◇→C.
 
@@ -1878,6 +1987,9 @@ def expand_linkage_branches(
     켠다. 확정 게이트 6(subprocess.find_output_rule_violations)은 parallel_outputs가 1차 판정이고,
     전부-parallel gateway는 속성 없는 구 데이터용 레거시 도출이다(출력 규칙 2026-10-01).
 
+    declared_decisions(relations.nodes로 선언한 판단)에서 나가는 엣지는 그 노드에서 바로 나간다 — 이미
+    분기 노드라 ◇를 또 끼우지 않고 병렬 표시도 하지 않는다(판단은 택일, 출력 규칙 밖).
+
     반환: (재작성 엣지 [(src,dst,label,gateway)], 분기노드키→원본 src code, 되돌아가는 쌍).
     되돌아가는 쌍은 재작성 좌표계 기준 — 안 넘기면 사이클이 되살아나 랭크가 무너진다.
     """
@@ -1890,6 +2002,12 @@ def expand_linkage_branches(
     branch_of: dict[str, str] = {}
     back: set[tuple[str, str]] = set()
     for src, group in out_by_src.items():
+        if src in declared_decisions:
+            for edge in group:
+                rewritten.append((src, edge.target, edge.label, None))
+                if edge.kind == "loop":
+                    back.add((src, edge.target))
+            continue
         # 자기 반복(A→A)은 단독이어도 분기 노드를 강제 — 셀프 엣지를 캔버스에 직접 그리면
         # 렌더가 퇴화하므로 ◇→자기 루프백으로 풀어낸다 (사용자 결정 2026-09-02).
         has_self = any(e.target == src for e in group)
@@ -2066,8 +2184,17 @@ async def apply_interview_linkage(
         # 외부 L6 — DB에 있으면 실 노드(외부 L6 색·배지), 없으면 플레이스홀더 (spec 2026-09-06 §8)
         external_present = {c for c in ext_refs if c in map_ids}
         external_missing = [c for c in ext_refs if c not in map_ids]
-        present_codes = placed_codes | external_present | set(external_missing)
-        flow, branch_of, back_pairs = expand_linkage_branches(linkage.edges, present_codes)
+        # 선언 판단·끝 노드(relations.nodes) — 계보 키로 재사용하고 없는 것만 얹는다(이름·위치는 안 바꾼다)
+        decl = linkage.nodes
+        decl_key = {nid: linkage_node_lineage(code, nid) for nid in decl}
+        decl_wanted = set(decl_key.values())
+        declared_nodes: dict[str, Node] = {
+            n.source_node_id: n for n in existing
+            if n.source_node_id in decl_wanted and n.node_type in ("decision", "end")
+        }
+        declared_decisions = {nid for nid, dn in decl.items() if dn.kind == "decision"}
+        present_codes = placed_codes | external_present | set(external_missing) | set(decl)
+        flow, branch_of, back_pairs = expand_linkage_branches(linkage.edges, present_codes, declared_decisions)
 
         # 계보 키로 이미 잡히는 외부 노드는 linked_map_id가 방금 확보됐을 때만 채운다 — 이미
         # 연결돼 있으면(정상이든 수동 재연결이든) 손대지 않는다(F1: append는 계보 노드가 없을 때만).
@@ -2106,6 +2233,7 @@ async def apply_interview_linkage(
             key for key in branch_of
             if make_node_id(code, key) not in branch_nodes
         ]
+        missing_declared = [nid for nid in decl if decl_key[nid] not in declared_nodes]
         # 캔버스를 **처음 만들 때만** 흐름대로 가로 자동정렬한다. 보강은 기존 노드를 못 옮기므로
         # (추가만·이동 없음 규약) 격자로 아래에 붙인다. 외부/플레이스홀더 신규 노드도 known에
         # 끼운다 — 빠지면 격자 폴백으로 밀려나 자동정렬된 1랭크와 y가 겹친다(controller ruling F2).
@@ -2116,6 +2244,7 @@ async def apply_interview_linkage(
             layout_nodes += [LayoutNode(id=c, node_type="subprocess") for c in missing_external]
             layout_nodes += [LayoutNode(id=c, node_type="subprocess") for c in missing_placeholders]
             layout_nodes += [LayoutNode(id=k, node_type="decision") for k in missing_branches]
+            layout_nodes += [LayoutNode(id=nid, node_type=decl[nid].kind) for nid in missing_declared]
             known = {n.id for n in layout_nodes}
             scoped_flow = [(a, b, text) for a, b, text, _ in flow if a in known and b in known]
             ranks = layout_flow(
@@ -2128,14 +2257,19 @@ async def apply_interview_linkage(
                 labeled=[(a, b, text) for a, b, text in scoped_flow if text],
             )
             # 분기 출구를 위/아래/옆으로 벌린다 — 한 줄이면 어디서 갈라지는지 선만으론 안 읽힌다
-            rows, fan_sides = plan_branch_fanout(
-                scoped_flow, {k: v for k, v in branch_of.items() if k in known}, ranks)
+            # 선언 판단도 자동 분기 노드와 같은 방식으로 출구를 벌린다(값은 쓰이지 않고 키만 분기 노드 집합)
+            fan_nodes = {k: v for k, v in branch_of.items() if k in known}
+            fan_nodes.update({nid: nid for nid in missing_declared if nid in declared_decisions})
+            rows, fan_sides = plan_branch_fanout(scoped_flow, fan_nodes, ranks)
             for node in layout_nodes:
                 node.y += rows.get(node.id, 0) * LINKAGE_ROW_STEP
             placed = {n.id: (n.x, n.y) for n in layout_nodes}
         added = 0
         grid = grid_positions(
-            0, len(missing) + len(missing_external) + len(missing_placeholders) + len(missing_branches), base_y
+            0,
+            len(missing) + len(missing_external) + len(missing_placeholders) + len(missing_branches)
+            + len(missing_declared),
+            base_y,
         )
         for i, (c, (px, py)) in enumerate(zip(missing, grid)):
             annual, fte = linkage.params.get(c, ("", ""))
@@ -2205,6 +2339,34 @@ async def apply_interview_linkage(
             session.add(node)
             branch_nodes[lineage] = node
             added += 1
+        offset += len(missing_branches)
+        # 끝 이름은 캔버스 안에서 유니크해야 저장된다(validate_framework_canvas) — 겹치면 번호를 붙인다.
+        # 대표 끝은 저장 규칙과 같게: 캔버스에 끝이 없었으면 첫 끝(sort_order 최소)이 대표, 있었으면 건드리지 않는다
+        end_titles = {n.title or "" for n in existing if n.node_type == "end"}
+        has_end = bool(end_titles)
+        for j, nid in enumerate(missing_declared):
+            dn = decl[nid]
+            x, y = placed.get(nid, grid[offset + j])
+            title = dn.label
+            if dn.kind == "end":
+                suffix = 1
+                while title in end_titles:
+                    suffix += 1
+                    title = f"{dn.label or 'End'} {suffix}"
+                if title != dn.label:
+                    report.add(code, "warning", f"end node '{dn.label}' renamed to '{title}' - end names must be unique")
+                end_titles.add(title)
+            node = Node(
+                id=uuid.uuid4().hex, version_id=draft.id, source_node_id=decl_key[nid],
+                title=title, node_type=dn.kind,
+                is_primary_end=dn.kind == "end" and not has_end,
+                pos_x=x, pos_y=y, sort_order=next_sort + offset + j,
+            )
+            if dn.kind == "end":
+                has_end = True
+            session.add(node)
+            declared_nodes[decl_key[nid]] = node
+            added += 1
 
         # 기존 SP 노드의 annual_count/fte — 비어 있으면 채우고, 값이 있으면 덮지 않는다
         # (사용자 직접 편집 필드. 맵 sp_gmp를 엔진이 안 건드리는 것과 같은 관례)
@@ -2235,6 +2397,8 @@ async def apply_interview_linkage(
         def _node_of(key: str) -> Node | None:
             if key in branch_of:
                 return branch_nodes.get(make_node_id(code, key))
+            if key in decl_key:
+                return declared_nodes.get(decl_key[key])
             if key not in linkage.map_codes:
                 # 이 L5 소유가 아닌 코드는 계보 키로 우선 찾고(linked_map_id 상태 무관 — 수동
                 # 재연결로 다른 맵에 물려도 엣지가 계속 붙는다), 계보 키가 아직 없는 노드는
