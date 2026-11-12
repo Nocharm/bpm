@@ -3,7 +3,7 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
-## 2026-11-12 — AI 첨부 형식에 xlsm·csv 추가
+## 2026-11-12 — AI 첨부 형식에 xlsm·csv 추가 (v1.9.0, main 머지)
 
 - 첨부 허용 목록이 한 상수(`parsing.ALLOWED_EXTENSIONS`)라 AI 컨설턴트 인터뷰·L5 캠페인 첨부·지식기반 업로드 세 곳이 함께 넓어진다. xlsm은 xlsx 파서로 셀 값만 읽고(매크로는 읽지 않음), csv는 텍스트로 읽되 Excel이 붙이는 BOM을 뗀다(UTF-8 실패 시 cp949). 슬라이드 덱 html은 다음 덱 갱신 때 반영.
 
