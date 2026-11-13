@@ -4,6 +4,12 @@
 **main 머지마다 버전을 올리고 `vX.Y.Z` 태그를 단다**(규칙: [`rules/common/git.md`](rules/common/git.md) "On Main Merge — 서비스 버전").
 상세 작업 로그는 [`PROGRESS.md`](PROGRESS.md), 사용자 공지는 [`docs/notices/`](docs/notices/).
 
+## v1.10.0 — 2026-11-13 (운영 미배포)
+
+- **수정: AI 컨설턴트 인터뷰에서 맵 그리기(안 생성)가 전부 실패하던 문제**: 대화는 되는데 그리기만 502로 끝났다(운영 2026-11-12). 그리기 호출만 사고량을 지정하지 않아 GLM-5.3 최대 사고로 나갔고, 매 호출이 응답 토큰 상한(`AI_MAX_TOKENS` 8000)을 사고로 다 써 본문이 비거나 잘렸다(나머지는 타임아웃). 그리기도 다른 호출처럼 사고량 high로 보내고, 그래도 예산을 다 쓴 응답이 오면 같은 요청을 low로 한 번 더 보낸다. 로그에 예외 형식명과 completion 토큰 수가 남는다.
+- **인터뷰 JSON 0.5 확장**(선택 키 2건, 없는 파일은 종전과 같다): `relations.nodes`로 업무 체계 연계 캔버스에 판단·끝 노드를 선언할 수 있고(선언 판단 뒤에는 자동 분기 노드를 세우지 않음, 재전달 무중복), `rows[].tobe`로 To-Be 그래프를 게시본 위 손대지 않은 Draft에 싣는다(쓰고 있는 Draft는 경고만 남기고 그대로 둠). 계약은 `docs/samples/interview-json-0.5.md`. 외부 AI 프롬프트에는 `relations.nodes` 안내 한 줄이 늘었고, 임포트 리포트의 L5 미리보기가 선언 노드를 그린다.
+- 배포 메모: 백엔드·프런트 함께 배포. DB 변경 없음, 새 의존성 없음, `.env` 변경 없음(`AI_MAX_TOKENS`·`AI_TIMEOUT_SECONDS`는 그대로 둔다). 배포 뒤 `ai_usage_events`에서 `interview` 행의 completion 토큰이 8000 미만으로 성공하는지 확인한다.
+
 ## v1.9.0 — 2026-11-12 (운영 미배포)
 
 - **AI 첨부 형식에 xlsm·csv 추가**: AI 컨설턴트 인터뷰 첨부, 업무 체계 캠페인 첨부, 설정의 지식기반 업로드가 pdf·docx·pptx·xlsx·txt·md에 더해 xlsm과 csv를 받는다. xlsm은 셀 값만 읽고 매크로는 읽지 않는다. csv는 텍스트 그대로 읽는다(UTF-8, 아니면 cp949).

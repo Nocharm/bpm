@@ -3,7 +3,7 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
-## 2026-11-13 — AI 인터뷰 그리기(안 생성) 운영 전멸 수정
+## 2026-11-13 — AI 인터뷰 그리기(안 생성) 운영 전멸 수정 (v1.10.0, main 머지)
 
 - 원인: 드래프터만 사고량을 생략(GLM-5.3 최대 사고)해 매 호출이 `AI_MAX_TOKENS` 8000 상한을 사고로 다 썼다(실패 행 completion이 전부 8000의 배수, 나머지는 타임아웃). 처방: 드래프터를 high로, `_ask_json`은 예산 소진 응답(빈·상한에 닿아 잘린 본문)이면 교정 문구 없이 같은 메시지를 low로 재시도. 로그에 예외 형식명·completion 토큰 추가. 상한·타임아웃 기본값은 그대로(올리면 생성 시간만 늘어 타임아웃 악화).
 
@@ -11,7 +11,7 @@
 
 - `.agents/`·`skills-lock.json`은 개인 PC에서만 쓰는 스킬 설치본이라 `.gitignore`에 올렸다.
 
-## 2026-11-12 — 인터뷰 JSON 0.5 확장: L5 판단·끝 노드(`relations.nodes`)·To-Be 작업본(`rows[].tobe`) (브랜치 `feat/interview-relations-nodes-tobe`)
+## 2026-11-12 — 인터뷰 JSON 0.5 확장: L5 판단·끝 노드(`relations.nodes`)·To-Be 작업본(`rows[].tobe`) (v1.10.0, main 머지)
 
 - PI 리디자인 데이터(L5 3,998·L6 20,671)를 잃지 않고 받기 위한 선택 키 2건. 새 키가 없는 파일·AI 캠페인·에디터·그래프 저장·버전 워크플로는 그대로다(기존 임포트 테스트 전부 무수정 통과).
 - `relations.nodes`: 선언 판단은 자동 분기 노드 없이 그 노드에서 바로 갈라지고, 계보 키 `linkage_node_lineage`(L5 코드 + `__node__`+id)로 재전달 무중복. 끝 이름은 저장 검증(유니크) 때문에 겹치면 번호, 대표 끝은 저장 규칙과 같게 캔버스에 끝이 없을 때만 선언 순서 첫 끝. 배치는 기존 `layout_flow`에 노드만 더 실어 `consultant_layout`은 고치지 않았다(연계 캔버스는 시작 노드가 없어 큰길 계산이 원래 비어 있다).
