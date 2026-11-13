@@ -9,6 +9,7 @@ from app import ai_client
 from app.interview import orchestrator
 from app.models import InterviewSession
 from app.schemas import InterviewTurnIn
+from app.settings import settings
 
 
 class _FakeDb:
@@ -537,3 +538,40 @@ def test_extract_contract_includes_touch_time() -> None:
     from app.interview.orchestrator import _EXTRACT_CONTRACT
 
     assert '"touch_time"' in _EXTRACT_CONTRACT
+
+
+def _draw(monkeypatch, replies: list[ai_client.AiReply]) -> tuple[dict | None, list[tuple[int, str | None]]]:
+    """single draw 실행 — (pending_choices, 호출별 (메시지 수, reasoning)) 반환."""
+    queue = list(replies)
+    calls: list[tuple[int, str | None]] = []
+
+    async def fake_call(messages, model=None, *, reasoning=None, max_tokens=None) -> ai_client.AiReply:
+        calls.append((len(messages), reasoning))
+        return queue.pop(0)
+
+    monkeypatch.setattr(ai_client, "call_ai", fake_call)
+    choices = asyncio.run(orchestrator.generate_proposals(_session(current_stage="activities"), ""))
+    return choices, calls
+
+
+def test_drafter_uses_high_reasoning(monkeypatch) -> None:
+    """드래프터는 high — 최대 사고(생략)는 토큰 상한을 사고로 다 써 운영에서 전멸했다 (2026-11-12)."""
+    choices, calls = _draw(monkeypatch, [ai_client.AiReply(content=DRAFT)])
+    assert len(choices["options"]) == 1
+    assert [reasoning for _, reasoning in calls] == ["high"]
+
+
+def test_drafter_retries_capped_reply_with_low_reasoning(monkeypatch) -> None:
+    """상한에 닿아 잘린 본문 — 교정 문구 없이 같은 메시지를 low로 다시 보낸다."""
+    capped = ai_client.AiReply(content=DRAFT[:40], completion_tokens=settings.ai_max_tokens)
+    choices, calls = _draw(monkeypatch, [capped, ai_client.AiReply(content=DRAFT)])
+    assert len(choices["options"]) == 1
+    assert [reasoning for _, reasoning in calls] == ["high", "low"]
+    assert calls[0][0] == calls[1][0]
+
+
+def test_drafter_retries_empty_reply_with_low_reasoning(monkeypatch) -> None:
+    """빈 본문(usage 없는 서버 포함)도 예산 소진으로 본다."""
+    choices, calls = _draw(monkeypatch, [ai_client.AiReply(content=""), ai_client.AiReply(content=DRAFT)])
+    assert len(choices["options"]) == 1
+    assert [reasoning for _, reasoning in calls] == ["high", "low"]

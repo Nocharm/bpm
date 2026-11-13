@@ -117,6 +117,13 @@ def merge_params_table(interview: InterviewSession, table: dict) -> None:
 _SchemaT = TypeVar("_SchemaT", bound=BaseModel)
 
 
+def _is_budget_exhausted(reply: ai_client.AiReply) -> bool:
+    """사고가 토큰 예산을 다 쓴 응답 — 빈 본문, 또는 completion이 max_tokens 상한에 닿아 잘린 본문."""
+    if not reply.content.strip():
+        return True
+    return reply.completion_tokens is not None and reply.completion_tokens >= settings.ai_max_tokens
+
+
 async def _ask_json(
     messages: list[dict],
     model: str | None,
@@ -125,13 +132,15 @@ async def _ask_json(
 ) -> _SchemaT:
     """call_ai + JSON 추출 + 스키마 검증 — 실패 1회 재프롬프트 후 TurnError.
 
-    reasoning: 호출 목적별 사고량 — 드래프터는 None(최대), 인터뷰어 턴은 "high", 첨부 추출은 "low".
+    reasoning: 호출 목적별 사고량 — 드래프터·인터뷰어 턴은 "high", 첨부 추출은 "low".
+    토큰 예산을 사고로 다 쓴 응답(빈·잘린 본문)은 교정 문구 없이 같은 메시지를 "low"로 다시 보낸다.
     """
     for attempt in range(2):
         try:
             reply = await ai_client.call_ai(messages, model, reasoning=reasoning)
         except Exception as exc:  # noqa: BLE001 -- 외부 AI 오류는 TurnError로 정규화
-            logger.warning("interview AI call failed: %s", exc)
+            # 타임아웃은 str(exc)가 빈 문자열이라 형식명을 같이 남긴다
+            logger.warning("interview AI call failed: %s: %s", type(exc).__name__, exc)
             raise TurnError("AI server error") from exc
         log = usage_log.get()
         if log is not None:  # 재프롬프트 재시도 콜도 각각 계량
@@ -140,9 +149,12 @@ async def _ask_json(
             return schema_cls.model_validate_json(extract_json(reply.content))
         except ValueError as exc:
             logger.warning(
-                "interview AI invalid (attempt %d, %s): %s | raw=%.500s",
-                attempt, schema_cls.__name__, exc, reply.content,
+                "interview AI invalid (attempt %d, %s, completion=%s): %s | raw=%.500s",
+                attempt, schema_cls.__name__, reply.completion_tokens, exc, reply.content,
             )
+            if _is_budget_exhausted(reply):
+                reasoning = "low"  # 교정 문구로는 못 고친다 — 사고를 줄여 본문 몫을 남긴다
+                continue
             if attempt == 0:
                 messages = [*messages, {"role": "user", "content": "유효한 JSON 한 개만 반환하세요."}]
     raise TurnError("AI returned invalid response")
@@ -435,7 +447,8 @@ async def generate_proposals(
                 history=history, overrides=overrides,
             ),
             model, AiProposal,
-            # 그래프 드래프팅은 정확도 우선 — 최대 사고(기본)
+            # 최대 사고(생략)는 매 호출 8000토큰 상한을 사고로 다 써 운영에서 전멸했다(ai_usage_events 2026-11-12)
+            reasoning="high",
         )
         for i in range(count)
     ]
